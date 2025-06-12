@@ -15,8 +15,8 @@ num_device = 2
 # such that JAX and XLA thinks there are multiple devices
 
 # !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
-# _set_cpu_count(num_device)
-# set_device("cpu", num_device=num_device, mpi=MPI)
+_set_cpu_count(num_device)
+set_device("cpu", num_device=num_device, mpi=MPI)
 
 # ====== Using GPUs ======
 # When we have multiple processes using the same devices (for example, 3 processes
@@ -25,8 +25,8 @@ num_device = 2
 # such that there is no pre-allocation. This is a bit conservative (and probably there is room
 # for improvement), but if a process needs more memory, it can use more memory on the fly.
 #
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-set_device("gpu", num_device=num_device)
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+# set_device("gpu", num_device=num_device)
 
 
 import numpy as np

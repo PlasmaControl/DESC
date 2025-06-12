@@ -249,6 +249,7 @@ class ObjectiveFunction(IOAble):
     """
 
     _io_attrs_ = ["_objectives"]
+    _static_attrs = []
 
     def __init__(
         self,
@@ -343,6 +344,7 @@ class ObjectiveFunction(IOAble):
                 "There is at least one rank that does not have any objective assigned. "
                 f"Objectives per rank are {self._obj_per_rank}.",
             )
+            self._static_attrs += ["mpi", "comm", "rank", "size"]
 
         if self._is_mpi and mpi is None:
             raise ValueError(
@@ -420,21 +422,30 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                x = jax.device_put(message[1], self.objectives[obj_idx_rank[0]]._device)
+                v = jax.device_put(message[2], self.objectives[obj_idx_rank[0]]._device)
+
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
-                J_rank = []
-                for idx in obj_idx_rank:
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    thing_idx = self._things_per_objective_idx[idx]
-                    xi = [message[1][i] for i in thing_idx]
-                    vi = [message[2][i] for i in thing_idx]
-                    xi = jax.device_put(xi, obj._device)
-                    vi = jax.device_put(vi, obj._device)
-                    J_rank.append(getattr(obj, message[0])(vi, xi, constants=const))
-                rng_con = nvtx.start_range(message="concat/numpy", color="red")
-                J_rank = np.hstack(J_rank)
+
+                @jit
+                def body(x, v):
+                    J_rank = jnp.hstack(
+                        [
+                            getattr(self.objectives[idx], message[0])(
+                                [v[i] for i in self._things_per_objective_idx[idx]],
+                                [x[i] for i in self._things_per_objective_idx[idx]],
+                                constants=self.constants[idx],
+                            )
+                            for idx in obj_idx_rank
+                        ]
+                    )
+                    return J_rank
+
+                J_rank = body(x, v)
+                rng_con = nvtx.start_range(message="numpy", color="red")
+                J_rank = np.array(J_rank)
                 nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
@@ -446,15 +457,26 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 rng_rank = nvtx.start_range(message="Worker Job Compute", color="green")
-                f_rank = []
-                for idx in obj_idx_rank:
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    par = message[1][idx]
-                    par = jax.device_put(par, obj._device)
-                    f_rank.append(getattr(obj, message[0])(*par, constants=const))
-                rng_con = nvtx.start_range(message="concat/numpy", color="red")
-                f_rank = np.concatenate(f_rank)
+                params = jax.device_put(
+                    message[1], self.objectives[obj_idx_rank[0]]._device
+                )
+
+                @jit
+                def body(params):
+                    f_rank = jnp.concatenate(
+                        [
+                            getattr(self.objectives[idx], message[0])(
+                                *params[idx],
+                                constants=self.constants[idx],
+                            )
+                            for idx in obj_idx_rank
+                        ]
+                    )
+                    return f_rank
+
+                f_rank = body(params)
+                rng_con = nvtx.start_range(message="numpy", color="red")
+                f_rank = np.array(f_rank)
                 nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
@@ -465,40 +487,46 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                op = message[0].replace("proximal_jvp_", "")
+                x = jax.device_put(message[1], self.objectives[obj_idx_rank[0]]._device)
+                v = jax.device_put(message[2], self.objectives[obj_idx_rank[0]]._device)
+
                 rng_rank = nvtx.start_range(
                     message="Worker Job JVP Proximal", color="green"
                 )
-                J_rank = []
-                for idx in obj_idx_rank:
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    op = message[0].replace("proximal_jvp_", "")
 
-                    thing_idx = self._things_per_objective_idx[idx]
-                    xi = [message[1][i] for i in thing_idx]
-                    vi = [message[2][i] for i in thing_idx]
-                    assert len(xi) > 0
-                    assert len(vi) > 0
-                    assert len(xi) == len(vi)
-                    if obj._deriv_mode == "rev":
-                        # obj might not allow fwd mode, so compute full rev mode
-                        # jacobian and do matmul manually. This is slightly
-                        # inefficient, but usuallywhen rev mode is used,
-                        # dim_f <<< dim_x, so its not too bad.
-                        Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
-                        J_rank.append(
-                            jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
-                                axis=0
+                @jit
+                def body(x, v):
+                    J_rank = []
+                    for idx in obj_idx_rank:
+                        obj = self.objectives[idx]
+                        const = self.constants[idx]
+
+                        thing_idx = self._things_per_objective_idx[idx]
+                        xi = [x[i] for i in thing_idx]
+                        vi = [v[i] for i in thing_idx]
+                        if obj._deriv_mode == "rev":
+                            # obj might not allow fwd mode, so compute full rev mode
+                            # jacobian and do matmul manually. This is slightly
+                            # inefficient, but usuallywhen rev mode is used,
+                            # dim_f <<< dim_x, so its not too bad.
+                            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+                            J_rank.append(
+                                jnp.array(
+                                    [Jii @ vii.T for Jii, vii in zip(Ji, vi)]
+                                ).sum(axis=0)
                             )
-                        )
-                    else:
-                        J_rank.append(
-                            getattr(obj, "jvp_" + op)(
-                                [_vi for _vi in vi], xi, constants=const
-                            ).T
-                        )
-                rng_con = nvtx.start_range(message="concat/numpy", color="red")
-                J_rank = np.vstack(J_rank)
+                        else:
+                            J_rank.append(
+                                getattr(obj, "jvp_" + op)(
+                                    [_vi for _vi in vi], xi, constants=const
+                                ).T
+                            )
+                    return jnp.vstack(J_rank)
+
+                J_rank = body(x, v)
+                rng_con = nvtx.start_range(message="numpy", color="red")
+                J_rank = np.array(J_rank)
                 nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
@@ -768,15 +796,20 @@ class ObjectiveFunction(IOAble):
                 rng = nvtx.start_range(
                     message="compute_unscaled on master", color="blue"
                 )
-                f_rank = []
-                for idx in obj_idx_rank:
-                    par = params[idx]
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    f_rank.append(obj.compute_unscaled(*par, constants=const))
-                rng_con = nvtx.start_range(message="concat/jax", color="red")
-                f_rank = jnp.concatenate(f_rank)
-                nvtx.end_range(rng_con)
+
+                @jit
+                def body(params):
+                    f_rank = jnp.concatenate(
+                        [
+                            self.objectives[idx].compute_unscaled(
+                                *params[idx], constants=self.constants[idx]
+                            )
+                            for idx in obj_idx_rank
+                        ]
+                    )
+                    return f_rank
+
+                f_rank = body(params)
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -826,15 +859,20 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 rng = nvtx.start_range(message="compute_scaled on master", color="blue")
-                f_rank = []
-                for idx in obj_idx_rank:
-                    par = params[idx]
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    f_rank.append(obj.compute_scaled(*par, constants=const))
-                rng_con = nvtx.start_range(message="concat/jax", color="red")
-                f_rank = jnp.concatenate(f_rank)
-                nvtx.end_range(rng_con)
+
+                @jit
+                def body(params):
+                    f_rank = jnp.concatenate(
+                        [
+                            self.objectives[idx].compute_scaled(
+                                *params[idx], constants=self.constants[idx]
+                            )
+                            for idx in obj_idx_rank
+                        ]
+                    )
+                    return f_rank
+
+                f_rank = body(params)
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -886,15 +924,20 @@ class ObjectiveFunction(IOAble):
                 rng = nvtx.start_range(
                     message="compute_scaled_error on master", color="blue"
                 )
-                f_rank = []
-                for idx in obj_idx_rank:
-                    par = params[idx]
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    f_rank.append(obj.compute_scaled_error(*par, constants=const))
-                rng_con = nvtx.start_range(message="concat/jax", color="red")
-                f_rank = jnp.concatenate(f_rank)
-                nvtx.end_range(rng_con)
+
+                @jit
+                def body(params):
+                    f_rank = jnp.concatenate(
+                        [
+                            self.objectives[idx].compute_scaled_error(
+                                *params[idx], constants=self.constants[idx]
+                            )
+                            for idx in obj_idx_rank
+                        ]
+                    )
+                    return f_rank
+
+                f_rank = body(params)
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -992,6 +1035,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt] = [outi]
         return out
 
+    @functools.partial(jit, static_argnames="per_objective")
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 

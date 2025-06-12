@@ -30,8 +30,6 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
-- - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
-- Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
 
 Performance Improvements
 

@@ -676,6 +676,9 @@ def test_ballooning_stability_eval():
         j = jnp.arange(N_zeta - 2)[None, None, :, None]
         k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
+        # This is an alternate way of solving the same eigenvalue problem
+        # The definition of this matrix is provided in Appendix A of
+        # Gaur et al. https://doi.org/10.1017/S0022377823000995
         A = A.at[i, l, j, k].set(
             g_half[i, l, k] / f[i, l, k] / h**2 * (j - k == -1)
             + (

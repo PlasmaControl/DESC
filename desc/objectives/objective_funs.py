@@ -450,10 +450,6 @@ class ObjectiveFunction(IOAble):
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 )
-
-                rng_con = nvtx.start_range(message="numpy", color="red")
-                J_rank = np.array(J_rank)
-                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
@@ -478,9 +474,6 @@ class ObjectiveFunction(IOAble):
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 )
-                rng_con = nvtx.start_range(message="numpy", color="red")
-                f_rank = np.array(f_rank)
-                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(f_rank, root=0)
@@ -498,6 +491,7 @@ class ObjectiveFunction(IOAble):
                     message="Worker Job JVP Proximal", color="green"
                 )
 
+                # TODO: jit this one too as above functions!!!!
                 @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
                 def body(x, v):
                     J_rank = []
@@ -528,9 +522,6 @@ class ObjectiveFunction(IOAble):
                     return jnp.vstack(J_rank)
 
                 J_rank = body(x, v)
-                rng_con = nvtx.start_range(message="numpy", color="red")
-                J_rank = np.array(J_rank)
-                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)

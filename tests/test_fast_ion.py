@@ -26,7 +26,7 @@ def test_Gamma_c_Nemov_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
-        surf_batch_size=2,
+        surf_batch_size=1,
     )
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()

@@ -12,7 +12,7 @@ expensive computations.
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jax, jit, jnp, scan, vmap
+from desc.backend import jax, jit, jnp, scan
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -244,8 +244,8 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
-    dim=3,
-    params=[],
+    dim=2,
+    params=["Psi"],
     transforms={},
     profiles=[],
     coordinates="rtz",
@@ -311,12 +311,12 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
-    dim=3,
+    dim=2,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["c_balloon"],
+    data=["c balloon"],
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -331,12 +331,12 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
-    dim=3,
+    dim=2,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["c_balloon"],
+    data=["c balloon"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -483,13 +483,14 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     units_long="None",
     description="A measure of Newcomb's distance from marginal ballooning stability",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["c balloon", "f balloon", "g balloon"],
+    data=["c balloon", "g balloon"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
+@jit
 def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     """Ideal-ballooning growth rate proxy.
 
@@ -510,7 +511,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     If zero crossing is at -inf (root finder failed), use the Y coordinate as a
     metric of stability. Otherwise use the zero-crossing point on the X-axis.
     This idea behind Newcomb's method is explained further in Appendix D of
-    [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
+    [Gaur _et al._](https://doi.org/10.1017/S0022377823000107).
 
     """
     grid = transforms["grid"].source_grid
@@ -521,79 +522,52 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     def reshape(f):
         assert f.shape == (num_zeta0, grid.num_nodes)
-        f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
-        assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
+        f = jnp.moveaxis(grid.meshgrid_reshape(f.T, "raz"), -2, 0)
+        assert f.shape == (grid.num_zeta, grid.num_rho, grid.num_alpha, num_zeta0)
         return f
 
-    c, f, g = map(reshape, (data["c balloon"], data["f balloon"], data["g balloon"]))
-    c = c[..., :-1]
-    g_half = (g[..., 1:] + g[..., :-1]) / 2
+    c, g = map(reshape, (data["c balloon"], data["g balloon"]))
+    c = c[:-1]
+    g = (g[1:] + g[:-1]) / 2
 
-    j = np.arange(grid.num_zeta)
-    X = (
-        jnp.zeros((grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta - 1))
-        .at[..., j[:-1]]
-        .set(zeta[:-1], unique_indices=True, indices_are_sorted=True)
-    )
-
-    Y = jnp.zeros(X.shape[:-1])
-    eps = 5e-3  # slope of the test function
-    Yp = eps * jnp.ones(Y.shape)
-
-    @jit
     def integrator(carry, x):
+        """Update ``y`` and its derivative using leapfrog-like method.
+
+        Assumed that y starts nonnegative with positive dy positive.
+
+        Returns
+        -------
+        Cumulative integration of ``y`` and markers for the sign change.
+        """
         y, dy = carry
-        g_element, c_element = x
-        # Update the array (Y) and its derivative on scattered grids and
-        # integrate using leapfrog-like method.
-        y_new = y + dz * dy / g_element
-        dy_new = dy - c_element * y_new * dz
-        # y starts at 0 with positive slope. If y goes negative it's unstable,
-        # so we look for a sign change.
-        sign_change = y_new < 0.0
-        return (y_new, dy_new), (y_new, sign_change)
+        c, g = x
+        y_new = y + dz * dy / g
+        dy_new = dy - c * y_new * dz
+        return (y_new, dy_new), (y_new, y_new < 0.0)
 
-    @jit
-    def cumulative_update_jit(y, dy, g_half, c_full):
-        _, scan_output = scan(integrator, (y, dy), (g_half, c_full))
-        Y, sign_change = scan_output
-        sign_change = sign_change.at[-1].set(1)
-        first_negative_index = jnp.argmax(sign_change)
-        # slope of Y where it crosses 0
-        slope = (Y[first_negative_index] - Y[first_negative_index - 1]) / dz
-        # This factor will give us the exact X point of intersection
-        lin_interp_factor = jnp.where(
-            first_negative_index != -1,
-            -Y[first_negative_index - 1] / slope,
-            0,
-        )
-
-        return Y, first_negative_index, lin_interp_factor
-
-    # Vectorize over the first two dimensions
-    vectorized_cumulative_update = jit(vmap(vmap(vmap(cumulative_update_jit))))
-    Y, first_negative_indices, lin_interp_factors = vectorized_cumulative_update(
-        Y, Yp, g_half, c
+    dy_dz_init = 5e-3
+    _, (y, is_root) = scan(
+        integrator,
+        (jnp.zeros(c.shape[1:]), jnp.full(c.shape[1:], dy_dz_init)),
+        (c, g),
     )
-
-    # x at crossing pts, or last value of x if there were no crossings
-    X0 = jnp.zeros(Y.shape)
-    X0 = X0.at[..., j, j].set(
-        X[..., j, j, first_negative_indices[..., j, j]]
-        + lin_interp_factors[..., j, j] * dz
+    idx_right_root = jnp.argmax(is_root.at[-1].set(True), axis=0)
+    y_left_root = y[idx_right_root - 1]
+    # derivative of linear approximation of ζ ↦ y(ζ) near root
+    dy_dz = (y[idx_right_root] - y_left_root) / dz
+    # crossing from stable to unstable regime
+    x = zeta[idx_right_root] - jnp.where(
+        idx_right_root < (is_root.shape[0] - 1),
+        y_left_root / dy_dz * dz,
+        0,
     )
-    # where X0 < phimax, it means there was a zero crossing so its unstable. We take
-    # the distance from X0 to phimax as the distance to stability. If there was no
-    # crossing we take Y[phi=phimax]. This gives a continuous metric, though
-    # the first derivative will be discontinuous. Could maybe think of something better?
-    # RG: Peak of the metric doesn't match mean peak of the growth rate in rho
-    metric = jnp.where(
-        first_negative_indices != -1,
-        # if it crossed, then X0 < phimax, so this < 0
-        (X0 - zeta[-1]) / (zeta[-1] - zeta[0]),
-        # if it reached the end without crossing, this is >=0
-        Y[..., -1],
-    )
-
-    data["Newcomb ballooning metric"] = jnp.min(metric)
+    # We take the signed distance X - ζ max < 0 as the distance to stability.
+    # If there was no crossing we take y[ζ = ζ max] > 0.
+    # This metric is only C0. Maybe think of something better?
+    # RG: Peak of the metric does not match mean peak of the growth rate in ρ.
+    data["Newcomb ballooning metric"] = jnp.where(
+        idx_right_root < (is_root.shape[0] - 1),
+        (x - zeta[-1]) / (zeta[-1] - zeta[0]),
+        y[-1],
+    ).min(axis=(-1, -2))
     return data

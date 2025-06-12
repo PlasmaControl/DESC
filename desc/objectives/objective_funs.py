@@ -407,7 +407,9 @@ class ObjectiveFunction(IOAble):
             # message[1] is the state vector (for compute and jvp's)
             # message[2] is the tangents (for only jvp's)
             message = (None, None, None)
+            rng_wait = nvtx.start_range(message="Wait for message", color="red")
             message = self.comm.bcast(message, root=0)
+            nvtx.end_range(rng_wait)
             obj_idx_rank = self._obj_per_rank[self.rank]
 
             if message[0] == "STOP":
@@ -420,8 +422,8 @@ class ObjectiveFunction(IOAble):
                 )
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
-                J_rank = []
                 rng_rank = nvtx.start_range(message="Worker Job JVP", color="red")
+                J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
@@ -431,34 +433,42 @@ class ObjectiveFunction(IOAble):
                     xi = jax.device_put(xi, obj._device)
                     vi = jax.device_put(vi, obj._device)
                     J_rank.append(getattr(obj, message[0])(vi, xi, constants=const))
+                rng_con = nvtx.start_range(message="concat/numpy", color="red")
                 J_rank = np.hstack(J_rank)
+                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
+                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
+                nvtx.end_range(rng)
             elif "compute" in message[0]:
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
-                f_rank = []
                 rng_rank = nvtx.start_range(message="Worker Job Compute", color="red")
+                f_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
                     par = message[1][idx]
                     par = jax.device_put(par, obj._device)
                     f_rank.append(getattr(obj, message[0])(*par, constants=const))
+                rng_con = nvtx.start_range(message="concat/numpy", color="red")
                 f_rank = np.concatenate(f_rank)
+                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
+                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(f_rank, root=0)
+                nvtx.end_range(rng)
             elif "proximal_jvp" in message[0]:
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
-                J_rank = []
                 rng_rank = nvtx.start_range(
                     message="Worker Job JVP Proximal", color="red"
                 )
+                J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
@@ -487,9 +497,13 @@ class ObjectiveFunction(IOAble):
                                 [_vi for _vi in vi], xi, constants=const
                             ).T
                         )
+                rng_con = nvtx.start_range(message="concat/numpy", color="red")
                 J_rank = np.vstack(J_rank)
+                nvtx.end_range(rng_con)
                 nvtx.end_range(rng_rank)
+                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
+                nvtx.end_range(rng)
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -749,16 +763,26 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                rng = nvtx.start_range(
+                    message="compute_unscaled on master", color="blue"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
                     f_rank.append(obj.compute_unscaled(*par, constants=const))
+                rng_con = nvtx.start_range(message="concat/jax", color="red")
                 f_rank = jnp.concatenate(f_rank)
+                nvtx.end_range(rng_con)
+                nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
+                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
+                nvtx.end_range(rng_gather)
+                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
+                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -799,16 +823,24 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                rng = nvtx.start_range(message="compute_scaled on master", color="blue")
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
                     f_rank.append(obj.compute_scaled(*par, constants=const))
+                rng_con = nvtx.start_range(message="concat/jax", color="red")
                 f_rank = jnp.concatenate(f_rank)
+                nvtx.end_range(rng_con)
+                nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
+                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
+                nvtx.end_range(rng_gather)
+                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
+                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -849,16 +881,26 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                rng = nvtx.start_range(
+                    message="compute_scaled_error on master", color="blue"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
                     f_rank.append(obj.compute_scaled_error(*par, constants=const))
+                rng_con = nvtx.start_range(message="concat/jax", color="red")
                 f_rank = jnp.concatenate(f_rank)
+                nvtx.end_range(rng_con)
+                nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
+                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
+                nvtx.end_range(rng_gather)
+                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
+                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -1098,6 +1140,7 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
+                rng = nvtx.start_range(message="JVP on master", color="blue")
                 J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
@@ -1106,9 +1149,14 @@ class ObjectiveFunction(IOAble):
                     xi = [xs[i] for i in thing_idx]
                     vi = [vs[i] for i in thing_idx]
                     J_rank.append(getattr(obj, "jvp_" + op)(vi, xi, constants=const))
+                rng_con = nvtx.start_range(message="concat/jax", color="red")
                 J_rank = jnp.hstack(J_rank)
+                nvtx.end_range(rng_con)
+                nvtx.end_range(rng)
+                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 print(f"Rank {self.rank} waiting to gather")
                 J = self.comm.gather(J_rank, root=0)
+                nvtx.end_range(rng_gather)
 
         # this is the transpose of the jvp when v is a matrix, for consistency with
         # jvp_batched
@@ -1116,7 +1164,9 @@ class ObjectiveFunction(IOAble):
             J = jnp.hstack(J)
         else:
             # this will handle the device placement of the J matrix
+            rng = nvtx.start_range(message="Pconcat", color="blue")
             J = pconcat(J, mode="hstack")
+            nvtx.end_range(rng)
 
         return J
 

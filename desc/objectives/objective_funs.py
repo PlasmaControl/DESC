@@ -781,8 +781,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
+                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_unscaled", params, None)
                 self.comm.bcast(message, root=0)
+                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
@@ -843,8 +845,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
+                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_scaled", params, None)
                 self.comm.bcast(message, root=0)
+                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
@@ -903,8 +907,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
+                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_scaled_error", params, None)
                 self.comm.bcast(message, root=0)
+                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
@@ -1166,8 +1172,10 @@ class ObjectiveFunction(IOAble):
                 xs = jnp.split(x, xs_splits)
                 vs = jnp.split(v[0], xs_splits, axis=-1)
                 nvtx.end_range(rng_unpack)
+                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("jvp_" + op, xs, vs)
                 self.comm.bcast(message, root=0)
+                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 print(

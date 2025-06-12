@@ -1400,4 +1400,4 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         rng_pcat = nvtx.start_range(message="Pconcat", color="blue")
         J = pconcat(J).T
         nvtx.end_range(rng_pcat)
-        return J
+        return J.block_until_ready()

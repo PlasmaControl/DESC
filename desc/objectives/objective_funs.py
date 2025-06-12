@@ -459,7 +459,7 @@ class ObjectiveFunction(IOAble):
                     objs,
                     constants,
                     op=message[0],
-                )
+                ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
                 J_rank = np.asarray(J_rank)
                 nvtx.end_range(rng_np)
@@ -486,7 +486,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
                 f_rank = np.asarray(f_rank)
                 nvtx.end_range(rng_np)
@@ -536,7 +536,7 @@ class ObjectiveFunction(IOAble):
                     objs,
                     constants,
                     op=op,
-                )
+                ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
                 J_rank = np.asarray(J_rank)
                 nvtx.end_range(rng_np)
@@ -820,7 +820,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).block_until_ready()
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -882,7 +882,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).block_until_ready()
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -946,7 +946,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).block_until_ready()
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -1215,7 +1215,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).block_until_ready()
                 nvtx.end_range(rng)
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 print(f"Rank {self.rank} waiting to gather")
@@ -2229,7 +2229,7 @@ def compute_per_process(params, objectives, constants, op="compute_scaled_error"
             for (obj, param, constant) in zip(objectives, params, constants)
         ]
     )
-    return f_rank.block_until_ready()
+    return f_rank
 
 
 @functools.partial(jit, static_argnames="op")
@@ -2241,7 +2241,7 @@ def jvp_per_process(x, v, objectives, constants, op="jvp_scaled_error"):
             for idx, (obj, constant) in enumerate(zip(objectives, constants))
         ]
     )
-    return J_rank.block_until_ready()
+    return J_rank
 
 
 @functools.partial(jit, static_argnames="op")
@@ -2264,4 +2264,4 @@ def jvp_proximal_per_process(x, v, objectives, constants, op="scaled_error"):
                     [_vi for _vi in v[idx]], x[idx], constants=constant
                 ).T
             )
-    return jnp.vstack(J_rank).block_until_ready()
+    return jnp.vstack(J_rank)

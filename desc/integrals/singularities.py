@@ -879,13 +879,13 @@ _kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
 def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
     """Returns -4π ds(y) ⋅ ∇_y G(x−y) = ds(y) ⋅ ‖x−y‖⁻³ (x-y)."""
     return (-4 * jnp.pi * ds) * dot(
-        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta"]
 
 
 def _kernel_biot_savart(eval_data, source_data, ds, diag=False):
@@ -942,7 +942,7 @@ def _kernel_magnetic_dipole(eval_data, source_data, ds, diag=False):
     Φ is the magnetic dipole layer for the surface current K = −n × ∇Φ.
     """
     out = ds * dot(
-        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
     if source_data["Phi"].ndim > 1:
@@ -953,7 +953,7 @@ def _kernel_magnetic_dipole(eval_data, source_data, ds, diag=False):
 
 
 _kernel_magnetic_dipole.ndim = 1
-_kernel_magnetic_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_magnetic_dipole.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
 
 
 kernels = {

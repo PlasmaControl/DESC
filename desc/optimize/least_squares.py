@@ -347,11 +347,13 @@ def lsqtr(  # noqa: C901
             step_h_norm = jnp.linalg.norm(step_h, ord=2)
             step_norm = jnp.linalg.norm(step, ord=2)
 
-            rng_fn = nvtx.start_range(message="F new and Make feasible", color="red")
+            rng_fea = nvtx.start_range(message="Make feasible", color="red")
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
+            nvtx.end_range(rng_fea)
+            rng_fn = nvtx.start_range(message="Fnew", color="red")
             f_new = fun(x_new, *args)
-            nfev += 1
             nvtx.end_range(rng_fn)
+            nfev += 1
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
             actual_reduction = cost - cost_new

@@ -422,7 +422,7 @@ class ObjectiveFunction(IOAble):
                 )
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
-                rng_rank = nvtx.start_range(message="Worker Job JVP", color="red")
+                rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
                 J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
@@ -445,7 +445,7 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
-                rng_rank = nvtx.start_range(message="Worker Job Compute", color="red")
+                rng_rank = nvtx.start_range(message="Worker Job Compute", color="green")
                 f_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
@@ -466,7 +466,7 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 rng_rank = nvtx.start_range(
-                    message="Worker Job JVP Proximal", color="red"
+                    message="Worker Job JVP Proximal", color="green"
                 )
                 J_rank = []
                 for idx in obj_idx_rank:
@@ -780,9 +780,7 @@ class ObjectiveFunction(IOAble):
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
                 nvtx.end_range(rng_gather)
-                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
-                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -838,9 +836,7 @@ class ObjectiveFunction(IOAble):
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
                 nvtx.end_range(rng_gather)
-                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
-                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -898,9 +894,7 @@ class ObjectiveFunction(IOAble):
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
                 nvtx.end_range(rng_gather)
-                rng_concat = nvtx.start_range(message="Pconcat", color="blue")
                 f = pconcat(fs)
-                nvtx.end_range(rng_concat)
         return f
 
     @jit
@@ -1164,9 +1158,7 @@ class ObjectiveFunction(IOAble):
             J = jnp.hstack(J)
         else:
             # this will handle the device placement of the J matrix
-            rng = nvtx.start_range(message="Pconcat", color="blue")
             J = pconcat(J, mode="hstack")
-            nvtx.end_range(rng)
 
         return J
 

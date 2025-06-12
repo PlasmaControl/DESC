@@ -742,7 +742,9 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
+        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
+        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -800,7 +802,9 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
+        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
+        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -856,7 +860,9 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
+        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
+        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -1114,6 +1120,7 @@ class ObjectiveFunction(IOAble):
                 J += [Ji_]
         else:
             if self.rank == 0:
+                rng_unpack = nvtx.start_range(message="precheck", color="red")
                 v = ensure_tuple(v)
                 if len(v) > 1:
                     # using blocked for higher order derivatives is a pain, and only
@@ -1123,9 +1130,11 @@ class ObjectiveFunction(IOAble):
 
                 if constants is None:
                     constants = self.constants
+
                 xs_splits = np.cumsum([t.dim_x for t in self.things])
                 xs = jnp.split(x, xs_splits)
                 vs = jnp.split(v[0], xs_splits, axis=-1)
+                nvtx.end_range(rng_unpack)
                 message = ("jvp_" + op, xs, vs)
                 self.comm.bcast(message, root=0)
 

@@ -422,28 +422,35 @@ class ObjectiveFunction(IOAble):
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
                 )
-                x = jax.device_put(message[1], self.objectives[obj_idx_rank[0]]._device)
-                v = jax.device_put(message[2], self.objectives[obj_idx_rank[0]]._device)
+                xs = jax.device_put(
+                    message[1], self.objectives[obj_idx_rank[0]]._device
+                )
+                vs = jax.device_put(
+                    message[2], self.objectives[obj_idx_rank[0]]._device
+                )
 
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
 
-                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
-                def body(x, v):
-                    J_rank = jnp.hstack(
-                        [
-                            getattr(self.objectives[idx], message[0])(
-                                [v[i] for i in self._things_per_objective_idx[idx]],
-                                [x[i] for i in self._things_per_objective_idx[idx]],
-                                constants=self.constants[idx],
-                            )
-                            for idx in obj_idx_rank
-                        ]
-                    )
-                    return J_rank
+                J_rank = jit(
+                    jvp_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [
+                        [xs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [
+                        [vs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
 
-                J_rank = body(x, v)
                 rng_con = nvtx.start_range(message="numpy", color="red")
                 J_rank = np.array(J_rank)
                 nvtx.end_range(rng_con)
@@ -1183,17 +1190,23 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 rng = nvtx.start_range(message="JVP on master", color="blue")
-                J_rank = []
-                for idx in obj_idx_rank:
-                    obj = self.objectives[idx]
-                    const = self.constants[idx]
-                    thing_idx = self._things_per_objective_idx[idx]
-                    xi = [xs[i] for i in thing_idx]
-                    vi = [vs[i] for i in thing_idx]
-                    J_rank.append(getattr(obj, "jvp_" + op)(vi, xi, constants=const))
-                rng_con = nvtx.start_range(message="concat/jax", color="red")
-                J_rank = jnp.hstack(J_rank)
-                nvtx.end_range(rng_con)
+                J_rank = jit(
+                    jvp_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [
+                        [xs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [
+                        [vs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
                 nvtx.end_range(rng)
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 print(f"Rank {self.rank} waiting to gather")
@@ -2196,7 +2209,7 @@ class _ThingFlattener(IOAble):
 
 # These will run on workers, and we wan to safely jit them
 @functools.partial(jit, static_argnames="op")
-def compute_per_process(params, objectives, constants, op):
+def compute_per_process(params, objectives, constants, op="compute_scaled_error"):
     """Compute the objective function on each process."""
     f_rank = jnp.concatenate(
         [
@@ -2208,3 +2221,15 @@ def compute_per_process(params, objectives, constants, op):
         ]
     )
     return f_rank
+
+
+@functools.partial(jit, static_argnames="op")
+def jvp_per_process(x, v, objectives, constants, op="jvp_scaled_error"):
+    """Compute the Jacobian-vector product on each process."""
+    J_rank = jnp.hstack(
+        [
+            getattr(obj, op)(v[idx], x[idx], constants=constant)
+            for idx, (obj, constant) in enumerate(zip(objectives, constants))
+        ]
+    )
+    return J_rank

@@ -1367,21 +1367,29 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
             f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
         )
         rng_rank = nvtx.start_range(message="JVP Proximal on master", color="green")
+        rng_xv = nvtx.start_range(message="form x and v", color="red")
+        xs = [
+            [xgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        vs = [
+            [vgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        nvtx.end_range(rng_xv)
+        rng_obj = nvtx.start_range(message="form objs and constants", color="red")
+        objs = [objective.objectives[i] for i in obj_idx_rank]
+        constants = [objective.constants[i] for i in obj_idx_rank]
+        nvtx.end_range(rng_obj)
         J_rank = jit(
             jvp_proximal_per_process,
             device=objective.objectives[obj_idx_rank[0]]._device,
             static_argnames="op",
         )(
-            [
-                [xgs[i] for i in objective._things_per_objective_idx[idx]]
-                for idx in obj_idx_rank
-            ],
-            [
-                [vgs[i] for i in objective._things_per_objective_idx[idx]]
-                for idx in obj_idx_rank
-            ],
-            [objective.objectives[i] for i in obj_idx_rank],
-            [objective.constants[i] for i in obj_idx_rank],
+            xs,
+            vs,
+            objs,
+            constants,
             op=op,
         )
         nvtx.end_range(rng_rank)

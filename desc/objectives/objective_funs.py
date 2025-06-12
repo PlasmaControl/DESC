@@ -432,22 +432,32 @@ class ObjectiveFunction(IOAble):
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
+                rng_xv = nvtx.start_range(message="form x and v", color="red")
+                xs = [
+                    [xs[i] for i in self._things_per_objective_idx[idx]]
+                    for idx in obj_idx_rank
+                ]
+                vs = [
+                    [vs[i] for i in self._things_per_objective_idx[idx]]
+                    for idx in obj_idx_rank
+                ]
+                nvtx.end_range(rng_xv)
+                rng_obj = nvtx.start_range(
+                    message="form objs and constants", color="red"
+                )
+                objs = [self.objectives[i] for i in obj_idx_rank]
+                constants = [self.constants[i] for i in obj_idx_rank]
+                nvtx.end_range(rng_obj)
 
                 J_rank = jit(
                     jvp_per_process,
                     device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
-                    [
-                        [xs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [
-                        [vs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
+                    xs,
+                    vs,
+                    objs,
+                    constants,
                     op=message[0],
                 )
                 rng_np = nvtx.start_range(message="numpy", color="red")
@@ -500,21 +510,31 @@ class ObjectiveFunction(IOAble):
                 rng_rank = nvtx.start_range(
                     message="Worker Job JVP Proximal", color="green"
                 )
+                rng_xv = nvtx.start_range(message="form x and v", color="red")
+                xs = [
+                    [xs[i] for i in self._things_per_objective_idx[idx]]
+                    for idx in obj_idx_rank
+                ]
+                vs = [
+                    [vs[i] for i in self._things_per_objective_idx[idx]]
+                    for idx in obj_idx_rank
+                ]
+                nvtx.end_range(rng_xv)
+                rng_obj = nvtx.start_range(
+                    message="form objs and constants", color="red"
+                )
+                objs = [self.objectives[i] for i in obj_idx_rank]
+                constants = [self.constants[i] for i in obj_idx_rank]
+                nvtx.end_range(rng_obj)
                 J_rank = jit(
                     jvp_proximal_per_process,
                     device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
-                    [
-                        [xs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [
-                        [vs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
+                    xs,
+                    vs,
+                    objs,
+                    constants,
                     op=op,
                 )
                 rng_np = nvtx.start_range(message="numpy", color="red")
@@ -2209,7 +2229,7 @@ def compute_per_process(params, objectives, constants, op="compute_scaled_error"
             for (obj, param, constant) in zip(objectives, params, constants)
         ]
     )
-    return f_rank
+    return f_rank.block_until_ready()
 
 
 @functools.partial(jit, static_argnames="op")
@@ -2221,7 +2241,7 @@ def jvp_per_process(x, v, objectives, constants, op="jvp_scaled_error"):
             for idx, (obj, constant) in enumerate(zip(objectives, constants))
         ]
     )
-    return J_rank
+    return J_rank.block_until_ready()
 
 
 @functools.partial(jit, static_argnames="op")
@@ -2244,4 +2264,4 @@ def jvp_proximal_per_process(x, v, objectives, constants, op="scaled_error"):
                     [_vi for _vi in v[idx]], x[idx], constants=constant
                 ).T
             )
-    return jnp.vstack(J_rank)
+    return jnp.vstack(J_rank).block_until_ready()

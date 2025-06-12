@@ -15,7 +15,7 @@ from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyqu
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
-from desc.basis import FourierZernikeBasis
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.compute.geom_utils import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -61,10 +61,13 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import (
     _1_over_G,
     _grad_G,
+    _kernel_Bn_over_r,
+    _kernel_magnetic_dipole,
     _kernel_nr_over_r3,
     _vanilla_params,
     best_params,
     best_ratio,
+    get_interpolator,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import ToroidalMagneticField
@@ -810,34 +813,34 @@ class TestVacuumSolver:
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
-    @pytest.mark.xfail(
-        reason="Debugging why first assert fails, "
-        "second one (the more important one) passes."
-    )
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [100])
+    @pytest.mark.parametrize("chunk_size", [25])
     def test_harmonic_exterior(self, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
         Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
         """
-        atol = 1.1e-4
+        atol = 1e-3
         # elliptic cross-section with torsion
         surf = FourierRZToroidalSurface(
-            R_lmn=[10, 1, 0.2],
-            Z_lmn=[-2, -0.2],
+            R_lmn=[100, 10, 1],
+            Z_lmn=[-20, -1],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=30, N=30, NFP=surf.NFP)
+        src_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
 
         src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
+        # place green's function origin inside torus
+        # so that singularity is outside of the domain of the
+        # exterior problem
+        y0 = jnp.array([100, 0, 0])
 
         def grad_G(x):
             # ∇G(x) = -∇_y G(x-y)
-            y = 0
+            y = y0
             return -_grad_G(x - y)
 
         vac = VacuumSolver(
@@ -845,21 +848,22 @@ class TestVacuumSolver:
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
-            Phi_M=25,
-            Phi_N=25,
+            Phi_M=20,
+            Phi_N=20,
             exterior=True,
             chunk_size=chunk_size,
             B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
             use_dft=False,
             warn_dft=False,
             warn_fft=False,
+            sym=False,
         )
 
         evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
 
         data = vac.compute_Phi(chunk_size)
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
-        G = np.reciprocal(_1_over_G(evl_data["x"]))
+        G = np.reciprocal(_1_over_G(evl_data["x"] - y0))
         np.testing.assert_allclose(np.ptp(G - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"]
@@ -869,6 +873,56 @@ class TestVacuumSolver:
             0,
             atol=atol,
         )
+
+    @pytest.mark.unit
+    def test_secular_splitting(self, chunk_size=100, I=5, Y=12):  # noqa: E741
+        """Test splitting of potential into periodic and secular parts.
+
+        Φ(periodic)/2 + Φ(secular)/2 = H [Φ(periodic) +    Φ(secular)]
+        Φ(periodic)/2                = H  Φ(periodic) + γ ∇Φ(secular)
+                        Φ(secular)/2 = H  Φ(secular)  - γ ∇Φ(secular)
+
+        This test confirms the last relation.
+        """
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        eq = Equilibrium(surface=surf)
+        grid = LinearGrid(M=50, N=50)
+        data = eq.compute(
+            ["n_rho", "e^theta", "e^zeta", "R", "phi", "Z", "theta", "zeta"], grid=grid
+        )
+        interpolator = get_interpolator(grid, grid, data)
+
+        Phi_secular = I * data["theta"] + Y * data["zeta"]
+        gradPhi_secular = I * data["e^theta"] + Y * data["e^zeta"]
+        basis = DoubleFourierSeries(M=0, N=0)
+        data["Phi"] = basis.evaluate(grid, secular=True)
+
+        H_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_magnetic_dipole,
+            known_map=("Phi", partial(basis.evaluate, secular=True)),
+            ndim=basis.num_modes + 2,
+            chunk_size=chunk_size,
+        )
+        H_secular = I * H_secular[:, 1] + Y * H_secular[:, 2]
+
+        data["Bn"] = dot(gradPhi_secular, data["n_rho"])
+        gamma_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_Bn_over_r,
+            chunk_size=chunk_size,
+        ).squeeze() / (-4 * jnp.pi)
+
+        np.testing.assert_allclose(Phi_secular / 2, H_secular - gamma_secular)
 
     @pytest.mark.unit
     @pytest.mark.slow

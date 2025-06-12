@@ -429,7 +429,7 @@ class ObjectiveFunction(IOAble):
                 # put xi and vi on the same device as the objective
                 rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
 
-                @jit
+                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
                 def body(x, v):
                     J_rank = jnp.hstack(
                         [
@@ -461,7 +461,7 @@ class ObjectiveFunction(IOAble):
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
 
-                @jit
+                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
                 def body(params):
                     f_rank = jnp.concatenate(
                         [
@@ -495,7 +495,7 @@ class ObjectiveFunction(IOAble):
                     message="Worker Job JVP Proximal", color="green"
                 )
 
-                @jit
+                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
                 def body(x, v):
                     J_rank = []
                     for idx in obj_idx_rank:

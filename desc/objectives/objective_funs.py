@@ -1384,11 +1384,10 @@ class _Objective(IOAble, ABC):
 
         else:
             # try to do weighted mean if possible
-            constants = self._constants
-            if constants is None:
+            if not hasattr(self, "_constants"):
                 w = jnp.ones_like(f)
             else:
-                w = constants["quad_weights"]
+                w = self._constants["quad_weights"]
 
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean

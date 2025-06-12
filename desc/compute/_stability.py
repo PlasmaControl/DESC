@@ -388,7 +388,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
         return f
 
-    c, f, g = map(reshape, (data["c balloon"], data["f balloon"], data["g balloon"]))
+    c = reshape(data["c balloon"])
+    f = reshape(data["f balloon"])
+    g = reshape(data["g balloon"])
     # Approximate derivative along field line with second order finite differencing.
     g = (g[..., 1:] + g[..., :-1]) / 2
     diag_inner = c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2
@@ -519,8 +521,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         assert f.shape == (grid.num_zeta, grid.num_rho, grid.num_alpha, num_zeta0)
         return f
 
-    c, g = map(reshape, (data["c balloon"], data["g balloon"]))
-    c = c[:-1]
+    c = reshape(data["c balloon"])[:-1]
+    g = reshape(data["g balloon"])
     g = (g[1:] + g[:-1]) / 2
 
     def integrator(carry, x):

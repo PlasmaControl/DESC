@@ -983,8 +983,8 @@ def test_plot_field_lines():
     field = SumMagneticField([field1, field2])
     _ = plot_field_lines(
         field,
-        R0=[1.1],
-        Z0=[0.0],
+        R0=[1.1, 1.3],
+        Z0=[0.0, 0.1],
         nphi_per_transit=100,
         ntransit=2,
         endpoint=True,

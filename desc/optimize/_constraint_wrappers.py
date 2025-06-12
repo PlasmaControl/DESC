@@ -3,6 +3,7 @@
 import functools
 
 import numpy as np
+import nvtx
 
 from desc.backend import jit, jnp, pconcat, put
 from desc.batching import batched_vectorize
@@ -13,6 +14,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.objective_funs import jvp_proximal_per_process
 from desc.objectives.utils import (
     _Project,
     _Recover,
@@ -1364,32 +1366,30 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         print(
             f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
         )
-        J_rank = []
-        for idx in obj_idx_rank:
-            obj = objective.objectives[idx]
-            const = objective.constants[idx]
-
-            thing_idx = objective._things_per_objective_idx[idx]
-            xi = [xgs[i] for i in thing_idx]
-            vi = [vgs[i] for i in thing_idx]
-            assert len(xi) > 0
-            assert len(vi) > 0
-            assert len(xi) == len(vi)
-            if obj._deriv_mode == "rev":
-                # obj might not allow fwd mode, so compute full rev mode jacobian
-                # and do matmul manually. This is slightly inefficient, but usually
-                # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-                Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
-                J_rank.append(
-                    jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
-                )
-            else:
-                J_rank.append(
-                    getattr(obj, "jvp_" + op)(
-                        [_vi for _vi in vi], xi, constants=const
-                    ).T
-                )
-        J_rank = jnp.concatenate(J_rank)
+        rng_rank = nvtx.start_range(message="JVP Proximal on master", color="green")
+        J_rank = jit(
+            jvp_proximal_per_process,
+            device=objective.objectives[obj_idx_rank[0]]._device,
+            static_argnames="op",
+        )(
+            [
+                [xgs[i] for i in objective._things_per_objective_idx[idx]]
+                for idx in obj_idx_rank
+            ],
+            [
+                [vgs[i] for i in objective._things_per_objective_idx[idx]]
+                for idx in obj_idx_rank
+            ],
+            [objective.objectives[i] for i in obj_idx_rank],
+            [objective.constants[i] for i in obj_idx_rank],
+            op=op,
+        )
+        nvtx.end_range(rng_rank)
         print(f"Rank {objective.rank} waiting to gather")
+        rng_gat = nvtx.start_range(message="Gather to master", color="green")
         J = objective.comm.gather(J_rank, root=0)
-        return pconcat(J).T
+        nvtx.end_range(rng_gat)
+        rng_pcat = nvtx.start_range(message="Pconcat", color="blue")
+        J = pconcat(J).T
+        nvtx.end_range(rng_pcat)
+        return J

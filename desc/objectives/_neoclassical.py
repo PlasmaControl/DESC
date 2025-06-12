@@ -3,10 +3,11 @@
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import setdefault
+from desc.utils import setdefault, warnif
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -165,7 +166,6 @@ class EffectiveRipple(_Objective):
 
         self._spline = spline
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -177,6 +177,8 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "alpha": alpha,
+            "quad_weights": 1.0,
         }
 
         super().__init__(
@@ -210,24 +212,24 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X,
-            self._Y,
-            self._grid.compress(self._grid.nodes[:, 0]),
-            domain=(0, 2 * np.pi),
-        )
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-        self._constants["transforms"] = get_transforms(
-            "effective ripple", eq, grid=self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
-        )
+        self._constants = {
+            "clebsch": FourierChebyshevSeries.nodes(
+                self._X,
+                self._Y,
+                self._grid.compress(self._grid.nodes[:, 0]),
+                domain=(0, 2 * np.pi),
+            ),
+            "fieldline quad": leggauss(self._hyperparam["Y_B"] // 2),
+            "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
+            "transforms": get_transforms("effective ripple", eq, grid=self._grid),
+            "profiles": get_profiles("effective ripple", eq, grid=self._grid),
+        }
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -238,9 +240,6 @@ class EffectiveRipple(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
             ``Equilibrium.params_dict``.
-        constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
 
         Returns
         -------
@@ -249,10 +248,19 @@ class EffectiveRipple(_Objective):
 
         """
         if self._spline:
-            return self._compute_spline(params, constants)
+            return self._compute_spline(params)
 
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
@@ -299,26 +307,36 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._dim_f = self._grid.num_rho
+
+        self._constants = {
+            "rho": self._grid.compress(self._grid.nodes[:, 0]),
+            "zeta": jnp.linspace(0, 2 * jnp.pi * num_transit, Y_B * num_transit),
+            "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
+            "transforms_1dr": get_transforms(self._keys_1dr, eq, self._grid),
+            "profiles": get_profiles(
+                self._keys_1dr + ["old effective ripple"], eq, self._grid
+            ),
+        }
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
-        )
-        self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_spline(self, params, constants=None):
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         eq = self.things[0]
         data = compute_fun(
             eq,

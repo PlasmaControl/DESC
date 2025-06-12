@@ -4,8 +4,7 @@ References
 ----------
 The ``_batch_and_remainder``, ``_evaluate_in_chunks``, ``jacrev_chunked``,
 and ``jacfwd_chunked`` functions are adapted from JAX.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2139.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2209.
+https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
 https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 
 The original copyright notice is as follows
@@ -43,7 +42,7 @@ from jax.tree_util import (
     tree_transpose,
 )
 
-from desc.backend import jax, jnp, scan
+from desc.backend import jax, jnp, scan, vmap
 from desc.utils import Index, errorif
 
 if jax.__version_info__ >= (0, 4, 16):
@@ -194,7 +193,7 @@ def vmap_chunked(
     reduction=None,
     chunk_reduction=_identity,
 ):
-    """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
+    """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
     Parameters
     ----------
@@ -223,7 +222,7 @@ def vmap_chunked(
     if isinstance(argnums, int):
         argnums = (argnums,)
 
-    f = jax.vmap(f, in_axes=in_axes)
+    f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
@@ -247,12 +246,11 @@ def batch_map(
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
-    This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
-    ``fun`` is assumed to be vectorized natively. No JAX vectorization such as ``vmap``
-    is applied to the supplied function. This makes compilation faster and avoids the
-    weaknesses of applying JAX vectorization, such as executing all branches of code
-    conditioned on dynamic values. For example, this function would be useful for
-    GitHub issue #1303.
+    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
+    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
+    supplied function. This makes compilation faster and avoids the weaknesses of
+    applying JAX vectorization, such as executing all branches of code conditioned on
+    dynamic values. For example, this function would be useful for GitHub issue #1303
 
     Parameters
     ----------
@@ -268,7 +266,8 @@ def batch_map(
         Should take two arguments and return one output, e.g. ``jnp.add``.
     chunk_reduction : callable
         Chunk-wise reduction operation.
-        Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+        Should typically apply ``reduction`` along the mapped axis,
+        e.g. ``jnp.add.reduce``.
 
     Returns
     -------
@@ -592,15 +591,12 @@ def make_shardable(f, axis=0, num_devices=None):
     """
     if num_devices is None:
         num_devices = jax.device_count()
-    print(jax.device_count())
 
     mesh = jax.make_mesh((num_devices,), ("x"))
 
-    remainder_size = f.shape[axis] % num_devices
-    sf = f[Index.get(slice(0, f.shape[axis] - remainder_size), axis, f.ndim)]
-    rf = f[
-        Index.get(slice(f.shape[axis] - remainder_size, f.shape[axis]), axis, f.ndim)
-    ]
+    shardable_size = f.shape[axis] - (f.shape[axis] % num_devices)
+    sf = f[Index.get(slice(0, shardable_size), axis, f.ndim)]
+    rf = f[Index.get(slice(shardable_size, f.shape[axis]), axis, f.ndim)]
 
     sf = jax.device_put(
         sf,

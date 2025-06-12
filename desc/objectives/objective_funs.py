@@ -461,20 +461,16 @@ class ObjectiveFunction(IOAble):
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
 
-                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
-                def body(params):
-                    f_rank = jnp.concatenate(
-                        [
-                            getattr(self.objectives[idx], message[0])(
-                                *params[idx],
-                                constants=self.constants[idx],
-                            )
-                            for idx in obj_idx_rank
-                        ]
-                    )
-                    return f_rank
-
-                f_rank = body(params)
+                f_rank = jit(
+                    compute_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [params[i] for i in obj_idx_rank],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
                 rng_con = nvtx.start_range(message="numpy", color="red")
                 f_rank = np.array(f_rank)
                 nvtx.end_range(rng_con)
@@ -797,19 +793,16 @@ class ObjectiveFunction(IOAble):
                     message="compute_unscaled on master", color="blue"
                 )
 
-                @jit
-                def body(params):
-                    f_rank = jnp.concatenate(
-                        [
-                            self.objectives[idx].compute_unscaled(
-                                *params[idx], constants=self.constants[idx]
-                            )
-                            for idx in obj_idx_rank
-                        ]
-                    )
-                    return f_rank
-
-                f_rank = body(params)
+                f_rank = jit(
+                    compute_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [params[i] for i in obj_idx_rank],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -860,19 +853,16 @@ class ObjectiveFunction(IOAble):
                 )
                 rng = nvtx.start_range(message="compute_scaled on master", color="blue")
 
-                @jit
-                def body(params):
-                    f_rank = jnp.concatenate(
-                        [
-                            self.objectives[idx].compute_scaled(
-                                *params[idx], constants=self.constants[idx]
-                            )
-                            for idx in obj_idx_rank
-                        ]
-                    )
-                    return f_rank
-
-                f_rank = body(params)
+                f_rank = jit(
+                    compute_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [params[i] for i in obj_idx_rank],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -925,19 +915,16 @@ class ObjectiveFunction(IOAble):
                     message="compute_scaled_error on master", color="blue"
                 )
 
-                @jit
-                def body(params):
-                    f_rank = jnp.concatenate(
-                        [
-                            self.objectives[idx].compute_scaled_error(
-                                *params[idx], constants=self.constants[idx]
-                            )
-                            for idx in obj_idx_rank
-                        ]
-                    )
-                    return f_rank
-
-                f_rank = body(params)
+                f_rank = jit(
+                    compute_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [params[i] for i in obj_idx_rank],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=message[0],
+                )
                 nvtx.end_range(rng)
                 print(f"Rank {self.rank} waiting to gather")
                 rng_gather = nvtx.start_range(message="Gather to master", color="red")
@@ -2197,3 +2184,19 @@ class _ThingFlattener(IOAble):
         assert len(flat) == self.length
         unique, _ = unique_list(flat)
         return unique
+
+
+# These will run on workers, and we wan to safely jit them
+@functools.partial(jit, static_argnames="op")
+def compute_per_process(params, objectives, constants, op):
+    """Compute the objective function on each process."""
+    f_rank = jnp.concatenate(
+        [
+            getattr(obj, op)(
+                *param,
+                constants=constant,
+            )
+            for (obj, param, constant) in zip(objectives, params, constants)
+        ]
+    )
+    return f_rank

@@ -389,9 +389,10 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         return f
 
     c, f, g = map(reshape, (data["c balloon"], data["f balloon"], data["g balloon"]))
-    g_half = (g[..., 1:] + g[..., :-1]) / 2
-    diag_inner = c[..., 1:-1] - (g_half[..., 1:] + g_half[..., :-1]) / dz**2
-    diag_outer = g_half[..., 1:-1] / dz**2
+    # Approximate derivative along field line with second order finite differencing.
+    g = (g[..., 1:] + g[..., :-1]) / 2
+    diag_inner = c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2
+    diag_outer = g[..., 1:-1] / dz**2
 
     j = np.arange(grid.num_zeta - 2)
     A = (

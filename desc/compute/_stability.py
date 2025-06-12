@@ -249,35 +249,18 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "a",
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "cvdrift",
-        "cvdrift0",
-        "|B|^2",
-        "B^zeta",
-        "p_r",
-        "iota",
-        "shear",
-        "psi",
-        "psi_r",
-        "rho",
-    ],
+    data=["a", "cvdrift", "cvdrift0", "B^zeta", "p_r", "shear", "psi", "psi_r", "rho"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
-    psi_boundary = params["Psi"] / (2 * jnp.pi)
-    B_n = 2 * psi_boundary / data["a"] ** 2
-    constant1 = data["a"] * B_n**3
-    constant2 = data["a"] ** 3 * B_n
 
     data["c balloon"] = (
-        constant2
+        params["Psi"]
+        / jnp.pi
+        * data["a"]
         * mu_0
         * data["p_r"]
         / data["psi_r"]
@@ -288,6 +271,35 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
             - data["shear"] * data["cvdrift0"] * zeta0
         )
     )
+    return data
+
+
+@register_compute_fun(
+    name="f balloon",
+    # f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
+    label="a B_n^3 / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
+    "\\vert \\nabla \\alpha \\vert^2 / B^3",
+    units="~",
+    units_long="None",
+    description="Parameter in ideal ballooning equation",
+    dim=2,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["a", "g^aa", "g^ra", "g^rr", "|B|^2", "B^zeta", "iota", "shear", "rho"],
+    zeta0="array: points of vanishing integrated local shear to scan over. "
+    "Default 15 points linearly spaced in [-π/2,π/2]",
+)
+def _f_balloon(params, transforms, profiles, data, **kwargs):
+    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
+    zeta0 = zeta0.reshape(-1, 1)
+
+    psi_boundary = params["Psi"] / (2 * jnp.pi)
+    B_n = 2 * psi_boundary / data["a"] ** 2
+    constant1 = data["a"] * B_n**3
+    constant2 = data["a"] ** 3 * B_n
+
     gds2 = (
         data["rho"] ** 2 * data["g^aa"]
         - 2
@@ -304,26 +316,6 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="f balloon",
-    # f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
-    label="a B_n^3 / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
-    "\\vert \\nabla \\alpha \\vert^2 / B^3",
-    units="~",
-    units_long="None",
-    description="Parameter in ideal ballooning equation",
-    dim=2,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["c balloon"],
-)
-def _f_balloon(params, transforms, profiles, data, **kwargs):
-    # noqa: unused dependency
-    return data
-
-
-@register_compute_fun(
     name="g balloon",
     # g = a³ Bₙ * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
     label="a^3 B_n b \\cdot \\nabla ζ (\\partial_{\\rho} \\psi_N)^2 "
@@ -336,7 +328,7 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["c balloon"],
+    data=["f balloon"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -486,7 +478,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rtz",
+    coordinates="r",
     data=["c balloon", "g balloon"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )

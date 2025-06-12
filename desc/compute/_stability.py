@@ -236,14 +236,17 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="ideal ballooning lambda",
-    label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
+    name="c balloon",
+    # c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
+    label="a^3 B_n / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
+    "(\\partial_{\\psi} \\rho) (b \\times \\kappa) \\cdot "
+    "\\vert \\nabla \\alpha \\vert^2 / B",
     units="~",
     units_long="None",
-    description="Normalized squared ideal ballooning growth rate",
-    dim=1,
-    params=["Psi"],
-    transforms={"grid": []},
+    description="Parameter in ideal ballooning equation",
+    dim=3,
+    params=[],
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -262,73 +265,18 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "psi_r",
         "rho",
     ],
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
-    Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
-    "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
-    eigfuns="bool: Whether to return eigenfunctions. Default is true.",
 )
-def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
-    """Ideal-ballooning growth rate finder.
-
-    A finite-difference method is used to calculate the maximum
-    growth rate against the infinite-n ideal ballooning mode.
-    The equation being solved is
-
-    d/dζ(g dX/dζ) + c X = λ f X, g, f > 0
-
-    where
-
-    𝛋 = b ⋅ ∇b
-    g = a³ Bₙ  * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
-    c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
-    f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
-    λ = a² / v_A² * γ²
-
-    and
-
-    v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
-    ψ_N = ψ/ψ_b     is the normalized toroidal flux
-    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
-
-    To obtain the parameters g, c, and f, we need a set of parameters
-    along a field line provided in the list ``data`` above.
-    Here is a description of some of these parameters.
-
-    - a: minor radius of the device
-    - g^aa: |∇α|², field line bending term
-    - g^ra: ∇α dot ∇ρ, integrated local shear
-    - g^rr: |∇ρ|², flux expansion term
-    - cvdrift: geometric factor of the curvature drift
-    - cvdrift0: geometric factor of curvature drift 2
-    - p_r: dp/dρ, pressure gradient
-
-    Returns
-    -------
-    Ideal-ballooning lambda eigenvalues
-        Shape (num_rho, num alpha, num zeta0, num eigvals).
-    Ideal-ballooning lambda eigenfunctions
-        Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
-
-    """
-    Neigvals = kwargs.get("Neigvals", 1)
-    eigfuns = kwargs.get("eigfuns", True)
+def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
-    grid = transforms["grid"].source_grid
-
-    # scalars
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     constant1 = data["a"] * B_n**3
     constant2 = data["a"] ** 3 * B_n
-    # toroidal step size between points along field lines is assumed uniform
-    dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
-    dz = dz[1] - dz[0]
 
-    # higher dimensional maps
-    c = (
+    data["c balloon"] = (
         constant2
         * mu_0
         * data["p_r"]
@@ -350,16 +298,105 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         * zeta0
         + data["shear"] ** 2 * data["g^rr"] * zeta0**2
     )
-    f = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
-    g = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
+    data["f balloon"] = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
+    data["g balloon"] = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
+    return data
+
+
+@register_compute_fun(
+    name="f balloon",
+    # f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
+    label="a B_n^3 / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
+    "\\vert \\nabla \\alpha \\vert^2 / B^3",
+    units="~",
+    units_long="None",
+    description="Parameter in ideal ballooning equation",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["c_balloon"],
+)
+def _f_balloon(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    return data
+
+
+@register_compute_fun(
+    name="g balloon",
+    # g = a³ Bₙ * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
+    label="a^3 B_n b \\cdot \\nabla ζ (\\partial_{\\rho} \\psi_N)^2 "
+    "\\vert \\nabla \\alpha \\vert^2 / B",
+    units="~",
+    units_long="None",
+    description="Parameter in ideal ballooning equation",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["c_balloon"],
+)
+def _g_balloon(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    return data
+
+
+@register_compute_fun(
+    name="ideal ballooning lambda",
+    label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared ideal ballooning growth rate",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["c balloon", "f balloon", "g balloon"],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
+    "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
+    eigfuns="bool: Whether to return eigenfunctions. Default is true.",
+)
+def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
+    """Eigenvalues of ideal-ballooning equation.
+
+    A finite-difference method is used to calculate the maximum
+    growth rate against the infinite-n ideal ballooning mode.
+    The equation being solved is
+
+    d/dζ(g dX/dζ) + c X = λ f X, g, f > 0
+
+    where
+
+    λ = a² / v_A² * γ²
+    v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
+    ψ_N = ψ/ψ_b     is the normalized toroidal flux
+    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
+
+    Returns
+    -------
+    Ideal-ballooning lambda eigenvalues
+        Shape (num_rho, num alpha, num zeta0, num eigvals).
+
+    """
+    Neigvals = kwargs.get("Neigvals", 1)
+    eigfuns = kwargs.get("eigfuns", True)
+    grid = transforms["grid"].source_grid
+    # toroidal step size between points along field lines is assumed uniform
+    dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
+    dz = dz[1] - dz[0]
+    num_zeta0 = data["c balloon"].shape[0]
 
     def reshape(f):
-        assert f.shape == (zeta0.size, grid.num_nodes)
+        assert f.shape == (num_zeta0, grid.num_nodes)
         f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
-        assert f.shape == (grid.num_rho, grid.num_alpha, zeta0.size, grid.num_zeta)
+        assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
         return f
 
-    f, g, c = map(reshape, (f, g, c))
+    c, f, g = map(reshape, (data["c balloon"], data["f balloon"], data["g balloon"]))
     g_half = (g[..., 1:] + g[..., :-1]) / 2
     diag_inner = c[..., 1:-1] - (g_half[..., 1:] + g_half[..., :-1]) / dz**2
     diag_outer = g_half[..., 1:-1] / dz**2
@@ -370,7 +407,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
             (
                 grid.num_rho,
                 grid.num_alpha,
-                zeta0.size,
+                num_zeta0,
                 grid.num_zeta - 2,
                 grid.num_zeta - 2,
             )
@@ -393,7 +430,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         w = jnp.linalg.eigvalsh(A)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
-    assert w.shape == (grid.num_rho, grid.num_alpha, zeta0.size, Neigvals)
+    assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
     data["ideal ballooning lambda"] = w
 
     if eigfuns:
@@ -404,7 +441,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         assert v.shape == (
             grid.num_rho,
             grid.num_alpha,
-            zeta0.size,
+            num_zeta0,
             grid.num_zeta - 2,
             Neigvals,
         )
@@ -419,23 +456,29 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="None",
     description="Ideal ballooning eigenfunction",
-    dim=1,
+    dim=4,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["ideal ballooning lambda"],
-    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
+    """Eigenfunctions of ideal-ballooning equation.
+
+    Returns
+    -------
+    Ideal-ballooning lambda eigenfunctions
+        Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
+
+    """
     assert kwargs.get("eigfuns", True)
     return data  # noqa: unused dependency
 
 
 @register_compute_fun(
     name="Newcomb ballooning metric",
-    label="\\mathrm{Newcomb-ballooning-metric}",
+    label="Newcomb ballooning metric",
     units="~",
     units_long="None",
     description="A measure of Newcomb's distance from marginal ballooning stability",
@@ -444,25 +487,8 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "a",
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "cvdrift",
-        "cvdrift0",
-        "|B|",
-        "B^zeta",
-        "p_r",
-        "iota",
-        "shear",
-        "psi",
-        "psi_r",
-        "rho",
-    ],
+    data=["c balloon", "f balloon", "g balloon"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    zeta0="array: points of vanishing integrated local shear to scan over. "
-    "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     """Ideal-ballooning growth rate proxy.
@@ -474,29 +500,10 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     where
 
-    𝛋 = b ⋅ ∇b
-    g = a³ Bₙ  * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
-    c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
-    f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
     λ = a² / v_A² * γ²
-
-    and
-
     v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
     ψ_N = ψ/ψ_b     is the normalized toroidal flux
     ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
-
-    To obtain the parameters g, c, and f, we need a set of parameters
-    along a field line provided in the list ``data`` above.
-    Here is a description of some of these parameters.
-
-    - a: minor radius of the device
-    - g^aa: |∇α|², field line bending term
-    - g^ra: ∇α dot ∇ρ, integrated local shear
-    - g^rr: |∇ρ|², flux expansion term
-    - cvdrift: geometric factor of the curvature drift
-    - cvdrift0: geometric factor of curvature drift 2
-    - p_r: dp/dρ, pressure gradient
 
     The Newcomb's stability criterion is used.
     We define the Newcomb metric as follows:
@@ -506,88 +513,32 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
 
     """
-    # FIXME: same issue
-    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
-    source_grid = transforms["grid"].source_grid
-    # Vectorize in rho later
-    rho = source_grid.meshgrid_reshape(data["rho"], "arz")
+    grid = transforms["grid"].source_grid
+    # toroidal step size between points along field lines is assumed uniform
+    zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+    dz = zeta[1] - zeta[0]
+    num_zeta0 = data["c balloon"].shape[0]
 
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    a_N = data["a"]
-    B_N = 2 * psi_b / a_N**2
+    def reshape(f):
+        assert f.shape == (num_zeta0, grid.num_nodes)
+        f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
+        assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
+        return f
 
-    N_zeta0 = len(zeta0)
+    c, f, g = map(reshape, (data["c balloon"], data["f balloon"], data["g balloon"]))
+    c = c[..., :-1]
+    g_half = (g[..., 1:] + g[..., :-1]) / 2
 
-    # This would fail with rho vectorization
-    iota = jnp.mean(data["iota"])
-    shear = jnp.mean(data["shear"])
-    psi = jnp.mean(data["psi"])
-    sign_psi = jnp.sign(psi)
-    sign_iota = jnp.sign(iota)
-
-    N_rho = int(source_grid.num_rho)
-    N_alpha = int(source_grid.num_alpha)
-
-    # phi is the same for each alpha
-    phi = source_grid.nodes[:: N_rho * N_alpha, 2]
-    N_zeta = len(phi)
-
-    B = source_grid.meshgrid_reshape(data["|B|"], "arz")
-    B_sup_zeta = source_grid.meshgrid_reshape(data["B^zeta"], "arz")
-    gradpar = B_sup_zeta / B
-
-    dpdpsi = source_grid.meshgrid_reshape(mu_0 * data["p_r"] / data["psi_r"], "arz")
-
-    g_sup_aa = source_grid.meshgrid_reshape(data["g^aa"], "arz")[None, :]
-    g_sup_ra = source_grid.meshgrid_reshape(data["g^ra"], "arz")[None, :]
-    g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, :]
-
-    gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None] * g_sup_ra
-            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
-        ),
-        (N_alpha, N_zeta0, N_zeta),
+    j = np.arange(grid.num_zeta)
+    X = (
+        jnp.zeros((grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta - 1))
+        .at[..., j[:-1]]
+        .set(zeta[:-1], unique_indices=True, indices_are_sorted=True)
     )
 
-    g = a_N**3 * B_N * gds2 / B * gradpar
-    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-
-    cvdrift = source_grid.meshgrid_reshape(data["cvdrift"], "arz")[None, :]
-    cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, :]
-
-    c = (
-        a_N**3
-        * B_N
-        * jnp.reshape(
-            2
-            / B_sup_zeta[None, :]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None] * cvdrift0),
-            (N_alpha, N_zeta0, N_zeta),
-        )
-    )
-
-    h = phi[1] - phi[0]
-
-    # g_half on half grid points, c_full on full grid points
-    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-    c_full = c[:, :, :-1]
-
-    i = jnp.arange(N_alpha)[:, None, None]
-    j = jnp.arange(N_zeta0)[None, :, None]
-    k = jnp.arange(N_zeta - 1)[None, None, :]
-
-    X = jnp.zeros((N_alpha, N_zeta0, N_zeta - 1))
-    X = X.at[i, j, k].set(phi[k])
-
-    Y = jnp.zeros((N_alpha, N_zeta0))
-    eps = 5e-3  # slope of the test functio
-    Yp = eps * jnp.ones((N_alpha, N_zeta0))
+    Y = jnp.zeros(X.shape[:-1])
+    eps = 5e-3  # slope of the test function
+    Yp = eps * jnp.ones(Y.shape)
 
     @jit
     def integrator(carry, x):
@@ -595,8 +546,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         g_element, c_element = x
         # Update the array (Y) and its derivative on scattered grids and
         # integrate using leapfrog-like method.
-        y_new = y + h * dy / g_element
-        dy_new = dy - c_element * y_new * h
+        y_new = y + dz * dy / g_element
+        dy_new = dy - c_element * y_new * dz
         # y starts at 0 with positive slope. If y goes negative it's unstable,
         # so we look for a sign change.
         sign_change = y_new < 0.0
@@ -606,16 +557,10 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     def cumulative_update_jit(y, dy, g_half, c_full):
         _, scan_output = scan(integrator, (y, dy), (g_half, c_full))
         Y, sign_change = scan_output
-        # argmax of boolean array returns index if first True, where y goes negative
+        sign_change = sign_change.at[-1].set(1)
         first_negative_index = jnp.argmax(sign_change)
-        # return last index if there are no sign crossings
-        first_negative_index = jnp.where(
-            ~jnp.any(sign_change),
-            -1,
-            first_negative_index,
-        )
         # slope of Y where it crosses 0
-        slope = (Y[first_negative_index] - Y[first_negative_index - 1]) / h
+        slope = (Y[first_negative_index] - Y[first_negative_index - 1]) / dz
         # This factor will give us the exact X point of intersection
         lin_interp_factor = jnp.where(
             first_negative_index != -1,
@@ -626,17 +571,16 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         return Y, first_negative_index, lin_interp_factor
 
     # Vectorize over the first two dimensions
-    vectorized_cumulative_update = jit(vmap(vmap(cumulative_update_jit)))
+    vectorized_cumulative_update = jit(vmap(vmap(vmap(cumulative_update_jit))))
     Y, first_negative_indices, lin_interp_factors = vectorized_cumulative_update(
-        Y, Yp, g_half, c_full
+        Y, Yp, g_half, c
     )
 
     # x at crossing pts, or last value of x if there were no crossings
-    X0 = jnp.zeros((N_alpha, N_zeta0))
-    i0 = jnp.arange(N_alpha)[:, None]
-    j0 = jnp.arange(N_zeta0)[None, :]
-    X0 = X0.at[i0, j0].set(
-        X[i0, j0, first_negative_indices[i0, j0]] + lin_interp_factors[i0, j0] * h
+    X0 = jnp.zeros(Y.shape)
+    X0 = X0.at[..., j, j].set(
+        X[..., j, j, first_negative_indices[..., j, j]]
+        + lin_interp_factors[..., j, j] * dz
     )
     # where X0 < phimax, it means there was a zero crossing so its unstable. We take
     # the distance from X0 to phimax as the distance to stability. If there was no
@@ -646,9 +590,9 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     metric = jnp.where(
         first_negative_indices != -1,
         # if it crossed, then X0 < phimax, so this < 0
-        (X0 - jnp.max(phi)) / jnp.ptp(phi),
+        (X0 - zeta[-1]) / (zeta[-1] - zeta[0]),
         # if it reached the end without crossing, this is >=0
-        Y[:, :, -1],
+        Y[..., -1],
     )
 
     data["Newcomb ballooning metric"] = jnp.min(metric)

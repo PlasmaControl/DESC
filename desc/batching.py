@@ -27,13 +27,14 @@ from jax._src.api import (
     _vjp,
 )
 from jax._src.api_util import _ensure_index, argnums_partial, check_callable
-from jax._src.mesh import auto_axes, get_abstract_mesh
+from jax._src.mesh import get_abstract_mesh
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
+from jax._src.pjit import auto_axes
 from jax._src.util import unzip2, wraps
 from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (

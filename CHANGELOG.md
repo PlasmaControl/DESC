@@ -6,6 +6,7 @@ New Features
 - Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
 - Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
+- Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
 
 Bug Fixes
 

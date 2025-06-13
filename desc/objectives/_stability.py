@@ -418,6 +418,7 @@ class BallooningStability(_Objective):
         w0=1.0,
         w1=10.0,
         name="ideal ballooning lambda",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -441,6 +442,7 @@ class BallooningStability(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         errorif(

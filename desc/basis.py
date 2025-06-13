@@ -101,6 +101,7 @@ class _Basis(IOAble, ABC):
             "cosine",
             "even",
             "cos(t)",
+            "no n=0",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
@@ -116,6 +117,8 @@ class _Basis(IOAble, ABC):
             self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
             self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
+        elif self.sym == "no n=0":  # no n=0 mode
+            self._modes = self.modes[np.asarray(self.modes[:, 2] != 0)]
         elif self.sym is None:
             self._sym = False
 
@@ -446,9 +449,10 @@ class FourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         number of field periods
-    sym : {``'cos'``, ``'sin'``, False}
-        * ``'cos'`` for cos(m*t-n*z) symmetry
-        * ``'sin'`` for sin(m*t-n*z) symmetry
+    sym : {``'cos'``, ``'sin'``, ``'no n0'``, False}
+        * ``'cos'`` for cos(n*z) symmetry
+        * ``'sin'`` for sin(n*z) symmetry
+        * ``'no n=0'`` for no n=0 mode
         * ``False`` for no symmetry (Default)
 
     """

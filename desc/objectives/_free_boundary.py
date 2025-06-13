@@ -365,7 +365,7 @@ class BoundaryError(_Objective):
     Computes the residual of the following:
 
     𝐁ₒᵤₜ ⋅ 𝐧 = 0
-    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - p = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - 2μ₀p = 0
     μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
 
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
@@ -773,7 +773,11 @@ class BoundaryError(_Objective):
 
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
-        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
             Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)

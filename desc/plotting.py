@@ -3621,7 +3621,10 @@ def plot_basis(  # noqa : C901
                     2 * np.pi / basis.NFP,
                 ]
             )
-            ax[mmax + m, 0].set_yticks([0, np.pi / 2, np.pi, 3 / 2 * np.pi, 2 * np.pi])
+            if type(ax[mmax + m, 0]) is matplotlib.axes._axes.Axes:
+                ax[mmax + m, 0].set_yticks(
+                    [0, np.pi / 2, np.pi, 3 / 2 * np.pi, 2 * np.pi]
+                )
             ax[mmax + m, nmax + n].set_xticklabels([])
             ax[mmax + m, nmax + n].set_yticklabels([])
             im = ax[mmax + m, nmax + n].contourf(
@@ -3643,7 +3646,7 @@ def plot_basis(  # noqa : C901
                     ["$0$", None, "$\\pi/N_{{FP}}$", None, "$2\\pi/N_{{FP}}$"],
                     fontsize=8,
                 )
-            if n + nmax == 0:
+            if n + nmax == 0 and type(ax[mmax + m, 0]) is matplotlib.axes._axes.Axes:
                 ax[mmax + m, 0].set_ylabel("$m={}$ \n $\\theta$".format(m), fontsize=10)
                 ax[mmax + m, 0].set_yticklabels(
                     ["$0$", None, "$\\pi$", None, "$2\\pi$"], fontsize=8

@@ -413,6 +413,7 @@ class ObjectiveFunction(IOAble):
             message = self.comm.bcast(message, root=0)
             nvtx.end_range(rng_wait)
             obj_idx_rank = self._obj_per_rank[self.rank]
+            objs = [self.objectives[i] for i in obj_idx_rank]
 
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
@@ -442,22 +443,14 @@ class ObjectiveFunction(IOAble):
                     for idx in obj_idx_rank
                 ]
                 nvtx.end_range(rng_xv)
-                rng_obj = nvtx.start_range(
-                    message="form objs and constants", color="red"
-                )
-                objs = [self.objectives[i] for i in obj_idx_rank]
-                constants = [self.constants[i] for i in obj_idx_rank]
-                nvtx.end_range(rng_obj)
 
                 J_rank = jit(
                     jvp_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     xs,
                     vs,
                     objs,
-                    constants,
                     op=message[0],
                 ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
@@ -479,12 +472,10 @@ class ObjectiveFunction(IOAble):
 
                 f_rank = jit(
                     compute_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     [params[i] for i in obj_idx_rank],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
+                    objs,
                     op=message[0],
                 ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
@@ -520,21 +511,13 @@ class ObjectiveFunction(IOAble):
                     for idx in obj_idx_rank
                 ]
                 nvtx.end_range(rng_xv)
-                rng_obj = nvtx.start_range(
-                    message="form objs and constants", color="red"
-                )
-                objs = [self.objectives[i] for i in obj_idx_rank]
-                constants = [self.constants[i] for i in obj_idx_rank]
-                nvtx.end_range(rng_obj)
                 J_rank = jit(
                     jvp_proximal_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     xs,
                     vs,
                     objs,
-                    constants,
                     op=op,
                 ).block_until_ready()
                 rng_np = nvtx.start_range(message="numpy", color="red")
@@ -813,12 +796,10 @@ class ObjectiveFunction(IOAble):
 
                 f_rank = jit(
                     compute_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
                 nvtx.end_range(rng)
@@ -875,12 +856,10 @@ class ObjectiveFunction(IOAble):
 
                 f_rank = jit(
                     compute_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
                 nvtx.end_range(rng)
@@ -939,12 +918,10 @@ class ObjectiveFunction(IOAble):
 
                 f_rank = jit(
                     compute_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
                 nvtx.end_range(rng)
@@ -1201,7 +1178,6 @@ class ObjectiveFunction(IOAble):
                 rng = nvtx.start_range(message="JVP on master", color="blue")
                 J_rank = jit(
                     jvp_per_process,
-                    device=self.objectives[obj_idx_rank[0]]._device,
                     static_argnames="op",
                 )(
                     [
@@ -1213,7 +1189,6 @@ class ObjectiveFunction(IOAble):
                         for idx in obj_idx_rank
                     ],
                     [self.objectives[i] for i in obj_idx_rank],
-                    [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
                 nvtx.end_range(rng)
@@ -2218,50 +2193,42 @@ class _ThingFlattener(IOAble):
 
 # These will run on workers, and we wan to safely jit them
 @functools.partial(jit, static_argnames="op")
-def compute_per_process(params, objectives, constants, op="compute_scaled_error"):
+def compute_per_process(params, objectives, op="compute_scaled_error"):
     """Compute the objective function on each process."""
     f_rank = jnp.concatenate(
         [
             getattr(obj, op)(
                 *param,
-                constants=constant,
             )
-            for (obj, param, constant) in zip(objectives, params, constants)
+            for (obj, param) in zip(objectives, params)
         ]
     )
     return f_rank
 
 
 @functools.partial(jit, static_argnames="op")
-def jvp_per_process(x, v, objectives, constants, op="jvp_scaled_error"):
+def jvp_per_process(x, v, objectives, op="jvp_scaled_error"):
     """Compute the Jacobian-vector product on each process."""
     J_rank = jnp.hstack(
-        [
-            getattr(obj, op)(v[idx], x[idx], constants=constant)
-            for idx, (obj, constant) in enumerate(zip(objectives, constants))
-        ]
+        [getattr(obj, op)(v[idx], x[idx]) for idx, obj in enumerate(objectives)]
     )
     return J_rank
 
 
 @functools.partial(jit, static_argnames="op")
-def jvp_proximal_per_process(x, v, objectives, constants, op="scaled_error"):
+def jvp_proximal_per_process(x, v, objectives, op="scaled_error"):
     """Compute the Jacobian-vector product on each process, for proximal."""
     J_rank = []
-    for idx, (obj, constant) in enumerate(zip(objectives, constants)):
+    for idx, obj in enumerate(objectives):
         if obj._deriv_mode == "rev":
             # obj might not allow fwd mode, so compute full rev mode
             # jacobian and do matmul manually. This is slightly
             # inefficient, but usuallywhen rev mode is used,
             # dim_f <<< dim_x, so its not too bad.
-            Ji = getattr(obj, "jac_" + op)(*x[idx], constants=constant)
+            Ji = getattr(obj, "jac_" + op)(*x[idx])
             J_rank.append(
                 jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, v[idx])]).sum(axis=0)
             )
         else:
-            J_rank.append(
-                getattr(obj, "jvp_" + op)(
-                    [_vi for _vi in v[idx]], x[idx], constants=constant
-                ).T
-            )
+            J_rank.append(getattr(obj, "jvp_" + op)([_vi for _vi in v[idx]], x[idx]).T)
     return jnp.vstack(J_rank)

@@ -1379,17 +1379,14 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         nvtx.end_range(rng_xv)
         rng_obj = nvtx.start_range(message="form objs and constants", color="red")
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        constants = [objective.constants[i] for i in obj_idx_rank]
         nvtx.end_range(rng_obj)
         J_rank = jit(
             jvp_proximal_per_process,
-            device=objective.objectives[obj_idx_rank[0]]._device,
             static_argnames="op",
         )(
             xs,
             vs,
             objs,
-            constants,
             op=op,
         )
         nvtx.end_range(rng_rank)

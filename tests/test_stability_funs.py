@@ -710,8 +710,8 @@ def test_ballooning_stability_eval():
         assert np.shape(X0_full) == (
             N_alpha,
             N_zeta0,
-            1,
             N_zeta - 2,
+            1,
         ), "output eigenfunction spectrum does not have the right shape"
 
         lam2 = jnp.max(lam2_full)

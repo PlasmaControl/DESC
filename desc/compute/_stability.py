@@ -421,9 +421,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # v becomes less than the machine precision at some theta points which gives NaNs
     # stop_gradient prevents that. Not sure how it will affect an objective that
     # requires both the eigenvalue and eigenfunction
-    v_T = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))
-
-    top_eigfuns = jnp.take_along_axis(v_T, top_theta_idxs[..., None], axis=2)
+    top_eigfuns = jnp.take_along_axis(
+        jax.lax.stop_gradient(v), top_theta_idxs[..., None, :], axis=-1
+    )
 
     data["ideal ballooning lambda"] = top_eigvals
     data["ideal ballooning eigenfunction"] = top_eigfuns

@@ -25,7 +25,7 @@ num_device = 2
 # cause the memory allocation to fail. To avoid this, we can set the allocator to `platform`
 # such that there is no pre-allocation. This is a bit conservative (and probably there is room
 # for improvement), but if a process needs more memory, it can use more memory on the fly.
-#
+
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 set_device("gpu", num_device=num_device)
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                 eq.solve(
                     objective=obj,
                     constraints=cons,
-                    maxiter=3,
+                    maxiter=10,
                     ftol=0,
                     gtol=0,
                     xtol=0,

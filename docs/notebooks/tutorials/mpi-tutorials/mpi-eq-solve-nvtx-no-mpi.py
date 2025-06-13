@@ -60,7 +60,7 @@ if __name__ == "__main__":
         eq.solve(
             objective=obj,
             constraints=cons,
-            maxiter=3,
+            maxiter=10,
             ftol=0,
             gtol=0,
             xtol=0,

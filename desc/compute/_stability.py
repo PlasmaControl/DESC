@@ -363,10 +363,8 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     where
 
-    λ = a² / v_A² * γ²
+      λ = a² / v_A² * γ²
     v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
-    ψ_N = ψ/ψ_b     is the normalized toroidal flux
-    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
 
     Returns
     -------
@@ -496,10 +494,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     where
 
-    λ = a² / v_A² * γ²
+      λ = a² / v_A² * γ²
     v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
-    ψ_N = ψ/ψ_b     is the normalized toroidal flux
-    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
 
     The Newcomb's stability criterion is used.
     We define the Newcomb metric as follows:
@@ -538,31 +534,33 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         c, g = x
         y_new = y + dz * dy / g
         dy_new = dy - c * y_new * dz
-        return (y_new, dy_new), (y_new, y_new < 0.0)
+        return (y_new, dy_new), (y_new, y_new < 0)
 
-    dy_dz_init = 5e-3
+    dy_dz_initial = 5e-3
     _, (y, is_root) = scan(
         integrator,
-        (jnp.zeros(c.shape[1:]), jnp.full(c.shape[1:], dy_dz_init)),
+        (jnp.zeros(c.shape[1:]), jnp.full(c.shape[1:], dy_dz_initial)),
         (c, g),
     )
-    idx_right_root = jnp.argmax(is_root.at[-1].set(True), axis=0)
-    y_left_root = y[idx_right_root - 1]
+    idx_right_root = jnp.argmax(is_root.at[-1].set(True), axis=0, keepdims=True)
+    y_left_root = jnp.take_along_axis(y, idx_right_root - 1, axis=0)
     # derivative of linear approximation of ζ ↦ y(ζ) near root
-    dy_dz = (y[idx_right_root] - y_left_root) / dz
+    dy_dz = (jnp.take_along_axis(y, idx_right_root, axis=0) - y_left_root) / dz
     # crossing from stable to unstable regime
     x = zeta[idx_right_root] - jnp.where(
-        idx_right_root < (is_root.shape[0] - 1),
-        y_left_root / dy_dz * dz,
-        0,
+        idx_right_root < (is_root.shape[0] - 1), y_left_root / dy_dz * dz, 0
     )
     # We take the signed distance X - ζ max < 0 as the distance to stability.
     # If there was no crossing we take y[ζ = ζ max] > 0.
     # This metric is only C0. Maybe think of something better?
     # RG: Peak of the metric does not match mean peak of the growth rate in ρ.
-    data["Newcomb ballooning metric"] = jnp.where(
-        idx_right_root < (is_root.shape[0] - 1),
-        (x - zeta[-1]) / (zeta[-1] - zeta[0]),
-        y[-1],
-    ).min(axis=(-1, -2))
+    data["Newcomb ballooning metric"] = (
+        jnp.where(
+            idx_right_root < (is_root.shape[0] - 1),
+            (x - zeta[-1]) / (zeta[-1] - zeta[0]),
+            y[-1],
+        )
+        .min((-1, -2))
+        .squeeze(0)
+    )
     return data

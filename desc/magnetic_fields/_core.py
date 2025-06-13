@@ -765,7 +765,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
 
     """
 
-    _static_attrs = Optimizable._static_attrs + ["_fun"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_fun"]
 
     def __init__(self, fun, params=None):
         errorif(not callable(fun), ValueError, "fun must be callable")
@@ -2263,7 +2263,7 @@ class ScalarPotentialField(_MagneticField):
 
     """
 
-    _static_attrs = ["_potential", "_NFP"]
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
 
     def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
@@ -2390,7 +2390,7 @@ class VectorPotentialField(_MagneticField):
 
     """
 
-    _static_attrs = ["_potential", "_NFP"]
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
 
     def __init__(self, potential, params=None, NFP=1):
         self._potential = potential

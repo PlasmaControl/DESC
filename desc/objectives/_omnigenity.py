@@ -40,6 +40,7 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
+    _static_attrs = _Objective._static_attrs + ["_helicity"]
 
     def __init__(
         self,
@@ -552,6 +553,7 @@ class Omnigenity(_Objective):
         "_eq_fixed",
         "_field_data_keys",
         "_field_fixed",
+        "_helicity",
     ]
 
     _coordinates = "rtz"

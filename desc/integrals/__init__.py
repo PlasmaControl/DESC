@@ -4,9 +4,7 @@ from .bounce_integral import Bounce1D, Bounce2D
 from .singularities import (
     DFTInterpolator,
     FFTInterpolator,
-    compute_A_plasma_vol,
     compute_B_plasma,
-    compute_B_plasma_vol,
     singular_integral,
     virtual_casing_biot_savart,
 )

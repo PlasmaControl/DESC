@@ -14,6 +14,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 
 from functools import partial
 
+from jax._src import core
 from jax._src.api import (
     _check_input_dtype_jacfwd,
     _check_input_dtype_jacrev,
@@ -26,13 +27,14 @@ from jax._src.api import (
     _vjp,
 )
 from jax._src.api_util import _ensure_index, argnums_partial, check_callable
+from jax._src.mesh import auto_axes, get_abstract_mesh
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
-from jax._src.util import wraps
+from jax._src.util import unzip2, wraps
 from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
@@ -51,23 +53,55 @@ else:
     from jax import linear_util as lu
 
 
+def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
+    def f(l):
+        return l[:batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+
+    aval = core.typeof(leaf)
+    if aval.sharding.spec[0] is not None:
+        raise ValueError(
+            "0th dimension of leaf passed to `jax.lax.map` should be replicated."
+            f" Got {aval.str_short(True, True)}"
+        )
+    if get_abstract_mesh()._are_all_axes_explicit:
+        out_s = aval.sharding.with_spec(
+            PartitionSpec(None, None, *aval.sharding.spec[1:])
+        )
+        return auto_axes(f, out_sharding=out_s)(leaf)
+    return f(leaf)
+
+
+def _remainder_leaf(leaf, batch_elems):
+    def f(l):
+        return l[batch_elems:]
+
+    if get_abstract_mesh()._are_all_axes_explicit:
+        return auto_axes(f, out_sharding=core.typeof(leaf).sharding)(leaf)
+    return f(leaf)
+
+
 def _batch_and_remainder(x, batch_size: int):
     leaves, treedef = tree_flatten(x)
-
-    scan_leaves = []
-    remainder_leaves = []
-
-    for leaf in leaves:
-        num_batches = leaf.shape[0] // batch_size
-        total_batch_elems = num_batches * batch_size
-        scan_leaves.append(
-            leaf[:total_batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+    if not leaves:
+        return x, None
+    num_batches, remainder = divmod(leaves[0].shape[0], batch_size)
+    batch_elems = num_batches * batch_size
+    if remainder:
+        scan_leaves, remainder_leaves = unzip2(
+            [
+                (
+                    _scan_leaf(leaf, batch_elems, num_batches, batch_size),
+                    _remainder_leaf(leaf, batch_elems),
+                )
+                for leaf in leaves
+            ]
         )
-        remainder_leaves.append(leaf[total_batch_elems:])
-
-    scan_tree = treedef.unflatten(scan_leaves)
-    remainder_tree = treedef.unflatten(remainder_leaves)
-    return scan_tree, remainder_tree
+        return treedef.unflatten(scan_leaves), treedef.unflatten(remainder_leaves)
+    else:
+        scan_leaves = tuple(
+            _scan_leaf(leaf, batch_elems, num_batches, batch_size) for leaf in leaves
+        )
+        return treedef.unflatten(scan_leaves), None
 
 
 def _identity(y):
@@ -86,7 +120,7 @@ def _scan_append(f, x, reduction=None, carry_init_fun=None):
     def body(carry, x):
         return (), f(x)
 
-    _, result = scan(body, (), x, unroll=1)
+    _, result = scan(body, (), x)
     return result
 
 
@@ -102,7 +136,7 @@ def _scan_reduce(
         return reduction(carry, f(x)), None
 
     carry_init = carry_init_fun(jax.eval_shape(f, _get_first_chunk(x)))
-    result, _ = scan(body, carry_init, x, unroll=1)
+    result, _ = scan(body, carry_init, x)
     return result
 
 
@@ -153,8 +187,6 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
-    # TODO: call make_shardable on scan_y and compute each chunk simaltanously
-    #       across devices
     scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
         *scan_x, **kwargs
     )

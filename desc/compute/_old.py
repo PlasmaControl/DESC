@@ -95,7 +95,6 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         "fieldline length",
     ]
     + Bounce1D.required_names,
-    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )

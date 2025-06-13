@@ -175,9 +175,34 @@ def _evaluate_in_chunks(
     argnums,
     reduction=None,
     chunk_reduction=_identity,
+    shard=False,
     *args,
     **kwargs,
 ):
+    if shard:
+        args_shardable, args_remainder = make_shardable(args)
+        out_shardable = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            False,
+            args_shardable,
+            **kwargs,
+        )
+        out_remainder = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            False,
+            args_remainder,
+            **kwargs,
+        )
+        return _concat(out_shardable, out_remainder)
+
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
@@ -225,6 +250,7 @@ def vmap_chunked(
     chunk_size=None,
     reduction=None,
     chunk_reduction=_identity,
+    shard=False,
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
@@ -265,6 +291,7 @@ def vmap_chunked(
         argnums,
         reduction,
         chunk_reduction,
+        shard,
     )
 
 

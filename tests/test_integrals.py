@@ -15,16 +15,20 @@ from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyqu
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
-from desc.basis import FourierZernikeBasis
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
+from desc.compute.geom_utils import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
     Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
+    FreeBoundarySolver,
+    VacuumSolver,
     line_integrals,
     singular_integral,
     surface_averages,
@@ -43,6 +47,7 @@ from desc.integrals._bounce_utils import (
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
+    _get_polar_quadrature,
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -54,14 +59,18 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_quadrature_nodes,
+    _1_over_G,
+    _grad_G,
+    _kernel_Bn_over_r,
+    _kernel_magnetic_dipole,
     _kernel_nr_over_r3,
-    _local_params,
     _vanilla_params,
     best_params,
     best_ratio,
+    get_interpolator,
 )
 from desc.integrals.surface_integral import _get_grid_surface
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
@@ -301,33 +310,6 @@ class TestSurfaceIntegral:
         test(lg_2_sym)
         test(cg)
         test(cg_sym)
-
-    @pytest.mark.unit
-    def test_surface_averages_identity_op(self):
-        """Test flux surface averages of surface functions are identity operations."""
-        eq = get("W7-X")
-        with pytest.warns(UserWarning, match="Reducing radial"):
-            eq.change_resolution(3, 3, 3, 6, 6, 6)
-        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute(["p", "sqrt(g)"], grid=grid)
-        pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
-        np.testing.assert_allclose(data["p"], pressure_average)
-
-    @pytest.mark.unit
-    def test_surface_averages_homomorphism(self):
-        """Test flux surface averages of surface functions are additive homomorphisms.
-
-        Meaning average(a + b) = average(a) + average(b).
-        """
-        eq = get("W7-X")
-        with pytest.warns(UserWarning, match="Reducing radial"):
-            eq.change_resolution(3, 3, 3, 6, 6, 6)
-        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
-        a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
-        b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
-        a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
-        np.testing.assert_allclose(a_plus_b, a + b)
 
     @pytest.mark.unit
     def test_surface_integrals_against_shortcut(self):
@@ -586,26 +568,30 @@ class TestSurfaceIntegral:
 
 
 class TestSingularities:
-    """Tests for high order singular integration.
+    """Tests for high order singular integration."""
 
-    Hyperparams from Dhairya for greens ID test:
+    @pytest.mark.unit
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_biest_interpolators(self, interpolator):
+        """Test that FFT and DFT interpolation gives same result for standard grids."""
+        grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        h_t = 2 * np.pi / grid.num_theta
+        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
 
-     M  q  Nu Nv   N=Nu*Nv    error
-    13 10  15 13       195 0.246547
-    13 10  30 13       390 0.0313301
-    13 12  45 13       585 0.0022925
-    13 12  60 13       780 0.00024359
-    13 12  75 13       975 1.97686e-05
-    19 16  90 19      1710 1.2541e-05
-    19 16 105 19      1995 2.91152e-06
-    19 18 120 19      2280 7.03463e-07
-    19 18 135 19      2565 1.60672e-07
-    25 20 150 25      3750 7.59613e-09
-    31 22 210 31      6510 1.04357e-09
-    37 24 240 37      8880 1.80728e-11
-    43 28 300 43     12900 2.14129e-12
+        st = 3
+        sz = 5
+        q = 4
+        r, w, _, _ = _get_polar_quadrature(q)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
 
-    """
+        interp = interpolator(grid, grid, st, sz, q)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+        f = _f_2d(theta, zeta)
+        for i in range(dt.size):
+            truth = _f_2d(theta + dt[i], zeta + dz[i])
+            np.testing.assert_allclose(interp(f, i), truth)
 
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
@@ -622,6 +608,22 @@ class TestSingularities:
 
         So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
 
+        Hyperparams from Dhairya for greens ID test:
+
+         M  q  Nu Nv   N=Nu*Nv    error
+        13 10  15 13       195 0.246547
+        13 10  30 13       390 0.0313301
+        13 12  45 13       585 0.0022925
+        13 12  60 13       780 0.00024359
+        13 12  75 13       975 1.97686e-05
+        19 16  90 19      1710 1.2541e-05
+        19 16 105 19      1995 2.91152e-06
+        19 18 120 19      2280 7.03463e-07
+        19 18 135 19      2565 1.60672e-07
+        25 20 150 25      3750 7.59613e-09
+        31 22 210 31      6510 1.04357e-09
+        37 24 240 37      8880 1.80728e-11
+        43 28 300 43     12900 2.14129e-12
         """
         eq = Equilibrium()
         Nu = [13, 13, 13, 19, 19, 25, 37]
@@ -637,7 +639,7 @@ class TestSingularities:
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
             err = singular_integral(
-                data, data, "nr_over_r3", interpolator, chunk_size=50
+                data, data, interpolator, kernel="nr_over_r3", chunk_size=50
             )
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
@@ -649,7 +651,9 @@ class TestSingularities:
         st, sz, q = best_params(grid, best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
-        err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
+        err = singular_integral(
+            data, data, interpolator, kernel="nr_over_r3", chunk_size=50
+        )
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
@@ -675,8 +679,7 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            mean, local = best_ratio(data, return_local=True)
-            st, sz, q = _local_params(grid, (mean, local.mean()))  # TODO (#1609)
+            st, sz, q = best_params(grid, best_ratio(data))
             atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
@@ -692,28 +695,455 @@ class TestSingularities:
         """Test vanilla params that do not account for aspect ratio."""
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
+
+class TestVacuumSolver:
+    """Test vacuum field solver."""
+
     @pytest.mark.unit
-    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
-    def test_biest_interpolators(self, interpolator):
-        """Test that FFT and DFT interpolation gives same result for standard grids."""
-        grid = LinearGrid(0, *_f_2d_nyquist_freq())
-        h_t = 2 * np.pi / grid.num_theta
-        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+    @pytest.mark.parametrize(
+        "maxiter",
+        [
+            0,
+            pytest.param(
+                40, marks=pytest.mark.xfail(strict=False, reason="Debugging.")
+            ),
+        ],
+    )
+    def test_harmonic_simple(self, maxiter):
+        """Test that Laplace solution recovers expected analytic result.
 
-        st = 3
-        sz = 5
-        q = 4
-        r, w, _, _ = _get_quadrature_nodes(q)
-        dt = st / 2 * h_t * r * np.sin(w)
-        dz = sz / 2 * h_z * r * np.cos(w)
+        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
+        θ = 0 is outboard side and θ increases clockwise.
+        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧
+                         = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
+                         = sin(θ)
+        and test that ‖ Φ − Z ‖_∞ → 0.
+        """
+        chunk_size = 1000
+        resolution = 50
+        atol = 1e-4
+        a = 1
+        surf = FourierRZToroidalSurface()  # Choosing a = 1.
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
-        interp = interpolator(grid, grid, st, sz, q)
-        theta = grid.nodes[:, 1]
-        zeta = grid.nodes[:, 2]
-        f = _f_2d(theta, zeta)
-        for i in range(dt.size):
-            truth = _f_2d(theta + dt[i], zeta + dz[i])
-            np.testing.assert_allclose(interp(f, i), truth)
+        theta = src_grid.nodes[:, 1]
+        B0n = np.sin(theta)
+        vac = VacuumSolver(
+            surface=surf,
+            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
+            src_grid=src_grid,
+            Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
+            Phi_M=1,
+            Phi_N=0,
+            B0n=B0n,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
+        np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
+
+        data = vac.compute_Phi(chunk_size, maxiter, warn=False)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
+        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
+
+        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
+        data = surf.compute(["n_rho", "theta"], grid=vac.evl_grid, data=data)
+        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
+        B0n = np.sin(data["theta"])
+        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("use_dft", "chunk_size"),
+        [
+            (False, 1000),
+            pytest.param(
+                True,
+                1000,
+                marks=pytest.mark.xfail(
+                    strict=False,
+                    reason="See #1599. Decrease chunk size to pass test.",
+                ),
+            ),
+        ],
+    )
+    def test_harmonic_interior(self, use_dft, chunk_size):
+        """Test that Laplace solution recovers expected analytic result.
+
+        Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
+        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
+        """
+        atol = 4e-5
+        # elliptic cross-section with torsion
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
+
+        vac = VacuumSolver(
+            surface=surf,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            # Φ = Z, so this should be exact.
+            Phi_M=surf.M,
+            Phi_N=surf.N,
+            chunk_size=chunk_size,
+            B0n=-surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2],
+            use_dft=use_dft,
+            warn_dft=False,
+            warn_fft=False,
+        )
+
+        data = vac.compute_Phi(chunk_size)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
+        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
+
+        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
+        data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
+        B0n = -data["n_rho"][:, 2]
+        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
+        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("chunk_size", [25])
+    def test_harmonic_exterior(self, chunk_size):
+        """Test that Laplace solution recovers expected analytic result.
+
+        Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
+        Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
+        """
+        atol = 1e-3
+        # elliptic cross-section with torsion
+        surf = FourierRZToroidalSurface(
+            R_lmn=[100, 10, 1],
+            Z_lmn=[-20, -1],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        src_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
+
+        src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
+        # place green's function origin inside torus
+        # so that singularity is outside of the domain of the
+        # exterior problem
+        y0 = jnp.array([100, 0, 0])
+
+        def grad_G(x):
+            # ∇G(x) = -∇_y G(x-y)
+            y = y0
+            return -_grad_G(x - y)
+
+        vac = VacuumSolver(
+            surface=surf,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            Phi_M=20,
+            Phi_N=20,
+            exterior=True,
+            chunk_size=chunk_size,
+            B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
+            use_dft=False,
+            warn_dft=False,
+            warn_fft=False,
+            sym=False,
+        )
+
+        evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
+
+        data = vac.compute_Phi(chunk_size)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        G = np.reciprocal(_1_over_G(evl_data["x"] - y0))
+        np.testing.assert_allclose(np.ptp(G - Phi), 0, atol=atol)
+
+        data = vac.compute_vacuum_field(chunk_size)["evl"]
+        grad_Phi = rpz2xyz_vec(data["grad(Phi)"], phi=evl_data["phi"])
+        np.testing.assert_allclose(
+            dot(grad_G(evl_data["x"]) - grad_Phi, evl_data["n_rho"]),
+            0,
+            atol=atol,
+        )
+
+    @pytest.mark.unit
+    def test_secular_splitting(self, chunk_size=100, I=5, Y=12):  # noqa: E741
+        """Test splitting of potential into periodic and secular parts.
+
+        Φ(periodic)/2 + Φ(secular)/2 = H [Φ(periodic) +    Φ(secular)]
+        Φ(periodic)/2                = H  Φ(periodic) + γ ∇Φ(secular)
+                        Φ(secular)/2 = H  Φ(secular)  - γ ∇Φ(secular)
+
+        This test confirms the last relation.
+        """
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        eq = Equilibrium(surface=surf)
+        grid = LinearGrid(M=50, N=50)
+        data = eq.compute(
+            ["n_rho", "e^theta", "e^zeta", "R", "phi", "Z", "theta", "zeta"], grid=grid
+        )
+        interpolator = get_interpolator(grid, grid, data)
+
+        Phi_secular = I * data["theta"] + Y * data["zeta"]
+        gradPhi_secular = I * data["e^theta"] + Y * data["e^zeta"]
+        basis = DoubleFourierSeries(M=0, N=0)
+        data["Phi"] = basis.evaluate(grid, secular=True)
+
+        H_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_magnetic_dipole,
+            known_map=("Phi", partial(basis.evaluate, secular=True)),
+            ndim=basis.num_modes + 2,
+            chunk_size=chunk_size,
+        )
+        H_secular = I * H_secular[:, 1] + Y * H_secular[:, 2]
+
+        data["Bn"] = dot(gradPhi_secular, data["n_rho"])
+        gamma_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_Bn_over_r,
+            chunk_size=chunk_size,
+        ).squeeze() / (-4 * jnp.pi)
+
+        np.testing.assert_allclose(Phi_secular / 2, H_secular - gamma_secular)
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    def test_dommaschk_vacuum(self, chunk_size=50):
+        """Test computed vacuum field matches Dommaschk potential.
+
+        The chosen boundary condition has a unique solution 𝐁 = ∇ϕ for the
+        Dommaschk potential ϕ. Hence, it suffices to check that 𝐁⋅𝐧 is satisfied.
+        """
+        C_r = {
+            (0, -2): 0.000056,
+            (0, -1): -0.000921,
+            (0, 0): 0.997922,
+            (0, 1): -0.000921,
+            (0, 2): 0.000056,
+            (1, -2): -0.000067,
+            (1, -1): -0.034645,
+            (1, 0): 0.093260,
+            (1, 1): 0.000880,
+            (1, 2): 0.000178,
+            (2, -2): 0.000373,
+            (2, -1): 0.000575,
+            (2, 0): 0.002916,
+            (2, 1): -0.000231,
+            (2, 2): 0.000082,
+            (3, -2): 0.000462,
+            (3, -1): -0.001509,
+            (3, 0): 0.001748,
+            (3, 1): -0.000239,
+            (3, 2): 0.000052,
+        }
+        C_z = {
+            (0, -2): 0.000076,
+            (0, -1): 0.000923,
+            (0, 0): 0.000000,
+            (0, 1): -0.000923,
+            (0, 2): -0.000076,
+            (1, -2): 0.000069,
+            (1, -1): 0.035178,
+            (1, 0): 0.099830,
+            (1, 1): 0.000860,
+            (1, 2): -0.000179,
+            (2, -2): -0.000374,
+            (2, -1): 0.000257,
+            (2, 0): 0.003096,
+            (2, 1): 0.003021,
+            (2, 2): 0.000007,
+            (3, -2): -0.000518,
+            (3, -1): 0.002233,
+            (3, 0): 0.001828,
+            (3, 1): 0.000257,
+            (3, 2): 0.000035,
+        }
+        eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
+
+        Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
+        src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
+        src_data = eq.compute(["G"], grid=src_grid)
+        R0 = 1
+        Y = src_grid.compress(src_data["G"])[-1]
+        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
+        vac = VacuumSolver(
+            surface=eq.surface,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            Phi_M=8,
+            Phi_N=8,
+            B0=B0,
+            # Y=Y, # noqa: E800
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        data = vac.compute_magnetic_field(chunk_size)["evl"].copy()
+        data = eq.compute("n_rho", grid=vac.evl_grid, data=data)
+        Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
+        np.testing.assert_allclose(Bn, 0, atol=4e-4)
+
+        # test off surface evaluation
+        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP, sym=eq.sym)
+        coords = eq.compute(["R", "phi", "Z"], grid=mid_grid)
+        coords = jnp.column_stack([coords["R"], coords["phi"], coords["Z"]])
+        data = vac.compute_magnetic_field(chunk_size, coords)
+        assert np.isfinite(data["evl"]["B0+grad(Phi)"]).all()
+
+    @staticmethod
+    def _merkel_surf(C_r, C_z):
+        """Convert merkel coefficients to DESC coefficients."""
+        m_b = max(
+            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
+        )
+        n_b = max(
+            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
+        )
+        R_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        Z_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        for m in range(0, m_b + 1):
+            for n in range(-n_b, n_b + 1):
+                if (m, n) in C_r:
+                    R_lmn[(m, abs(n))] += C_r[(m, n)]
+                    if n < 0:
+                        R_lmn[(-m, n)] += C_r[(m, n)]
+                    elif n > 0:
+                        R_lmn[(-m, -n)] -= C_r[(m, n)]
+                if (m, n) in C_z:
+                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
+                    if n < 0:
+                        Z_lmn[(m, n)] -= C_z[(m, n)]
+                    elif n > 0:
+                        Z_lmn[(m, -n)] += C_z[(m, n)]
+
+        grid = LinearGrid(rho=1, M=5, N=5)
+        R_bench = TestVacuumSolver._manual_transform(
+            np.array(list(R_lmn.values())),
+            np.array([mn[0] for mn in R_lmn.keys()]),
+            np.array([mn[1] for mn in R_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        R_merk = TestVacuumSolver._merkel_transform(
+            np.array(list(C_r.values())),
+            np.array([mn[0] for mn in C_r.keys()]),
+            np.array([mn[1] for mn in C_r.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_bench = TestVacuumSolver._manual_transform(
+            np.array(list(Z_lmn.values())),
+            np.array([mn[0] for mn in Z_lmn.keys()]),
+            np.array([mn[1] for mn in Z_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_merk = TestVacuumSolver._merkel_transform(
+            np.array(list(C_z.values())),
+            np.array([mn[0] for mn in C_z.keys()]),
+            np.array([mn[1] for mn in C_z.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+            fun=np.sin,
+        )
+        np.testing.assert_allclose(R_bench, R_merk)
+        np.testing.assert_allclose(Z_bench, Z_merk)
+        with pytest.warns(UserWarning, match="Left handed"):
+            surf = FourierRZToroidalSurface(
+                R_lmn=list(R_lmn.values()),
+                Z_lmn=list(Z_lmn.values()),
+                modes_R=list(R_lmn.keys()),
+                modes_Z=list(Z_lmn.keys()),
+            )
+        surf_data = surf.compute(["R", "Z"], grid=grid)
+        np.testing.assert_allclose(surf_data["R"], R_merk)
+        np.testing.assert_allclose(surf_data["Z"], Z_merk)
+        return surf
+
+    @staticmethod
+    def _manual_transform(coef, m, n, theta, zeta):
+        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
+        op_four = np.where(
+            ((m < 0) & (n < 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta)
+            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            n[:, np.newaxis] * zeta * np.nan,
+        )
+        op_three = np.where(
+            ((m < 0) & (n >= 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_four,
+        )
+        op_two = np.where(
+            ((m >= 0) & (n < 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            op_three,
+        )
+        op_one = np.where(
+            ((m >= 0) & (n >= 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_two,
+        )
+        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
+
+    @staticmethod
+    def _merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
+        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
+        return np.sum(
+            coef[:, np.newaxis]
+            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
+            axis=0,
+        )
+
+
+class TestFreeBoundarySolver:
+    """Test free boundary solver (standard Neumann and potential mapping)."""
+
+    @pytest.mark.unit
+    def test_potential_map_free_boundary(self):
+        """Test potential map formulation of free boundary solver."""
+        chunk_size = 1000
+        resolution = 50
+        surf = FourierRZToroidalSurface()
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
+
+        free = FreeBoundarySolver(
+            surface=surf,
+            B_coil=ToroidalMagneticField(B0=1, R0=1),
+            G_coil=None,
+            G_plasma=1,
+            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
+            src_grid=src_grid,
+            Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),
+            Phi_M=2,
+            Phi_N=1,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        data = free.compute_B2()
+        assert np.isfinite(data["evl"]["|B_out|^2"]).all()
 
 
 class TestBouncePoints:

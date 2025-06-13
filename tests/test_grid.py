@@ -827,6 +827,24 @@ class TestGrid:
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
+    @pytest.mark.unit
+    def test_meshgrid_flatten(self):
+        """Test that meshgrid_flatten is the inverse of meshgrid_reshape."""
+        grid = LinearGrid(2, 3, 4)
+        orders = ["rtz", "trz", "zrt", "rzt", "tzr", "ztr"]
+        rng = np.random.default_rng(123)
+        x = rng.random(grid.num_nodes)
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
+
+        x = rng.random((grid.num_nodes, 3))
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():

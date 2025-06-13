@@ -178,7 +178,9 @@ def lsqtr(  # noqa: C901
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args).block_until_ready()  # FIXME: block is needed for jaxify util
+    # block is needed for jaxify util which uses jax functions inside
+    # jax.pure_callback and gets stuck due to async dispatch
+    J = jac(x, *args).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 

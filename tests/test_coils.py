@@ -434,6 +434,20 @@ class TestCoil:
                 atol=1e-12,
             )
 
+            # FourierXYCoil
+            coil = FourierXYCoil(
+                I, center=[0, 0, 0], normal=[0, 0, -1], X_n=[0, R], Y_n=[R, 0]
+            )
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                -A_true_rpz,
+                -correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
             # FourierRZCoil
             coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
             test(

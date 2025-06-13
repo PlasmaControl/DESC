@@ -64,7 +64,7 @@ from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble, Optimizable, _MagneticField):
+class Equilibrium(Optimizable, _MagneticField):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces

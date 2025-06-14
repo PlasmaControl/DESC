@@ -942,6 +942,7 @@ class FourierXYCurve(Curve):
         "_Y_basis",
         "_basis",
     ]
+    _static_attrs = Curve._static_attrs + ["_X_basis", "_Y_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.

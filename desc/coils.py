@@ -1077,6 +1077,7 @@ class FourierXYCoil(_Coil, FourierXYCurve):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + FourierXYCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierXYCurve._static_attrs
 
     def __init__(
         self,

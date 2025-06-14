@@ -317,6 +317,21 @@ class _Basis(IOAble, ABC):
             )
         )
 
+    def __hash__(self):
+        """Get the hash of the object."""
+        return hash(
+            (
+                self.__class__.__name__,
+                self._L,
+                self._M,
+                self._N,
+                self._NFP,
+                self._sym,
+                self._spectral_indexing,
+                # add device/sharding info for multi-device support
+            )
+        )
+
 
 class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.

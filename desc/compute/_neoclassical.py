@@ -125,9 +125,6 @@ def _compute(
         num_pitch,
         simp=simp,
     )
-    for key, value in kwargs.items():
-        fun_data[key] = value
-
     out = batch_map(fun, fun_data, surf_batch_size)
 
     return grid.expand(out)

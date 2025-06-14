@@ -359,6 +359,7 @@ class BallooningStability(_Objective):
         ``Equilibrium`` to be optimized.
     rho : float
         Flux surface to optimize on. Should include the last closed flux surface.
+        Instabilities often peak near the middle.
     alpha : float, ndarray
         Field line labels to optimize. Values should be in [0, 2π). Default is
         ``alpha=0`` for axisymmetric equilibria, or 8 field lines linearly spaced
@@ -405,7 +406,7 @@ class BallooningStability(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=1,
+        rho=np.array([0.5, 1]),
         alpha=None,
         nturns=3,
         nzetaperturn=200,

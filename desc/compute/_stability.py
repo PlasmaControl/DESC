@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from functools import partial
+
 import numpy as np
 from scipy.constants import mu_0
 
@@ -236,7 +238,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="c balloon",
+    name="c ballooning",
     # c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
     label="a^3 B_n / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
     "(\\partial_{\\psi} \\rho) (b \\times \\kappa) \\cdot "
@@ -257,7 +259,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
 
-    data["c balloon"] = (
+    data["c ballooning"] = (
         params["Psi"]
         / jnp.pi
         * data["a"]
@@ -275,7 +277,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="f balloon",
+    name="f ballooning",
     # f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
     label="a B_n^3 / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
     "\\vert \\nabla \\alpha \\vert^2 / B^3",
@@ -310,13 +312,13 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
         * zeta0
         + data["shear"] ** 2 * data["g^rr"] * zeta0**2
     )
-    data["f balloon"] = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
-    data["g balloon"] = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
+    data["f ballooning"] = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
+    data["g ballooning"] = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
     return data
 
 
 @register_compute_fun(
-    name="g balloon",
+    name="g ballooning",
     # g = a³ Bₙ * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
     label="a^3 B_n b \\cdot \\nabla ζ (\\partial_{\\rho} \\psi_N)^2 "
     "\\vert \\nabla \\alpha \\vert^2 / B",
@@ -328,7 +330,7 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["f balloon"],
+    data=["f ballooning"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -346,12 +348,13 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["c balloon", "f balloon", "g balloon"],
+    data=["c ballooning", "f ballooning", "g ballooning"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
     eigfuns="bool: Whether to return eigenfunctions. Default is true.",
 )
+@partial(jit, static_argnames=["Neigvals", "eigfuns"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
@@ -378,7 +381,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # toroidal step size between points along field lines is assumed uniform
     dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
     dz = dz[1] - dz[0]
-    num_zeta0 = data["c balloon"].shape[0]
+    num_zeta0 = data["c ballooning"].shape[0]
 
     def reshape(f):
         assert f.shape == (num_zeta0, grid.num_nodes)
@@ -386,11 +389,11 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
         return f
 
-    c = reshape(data["c balloon"])
-    f = reshape(data["f balloon"])
-    g = reshape(data["g balloon"])
+    c = reshape(data["c ballooning"])
+    f = reshape(data["f ballooning"])
+    g = reshape(data["g ballooning"])
     # Approximate derivative along field line with second order finite differencing.
-    g = (g[..., 1:] + g[..., :-1]) / 2
+    g = (g[..., 1:] + g[..., :-1]) / 2  # g is now on the half grid: g -> g_1/2.
     diag_inner = c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2
     diag_outer = g[..., 1:-1] / dz**2
 
@@ -480,7 +483,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["c balloon", "g balloon"],
+    data=["c ballooning", "g ballooning"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 @jit
@@ -509,7 +512,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     # toroidal step size between points along field lines is assumed uniform
     zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
     dz = zeta[1] - zeta[0]
-    num_zeta0 = data["c balloon"].shape[0]
+    num_zeta0 = data["c ballooning"].shape[0]
 
     def reshape(f):
         assert f.shape == (num_zeta0, grid.num_nodes)
@@ -517,9 +520,9 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         assert f.shape == (grid.num_zeta, grid.num_rho, grid.num_alpha, num_zeta0)
         return f
 
-    c = reshape(data["c balloon"])[:-1]
-    g = reshape(data["g balloon"])
-    g = (g[1:] + g[:-1]) / 2
+    c = reshape(data["c ballooning"])[:-1]
+    g = reshape(data["g ballooning"])
+    g = (g[1:] + g[:-1]) / 2  # g is now on the half grid: g -> g_1/2.
 
     def integrator(carry, x):
         """Update ``y`` and its derivative using leapfrog-like method.
@@ -546,6 +549,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     y_left_root = jnp.take_along_axis(y, idx_right_root - 1, axis=0)
     # derivative of linear approximation of ζ ↦ y(ζ) near root
     dy_dz = (jnp.take_along_axis(y, idx_right_root, axis=0) - y_left_root) / dz
+
     # crossing from stable to unstable regime
     x = zeta[idx_right_root] - jnp.where(
         idx_right_root < (is_root.shape[0] - 1), y_left_root / dy_dz * dz, 0

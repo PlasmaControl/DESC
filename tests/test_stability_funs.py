@@ -793,12 +793,15 @@ def test_ballooning_compare_with_COBRAVMEC():
     ntor = 3
     N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
-    grid = Grid.create_meshgrid(
-        [surfaces, alpha, zeta],
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-    data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
-    lam2_array = data["ideal ballooning lambda"].max((-1, -2, -3))
+    lam2_array = []
+    for i in range(surfaces.size):
+        grid = Grid.create_meshgrid(
+            [surfaces[i], alpha, zeta],
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+        data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
+        lam2_array.append(data["ideal ballooning lambda"].max((-1, -2, -3)))
+    lam2_array = np.array(lam2_array)
     root_DESC = find_root_simple(surfaces, lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

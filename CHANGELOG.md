@@ -7,7 +7,9 @@ New Features
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
 - Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
-- Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
+- Ability to obtain the top eigenvalues and the corresponding eigenfunctions using the ``ideal ballooning lambda`` and ``ideal ballooning eigenfunction`` compute functions by specifying the variable ``Neigvals``.
+- Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+
 
 Bug Fixes
 

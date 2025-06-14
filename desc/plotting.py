@@ -45,6 +45,7 @@ __all__ = [
     "plot_section",
     "plot_surfaces",
     "poincare_plot",
+    "plot_gammac",
 ]
 
 
@@ -3834,5 +3835,112 @@ def plot_logo(save_path=None, **kwargs):
 
     if save_path is not None:
         fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
+
+    return fig, ax
+
+
+def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
+    """Plot the energetic proxy metric γ_c for a single flux surface.
+
+    Parameters
+    ----------
+    eq : object
+        Equilibrium object containing magnetic field information
+    rhos : float, optional
+        Flux surface radius. If float, plots single surface.
+        Default: 0.5
+    alphas : array_like, optional
+        Fieldline label values (toroidal angle).
+        Default: np.linspace(0, 2π, 32, endpoint=True)
+    num_pitch : int, optional
+        Number of pitch angle values for bounce integral calculation.
+        Default: 16
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the plot
+    ax : matplotlib.axes.Axes
+        The axes object for further customization
+
+    Notes
+    -----
+    An example
+
+    fig, ax = plot_gammac(eq, rhos=0.5)
+    fig.show()
+    """
+    if rhos is None:
+        rhos = np.array([0.5])
+    elif isinstance(rhos, float):
+        rhos = np.array([rhos])
+
+    if alphas is None:
+        alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
+
+    if num_pitch is None:
+        num_pitch = 16
+
+    # TODO(#1352)
+    X = kwargs.get("X", 32)
+    Y = kwargs.get("Y", 32)
+    Y_B = kwargs.get("Y_B", 64)
+    num_quad = kwargs.get("num_quad", 24)
+    num_transit = kwargs.get("num_transit", 1)
+
+    figsize = kwargs.get("figsize", (6, 5))
+    cmap = kwargs.get("cmap", "plasma")
+
+    from desc.integrals.bounce_integral import Bounce2D
+
+    # Compute bounce integral
+    theta = Bounce2D.compute_theta(eq, X, Y, rhos)
+    grid = LinearGrid(rho=rhos, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    data0 = eq.compute(
+        "gamma_c",
+        grid=grid,
+        theta=theta,
+        Y_B=Y_B,
+        num_transit=num_transit,
+        num_quad=num_quad,
+        num_pitch=num_pitch,
+        alpha=alphas,
+    )
+    data_full = grid.compress(data0["gamma_c"])
+
+    # Extract pitch angle range
+    minB = data0["min_tz |B|"][0]
+    maxB = data0["max_tz |B|"][0]
+    inv_pitch = np.linspace(minB, maxB, num_pitch)
+
+    # Create figure and prepare colormap
+    fig = plt.figure(figsize=figsize)
+
+    # Plot γ_c as function of α and 1/λ
+    plt.contourf(
+        inv_pitch,
+        alphas,
+        data_full[0],
+        cmap=cmap,
+    )
+
+    cbar = plt.colorbar()
+    cbar.ax.tick_params(labelsize=22)
+
+    # Format scientific notation
+    import matplotlib.ticker as ticker
+
+    cbar.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
+    cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
+
+    ax = plt.gca()
+    ax.tick_params(axis="x", labelsize=22)
+    ax.tick_params(axis="y", labelsize=22)
+
+    # Add labels
+    plt.xlabel(r"$1/\lambda (T)$", fontsize=24)
+    plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+    plt.title(r"$\gamma_c$", fontsize=26)
 
     return fig, ax

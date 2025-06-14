@@ -392,7 +392,6 @@ class BallooningStability(_Objective):
     )
 
     _coordinates = "r"
-    _scalar = True
     _units = "~"
     _print_value_fmt = "Ideal ballooning lambda: "
 
@@ -429,7 +428,7 @@ class BallooningStability(_Objective):
         self._w1 = w1
         self._rho = rho
         self._alpha = setdefault(
-            self._alpha,
+            alpha,
             (
                 jnp.linspace(0, (1 + eq.sym) * jnp.pi, (1 + eq.sym) * 8)
                 if eq.N
@@ -470,7 +469,7 @@ class BallooningStability(_Objective):
         )
         assert not iota_grid.axis.size
         warnif(
-            not np.isclose(iota_grid.nodes[iota_grid.unique_rho_idx[-1]], 1),
+            not np.isclose(iota_grid.nodes[iota_grid.unique_rho_idx[-1], 0], 1),
             ResolutionWarning,
             "This objective strongly depends on accurate computation of length scale "
             "quantities. This implementation requires that the grid contains a flux "

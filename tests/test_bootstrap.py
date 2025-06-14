@@ -1534,12 +1534,12 @@ def test_bootstrap_objective_build():
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes
-    assert obj.constants["transforms"]["grid"].num_theta == 17
-    assert obj.constants["transforms"]["grid"].num_zeta == 17
-    assert obj.constants["transforms"]["grid"].num_rho == 4
+    assert obj._constants["transforms"]["grid"].num_theta == 17
+    assert obj._constants["transforms"]["grid"].num_zeta == 17
+    assert obj._constants["transforms"]["grid"].num_rho == 4
     np.testing.assert_allclose(
-        obj.constants["transforms"]["grid"].nodes[
-            obj.constants["transforms"]["grid"].unique_rho_idx, 0
+        obj._constants["transforms"]["grid"].nodes[
+            obj._constants["transforms"]["grid"].unique_rho_idx, 0
         ],
         np.array([0.125, 0.375, 0.625, 0.875]),
     )

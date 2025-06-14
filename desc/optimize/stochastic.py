@@ -37,13 +37,13 @@ def sgd(
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x,*args)-> float
+        objective to be minimized. Should have a signature like fun(x)-> float
     x0 : array-like
         initial guess
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     args : tuple
-        additional arguments passed to fun and grad
+        additional arguments passed to fun and grad (not used)
     method : str
         Step size update rule. Currently only the default "sgd" is available. Future
         updates may include RMSProp, Adam, etc.
@@ -68,10 +68,9 @@ def sgd(
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``args``
-        are the same arguments passed to fun and grad. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -96,9 +95,9 @@ def sgd(
     N = x0.size
     x = x0.copy()
     v = jnp.zeros_like(x)
-    f = fun(x, *args)
+    f = fun(x)
     nfev += 1
-    g = grad(x, *args)
+    g = grad(x)
     ngev += 1
 
     maxiter = setdefault(maxiter, N * 100)
@@ -147,11 +146,11 @@ def sgd(
 
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
-        g = grad(x, *args)
+        g = grad(x)
         ngev += 1
         step_norm = jnp.linalg.norm(alpha * v, ord=2)
         g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fnew = fun(x, *args)
+        fnew = fun(x)
         nfev += 1
         df = f - fnew
         f = fnew
@@ -161,7 +160,7 @@ def sgd(
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
-        if callback(jnp.copy(x), *args):
+        if callback(jnp.copy(x)):
             success, message = False, STATUS_MESSAGES["callback"]
 
     result = OptimizeResult(

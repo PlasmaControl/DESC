@@ -702,12 +702,14 @@ def test_ballooning_stability_eval():
         X0_full = data["ideal ballooning eigenfunction"]
 
         assert np.shape(lam2_full) == (
+            1,
             N_alpha,
             N_zeta0,
             1,
         ), "output eigenvalue spectrum does not have the right shape"
 
         assert np.shape(X0_full) == (
+            1,
             N_alpha,
             N_zeta0,
             N_zeta - 2,
@@ -722,12 +724,12 @@ def test_ballooning_stability_eval():
 
         if lam2 > 0:
             assert Newcomb_metric <= 0, (
-                "Newcomb metric indicates stabiliy for an unstable equilibrium, "
+                "Newcomb metric indicates stability for an unstable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
         else:
             assert Newcomb_metric > 0, (
-                "Newcomb metric indicates instabiliy for a stable equilibrium, "
+                "Newcomb metric indicates instability for a stable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
 
@@ -785,39 +787,18 @@ def test_ballooning_compare_with_COBRAVMEC():
     root_COBRAVMEC = find_root_simple(rho1, gamma1)
 
     eq = desc.examples.get("HELIOTRON")
-
-    # Flux surfaces on which to evaluate ballooning stability
-    surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
-
-    Nalpha = 8  # Number of field lines
-
-    # Field lines on which to evaluate ballooning stability
+    surfaces = np.array([0.98, 0.985, 0.99, 0.995, 1.0])
+    Nalpha = 8
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
-
-    # Number of toroidal transits of the field line
     ntor = 3
-
-    # Number of point along a field line in ballooning space
     N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
-
-    # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
-
-    lam2_array = np.zeros(
-        len(surfaces),
+    grid = Grid.create_meshgrid(
+        [surfaces, alpha, zeta],
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
     )
-    for i in range(len(surfaces)):
-        rho = surfaces[i]
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
-
-        data_keys = ["ideal ballooning lambda"]
-        data = eq.compute(data_keys, grid=grid)
-
-        lam2_array[i] = np.max(data["ideal ballooning lambda"])
-
-    root_DESC = find_root_simple(np.array(surfaces), lam2_array)
+    data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
+    lam2_array = data["ideal ballooning lambda"].max((-1, -2, -3))
+    root_DESC = find_root_simple(surfaces, lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

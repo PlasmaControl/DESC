@@ -10,6 +10,7 @@ New Features
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions using the ``ideal ballooning lambda`` and ``ideal ballooning eigenfunction`` compute functions by specifying the variable ``Neigvals``.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
 
+
 Bug Fixes
 
 - Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.

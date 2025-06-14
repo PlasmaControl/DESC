@@ -405,7 +405,7 @@ class BallooningStability(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=0.5,
+        rho=1,
         alpha=None,
         nturns=3,
         nzetaperturn=200,

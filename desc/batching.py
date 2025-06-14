@@ -175,11 +175,11 @@ def _evaluate_in_chunks(
     argnums,
     reduction=None,
     chunk_reduction=_identity,
-    shard=False,
     *args,
     **kwargs,
 ):
-    if shard:
+    if kwargs.get("shard", False):
+        kwargs.pop("shard")
         args_shardable, args_remainder = make_shardable(args)
         out_shardable = _evaluate_in_chunks(
             vmapped_fun,
@@ -187,7 +187,6 @@ def _evaluate_in_chunks(
             argnums,
             reduction,
             chunk_reduction,
-            False,
             args_shardable,
             **kwargs,
         )
@@ -197,7 +196,6 @@ def _evaluate_in_chunks(
             argnums,
             reduction,
             chunk_reduction,
-            False,
             args_remainder,
             **kwargs,
         )
@@ -633,8 +631,7 @@ def make_shardable(f, axis=0, num_devices=None):
 
     Parameters
     ----------
-    f : jnp.ndarray
-        Array to shard.
+    f : Pytree
     axis : int
         Axis across which ``f`` should be sharded.
     num_devices : int
@@ -643,9 +640,9 @@ def make_shardable(f, axis=0, num_devices=None):
 
     Return
     ------
-    sf : jnp.ndarray
+    sf : Pytree
         Sharded portion of ``f``.
-    rf : jnp.ndarray
+    rf : Pytree
         Remainder portion of ``f``.
 
     """
@@ -653,18 +650,17 @@ def make_shardable(f, axis=0, num_devices=None):
         num_devices = jax.device_count()
 
     mesh = jax.make_mesh((num_devices,), ("x"))
+    P = PartitionSpec("x")
+    leaves, treedef = tree_flatten(f)
+    out = [_shard(leaf, axis, num_devices, mesh, P) for leaf in leaves]
+    sf = treedef.unflatten(f[0] for f in out)
+    rf = treedef.unflatten(f[1] for f in out)
+    return sf, rf
 
+
+def _shard(f, axis, num_devices, mesh, P):
     shardable_size = f.shape[axis] - (f.shape[axis] % num_devices)
     sf = f[Index.get(slice(0, shardable_size), axis, f.ndim)]
     rf = f[Index.get(slice(shardable_size, f.shape[axis]), axis, f.ndim)]
-
-    sf = jax.device_put(
-        sf,
-        NamedSharding(
-            mesh,
-            PartitionSpec(
-                "x",
-            ),
-        ),
-    )
+    sf = jax.device_put(sf, NamedSharding(mesh, P))
     return sf, rf

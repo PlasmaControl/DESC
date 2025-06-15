@@ -527,7 +527,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     def integrator(carry, x):
         """Update ``y`` and its derivative using leapfrog-like method.
 
-        Assumed that y starts nonnegative with positive dy positive.
+        Assumed that y starts nonnegative with positive dy.
 
         Returns
         -------

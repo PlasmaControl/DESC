@@ -2304,11 +2304,7 @@ def test_ballooning_stability_opt():
     nturns = 2
     N0 = 2 * nturns * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * nturns, jnp.pi * nturns, N0)
-    grid = Grid.create_meshgrid(
-        [surfaces, alpha, zeta],
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
+    grid = Grid.create_meshgrid([surfaces, alpha, zeta], coordinates="raz")
     data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
     lam2_initial = data["ideal ballooning lambda"].max((-1, -2, -3))
 
@@ -2350,7 +2346,7 @@ def test_ballooning_stability_opt():
         ftol=1e-4,
         xtol=1e-6,
         gtol=1e-6,
-        maxiter=2,
+        maxiter=2,  # increase maxiter to 50 for a better result
         verbose=3,
         options={"initial_trust_ratio": 2e-3},
     )

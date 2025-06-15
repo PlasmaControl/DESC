@@ -429,11 +429,7 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^rz",
         ]
 
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         # Fieldline data
         data = eq.compute(data_keys, grid=grid)
@@ -562,11 +558,7 @@ def test_ballooning_stability_eval():
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         data_keys0 = [
             "g^aa",
@@ -795,13 +787,9 @@ def test_ballooning_compare_with_COBRAVMEC():
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
     lam2_array = []
     for i in range(surfaces.size):
-        grid = Grid.create_meshgrid(
-            [surfaces[i], alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
+        grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
         data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
-        lam2_array.append(data["ideal ballooning lambda"].max((-1, -2, -3)))
+        lam2_array.append(data["ideal ballooning lambda"].max())
     lam2_array = np.array(lam2_array)
     root_DESC = find_root_simple(surfaces, lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

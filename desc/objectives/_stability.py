@@ -358,8 +358,7 @@ class BallooningStability(_Objective):
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
     rho : float
-        Flux surface to optimize on. Should include the last closed flux surface.
-        Instabilities often peak near the middle.
+        Flux surface to optimize on. Instabilities often peak near the middle.
     alpha : float, ndarray
         Field line labels to optimize. Values should be in [0, 2π). Default is
         ``alpha=0`` for axisymmetric equilibria, or 8 field lines linearly spaced
@@ -406,11 +405,11 @@ class BallooningStability(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=np.array([0.5, 1]),
+        rho=np.array([0.5]),
         alpha=None,
         nturns=3,
         nzetaperturn=200,
-        zeta0=jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15),
+        zeta0=jnp.linspace(-0.5 * np.pi, 0.5 * np.pi, 15),
         Neigvals=1,
         lambda0=0.0,
         w0=1.0,
@@ -428,12 +427,13 @@ class BallooningStability(_Objective):
         self._w0 = w0
         self._w1 = w1
         self._rho = rho
+        self._add_lcfs = np.all(self._rho < 0.97)
         self._alpha = setdefault(
             alpha,
             (
                 jnp.linspace(0, (1 + eq.sym) * jnp.pi, (1 + eq.sym) * 8)
                 if eq.N
-                else jnp.array(0.0)
+                else jnp.array([0])
             ),
         )
         self._zeta0 = zeta0
@@ -466,23 +466,19 @@ class BallooningStability(_Objective):
 
         eq = self.things[0]
         iota_grid = LinearGrid(
-            rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            # to compute length scale quantities correctly
+            rho=np.append(self._rho, 1) if self._add_lcfs else self._rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
         )
         assert not iota_grid.axis.size
-        warnif(
-            not np.isclose(iota_grid.nodes[iota_grid.unique_rho_idx[-1], 0], 1),
-            ResolutionWarning,
-            "This objective strongly depends on accurate computation of length scale "
-            "quantities. This implementation requires that the grid contains a flux "
-            "surface near the boundary to achieve this. "
-            "Please include a surface near or at rho=1.",
-        )
-        self._dim_f = iota_grid.num_rho
+        self._dim_f = iota_grid.num_rho - self._add_lcfs
         transforms = get_transforms(self._iota_keys, eq, iota_grid)
         profiles = get_profiles(
             self._iota_keys + ["ideal ballooning lambda"], eq, iota_grid
         )
-
         self._constants = {
             "lambda0": self._lambda0,
             "w0": self._w0,
@@ -490,9 +486,9 @@ class BallooningStability(_Objective):
             "rho": self._rho,
             "alpha": self._alpha,
             "zeta": jnp.linspace(
-                -jnp.pi * self._nturns,
-                +jnp.pi * self._nturns,
-                self._nzetaperturn * self._nturns,
+                -self._nturns * jnp.pi,
+                +self._nturns * jnp.pi,
+                +self._nturns * self._nzetaperturn,
             ),
             "zeta0": self._zeta0,
             "iota_transforms": transforms,
@@ -530,23 +526,27 @@ class BallooningStability(_Objective):
             constants["profiles"],
         )
         iota_grid = constants["iota_transforms"]["grid"]
+
+        def get(key):
+            x = iota_grid.compress(iota_data[key])
+            return x[:-1] if self._add_lcfs else x
+
+        iota = get("iota")
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],
             coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=iota_grid.compress(iota_data["iota"]),
+            iota=iota,
             params=params,
         )
         data = {
-            key: (
-                grid.copy_data_from_other(iota_data[key], iota_grid)
-                if key != "a"
-                else iota_data[key]
-            )
+            key: grid.expand(get(key))
             for key in self._iota_keys
+            if (key != "iota" and key != "a")
         }
+        data["iota"] = grid.expand(iota)
+        data["a"] = iota_data["a"]
         data = compute_fun(
             eq,
             ["ideal ballooning lambda"],

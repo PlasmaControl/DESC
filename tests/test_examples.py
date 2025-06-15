@@ -2298,9 +2298,8 @@ def test_coil_arclength_optimization():
 def test_ballooning_stability_opt():
     """Perform ballooning stability optimization with DESC."""
     eq = get("HELIOTRON")
-    surfaces = np.array([0.8, 1])
-    Nalpha = 8
-    alpha = jnp.linspace(0, np.pi, Nalpha)
+    surfaces = np.array([0.8])
+    alpha = jnp.linspace(0, np.pi, 8)
     nturns = 2
     N0 = 2 * nturns * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * nturns, jnp.pi * nturns, N0)
@@ -2352,7 +2351,7 @@ def test_ballooning_stability_opt():
     )
     data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
     lam2_optimized = data["ideal ballooning lambda"].max((-1, -2, -3))
-    assert np.max(lam2_initial - lam2_optimized) >= 1.8e-2
+    assert (lam2_initial - lam2_optimized) >= 1.8e-2
 
 
 @pytest.mark.slow

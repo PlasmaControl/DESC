@@ -135,15 +135,39 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = 4  # hardcode max derivative order for now,
-        matrices = {
-            "direct1": {
-                i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
-                for i in range(n + 1)
-            },
-            "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
-            "direct2": {i: {} for i in range(n + 1)},
-        }
+        n = 4  # hardcode max derivative order for now
+        if self.method == "jitable":
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
+                    for i in range(n + 1)
+                },
+            }
+        elif self.method == "fft":
+            ndi = self.derivatives[:, 0].max()
+            ndj = self.derivatives[:, 1].max()
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+            }
+        elif self.method == "direct2":
+            ndi = self.derivatives[:, 0].max()
+            ndj = self.derivatives[:, 1].max()
+            ndk = self.derivatives[:, 2].max()
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+                "direct2": {k: {} for k in range(ndk + 1)},
+            }
+        elif self.method == "direct1":
+            ndi = self.derivatives[:, 0].max()
+            ndj = self.derivatives[:, 1].max()
+            ndk = self.derivatives[:, 2].max()
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
+                    for i in range(ndi + 1)
+                },
+            }
+
         return matrices
 
     def _check_inputs_fft(self, grid, basis):

@@ -328,8 +328,22 @@ class _Basis(IOAble, ABC):
                 self._NFP,
                 self._sym,
                 self._spectral_indexing,
-                # add device/sharding info for multi-device support
+                # add device/sharding info for multi-device support?
             )
+        )
+
+    def __eq__(self, other):
+        """Check if two basis objects are equal."""
+        if not isinstance(other, _Basis):
+            return False
+        return (
+            self.__class__ == other.__class__
+            and self.L == other.L
+            and self.M == other.M
+            and self.N == other.N
+            and self.NFP == other.NFP
+            and self.sym == other.sym
+            and self.spectral_indexing == other.spectral_indexing
         )
 
 

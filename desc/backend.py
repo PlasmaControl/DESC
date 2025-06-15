@@ -63,6 +63,19 @@ def print_backend_info():
     )
 
 
+def _diag_to_full(d, e):
+    j = np.arange(d.shape[-1])
+    return (
+        jnp.zeros(d.shape + d.shape[-1])
+        .at[..., j, j]
+        .set(d, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+    )
+
+
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
@@ -134,8 +147,66 @@ if use_jax:  # noqa: C901
 
         return wrapper
 
-    # JAX implementation is not differentiable on gpu.
+    # JAX eigh_tridiagonal is not differentiable on gpu.
+    # https://github.com/jax-ml/jax/issues/23650
     eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
+
+    if desc_config["kind"] == "gpu":
+
+        def eigh_tridiagonal_wrapper(
+            d=None,
+            e=None,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+            full_mat=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            if full_mat is None:
+                full_mat = _diag_to_full(d, e)
+            return jax.scipy.linalg.eigh(
+                full_mat, eigvals_only=eigvals_only, eigvals=select_range
+            )
+
+    else:
+
+        def eigh_tridiagonal_wrapper(
+            d=None,
+            e=None,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+            full_mat=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            if not eigvals_only:
+                # JAX has not yet implemented eigenvector computation.
+                if full_mat is None:
+                    full_mat = _diag_to_full(d, e)
+                return jax.scipy.linalg.eigh(
+                    full_mat, eigvals_only=eigvals_only, eigvals=select_range
+                )
+            if full_mat is not None:
+                d = jnp.diagonal(full_mat, offset=0, axis1=-2, axis2=-1)
+                e = jnp.diagonal(full_mat, offset=1, axis1=-2, axis2=-1)
+            return jax.scipy.linalg.eigh_tridiagonal(
+                d,
+                e,
+                eigvals_only=eigvals_only,
+                select=select,
+                select_range=select_range,
+                tol=tol,
+            )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -472,6 +543,32 @@ else:  # pragma: no cover
     )
     from scipy.special import gammaln  # noqa: F401
     from scipy.special import softmax as softargmax  # noqa: F401
+
+    def eigh_tridiagonal_wrapper(
+        d=None,
+        e=None,
+        *,
+        eigvals_only=False,
+        select="a",
+        select_range=None,
+        tol=None,
+        full_mat=None,
+    ):
+        """Wrapper for eigh_tridiagonal.
+
+        For compatibility with JAX where eigh_tridiagonal is partially implemented.
+        """
+        if full_mat is not None:
+            d = np.diagonal(full_mat, offset=0, axis1=-2, axis2=-1)
+            e = np.diagonal(full_mat, offset=1, axis1=-2, axis2=-1)
+        return scipy.linalg.eigh_tridiagonal(
+            d,
+            e,
+            eigvals_only=eigvals_only,
+            select=select,
+            select_range=select_range,
+            tol=tol,
+        )
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 

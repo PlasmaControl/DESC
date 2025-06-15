@@ -14,7 +14,7 @@ from functools import partial
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jax, jit, jnp, scan
+from desc.backend import eigh_tridiagonal_wrapper, jax, jit, jnp, scan
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -419,11 +419,10 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     A = B_inv[..., jnp.newaxis] * A * B_inv[..., jnp.newaxis, :]
 
     # TODO: Issue #1750
-    # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
     if eigfuns:
-        w, v = jnp.linalg.eigh(A)
+        w, v = eigh_tridiagonal_wrapper(full_mat=A)
     else:
-        w = jnp.linalg.eigvalsh(A)
+        w = eigh_tridiagonal_wrapper(full_mat=A, eigvals_only=True)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)

@@ -289,7 +289,7 @@ def vmap_chunked(
         argnums,
         reduction,
         chunk_reduction,
-        shard,
+        shard=shard,
     )
 
 
@@ -301,6 +301,7 @@ def batch_map(
     *,
     reduction=None,
     chunk_reduction=_identity,
+    shard=False,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
@@ -343,6 +344,7 @@ def batch_map(
             reduction,
             chunk_reduction,
             fun_input,
+            shard=shard,
         )
     )
 

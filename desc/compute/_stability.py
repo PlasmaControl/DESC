@@ -394,9 +394,10 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     g = reshape(data["g ballooning"])
     # Approximate derivative along field line with second order finite differencing.
     g = (g[..., 1:] + g[..., :-1]) / 2  # g is now on the half grid: g -> g_1/2.
-    diag_inner = c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2
-    diag_outer = g[..., 1:-1] / dz**2
 
+    b_inv = jnp.reciprocal(f[..., 1:-1])
+    diag_inner = (c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2) * b_inv
+    diag_outer = g[..., 1:-1] / dz**2 * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
     j = np.arange(grid.num_zeta - 2)
     A = (
         jnp.zeros(
@@ -415,8 +416,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         .at[..., j[1:], j[:-1]]
         .set(diag_outer, indices_are_sorted=True, unique_indices=True)
     )
-    B_inv = jnp.reciprocal(jnp.sqrt(f[..., 1:-1]))
-    A = B_inv[..., jnp.newaxis] * A * B_inv[..., jnp.newaxis, :]
 
     # TODO: Issue #1750
     if eigfuns:

@@ -11,10 +11,9 @@ expensive computations.
 
 from functools import partial
 
-import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jax, jit, jnp, scan
+from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -398,31 +397,12 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     b_inv = jnp.reciprocal(f[..., 1:-1])
     diag_inner = (c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2) * b_inv
     diag_outer = g[..., 1:-1] / dz**2 * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
-    j = np.arange(grid.num_zeta - 2)
-    A = (
-        jnp.zeros(
-            (
-                grid.num_rho,
-                grid.num_alpha,
-                num_zeta0,
-                grid.num_zeta - 2,
-                grid.num_zeta - 2,
-            )
-        )
-        .at[..., j, j]
-        .set(diag_inner, indices_are_sorted=True, unique_indices=True)
-        .at[..., j[:-1], j[1:]]
-        .set(diag_outer, indices_are_sorted=True, unique_indices=True)
-        .at[..., j[1:], j[:-1]]
-        .set(diag_outer, indices_are_sorted=True, unique_indices=True)
-    )
 
     # TODO: Issue #1750
-    # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
     if eigfuns:
-        w, v = jnp.linalg.eigh(A)
+        w, v = eigh_tridiagonal(diag_inner, diag_outer)
     else:
-        w = jnp.linalg.eigvalsh(A)
+        w = eigh_tridiagonal(diag_inner, diag_outer, eigvals_only=True)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)

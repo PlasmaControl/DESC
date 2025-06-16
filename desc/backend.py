@@ -63,6 +63,19 @@ def print_backend_info():
     )
 
 
+def _diag_to_full(d, e):
+    j = np.arange(d.shape[-1])
+    return (
+        jnp.zeros(d.shape + (d.shape[-1],))
+        .at[..., j, j]
+        .set(d, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+    )
+
+
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
@@ -134,8 +147,62 @@ if use_jax:  # noqa: C901
 
         return wrapper
 
-    # JAX implementation is not differentiable on gpu.
-    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
+    _eigh_tridiagonal = jnp.vectorize(
+        jax.scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
+    if desc_config["kind"] == "gpu":
+        # JAX eigh_tridiagonal is not differentiable on gpu.
+        # https://github.com/jax-ml/jax/issues/23650
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            return jax.scipy.linalg.eigh(
+                _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+            )
+
+    else:
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            # This used to be differenitable on CPU, but it is not anymore.
+            # TODO (#1750): Reconfirm and update logic when resolving the linked issue.
+            if True or not eigvals_only:
+                # https://github.com/jax-ml/jax/issues/14019
+                return jax.scipy.linalg.eigh(
+                    _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+                )
+            return _eigh_tridiagonal(
+                d,
+                e,
+                eigvals_only=eigvals_only,
+                select=select,
+                select_range=select_range,
+                tol=tol,
+            )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -466,7 +533,6 @@ else:  # pragma: no cover
         block_diag,
         cho_factor,
         cho_solve,
-        eigh_tridiagonal,
         qr,
         solve_triangular,
     )
@@ -474,6 +540,12 @@ else:  # pragma: no cover
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+    eigh_tridiagonal = np.vectorize(
+        scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
 
     def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""

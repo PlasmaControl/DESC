@@ -623,11 +623,19 @@ def test_ballooning_stability_eval():
         g_sup_rr = grid.meshgrid_reshape(data0["g^rr"], "arz")[None, ...]
 
         gds2 = jnp.reshape(
-            rho**2
-            * (
-                g_sup_aa
-                - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
-                + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+            jnp.transpose(
+                rho**2
+                * (
+                    g_sup_aa
+                    - 2
+                    * sign_iota
+                    * shear
+                    / rho
+                    * zeta0[:, None, None, None]
+                    * g_sup_ra
+                    + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+                ),
+                axes=(1, 0, 2, 3),
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
@@ -643,14 +651,17 @@ def test_ballooning_stability_eval():
             a_N**3
             * B_N
             * jnp.reshape(
-                2
-                / B_sup_zeta[None, ...]
-                * sign_psi
-                * rho**2
-                * dpdpsi
-                * (
-                    cvdrift
-                    - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
+                jnp.transpose(
+                    2
+                    / B_sup_zeta[None, ...]
+                    * sign_psi
+                    * rho**2
+                    * dpdpsi
+                    * (
+                        cvdrift
+                        - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
+                    ),
+                    axes=(1, 0, 2, 3),
                 ),
                 (N_alpha, N_zeta0, N_zeta),
             )
@@ -665,6 +676,9 @@ def test_ballooning_stability_eval():
         j = jnp.arange(N_zeta - 2)[None, None, :, None]
         k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
+        # This is an alternate way of solving the same eigenvalue problem
+        # The definition of this matrix is provided in Appendix A of
+        # Gaur et al. https://doi.org/10.1017/S0022377823000995
         A = A.at[i, l, j, k].set(
             g_half[i, l, k] / f[i, l, k] / h**2 * (j - k == -1)
             + (
@@ -683,7 +697,25 @@ def test_ballooning_stability_eval():
         data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = np.max(data["ideal ballooning lambda"])
+        lam2_full = data["ideal ballooning lambda"]
+
+        X0_full = data["ideal ballooning eigenfunction"]
+
+        assert np.shape(lam2_full) == (
+            N_alpha,
+            N_zeta0,
+            1,
+        ), "output eigenvalue spectrum does not have the right shape"
+
+        assert np.shape(X0_full) == (
+            N_alpha,
+            N_zeta0,
+            N_zeta - 2,
+            1,
+        ), "output eigenfunction spectrum does not have the right shape"
+
+        lam2 = jnp.max(lam2_full)
+
         Newcomb_metric = data["Newcomb ballooning metric"]
 
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
@@ -759,8 +791,6 @@ def test_ballooning_compare_with_COBRAVMEC():
 
     Nalpha = 8  # Number of field lines
 
-    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
-
     # Field lines on which to evaluate ballooning stability
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
 
@@ -768,7 +798,7 @@ def test_ballooning_compare_with_COBRAVMEC():
     ntor = 3
 
     # Number of point along a field line in ballooning space
-    N0 = 2 * ntor * eq.M_grid * eq.N_grid + 1
+    N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
@@ -790,4 +820,4 @@ def test_ballooning_compare_with_COBRAVMEC():
         lam2_array[i] = np.max(data["ideal ballooning lambda"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
-    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)
+    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

@@ -2023,11 +2023,8 @@ class TestObjectiveFunction:
             jac_chunk_size=1,
         )
         obj.build()
-        # TODO(#1094)
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict),
-            grid.compress(data["effective ripple"]),
-            rtol=0.004,
+            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
         )
         obj = GammaC(
             eq,

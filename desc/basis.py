@@ -2019,7 +2019,7 @@ def chebyshev(r, l, dr=0):
         # updating notation to match formula
         n=l
         p=dr
-
+        print(x.shape)
         # 0 <= k <= n-p and k === (n-p) mod 2
         k = jnp.arange((n-p)%2, n-p+1, 2)
 
@@ -2039,7 +2039,11 @@ def chebyshev(r, l, dr=0):
 
         # sum over k and apply chain rule
         dydx = np.sum(coeff * recursive, axis = 0) * 2**p * n
+
         dydr = 2 * dydx
+        
+        return dydr
+
 
 
 @jit

@@ -2468,6 +2468,7 @@ def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+    aliases=["e_phi|v,r"],
 )
 def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϑ
@@ -2495,6 +2496,7 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+    aliases=["e_rho|p,v"],
 )
 def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
     # constant ϑ and ϕ

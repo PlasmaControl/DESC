@@ -2088,3 +2088,306 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
         * dot(data["b"], cross(data["grad(|B|)"], data["e^rho"]))
     )
     return data
+
+
+################################################################################
+##########-----------------METRIC ELEMENTS PEST----------------------###########
+################################################################################
+
+
+@register_compute_fun(
+    name="g_rr|PEST",
+    label="g_{\\rho\\rho}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+)
+def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rr|PEST"] = dot(data["e_rho|v,p"], data["e_rho|v,p"])
+    return data
+
+
+@register_compute_fun(
+    name="g_rt|PEST",
+    label="g_{\\rho\\theta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_theta_PEST"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+    aliases=["g_tr|PEST"],
+)
+def _g_sub_rt_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rt|PEST"] = dot(data["e_rho|v,p"], data["e_theta_PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="g_rz|PEST",
+    label="g_{\\rho\\phi}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_phi|r,p"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+    aliases=["g_zr|PEST"],
+)
+def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rz|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,p"])
+    return data
+
+
+@register_compute_fun(
+    name="g_tt|PEST",
+    label="g_{\\theta_PEST \\theta_PEST}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_phi|r,p"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+)
+def _g_sub_tt_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_tt|PEST"] = dot(data["e_theta_PEST"], data["e_theta_PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="g_tz|PEST",
+    label="g_{\\theta_PEST \\phi}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_PEST", "e_phi|r,p"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+    aliases=["g_zt|PEST"],
+)
+def _g_sub_tz_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_tz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,p"])
+    return data
+
+
+@register_compute_fun(
+    name="g_zz|PEST",
+    label="g_{\\phi \\phi}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_phi|r,p"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+)
+def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_zz|PEST"] = dot(data["e_phi|r,p"], data["e_phi|r,p"])
+    return data
+
+
+################################################################################
+###########------------METRIC ELEMENT DERIVATIVES PEST---------------###########
+################################################################################
+
+
+@register_compute_fun(
+    name="g_rr_t|PEST",
+    label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_rho_theta_PEST"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+)
+def _g_sub_rr_t_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rr_t|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_theta_PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="g_rr_z|PEST",
+    label="\\partial_{\\phi} g_{\\rho\\rho}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of covariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_rho_phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+)
+def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rr_z|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_phi"])
+    return data
+
+
+################################################################################
+#############--------------JACOBIAN DERIVATIVES PEST---------------#############
+################################################################################
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST2",
+    label="\\sqrt{g}_PEST",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_theta_PEST", "e_phi|r,v"],
+)
+def _sqrtg_PEST2(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST"] = dot(
+        data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi|r,v"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_r",
+    label="\\partial_{\\rho} \\sqrt{g}_PEST",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho|v,p",
+        "e_theta_PEST",
+        "e_phi|r,v",
+        "e_rho_rho",
+        "e_theta_PEST_rho",
+        "e_phi_rho",
+    ],
+)
+def _sqrtg_PEST_r(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_r"] = (
+        dot(data["e_rho_rho"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
+        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_rho"], data["e_phi|r,v"]))
+        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_rho"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_t",
+    label="\\partial_{\\rho} \\sqrt{g}_PEST",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho|v,p",
+        "e_theta_PEST",
+        "e_phi|r,v",
+        "e_rho_theta_PEST",
+        "e_theta_PEST_theta_PEST",
+        "e_phi_theta_PEST",
+    ],
+)
+def _sqrtg_PEST_t(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_t"] = (
+        dot(data["e_rho_theta_PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
+        + dot(
+            data["e_rho|v,p"], cross(data["e_theta_PEST_theta_PEST"], data["e_phi|r,v"])
+        )
+        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_theta_PEST"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_z",
+    label="\\partial_{\\rho} \\sqrt{g}_PEST",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho|v,p",
+        "e_theta_PEST",
+        "e_phi|r,v",
+        "e_rho_rho",
+        "e_theta_PEST_rho",
+        "e_phi_rho",
+    ],
+)
+def _sqrtg_PEST_z(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_z"] = (
+        dot(data["e_rho_phi"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
+        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_phi"], data["e_phi|r,v"]))
+        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_phi"]))
+    )
+    return data

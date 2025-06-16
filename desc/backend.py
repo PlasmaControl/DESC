@@ -188,7 +188,9 @@ if use_jax:  # noqa: C901
 
             Calls linalg.eigh when on GPU or when eigenvectors are requested.
             """
-            if not eigvals_only:
+            # This used to be differenitable on CPU, but it is not anymore.
+            # TODO (#1750): Reconfirm and update logic when resolving the linked issue.
+            if True or not eigvals_only:
                 # https://github.com/jax-ml/jax/issues/14019
                 return jax.scipy.linalg.eigh(
                     _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range

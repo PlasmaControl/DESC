@@ -16,7 +16,7 @@ from desc.backend import (
     use_jax,
 )
 from desc.batching import batched_vectorize
-from desc.derivatives import Derivative
+from desc.derivatives.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
 from desc.utils import (

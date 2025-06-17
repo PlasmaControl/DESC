@@ -9,7 +9,7 @@ from interpax import interp1d
 
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
-from desc.derivatives import Derivative
+from desc.derivatives.derivatives import Derivative
 from desc.grid import Grid, _Grid
 from desc.io import IOAble
 from desc.utils import (

@@ -59,7 +59,8 @@ def _1(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=[],
     transforms={},

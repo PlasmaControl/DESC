@@ -186,7 +186,8 @@ def _center_PlanarCurve(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={"r": [[0, 0, 0]]},
@@ -386,7 +387,8 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X_n", "Y_n", "center", "normal", "rotmat", "shift"],
     transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]]},
@@ -591,7 +593,8 @@ def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["R_n", "Z_n", "rotmat", "shift"],
     transforms={"R": [[0, 0, 0]], "Z": [[0, 0, 0]], "grid": []},
@@ -742,7 +745,8 @@ def _center_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]], "Z": [[0, 0, 0]]},
@@ -870,7 +874,8 @@ def _center_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a position vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X", "Y", "Z", "rotmat", "shift"],
     transforms={"knots": []},

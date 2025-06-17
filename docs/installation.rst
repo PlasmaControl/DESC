@@ -138,6 +138,15 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
         .. attention::
             Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
 
+        .. attention::
+            JAX version 0.6.1 may cause silent installation failures on GPU where the installation appears to succeed, but when running DESC, you will get an error like ``XlaRuntimeError: INTERNAL: cuSolver internal error``. To solve this problem, you need to run
+
+            .. code-block:: sh
+
+                pip install nvidia-cublas-cu12==12.9.0.13
+
+            in addition to below instructions.
+
 
         .. dropdown:: Perlmutter (NERSC)
 
@@ -195,12 +204,12 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 # It is important to NOT use the --upgrade or -U flag here! otherwise you may get incompatible JAX versions
                 pip install "jax[cuda12]"
 
-            Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 30, 2025.
+            Tested and confirmed to work on the Della and Stellar clusters at Princeton as of June 4, 2025.
 
 
         .. dropdown:: RAVEN (IPP, Germany)
 
-            These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024
+            These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024.
 
             Create a conda environment for DESC
 
@@ -259,6 +268,12 @@ You can also try running an example input file (filepath shown here is from the 
 .. code-block:: console
 
     python -m desc -vv desc/examples/SOLOVEV
+
+For GPU, one can use,
+
+.. code-block:: console
+
+    python -m desc -vv desc/examples/SOLOVEV -g
 
 
 Troubleshooting

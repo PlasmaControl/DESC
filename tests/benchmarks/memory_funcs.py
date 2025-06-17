@@ -56,7 +56,7 @@ def test_objective_jac_w7x():
     x = objective.x(eq)
 
     for _ in range(3):
-        _ = objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        _ = objective.jac_scaled_error(x).block_until_ready()
 
 
 @pytest.mark.memory
@@ -81,7 +81,7 @@ def test_proximal_jac_w7x_with_eq_update():
         # we change x slightly to profile solve/perturb equilibrium too
         # this one will compile everything inside the function
         x = x.at[0].add(np.random.rand() * 0.001)
-        _ = prox.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = prox.jac_scaled_error(x).block_until_ready()
 
 
 @pytest.mark.memory
@@ -104,7 +104,7 @@ def test_proximal_freeb_jac():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(3):
-        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x).block_until_ready()
 
 
 @pytest.mark.memory
@@ -132,7 +132,7 @@ def test_proximal_freeb_jac_batched():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(3):
-        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x).block_until_ready()
 
 
 @pytest.mark.memory
@@ -159,7 +159,7 @@ def test_proximal_freeb_jac_blocked():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(3):
-        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x).block_until_ready()
 
 
 @pytest.mark.memory
@@ -200,7 +200,7 @@ def _test_proximal_ripple(spline, method):
     prox.build(verbose=0)
     x = prox.x(eq)
     for _ in range(3):
-        _ = getattr(prox, method)(x, prox.constants).block_until_ready()
+        _ = getattr(prox, method)(x).block_until_ready()
 
 
 @pytest.mark.memory

@@ -33,7 +33,7 @@ class PointBMeasurement(_Objective):
         External field produced by coils or other sources outside the plasma.
     measurement_coords : (n,3) ndarray
         Array of n points at which the magnetic field B is measured.
-    target : {float, ndarray}, optional
+    target : {float, ndarray}
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f which is the
         number of measurement points if ``direction`` is passed in, or
@@ -43,7 +43,7 @@ class PointBMeasurement(_Objective):
         ``B_array.flatten()``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
     field_grid : Grid, optional
         Grid containing the nodes to evaluate field source.
         Defaults to the default for the
@@ -198,10 +198,10 @@ class PointBMeasurement(_Objective):
                 sym=False,
             )
 
-        eq_transforms = get_transforms(
+        self._eq_transforms = get_transforms(
             self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
-        eq_profiles = get_profiles(
+        self._eq_profiles = get_profiles(
             self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
 
@@ -217,31 +217,27 @@ class PointBMeasurement(_Objective):
 
         # pre-calc field contrib to B if field are fixed
         if self._field_fixed:
-            B_from_field = self._field.compute_magnetic_field(
+            self._B_from_field = self._field.compute_magnetic_field(
                 self._measurement_coords,
                 basis="rpz",
                 source_grid=self._field_grid,
             )
+            # dot with directions if directions provided
+            self._B_from_field = (
+                self._B_from_field
+                if self._directions is None
+                else dot(self._B_from_field, self._directions)
+            )
 
         self._constants = {
             "quad_weights": 1.0,
-            "measurement_coords": self._measurement_coords,
-            "equil_transforms": eq_transforms,
-            "equil_profiles": eq_profiles,
-            "directions": self._directions,
         }
-        if self._field_fixed:
-            self._constants["B_from_field"] = (
-                B_from_field
-                if self._directions is None
-                else dot(B_from_field, self._directions)
-            )
+
         if self._sheet_current:
             self._sheet_data_keys = ["K"]
-            sheet_source_transforms = get_transforms(
+            self._sheet_source_transforms = get_transforms(
                 self._sheet_data_keys, obj=eq.surface, grid=self._vc_source_grid
             )
-            self._constants["sheet_source_transforms"] = sheet_source_transforms
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -280,8 +276,8 @@ class PointBMeasurement(_Objective):
             self.things[0],
             self._eq_vc_data_keys,
             params=eq_params,
-            profiles=constants["equil_profiles"],
-            transforms=constants["equil_transforms"],
+            profiles=self._eq_profiles,
+            transforms=self._eq_transforms,
         )
         plasma_surf_data["x"] = jnp.vstack(
             [plasma_surf_data["R"], plasma_surf_data["phi"], plasma_surf_data["Z"]]
@@ -298,7 +294,7 @@ class PointBMeasurement(_Objective):
                 "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
-                transforms=constants["sheet_source_transforms"],
+                transforms=self._sheet_source_transforms,
                 profiles={},
             )
             plasma_surf_data["K_vc"] += sheet_source_data["K"]
@@ -308,7 +304,7 @@ class PointBMeasurement(_Objective):
         # field contribution
         if not self._field_fixed:
             Bcoil = self._field.compute_magnetic_field(
-                constants["measurement_coords"],
+                self._measurement_coords,
                 basis="rpz",
                 source_grid=self._field_grid,
                 params=field_params,
@@ -320,7 +316,7 @@ class PointBMeasurement(_Objective):
         if not self._vacuum:
             Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                 self._field,  # this is unused, just pass a dummy variable in
-                constants["measurement_coords"],
+                self._measurement_coords,
                 source_grid=self._vc_source_grid,
                 compute_A_or_B="B",
                 data=plasma_surf_data,
@@ -328,12 +324,12 @@ class PointBMeasurement(_Objective):
         else:
             Bplasma = jnp.zeros_like(self._measurement_coords)
         B = Bplasma + Bcoil
-        if constants["directions"] is not None:
-            B = dot(B, constants["directions"])
+        if self._directions is not None:
+            B = dot(B, self._directions)
 
         if self._field_fixed:
             # add fixed field contribution at end, after we've already
             # dotted Bplasma, as it is already dotted with the directions,
             # if passed in.
-            B += constants["B_from_field"]
+            B += self._B_from_field
         return B.flatten()

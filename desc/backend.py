@@ -155,6 +155,8 @@ if use_jax:  # noqa: C901
     if desc_config["kind"] == "gpu":
         # JAX eigh_tridiagonal is not differentiable on gpu.
         # https://github.com/jax-ml/jax/issues/23650
+        # # TODO (#1750): Eventually use this once it supports kwargs.
+        # https://docs.jax.dev/en/latest/_autosummary/jax.lax.platform_dependent.html
 
         def eigh_tridiagonal(
             d,
@@ -188,8 +190,8 @@ if use_jax:  # noqa: C901
 
             Calls linalg.eigh when on GPU or when eigenvectors are requested.
             """
-            # This used to be differenitable on CPU, but it is not anymore.
-            # TODO (#1750): Reconfirm and update logic when resolving the linked issue.
+            # Reverse mode also not differentiable on CPU.
+            # TODO (#1750): Update logic when resolving the linked issue?
             if True or not eigvals_only:
                 # https://github.com/jax-ml/jax/issues/14019
                 return jax.scipy.linalg.eigh(

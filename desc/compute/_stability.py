@@ -253,6 +253,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     data=["a", "cvdrift", "cvdrift0", "B^zeta", "p_r", "shear", "psi", "psi_r", "rho"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    public=False,
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
@@ -291,6 +292,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "g^aa", "g^ra", "g^rr", "|B|^2", "B^zeta", "iota", "shear", "rho"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    public=False,
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
@@ -330,6 +332,7 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["f ballooning"],
+    public=False,
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -453,7 +456,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
 
 @register_compute_fun(
     name="Newcomb ballooning metric",
-    label="Newcomb ballooning metric",
+    label="\\mathrm{Newcomb-ballooning-metric}",
     units="~",
     units_long="None",
     description="A measure of Newcomb's distance from marginal ballooning stability",

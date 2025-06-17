@@ -409,7 +409,7 @@ class BallooningStability(_Objective):
         alpha=None,
         nturns=3,
         nzetaperturn=200,
-        zeta0=jnp.linspace(-0.5 * np.pi, 0.5 * np.pi, 15),
+        zeta0=None,
         Neigvals=1,
         lambda0=0.0,
         w0=1.0,
@@ -426,7 +426,7 @@ class BallooningStability(_Objective):
         self._lambda0 = lambda0
         self._w0 = w0
         self._w1 = w1
-        self._rho = rho
+        self._rho = np.atleast_1d(rho)
         self._add_lcfs = np.all(self._rho < 0.97)
         self._alpha = setdefault(
             alpha,
@@ -436,7 +436,7 @@ class BallooningStability(_Objective):
                 else jnp.array([0])
             ),
         )
-        self._zeta0 = zeta0
+        self._zeta0 = setdefault(zeta0, jnp.linspace(-0.5 * np.pi, 0.5 * np.pi, 15))
 
         super().__init__(
             things=eq,

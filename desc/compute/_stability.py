@@ -317,7 +317,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "|B|^2", "B^zeta"],
+    data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
     psi_boundary = params["Psi"] / (2 * jnp.pi)
@@ -334,7 +334,7 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     name="g ballooning",
     # g = a³ Bₙ * b⋅∇ζ (dψ_N/dρ)² |∇(α + ι ζ₀)|² / |B|
     label="a^3 B_n b \\cdot \\nabla ζ (\\partial_{\\rho} \\psi_N)^2 "
-    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert ",
+    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",

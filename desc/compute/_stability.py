@@ -323,11 +323,9 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
 def _f_balloon(params, transforms, profiles, data, **kwargs):
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
-    constant1 = data["a"] * B_n**3
-    constant2 = data["a"] ** 3 * B_n
-
-    data["f ballooning"] = (constant1 / data["|B|^2"] / data["B^zeta"]) * data["gds2"]
-    data["g ballooning"] = (constant2 / data["|B|^2"] * data["B^zeta"]) * data["gds2"]
+    data["f ballooning"] = (
+        data["a"] * B_n**3 / data["|B|^2"] / data["B^zeta"]
+    ) * data["gds2"]
     return data
 
 
@@ -340,14 +338,18 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Parameter in ideal ballooning equation",
     dim=2,
-    params=[],
+    params=["Psi"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["f ballooning"],
+    data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
-    # noqa: unused dependency
+    psi_boundary = params["Psi"] / (2 * jnp.pi)
+    B_n = 2 * psi_boundary / data["a"] ** 2
+    data["g ballooning"] = (
+        data["a"] ** 3 * B_n / data["|B|^2"] * data["B^zeta"]
+    ) * data["gds2"]
     return data
 
 

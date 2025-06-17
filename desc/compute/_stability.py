@@ -249,9 +249,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "g^aa", "g^rr", "grad(alpha)", "grad(rho)", "iota_r"],
+    data=["rho", "g^aa", "g^rr", "g^ra", "iota_r"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    public=False,
 )
 def _gds2(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
@@ -259,7 +260,7 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
     data["gds2"] = data["rho"] ** 2 * (
         data["g^aa"]
-        + 2 * dot(data["grad(alpha)"], data["grad(rho)"]) * data["iota_r"] * zeta0
+        + 2 * data["g^ra"] * data["iota_r"] * zeta0
         + data["g^rr"] * data["iota_r"] ** 2 * zeta0**2
     )
     return data

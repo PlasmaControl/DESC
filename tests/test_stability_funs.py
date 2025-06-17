@@ -524,13 +524,15 @@ def test_ballooning_geometry(tmpdir_factory):
 
 @pytest.mark.unit
 def test_gds2():
-    """Test computation of (dψ_N/dρ)² |∇α|²."""
+    """Test computation of gds2."""
     eq = desc.examples.get("W7-X")
     zeta0 = np.linspace(0, 2 * np.pi, 15)[:, np.newaxis]
     data = eq.compute(["alpha_r (secular)", "iota_r", "gds2"], zeta0=zeta0)
-    gds2 = data["gds2"].copy()
-    data = {"alpha_r (secular)": data["alpha_r (secular)"] + data["iota_r"] * zeta0}
-    data = eq.compute(["g^aa", "rho"], data=data)
+    gds2 = data["gds2"]
+    data = eq.compute(
+        ["g^aa", "rho"],
+        data={"alpha_r (secular)": data["alpha_r (secular)"] + data["iota_r"] * zeta0},
+    )
     np.testing.assert_allclose(gds2, data["g^aa"] * data["rho"] ** 2)
 
 

@@ -10,7 +10,16 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+from desc.backend import (
+    flatnonzero,
+    fori_loop,
+    jax,
+    jit,
+    jnp,
+    pure_callback,
+    sign,
+    take,
+)
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -852,7 +861,10 @@ def atleast_2d_end(ary):
 
 
 def dot(a, b, axis=-1):
-    """Batched vector dot product.
+    """Batched coordinate dot product.
+
+    This returns the dot product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal.
 
     Parameters
     ----------
@@ -869,11 +881,15 @@ def dot(a, b, axis=-1):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis)
 
 
 def cross(a, b, axis=-1):
-    """Batched vector cross product.
+    """Batched coordinate cross product.
+
+    This returns the cross product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal
+    and right-handed.
 
     Parameters
     ----------
@@ -893,7 +909,7 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     """Like jnp.linalg.norm, but without nan gradient at x=0.
 
     Parameters
@@ -908,12 +924,19 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
         Value to return where x is zero.
     threshold : float >= 0
         How small is x allowed to be.
+    keepdims : bool, optional
+        If this is set to True, the axes which are normed over are left in the result
+        as dimensions with size one. With this option the result will broadcast
+        correctly against the original x.
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
     n = jnp.linalg.norm(y, ord=ord, axis=axis)
     n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    if keepdims:
+        axis = 0 if axis is None else axis
+        n = jnp.expand_dims(n, axis)
     return n
 
 
@@ -936,7 +959,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims=True) * jnp.ones_like(x)
     # return unit vector with equal components if norm <= threshold
     return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 
@@ -952,11 +975,18 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):

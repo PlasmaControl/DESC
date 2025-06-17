@@ -103,7 +103,12 @@ from desc.objectives.nae_utils import (
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.profiles import (
+    FourierZernikeProfile,
+    PowerProfile,
+    PowerSeriesProfile,
+    ScaledProfile,
+)
 from desc.utils import PRINT_WIDTH, dot, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -2166,11 +2171,8 @@ class TestObjectiveFunction:
             jac_chunk_size=1,
         )
         obj.build()
-        # TODO(#1094)
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict),
-            grid.compress(data["effective ripple"]),
-            rtol=0.004,
+            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
         )
         obj = GammaC(
             eq,
@@ -3924,6 +3926,28 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "boundary error"
 
     @pytest.mark.unit
+    def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):
+        """Test BoundaryError with kinetic profiles. Related to GH Issue #1712."""
+        eq = get("DSHAPE")
+        density = PowerProfile(0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure))
+        temperature = PowerProfile(
+            0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure)
+        )
+        eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile([1], [0])
+        eq.electron_density = density
+        eq.electron_temperature = temperature
+        eq.ion_temperature = temperature
+
+        field = ToroidalMagneticField(B0=0.2, R0=3.5)
+        objective = ObjectiveFunction(
+            BoundaryError(eq=eq, field=field, field_fixed=True)
+        )
+        objective.build()
+        J = objective.jac_unscaled(objective.x(eq))
+        assert not np.any(np.isnan(J)), "boundary error, kinetic"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
         with pytest.warns(UserWarning):
@@ -3976,7 +4000,6 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
         ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
-
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
             modes_R=[[0, 0], [1, 0]],
@@ -3984,6 +4007,21 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
+
+        def test(normal):
+            ext_field = FourierPlanarCoil(center=[0, 0, 3.0], normal=normal)
+            obj = ObjectiveFunction(
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
+            )
+            obj.build()
+            g = obj.grad(obj.x(surf, ext_field))
+            assert not np.any(np.isnan(g)), "quadratic flux"
+
+        test([0, 0, 1])  # normal parallel to Z-axis
+        test([0, 0, -1])  # antiparallel
+        test([0, 1e-4, 1])  # nearly parallel
+        test([0, 1e-4, -1])  # nearly antiparallel
+
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)

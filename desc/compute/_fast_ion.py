@@ -707,7 +707,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_s",
     label=(
-        # ∂ₛJ_∥ /max|∂ₛJ_∥| = - ∫ dl/|v_∥| (v_d ⋅ ∇α) /max|∫ dl/|v_∥| (v_d ⋅ ∇α)|
+        # ∂ₛJ_∥ = - ∫ dl/|v_∥| (v_d ⋅ ∇α)
         "\\partial_{\\s} \\J_{\\parallel}/\\oint dl"
     ),
     units="~",
@@ -820,7 +820,4 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         surf_batch_size,
     )
 
-    # Since there isn't a standard method of normalization, I choose this.
-    # Gives the right result (J_s < 0 everywhere) for Goodman's elongated QI.
-    data["J_s"] = data["J_s"]
     return data

@@ -230,23 +230,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # remove fixed parameters from A and b again by the same loop as in factorize
         # Actually A (unscaled linear constraint matrix without any degenerate rows)
         # does not change here, but still recompute it while updating others
-        A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
+        _, b, xp, _, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        x_scale = self._objective.x(*self._objective.things)
-        self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
-
-        # since D has changed, we need to update the ADinv
-        # as mentioned above A does not change, so we can use the same Ainv
-        # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
-        self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
-        # we also need to update the nullspace Z of AD in a similar way
-        # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
-        # where ZA is the nullspace of A, and Z is the nullspace of AD
-        self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
-        # we also normalize Z to make each column have unit norm
-        self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
-
-        xp = put(xp, unfixed_idx, self._ADinv @ b)
+        # When we change some fixed parameter values, A, Z and D doesn't change
+        xp = put(xp, self._unfixed_idx, self._ADinv @ b)
         xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
         # cast to jnp arrays
         self._xp = jnp.asarray(xp)
@@ -351,7 +338,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+        return df[self._unfixed_idx] @ self._ZA
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -374,7 +361,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         return (
             (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
             @ df[self._unfixed_idx, :][:, self._unfixed_idx]
-            @ (self._Z * self._D[self._unfixed_idx, None])
+            @ self._ZA
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
@@ -491,7 +478,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+        return df[self._unfixed_idx] @ self._ZA
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.

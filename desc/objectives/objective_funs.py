@@ -1207,8 +1207,9 @@ class _Objective(IOAble, ABC):
         if not self._use_jit:
             self._unjit()
 
-        # put the constants to device (CPU or GPU) as jax arrays
-        self._constants = jax.device_put(self.constants, jax.devices()[0])
+        # put the constants to device as jax arrays
+        if desc_config["kind"] == "gpu":
+            self._constants = jax.device_put(self.constants, jax.devices()[0])
 
         self._built = True
 

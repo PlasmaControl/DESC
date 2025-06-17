@@ -253,7 +253,6 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     data=["a", "cvdrift", "cvdrift0", "B^zeta", "p_r", "shear", "psi", "psi_r", "rho"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
-    public=False,
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
@@ -292,7 +291,6 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "g^aa", "g^ra", "g^rr", "|B|^2", "B^zeta", "iota", "shear", "rho"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
-    public=False,
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
@@ -332,7 +330,6 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["f ballooning"],
-    public=False,
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -394,12 +391,13 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     c = reshape(data["c ballooning"])
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
-    # Approximate derivative along field line with second order finite differencing.
-    g = (g[..., 1:] + g[..., :-1]) / 2  # g is now on the half grid: g -> g_1/2.
 
+    # Approximate derivative along field line with second order finite differencing.
+    # Use g on the half grid for numerical stability.
+    g_half = (g[..., 1:] + g[..., :-1]) / (2 * dz**2)
     b_inv = jnp.reciprocal(f[..., 1:-1])
-    diag_inner = (c[..., 1:-1] - (g[..., 1:] + g[..., :-1]) / dz**2) * b_inv
-    diag_outer = g[..., 1:-1] / dz**2 * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
+    diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
+    diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
 
     # TODO: Issue #1750
     if eigfuns:
@@ -504,7 +502,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     c = reshape(data["c ballooning"])[:-1]
     g = reshape(data["g ballooning"])
-    g = (g[1:] + g[:-1]) / 2  # g is now on the half grid: g -> g_1/2.
 
     def integrator(carry, x):
         """Update ``y`` and its derivative using leapfrog-like method.
@@ -524,9 +521,11 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     dy_dz_initial = 5e-3
     _, (y, is_root) = scan(
         integrator,
-        (jnp.zeros(c.shape[1:]), jnp.full(c.shape[1:], dy_dz_initial)),
-        (c, g),
+        init=(jnp.zeros(c.shape[1:]), jnp.full(c.shape[1:], dy_dz_initial)),
+        # Use g on the half grid for numerical stability.
+        xs=(c, (g[1:] + g[:-1]) / 2),
     )
+
     idx_right_root = jnp.argmax(is_root.at[-1].set(True), axis=0, keepdims=True)
     y_left_root = jnp.take_along_axis(y, idx_right_root - 1, axis=0)
     # derivative of linear approximation of ζ ↦ y(ζ) near root

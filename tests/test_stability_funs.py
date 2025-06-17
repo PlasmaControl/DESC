@@ -523,6 +523,30 @@ def test_ballooning_geometry(tmpdir_factory):
 
 
 @pytest.mark.unit
+@pytest.mark.xfail(reason="trying to understand")
+def test_gds2():
+    """Test computation of (dψ_N/dρ)² |∇α|²."""
+    eq = desc.examples.get("W7-X")
+    data = eq.compute(
+        ["rho", "g^aa", "iota", "shear", "g^ra", "g^rr", "alpha_r (secular)", "iota_r"]
+    )
+    zeta0 = np.linspace(0, 2 * np.pi, 15)[:, np.newaxis]
+    gds2 = (
+        data["rho"] ** 2 * data["g^aa"]
+        - 2
+        * data["rho"]
+        * jnp.sign(data["iota"])
+        * data["shear"]
+        * data["g^ra"]
+        * zeta0
+        + data["shear"] ** 2 * data["g^rr"] * zeta0**2
+    )
+    data = {"alpha_r (secular)": data["alpha_r (secular)"] + data["iota_r"] * zeta0}
+    data = eq.compute(["g^aa", "rho"], data=data)
+    np.testing.assert_allclose(gds2, data["g^aa"] * data["rho"] ** 2)
+
+
+@pytest.mark.unit
 def test_ballooning_stability_eval():
     """Cross-compare all the stability functions.
 

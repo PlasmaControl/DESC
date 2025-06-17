@@ -1142,12 +1142,8 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data1dr)
 
         if calc1dz and override_grid:
-            if hasattr(grid, "unique_zeta_idx"):
-                unique_zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-            else:
-                unique_zeta = np.unique(grid.nodes[:, 2])
             grid1dz = LinearGrid(
-                zeta=unique_zeta,
+                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d

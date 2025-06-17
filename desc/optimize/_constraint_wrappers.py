@@ -47,6 +47,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         If set to ``'auto'``, the scale is determined from the initial state vector.
+        This can be passed through optimizer options as
+        solve_options["linear_constraint_options"]["x_scale"].
     name : str
         Name of the objective function.
 

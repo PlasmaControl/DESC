@@ -268,9 +268,9 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="c ballooning",
-    # c = 2 ρ² a³ Bₙ / b⋅∇ζ d(μ₀ p)/dψ (b × 𝛋) ⋅ ∇(α + ι ζ₀)/|B|²
-    label="2 \\rho^2 a^3 B_n / (b \\cdot \\nabla ζ) "
-    "(\\partial_{\\psi} \\mu_0 p) (b \\times \\kappa) \\cdot "
+    # c = 2 ρ² a³ Bₙ μ₀ / b⋅∇ζ dp/dψ (b × 𝛋) ⋅ ∇(α + ι ζ₀)/|B|²
+    label="2 \\rho^2 a^3 B_n \\mu_0 / (b \\cdot \\nabla ζ) "
+    "(\\partial_{\\psi} p) (b \\times \\kappa) \\cdot "
     "\\nabla (\\alpha + \\iota \\zeta_0) / \\vert B \\vert^2",
     units="~",
     units_long="None",
@@ -292,9 +292,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
 
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     data["c ballooning"] = (
-        psi_boundary
-        * data["a"]
-        * mu_0
+        (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]

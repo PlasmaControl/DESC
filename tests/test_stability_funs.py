@@ -545,15 +545,13 @@ def test_grad_alpha_zeta0_maps():
     psi_boundary = eq.Psi / (2 * jnp.pi)
     np.testing.assert_allclose(
         c_ballooning,
-        2
-        * psi_boundary
-        * data["a"]
-        * mu_0
+        (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]
         * data["cvdrift"]
-        * data["rho"] ** 2,
+        * data["rho"] ** 2
+        * 2,
     )
 
 

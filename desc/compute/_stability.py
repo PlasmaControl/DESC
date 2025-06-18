@@ -292,7 +292,12 @@ def _gds2(params, transforms, profiles, data, **kwargs):
     "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
-    """Dimensionless ρ² c where c is defined in eq. 25b of arxiv.org/abs/2410.04576."""
+    """Dimensionless c sign(ψ) ρ².
+
+    Where c mentioned immediately prior is defined in
+    eq. 25b of arxiv.org/abs/2410.04576. Also α = α_{DESC} + ι ζ₀ here,
+    consistent with above link.
+    """
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
 
@@ -327,7 +332,10 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
-    """Dimensionless ρ² f where f is defined in eq. 25c of arxiv.org/abs/2410.04576."""
+    """Dimensionless f ρ² where f is defined in eq. 25c of arxiv.org/abs/2410.04576.
+
+    Also α = α_{DESC} + ι ζ₀ sign ι here whereas above link has α = α_{DESC} + ι ζ₀.
+    """
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     data["f ballooning"] = (
@@ -352,7 +360,10 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
-    """Dimensionless ρ² g where g is defined in eq. 25a of arxiv.org/abs/2410.04576."""
+    """Dimensionless ρ² g where g is defined in eq. 25a of arxiv.org/abs/2410.04576.
+
+    Also α = α_{DESC} + ι ζ₀ sign ι here whereas above link has α = α_{DESC} + ι ζ₀.
+    """
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     data["g ballooning"] = (

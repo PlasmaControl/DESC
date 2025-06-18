@@ -351,9 +351,8 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
-    eigfuns="bool: Whether to return eigenfunctions. Default is true.",
 )
-@partial(jit, static_argnames=["Neigvals", "eigfuns"])
+@partial(jit, static_argnames=["Neigvals"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
@@ -375,7 +374,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
-    eigfuns = kwargs.get("eigfuns", True)
     grid = transforms["grid"].source_grid
     # toroidal step size between points along field lines is assumed uniform
     dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
@@ -400,28 +398,24 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
 
     # TODO: Issue #1750
-    if eigfuns:
-        w, v = eigh_tridiagonal(diag_inner, diag_outer)
-    else:
-        w = eigh_tridiagonal(diag_inner, diag_outer, eigvals_only=True)
+    w, v = eigh_tridiagonal(diag_inner, diag_outer)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
     data["ideal ballooning lambda"] = w
 
-    if eigfuns:
-        # v becomes less than the machine precision at some points which gives NaNs.
-        # stop_gradient prevents that.
-        v = jax.lax.stop_gradient(v)
-        v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
-        assert v.shape == (
-            grid.num_rho,
-            grid.num_alpha,
-            num_zeta0,
-            grid.num_zeta - 2,
-            Neigvals,
-        )
-        data["ideal ballooning eigenfunction"] = v
+    # v becomes less than the machine precision at some points which gives NaNs.
+    # stop_gradient prevents that.
+    v = jax.lax.stop_gradient(v)
+    v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
+    assert v.shape == (
+        grid.num_rho,
+        grid.num_alpha,
+        num_zeta0,
+        grid.num_zeta - 2,
+        Neigvals,
+    )
+    data["ideal ballooning eigenfunction"] = v
 
     return data
 
@@ -448,7 +442,6 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
         Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
 
     """
-    assert kwargs.get("eigfuns", True)
     return data  # noqa: unused dependency
 
 

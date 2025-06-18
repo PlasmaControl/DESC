@@ -2047,7 +2047,6 @@ class TestObjectiveFunction:
                 [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
                 coordinates="raz",
             ),
-            eigfuns=False,
         )
         lam = data["ideal ballooning lambda"]
         lambda0, w0, w1 = (

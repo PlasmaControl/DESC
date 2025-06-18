@@ -788,7 +788,7 @@ def test_ballooning_compare_with_COBRAVMEC():
     lam2_array = []
     for i in range(surfaces.size):
         grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
-        data = eq.compute("ideal ballooning lambda", grid=grid, eigfuns=False)
+        data = eq.compute("ideal ballooning lambda", grid=grid)
         lam2_array.append(data["ideal ballooning lambda"].max())
     lam2_array = np.array(lam2_array)
     root_DESC = find_root_simple(surfaces, lam2_array)

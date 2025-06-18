@@ -348,7 +348,6 @@ class Bounce2D(Bounce):
                 ),
             }
 
-
         if not is_reshaped:
             self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
@@ -769,7 +768,7 @@ class Bounce2D(Bounce):
         cov = grad_bijection_from_disc(z1, z2)
 
         # RG: Quadrature happens here
-        # RG: (surf_batch_size, num_alpha, num_pitch, num_well) 
+        # RG: shape (surf_batch_size, num_alpha, num_pitch, num_well)
         result = [
             _swap_shape((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
             for f in integrand

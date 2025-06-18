@@ -236,11 +236,14 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: If user is giving zeta0 = ι ζ₀ as input, then divide zeta0
+#       array passed in through the kwargs by ι.
+
+
 @register_compute_fun(
     name="gds2",
-    # (dψ_N/dρ)² |∇(α + ι ζ₀)|²
-    label="(\\partial_{\\rho} \\psi_N)^2 "
-    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2",
+    # ρ² |∇(α + ι ζ₀)|²
+    label="\\rho^2 \\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Parameter in ideal ballooning equation",
@@ -268,10 +271,10 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="c ballooning",
-    # c = a³ Bₙ / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇(α + ι ζ₀)|/|B|²
-    label="a^3 B_n / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
-    "(\\partial_{\\psi} \\rho) (b \\times \\kappa) \\cdot "
-    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert",
+    # c = 2 ρ² a³ Bₙ / b⋅∇ζ d(μ₀ p)/dψ (b × 𝛋) ⋅ ∇(α + ι ζ₀)/|B|²
+    label="2 \\rho^2 a^3 B_n / (b \\cdot \\nabla ζ) "
+    "(\\partial_{\\psi} \\mu_0 p) (b \\times \\kappa) \\cdot "
+    "\\nabla (\\alpha + \\iota \\zeta_0) / \\vert B \\vert^2",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
@@ -280,35 +283,36 @@ def _gds2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "cvdrift", "cvdrift0", "B^zeta", "p_r", "shear", "psi", "psi_r", "rho"],
+    data=["a", "p_r", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "iota_r"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
+    """Dimensionless ρ² c where c is defined in eq. 25b of arxiv.org/abs/2410.04576."""
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
 
-    data["c ballooning"] = (
-        params["Psi"]
-        / jnp.pi
+    psi_boundary = params["Psi"] / (2 * jnp.pi)
+    temp = (
+        psi_boundary
         * data["a"]
         * mu_0
         * data["p_r"]
         / data["psi_r"]
-        * jnp.sign(data["psi"])
         / data["B^zeta"]
-        * (
-            2 * data["rho"] ** 2 * data["cvdrift"]
-            - data["shear"] * data["cvdrift0"] * zeta0
-        )
+        * data["rho"]
+    )
+    data["c ballooning"] = (
+        temp * 2 * data["rho"] * data["cvdrift"]
+        + (temp * data["cvdrift0"] * data["iota_r"]) * zeta0
     )
     return data
 
 
 @register_compute_fun(
     name="f ballooning",
-    # f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇(α + ι ζ₀)|² / |B|³
-    label="a B_n^3 / (b \\cdot \\nabla ζ) (\\partial_{\\rho} \\psi_N)^2 "
+    # f = ρ² a Bₙ³ / b⋅∇ζ |∇(α + ι ζ₀)|² / |B|³
+    label="\\rho^2 a B_n^3 / (b \\cdot \\nabla ζ) "
     "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert^3",
     units="~",
     units_long="None",
@@ -321,6 +325,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _f_balloon(params, transforms, profiles, data, **kwargs):
+    """Dimensionless ρ² f where f is defined in eq. 25c of arxiv.org/abs/2410.04576."""
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     data["f ballooning"] = (
@@ -331,8 +336,8 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g ballooning",
-    # g = a³ Bₙ * b⋅∇ζ (dψ_N/dρ)² |∇(α + ι ζ₀)|² / |B|
-    label="a^3 B_n b \\cdot \\nabla ζ (\\partial_{\\rho} \\psi_N)^2 "
+    # g = ρ² a³ Bₙ * b⋅∇ζ |∇(α + ι ζ₀)|² / |B|
+    label="\\rho^2 a^3 B_n b \\cdot \\nabla ζ "
     "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert",
     units="~",
     units_long="None",
@@ -345,6 +350,7 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
     data=["a", "|B|^2", "B^zeta", "gds2"],
 )
 def _g_balloon(params, transforms, profiles, data, **kwargs):
+    """Dimensionless ρ² g where g is defined in eq. 25a of arxiv.org/abs/2410.04576."""
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     data["g ballooning"] = (

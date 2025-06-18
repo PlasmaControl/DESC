@@ -236,10 +236,6 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: If user is giving zeta0 = ι ζ₀ as input, then divide zeta0
-#       array passed in through the kwargs by ι.
-
-
 @register_compute_fun(
     name="gds2",
     # ρ² |∇(α + ι ζ₀)|²

@@ -120,7 +120,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
     # compute x_scale if not provided
     # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
-    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
     if x_scale == "auto":
         x_scale = objective.x(*objective.things)
     errorif(

@@ -146,6 +146,7 @@ class Equilibrium(IOAble, Optimizable):
         "_L_lmn",
         "_R_basis",
         "_Z_basis",
+        "_L_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -162,7 +163,7 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -276,8 +277,15 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._R_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        # Z and L bases are the same
         self._Z_basis = FourierZernikeBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
+        self._L_basis = FourierZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -1918,7 +1926,7 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def L_basis(self):
         """FourierZernikeBasis: Spectral basis for lambda."""
-        return self._Z_basis
+        return self._L_basis
 
     @property
     def L_grid(self):

@@ -234,7 +234,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # remove fixed parameters from A and b again by the same loop as in factorize
         # Actually A (unscaled linear constraint matrix without any degenerate rows)
         # does not change here, but still recompute it while updating others
-        _, b, xp, _, fixed_idx = remove_fixed_parameters(A, b, xp)
+        A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
         # if user specified x_scale, don't dynamically change it
         if self._x_scale == "auto":
@@ -357,7 +357,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ self._ZA
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -380,7 +380,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         return (
             (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
             @ df[self._unfixed_idx, :][:, self._unfixed_idx]
-            @ self._ZA
+            @ (self._Z * self._D[self._unfixed_idx, None])
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
@@ -497,7 +497,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ self._ZA
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.

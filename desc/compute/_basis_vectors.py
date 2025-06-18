@@ -3294,7 +3294,7 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _secular_grad_alpha(params, transforms, profiles, data, **kwargs):
     data["grad(alpha) (secular)"] = (
-        data["alpha_r (secular)"][:, jnp.newaxis] * data["e^rho"]
+        data["alpha_r (secular)"][..., jnp.newaxis] * data["e^rho"]
     )
     return data
 

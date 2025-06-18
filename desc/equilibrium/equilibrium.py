@@ -11,7 +11,7 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, fori_loop, jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import FourierZernikeBasis, DoubleChebyshevFourierBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -23,6 +23,7 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
+from desc.compute.curl import curl_cylindrical
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -1229,6 +1230,10 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        L = None,
+        M = 8,
+        N = None,
+        method="vector potential"
     ):
         """Compute magnetic field at a set of points.
 
@@ -1249,7 +1254,15 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-
+        L, M, N: int
+            Spectral resolution to use when taking the curl of the vector potential
+            in a spectral basis. Only used if method == "vector potential". L and N
+            default to M, and M defaults to 8.
+        method: string
+            "biot-savart" or "vector potential". "biot-savart" calculates 
+            the magnetic field directly from the current density, whereas
+            "vector potential" first calculates A, and then takes curl(A)
+            to ensure a divergence-free field.
         Returns
         -------
         field : ndarray, shape(n,3)
@@ -1263,35 +1276,42 @@ class Equilibrium(Optimizable, _MagneticField):
                 L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
             )
 
-        data = self.compute(
-            ["J", "phi", "sqrt(g)", "x"],
-            grid=source_grid,
-            params=params,
-            transforms=transforms,
-        )
-        # surface element, must divide by NFP to remove the NFP multiple on the surface
-        # grid weights, as we account for that when doing the for loop over NFP
-        dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
-
-        def nfp_loop(j, f):
-            # calculate (by rotating) rs, rs_t, rz_t
-            phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
-                2 * jnp.pi
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            data = self.compute(
+                ["J", "phi", "sqrt(g)", "x"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
             )
-            # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-            source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
-            source_xyz = rpz2xyz(source_rpz)
-            J = rpz2xyz_vec(data["J"], phi=phi)
-            fj = biot_savart_general(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
-            )
-            f += fj
-            return f
+        methods = ['biot-savart','','vector potential','']
+        assert (method in methods), f"""Method {method} unknown. Please choose one of the following methods:
+            {', '.join(methods)}"""
+        method = method.lower().strip()
+        if method == methods[0]:
+            source_xyz = rpz2xyz(data["x"])
+            J = rpz2xyz_vec(data["J"], phi=data["phi"])
+            dV = data["sqrt(g)"] * source_grid.weights
 
-        B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-        if basis.lower() == "rpz":
-            B = xyz2rpz_vec(B, phi=coords[:, 1])
+            B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
+            if basis.lower() == "rpz":
+                B = xyz2rpz_vec(B, phi=coords[:, 1])
+        elif method == methods[2]:
+            coords = np.array(coords)
+            # Default spectral resolution parameters
+            if L is None:
+                L = M
+            if N is None:
+                N = M
+            A = self.compute_magnetic_vector_potential(coords,
+                chunk_size=chunk_size,
+                source_grid=source_grid,
+                params=params,
+                basis=basis,
+                transforms=transforms)
+            B = curl_cylindrical(A, coords, L, M, N, source_grid.NFP)
         return B
+        
 
     def compute_magnetic_vector_potential(
         self,

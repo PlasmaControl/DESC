@@ -2015,36 +2015,40 @@ def chebyshev(r, l, dr=0):
     if dr == 0:
         return jnp.cos(l * jnp.arccos(x))
     else:
-        # see https://en.wikipedia.org/wiki/Chebyshev_polynomials#Differentiation_and_integration
-        # updating notation to match formula
-        n=l
-        p=dr
-        print(x.shape)
-        # 0 <= k <= n-p and k === (n-p) mod 2
-        k = jnp.arange((n-p)%2, n-p+1, 2)
-
-        # expand dims for broadcasting
-        # the dimension corresponding to k is the 0 dimension
-        # all other dims correspond to x
-        k = jnp.expand_dims(k, list(np.arange(len(x.shape))+1))
-        x = jnp.expand_dims(x, 0)
-
-        # calculate summand
-        term_1 = (n+p-k)/2-1
-        term_2 = (n-p-k)/2
-        coeff = binom(term_1,term_2) * factorial(term_1)/factorial(term_2) 
-        recursive = jnp.cos(k * jnp.arccos(x))
-        if (n-p)%2 == 0:
-            coeff[0] *= 1/2
-
-        # sum over k and apply chain rule
-        dydx = np.sum(coeff * recursive, axis = 0) * 2**p * n
-
+        # Calculate derivative recursively using the chebyshev_second_kind function
+        dydx = l * chebyshev_second_kind(r, l-1, dr= (dr-1))
         dydr = 2 * dydx
-        
+
         return dydr
 
+def chebyshev_second_kind(r, l, dr=0):
+    """Shifted Chebyshev polynomial of the second kind.
 
+    Parameters
+    ----------
+    r : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        U_n evaluated at specified points
+    """
+    r, l = map(jnp.asarray, (r, l))
+    x = 2 * r - 1  # shift
+    if dr == 0:
+        return jnp.where(jnp.abs(x)==1,
+                        l+1,
+                        jnp.sin((l+1)*jnp.arccos(x))/jnp.sqrt(1-x**2))
+    else:
+        raise NotImplementedError(
+            "Analytic second-degree derivatives of Chebyshev polynomials "
+            + "have not been implemented."
+        )
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

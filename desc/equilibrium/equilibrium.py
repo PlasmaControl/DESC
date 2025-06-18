@@ -11,7 +11,7 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import FourierZernikeBasis, DoubleChebyshevFourierBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -23,6 +23,7 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
+from desc.compute.curl import curl_cylindrical
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -1219,6 +1220,10 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        L = None,
+        M = 8,
+        N = None,
+        method="vector potential"
     ):
         """Compute magnetic field at a set of points.
 
@@ -1239,7 +1244,15 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-
+        L, M, N: int
+            Spectral resolution to use when taking the curl of the vector potential
+            in a spectral basis. Only used if method == "vector potential". L and N
+            default to M, and M defaults to 8.
+        method: string
+            "biot-savart" or "vector potential". "biot-savart" calculates 
+            the magnetic field directly from the current density, whereas
+            "vector potential" first calculates A, and then takes curl(A)
+            to ensure a divergence-free field.
         Returns
         -------
         field : ndarray, shape(n,3)
@@ -1261,14 +1274,34 @@ class Equilibrium(Optimizable, _MagneticField):
                 params=params,
                 transforms=transforms,
             )
-        source_xyz = rpz2xyz(data["x"])
-        J = rpz2xyz_vec(data["J"], phi=data["phi"])
-        dV = data["sqrt(g)"] * source_grid.weights
+        methods = ['biot-savart','','vector potential','']
+        assert (method in methods), f"""Method {method} unknown. Please choose one of the following methods:
+            {', '.join(methods)}"""
+        method = method.lower().strip()
+        if method == methods[0]:
+            source_xyz = rpz2xyz(data["x"])
+            J = rpz2xyz_vec(data["J"], phi=data["phi"])
+            dV = data["sqrt(g)"] * source_grid.weights
 
-        B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
-        if basis.lower() == "rpz":
-            B = xyz2rpz_vec(B, phi=coords[:, 1])
+            B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
+            if basis.lower() == "rpz":
+                B = xyz2rpz_vec(B, phi=coords[:, 1])
+        elif method == methods[2]:
+            coords = np.array(coords)
+            # Default spectral resolution parameters
+            if L is None:
+                L = M
+            if N is None:
+                N = M
+            A = self.compute_magnetic_vector_potential(coords,
+                chunk_size=chunk_size,
+                source_grid=source_grid,
+                params=params,
+                basis=basis,
+                transforms=transforms)
+            B = curl_cylindrical(A, coords, L, M, N, source_grid.NFP)
         return B
+        
 
     def compute_magnetic_vector_potential(
         self,

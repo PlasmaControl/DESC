@@ -307,6 +307,7 @@ class Bounce2D(Bounce):
         automorphism=None,
         Bref=1.0,
         Lref=1.0,
+        split_by_NFP=False,
         is_reshaped=False,
         is_fourier=False,
         check=False,
@@ -323,16 +324,31 @@ class Bounce2D(Bounce):
         )
         self._x, self._w = get_quadrature(quad, automorphism)
 
-        self._c = {
-            "|B|": data["|B|"] / Bref,
-            "B^zeta": data["B^zeta"] * Lref / Bref,
-            "T(z)": fourier_chebyshev(
-                theta,
-                data["iota"] if is_reshaped else grid.compress(data["iota"]),
-                jnp.atleast_1d(alpha),
-                num_transit,
-            ),
-        }
+        if split_by_NFP:
+            self._c = {
+                "|B|": data["|B|"] / Bref,
+                "B^zeta": data["B^zeta"] * Lref / Bref,
+                "T(z)": fourier_chebyshev(
+                    theta,
+                    data["iota"] if is_reshaped else grid.compress(data["iota"]),
+                    jnp.atleast_1d(alpha),
+                    num_transit,
+                    NFP=self._NFP,
+                ),
+            }
+        else:
+            self._c = {
+                "|B|": data["|B|"] / Bref,
+                "B^zeta": data["B^zeta"] * Lref / Bref,
+                "T(z)": fourier_chebyshev(
+                    theta,
+                    data["iota"] if is_reshaped else grid.compress(data["iota"]),
+                    jnp.atleast_1d(alpha),
+                    num_transit,
+                ),
+            }
+
+
         if not is_reshaped:
             self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
@@ -724,7 +740,9 @@ class Bounce2D(Bounce):
         #  done once in ``desc/_compute/_neoclassical.py::_compute``.
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
+
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
+        # RG: Shape (num_pitch, num_alpha, surf_batch_size, num_well*num_quad)
         zeta = flatten_matrix(
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
@@ -745,7 +763,13 @@ class Bounce2D(Bounce):
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         dl_dz = B / jnp.abs(data["B^zeta"])
+
+        # RG: cov is just a scaling factor for each fieldline
+        # RG: shape (num_pitch, num_alpha, surf_batch_size, num_well)
         cov = grad_bijection_from_disc(z1, z2)
+
+        # RG: Quadrature happens here
+        # RG: (surf_batch_size, num_alpha, num_pitch, num_well) 
         result = [
             _swap_shape((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
             for f in integrand

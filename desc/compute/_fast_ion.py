@@ -445,8 +445,9 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            split_by_NFP=False,
             is_fourier=True,
-            spline=spline,
+            spline=True,
         )
 
         def fun(pitch_inv):
@@ -462,7 +463,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
             Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
             return Jpar_wellsum
 
-        # We normalize with (2 pi R0)
+        ## We normalize with (2 pi R0)
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]

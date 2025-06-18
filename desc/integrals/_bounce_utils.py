@@ -579,7 +579,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_fieldline(alpha, iota, num_transit):
+def get_fieldline(alpha, iota, num_transit, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -603,10 +603,10 @@ def get_fieldline(alpha, iota, num_transit):
     iota = jnp.atleast_1d(iota)[:, jnp.newaxis]
     alpha = alpha[:, jnp.newaxis, jnp.newaxis]
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota
+    return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota / NFP
 
 
-def fourier_chebyshev(theta, iota, alpha, num_transit):
+def fourier_chebyshev(theta, iota, alpha, num_transit, NFP=1):
     """Parameterize θ on field lines ``alpha``.
 
     Parameters
@@ -624,6 +624,9 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP: int
+        Factor by which to split the number of toroidal transits.
+        Useful when calculating `adiabatic J` for equilibria with NFP>1.
 
     Returns
     -------
@@ -674,7 +677,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
 
     """
     # peeling off field lines
-    fieldline = get_fieldline(alpha, iota, num_transit)
+    fieldline = get_fieldline(alpha, iota, num_transit, NFP)
     if theta.ndim == 2:
         # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)

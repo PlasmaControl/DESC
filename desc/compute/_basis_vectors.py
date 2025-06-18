@@ -45,6 +45,7 @@ def _b(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta/sqrt(g)", "e_zeta"],
+    aliases=["grad(rho)"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose

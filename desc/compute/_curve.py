@@ -1077,6 +1077,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x_s"],
     parameterization="desc.geometry.core.Curve",
+    aliases=["centroid_tangent"],
 )
 def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     data["frenet_tangent"] = (
@@ -1227,4 +1228,204 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # this is equivalent to jnp.trapz(T, s) for a closed curve
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
+    return data
+
+
+@register_compute_fun(
+    name="centroid_normal",
+    label="\\mathbf{N}_{\\mathrm{Centroid}}",
+    units="~",
+    units_long="None",
+    description="Normal unit vector to curve in centroid frame "
+    "(see Singh et al. 2020, section 3.1)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x", "center", "centroid_tangent", "phi"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _centroid_normal(params, transforms, profiles, data, **kwargs):
+    x = rpz2xyz(data["x"])
+    center = rpz2xyz(data["center"])
+    delta = x - center
+
+    # back to rpz frame
+    delta = xyz2rpz_vec(delta, phi=data["phi"])
+
+    delta_orth = (
+        delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
+    )
+    delta_orth = delta_orth / jnp.linalg.norm(delta_orth, axis=-1)[:, None]
+
+    data["centroid_normal"] = delta_orth
+
+    return data
+
+
+@register_compute_fun(
+    name="centroid_binormal",
+    label="\\mathbf{B}_{\\mathrm{Centroid}}",
+    units="~",
+    units_long="None",
+    description="Binormal unit vector to curve in centroid frame "
+    "(see Singh et al. 2020, section 3.1)",
+    dim=3,
+    params=["rotmat"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_tangent", "centroid_normal"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _centroid_binormal(params, transforms, profiles, data, **kwargs):
+    data["centroid_binormal"] = cross(
+        data["centroid_tangent"], data["centroid_normal"]
+    ) * jnp.linalg.det(params["rotmat"].reshape((3, 3)))
+
+    return data
+
+
+@register_compute_fun(
+    name="p_frame",
+    label="\\mathbf{p}_{\\mathrm{Frame}}",
+    units="~",
+    units_long="None",
+    description="P unit vector for framed coil with arbitrary rotation fourier series",
+    dim=3,
+    params=["alpha_n"],
+    transforms={"alpha": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_normal", "centroid_binormal"],
+    parameterization="desc.coils.AbstractFramedCoil",
+)
+def _p_frame(params, transforms, profiles, data, **kwargs):
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
+
+    p_frame = (
+        data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis]
+        + data["centroid_binormal"] * jnp.sin(alpha)[:, jnp.newaxis]
+    )
+
+    data["p_frame"] = p_frame
+    return data
+
+
+@register_compute_fun(
+    name="q_frame",
+    label="\\mathbf{q}_{\\mathrm{Frame}}",
+    units="~",
+    units_long="None",
+    description="Q unit vector for framed coil with arbitrary rotation fourier series",
+    dim=3,
+    params=["alpha_n"],
+    transforms={"alpha": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_normal", "centroid_binormal"],
+    parameterization="desc.coils.AbstractFramedCoil",
+)
+def _q_frame(params, transforms, profiles, data, **kwargs):
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
+
+    q_frame = (
+        -data["centroid_normal"] * jnp.sin(alpha)[:, jnp.newaxis]
+        + data["centroid_binormal"] * jnp.cos(alpha)[:, jnp.newaxis]
+    )
+
+    data["q_frame"] = q_frame
+    return data
+
+
+@register_compute_fun(
+    name="curv1_frame",
+    label="\\kappa_{1}}_{\\mathrm{Frame}",
+    units="~",
+    units_long="None",
+    description="Curvature component in the p-vector direction for a "
+    "rectangular cross section coil",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["curvature", "frenet_normal", "p_frame"],
+    parameterization="desc.coils.AbstractFramedCoil",
+)
+def _curv1_frame(params, transforms, profiles, data, **kwargs):
+    data["curv1_frame"] = data["curvature"] * dot(
+        data["frenet_normal"], data["p_frame"]
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="curv2_frame",
+    label="\\kappa_{2}}_{\\mathrm{Frame}",
+    units="~",
+    units_long="None",
+    description="Curvature component in the q-vector direction for a "
+    "rectangular cross section coil",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["curvature", "frenet_normal", "q_frame"],
+    parameterization="desc.coils.AbstractFramedCoil",
+)
+def _curv2_frame(params, transforms, profiles, data, **kwargs):
+    data["curv2_frame"] = data["curvature"] * dot(
+        data["frenet_normal"], data["q_frame"]
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_fb",
+    label="u_{FB}",
+    units="",
+    units_long="",
+    description="U coordinate for finite build expansion",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rt",  # just two degrees of freedom
+    data=[],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _u_fb(params, transforms, profiles, data, **kwargs):
+    grid = transforms["grid"]
+
+    data["u_fb"] = (
+        (grid.nodes[:, 0] - 0.5) / (0.5) * 0.9999
+    )  # rescale to [-0.9999,0.9999], as the finite build term is singular at the edge
+    return data
+
+
+@register_compute_fun(
+    name="v_fb",
+    label="v_{FB}",
+    units="",
+    units_long="",
+    description="V coordinate for finite build expansion",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rt",
+    data=[],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _v_fb(params, transforms, profiles, data, **kwargs):
+    grid = transforms["grid"]
+
+    data["v_fb"] = (
+        (grid.nodes[:, 1] - jnp.pi) / (jnp.pi) * 0.9999
+    )  # rescale to [-0.9999,0.9999]
     return data

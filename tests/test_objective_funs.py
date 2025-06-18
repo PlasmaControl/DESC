@@ -20,6 +20,7 @@ from desc.backend import jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
+    FourierPlanarFiniteBuildCoil,
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
@@ -53,6 +54,7 @@ from desc.objectives import (
     CoilIntegratedCurvature,
     CoilLength,
     CoilSetLinkingNumber,
+    CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
     EffectiveRipple,
@@ -2124,6 +2126,77 @@ class TestObjectiveFunction:
         with pytest.raises(ValueError, match="vanish"):
             obj.build()
 
+    @pytest.mark.regression  # pretty slow test
+    def test_coil_maxB(self):
+        """Tests coil max field."""
+
+        def test(coil, component, target=0):
+            obj = CoilSetMaxB(
+                coil=coil,
+                component=component,
+                xsection_grid=5,
+                centerline_grid=50,
+            )
+
+            obj2 = CoilSetMaxB(
+                coil=coil,
+                component=component,
+                use_softmax=True,
+                softmax_alpha=100,
+                xsection_grid=5,
+                centerline_grid=50,
+                bs_chunk_size=1,
+            )
+
+            vertical_field_mag = 1
+            vertical_field = VerticalMagneticField(
+                vertical_field_mag
+            )  # 1 T background field
+            obj3 = CoilSetMaxB(
+                coil=coil,
+                field=vertical_field,
+                component=component,
+                xsection_grid=5,
+                centerline_grid=50,
+                bs_chunk_size=1,
+            )
+
+            obj.build()
+            obj2.build()
+            obj3.build()
+
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, target, rtol=5e-4, atol=1e-4)
+            assert len(f) == obj.dim_f
+
+            f2 = obj2.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f2, target, rtol=5e-4, atol=1e-4)
+            assert len(f2) == obj.dim_f
+
+            f3 = obj3.compute(params=coil.params_dict)
+            if component == "p" or component == "t":
+                # Affected by vertical field
+                np.testing.assert_allclose(
+                    f3, target + vertical_field_mag, rtol=5e-4, atol=1e-4
+                )
+            assert len(f3) == obj.dim_f
+
+        coil = FourierPlanarFiniteBuildCoil(
+            center=[10, 1, 1],
+            normal=[0, 1, 0],
+            cross_section_dims=[0.1, 0.2],
+            current=1e7,
+        )
+        coils = CoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 2, 0], endpoint=True
+        )
+
+        # Nominal values computed with the CoilForces package in Julia
+        test(coils, component="mag", target=25.687)
+        test(coils, component="t", target=0)
+        test(coils, component="p", target=24.489)
+        test(coils, component="q", target=25.619)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -3141,6 +3214,7 @@ class TestComputeScalarResolution:
         CoilIntegratedCurvature,
         CoilLength,
         CoilSetLinkingNumber,
+        CoilSetMaxB,
         CoilSetMinDistance,
         CoilTorsion,
         FusionPower,
@@ -3628,6 +3702,7 @@ class TestObjectiveNaNGrad:
         CoilIntegratedCurvature,
         CoilLength,
         CoilSetLinkingNumber,
+        CoilSetMaxB,
         CoilSetMinDistance,
         CoilTorsion,
         EffectiveRipple,

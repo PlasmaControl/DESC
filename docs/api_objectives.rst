@@ -130,6 +130,7 @@ Coil Optimization
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
+    desc.objectives.CoilSetMaxB
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.LinkingCurrentConsistency
 

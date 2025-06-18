@@ -9,6 +9,7 @@ from desc.geometry import Curve
 def compute_scaling_factors(thing):
     """Compute dimensional quantities for normalizations."""
     # local import to avoid circular import
+    from desc.coils import _Coil
     from desc.equilibrium import Equilibrium
     from desc.geometry import FourierRZToroidalSurface
 
@@ -77,6 +78,11 @@ def compute_scaling_factors(thing):
 
     elif isinstance(thing, Curve):
         scales["a"] = thing.compute("length")["length"] / (2 * np.pi)
+
+        if isinstance(thing, _Coil):
+            scales["B"] = (
+                mu_0 * np.abs(thing.current) / (2 * scales["a"])
+            )  # field at center of equivalent loop
 
     # replace 0 scales to avoid normalizing by zero
     for scale in scales.keys():

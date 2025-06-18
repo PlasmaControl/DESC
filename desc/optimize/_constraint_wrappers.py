@@ -152,9 +152,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
 
-        # df/dx_reduced = df/dx_full @ dx_full/dx_reduced       # noqa: E800
-        # x_full = D(xp + Z @ x_reduced)                        # noqa: E800
-        # So, the feasible tangents (aka. dx_full/dx_reduced) is D@Z
+        # df/dx_reduced = df/dx_full_unscaled @ dx_full_unscaled/dx_reduced # noqa: E800
+        # x_full_unscaled = D(xp + Z @ x_reduced)                           # noqa: E800
+        # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
         # Since the fixed parameters stay constant, we add 0 rows by below operation
         self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
@@ -758,8 +758,12 @@ class ProximalProjection(ObjectiveFunction):
         self._feasible_tangents = jnp.split(
             self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
-        # TODO (1721): eq_Z is already scaled by eq_D, so we don't need to scale
-        # it again. Update the weights of the coil tests
+        # dg/dxeq_reduced = dg/dx_eq_unscaled @ dx_eq_unscaled/dxeq_reduced # noqa: E800
+        # x_eq_unscaled = Deq(xp_eq + Zeq @ xeq_reduced)                    # noqa: E800
+        # So, the feasible tangents (aka. dx_eq_unscaled/dx_reduced) is Deq@Zeq
+        # Since here we are setting the feasible direction for eq parameters only,
+        # we need to add 0 rows for eq fixed parameters and non-eq parameters which we
+        # handle by below operation
         self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
@@ -835,7 +839,11 @@ class ProximalProjection(ObjectiveFunction):
         return params
 
     def x(self, *things):
-        """Return the full state vector from the Optimizable objects things."""
+        """Return the full state vector from the Optimizable objects things.
+
+        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
+        params.
+        """
         # TODO (#1392): also check resolution etc?
         things = things or self.things
         assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
@@ -854,7 +862,11 @@ class ProximalProjection(ObjectiveFunction):
 
     @property
     def dim_x(self):
-        """int: Dimension of the state vector."""
+        """int: Dimension of the state vector.
+
+        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
+        params.
+        """
         s = 0
         for t in self.things:
             if t is self._eq:

@@ -36,6 +36,7 @@ class _Profile(IOAble, ABC):
     """
 
     _io_attrs_ = ["_name"]
+    _static_attrs = ["_name"]
 
     def __init__(self, name=""):
         self.name = name
@@ -956,6 +957,7 @@ class SplineProfile(_Profile):
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_params", "_knots", "_method"]
+    _static_attrs = _Profile._static_attrs + ["_method"]
 
     def __init__(self, values=None, knots=None, method="cubic2", name=""):
         super().__init__(name)

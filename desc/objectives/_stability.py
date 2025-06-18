@@ -3,7 +3,7 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, setdefault, warnif
@@ -392,6 +392,11 @@ class BallooningStability(_Objective):
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_iota_keys",
+        "_len_keys",
+    ]
+
     _coordinates = ""  # not vectorized over rho, always a scalar
     _scalar = True
     _units = "(dimensionless)"
@@ -515,12 +520,6 @@ class BallooningStability(_Objective):
         self._Neigvals = setdefault(self._Neigvals, 1)
         self._dim_f = 1
         self._data_keys = ["ideal ballooning lambda"]
-
-        self._args = get_params(
-            self._iota_keys + self._len_keys + self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         self._constants = {
             "iota_transforms": iota_transforms,

@@ -252,19 +252,20 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "g^aa", "g^rr", "g^ra", "iota_r"],
+    data=["rho", "g^aa", "g^rr", "g^ra", "shear"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
-    "Default 15 points linearly spaced in [-π/2,π/2]",
+    "Default 15 points linearly spaced in [-π/2,π/2]. "
+    "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
     public=False,
 )
 def _gds2(params, transforms, profiles, data, **kwargs):
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
 
-    data["gds2"] = data["rho"] ** 2 * (
-        data["g^aa"]
-        + 2 * data["g^ra"] * data["iota_r"] * zeta0
-        + data["g^rr"] * data["iota_r"] ** 2 * zeta0**2
+    data["gds2"] = (
+        data["g^aa"] * data["rho"] ** 2
+        - 2 * data["g^ra"] * data["rho"] * data["shear"] * zeta0
+        + data["g^rr"] * data["shear"] ** 2 * zeta0**2
     )
     return data
 
@@ -283,9 +284,10 @@ def _gds2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "p_r", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "iota_r"],
+    data=["a", "p_r", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "shear"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
-    "Default 15 points linearly spaced in [-π/2,π/2]",
+    "Default 15 points linearly spaced in [-π/2,π/2]. "
+    "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
     """Dimensionless ρ² c where c is defined in eq. 25b of arxiv.org/abs/2410.04576."""
@@ -293,18 +295,17 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     zeta0 = zeta0.reshape(-1, 1)
 
     psi_boundary = params["Psi"] / (2 * jnp.pi)
-    temp = (
+    data["c ballooning"] = (
         psi_boundary
         * data["a"]
         * mu_0
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]
-        * data["rho"]
-    )
-    data["c ballooning"] = (
-        temp * 2 * data["rho"] * data["cvdrift"]
-        + (temp * data["cvdrift0"] * data["iota_r"]) * zeta0
+        * (
+            2 * data["rho"] ** 2 * data["cvdrift"]
+            - data["cvdrift0"] * data["shear"] * zeta0
+        )
     )
     return data
 

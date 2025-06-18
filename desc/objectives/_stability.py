@@ -372,6 +372,7 @@ class BallooningStability(_Objective):
     zeta0 : array-like
         Points of vanishing integrated local shear to scan over.
         Default 15 points in [-π/2,π/2].
+        The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.
     Neigvals : int
         Number of top eigenvalues to select.
         Default is 1.

@@ -527,15 +527,19 @@ def test_ballooning_geometry(tmpdir_factory):
 def test_grad_alpha_zeta0_maps():
     """Test computation of gds2."""
     eq = desc.examples.get("W7-X")
-    zeta0 = np.linspace(-np.pi, np.pi, 15)[:, np.newaxis]
+    iota_zeta0 = np.linspace(-np.pi / 2, np.pi / 2, 15)[:, np.newaxis]
     data = eq.compute(
-        ["alpha_r (secular)", "iota_r", "gds2", "c ballooning"], zeta0=zeta0
+        ["alpha_r (secular)", "iota_r", "iota", "gds2", "c ballooning"],
+        zeta0=iota_zeta0,
     )
     gds2 = data["gds2"]
     c_ballooning = data["c ballooning"]
     data = eq.compute(
         ["g^aa", "rho", "a", "p_r", "psi_r", "B^zeta", "cvdrift"],
-        data={"alpha_r (secular)": data["alpha_r (secular)"] + data["iota_r"] * zeta0},
+        data={
+            "alpha_r (secular)": data["alpha_r (secular)"]
+            + data["iota_r"] / data["iota"] * iota_zeta0
+        },
     )
     np.testing.assert_allclose(gds2, data["g^aa"] * data["rho"] ** 2)
     psi_boundary = eq.Psi / (2 * jnp.pi)

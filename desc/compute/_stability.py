@@ -238,8 +238,9 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="gds2",
-    # ρ² |∇(α + ι ζ₀)|²
-    label="\\rho^2 \\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2",
+    # |∇(α + ι ζ₀ sign ι)|² ρ²
+    label="\\vert \\nabla (\\alpha + "
+    "\\iota \\zeta_0 \\mathrm{sign} \\iota) \\vert^2 \\rho^2",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Parameter in ideal ballooning equation",
@@ -248,7 +249,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "g^aa", "g^rr", "g^ra", "shear"],
+    data=["rho", "g^aa", "g^rr", "g^ra", "shear", "iota"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]. "
     "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
@@ -260,7 +261,12 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
     data["gds2"] = (
         data["g^aa"] * data["rho"] ** 2
-        - 2 * data["g^ra"] * data["rho"] * data["shear"] * zeta0
+        - 2
+        * data["g^ra"]
+        * data["rho"]
+        * jnp.sign(data["iota"])
+        * data["shear"]
+        * zeta0
         + data["g^rr"] * data["shear"] ** 2 * zeta0**2
     )
     return data
@@ -268,10 +274,10 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="c ballooning",
-    # c = 2 ρ² a³ Bₙ μ₀ / b⋅∇ζ dp/dψ (b × 𝛋) ⋅ ∇(α + ι ζ₀)/|B|²
-    label="2 \\rho^2 a^3 B_n \\mu_0 / (b \\cdot \\nabla ζ) "
-    "(\\partial_{\\psi} p) (b \\times \\kappa) \\cdot "
-    "\\nabla (\\alpha + \\iota \\zeta_0) / \\vert B \\vert^2",
+    # c = 2 a³ Bₙ μ₀ sign(ψ) dp/dψ / (|B|² b⋅∇ζ) (b × 𝛋) ⋅ ∇(α + ι ζ₀) ρ²
+    label="2 a^3 B_n \\mu_0 \\mathrm{sign}(\\psi) (\\partial_{\\psi} p) / "
+    "(\\vert B \\vert^2 b \\cdot \\nabla ζ) (b \\times \\kappa) \\cdot "
+    "\\nabla (\\alpha + \\iota \\zeta_0) \\rho^2",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
@@ -280,7 +286,7 @@ def _gds2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "p_r", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "shear"],
+    data=["a", "p_r", "psi", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "shear"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]. "
     "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
@@ -293,6 +299,7 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     data["c ballooning"] = (
         (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
+        * jnp.sign(data["psi"])
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]
@@ -306,9 +313,9 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="f ballooning",
-    # f = ρ² a Bₙ³ / b⋅∇ζ |∇(α + ι ζ₀)|² / |B|³
-    label="\\rho^2 a B_n^3 / (b \\cdot \\nabla ζ) "
-    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert^3",
+    # f = a Bₙ³ |B|⁻² / (B⋅∇ζ) |∇(α + ι ζ₀ sign ι)|² ρ²
+    label="a B_n^3 \\vert B \\vert^{-2} / (B \\cdot \\nabla ζ) "
+    "\\vert \\nabla (\\alpha + \\iota \\zeta_0 \\mathrm{sign} \\iota) \\vert^2 \\rho^2",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
@@ -331,9 +338,9 @@ def _f_balloon(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g ballooning",
-    # g = ρ² a³ Bₙ * b⋅∇ζ |∇(α + ι ζ₀)|² / |B|
-    label="\\rho^2 a^3 B_n b \\cdot \\nabla ζ "
-    "\\vert \\nabla (\\alpha + \\iota \\zeta_0) \\vert^2 / \\vert B \\vert",
+    # g = a³ Bₙ |B|⁻² (B⋅∇ζ) |∇(α + ι ζ₀ sign ι)|² ρ²
+    label="a^3 B_n \\vert B \\vert^{-2} (B \\cdot \\nabla ζ) "
+    "\\vert \\nabla (\\alpha + \\iota \\zeta_0 \\mathrm{sign} \\iota) \\vert^2 \\rho^2",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
@@ -349,7 +356,7 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     B_n = 2 * psi_boundary / data["a"] ** 2
     data["g ballooning"] = (
-        data["a"] ** 3 * B_n / data["|B|^2"] * data["B^zeta"]
+        data["a"] ** 3 * B_n * data["B^zeta"] / data["|B|^2"]
     ) * data["gds2"]
     return data
 

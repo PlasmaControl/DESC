@@ -2712,6 +2712,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     data=[
         "e_rho_r",
         "e_rho_theta_PEST",
+        "e_theta_PEST",
         "e_theta_PEST_theta_PEST",
         "theta_PEST_r",
         "theta_PEST_rr",

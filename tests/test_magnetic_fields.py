@@ -10,7 +10,7 @@ from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
-from desc.derivatives import FiniteDiffDerivative as Derivative
+from desc.derivatives.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid

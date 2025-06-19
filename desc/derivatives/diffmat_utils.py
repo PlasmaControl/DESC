@@ -37,7 +37,7 @@ Examples
 >>> df = D1 @ f                     # approximate derivative at the nodes
 """
 
-from desc.backend import jnp, vmap
+from desc.backend import jnp
 
 ########################################################################
 # ---------------------- CHEBYSHEV MATRICES --------------------------- #
@@ -239,68 +239,3 @@ def fourier_diffmat(n: int):
     else:
         D = jnp.where(i != j, 0.5 * (-1) ** (i - j) / jnp.sin(angle), 0.0)
     return D
-
-
-def fourier_diffmat1(N: int):
-    """Efficient first‑order Fourier differentiation matrix.
-
-    Unlike :func:`fourier_diffmat`, this variant constructs the matrix by a
-    single circulant first column/row, permitting *O(n^2)* explicit formation
-    but *O(n log n)* mat‑vec products via convolution methods if desired.
-
-    Parameters
-    ----------
-    N : int
-        Grid size.
-
-    Returns
-    -------
-    jax.Array
-        First‑derivative matrix of shape ``(N, N)``.
-    """
-    h = 2.0 * jnp.pi / N
-    col1 = jnp.zeros(N)
-
-    j_idx = jnp.arange(1, N)
-    if N % 2 == 0:
-        values = 0.5 * (-1.0) ** j_idx * (1 / jnp.tan(j_idx * h / 2.0))
-    else:
-        values = 0.5 * (-1.0) ** j_idx * (1 / jnp.sin(j_idx * h / 2.0))
-    col1 = col1.at[j_idx].set(values)
-
-    # Build circulant matrix
-    D1 = vmap(lambda i: jnp.roll(col1, i))(jnp.arange(N))
-    D1 = D1.at[0].set(-col1)  # first row is negative of first column
-    return D1
-
-
-def fourier_diffmat2(N: int):
-    """Second‑order Fourier differentiation matrix (symmetric).
-
-    Parameters
-    ----------
-    N : int
-        Grid size.
-
-    Returns
-    -------
-    jax.Array
-        Second‑derivative matrix of shape ``(N, N)``.
-    """
-    h = 2.0 * jnp.pi / N
-    col1 = jnp.zeros(N)
-
-    if N % 2 == 0:
-        col1 = col1.at[0].set(-jnp.pi**2 / (3.0 * h**2) - 1.0 / 6.0)
-        j_idx = jnp.arange(1, N)
-        sin_sq = jnp.sin(j_idx * h / 2.0) ** 2
-        col1 = col1.at[j_idx].set(-((-1.0) ** j_idx) / (2.0 * sin_sq))
-    else:
-        col1 = col1.at[0].set(-jnp.pi**2 / (3.0 * h**2) + 1.0 / 12.0)
-        j_idx = jnp.arange(1, N)
-        sin_term = jnp.sin(j_idx * h / 2.0)
-        cot_term = jnp.cos(j_idx * h / 2.0) / sin_term
-        col1 = col1.at[j_idx].set(-((-1.0) ** j_idx) * cot_term / (2.0 * sin_term))
-
-    D2 = vmap(lambda i: jnp.roll(col1, i))(jnp.arange(N))
-    return D2

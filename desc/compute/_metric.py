@@ -2107,10 +2107,6 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho|v,p"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
 )
 def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
     data["g_rr|PEST"] = dot(data["e_rho|v,p"], data["e_rho|v,p"])
@@ -2129,10 +2125,6 @@ def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho|v,p", "e_theta_PEST"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
     aliases=["g_tr|PEST"],
 )
 def _g_sub_rt_PEST(params, transforms, profiles, data, **kwargs):
@@ -2151,15 +2143,11 @@ def _g_sub_rt_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho|v,p", "e_phi|r,p"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
+    data=["e_rho|v,p", "e_phi|r,v"],
     aliases=["g_zr|PEST"],
 )
 def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rz|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,p"])
+    data["g_rz|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,v"])
     return data
 
 
@@ -2174,11 +2162,7 @@ def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho|v,p", "e_phi|r,p"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
+    data=["e_theta_PEST"],
 )
 def _g_sub_tt_PEST(params, transforms, profiles, data, **kwargs):
     data["g_tt|PEST"] = dot(data["e_theta_PEST"], data["e_theta_PEST"])
@@ -2196,15 +2180,14 @@ def _g_sub_tt_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta_PEST", "e_phi|r,p"],
+    data=["e_theta_PEST", "e_phi|r,v"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
     aliases=["g_zt|PEST"],
 )
 def _g_sub_tz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,p"])
+    data["g_tz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])
     return data
 
 
@@ -2219,14 +2202,10 @@ def _g_sub_tz_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_phi|r,p"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
+    data=["e_phi|r,v"],
 )
 def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_zz|PEST"] = dot(data["e_phi|r,p"], data["e_phi|r,p"])
+    data["g_zz|PEST"] = dot(data["e_phi|r,v"], data["e_phi|r,v"])
     return data
 
 
@@ -2249,7 +2228,6 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     data=["e_rho|v,p", "e_rho_theta_PEST"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _g_sub_rr_t_PEST(params, transforms, profiles, data, **kwargs):
@@ -2269,10 +2247,6 @@ def _g_sub_rr_t_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho|v,p", "e_rho_phi"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
 )
 def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
     data["g_rr_z|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_phi"])

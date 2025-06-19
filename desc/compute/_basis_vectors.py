@@ -2601,7 +2601,7 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_theta_PEST",
-        "e_phi_z",
+        "e_zeta_z",  # TODO: 568
         "e_theta_PEST_phi",
         "theta_PEST_t",
         "theta_PEST_z",
@@ -2613,7 +2613,7 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
     ratio1 = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["e_phi_phi"] = (
-        data["e_phi_z"].T
+        data["e_zeta_z"].T
         - data["e_theta_PEST_phi"] * data["theta_PEST_z"]
         - data["e_theta_PEST"]
         * (data["theta_PEST_zz"] - ratio1 * data["theta_PEST_tz"])
@@ -2677,7 +2677,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_phi_r",  # in native coordinates
+        "e_zeta_r",  # in native coordinates
         "e_theta_PEST",
         "e_phi_theta_PEST",
         "theta_PEST_t",
@@ -2691,7 +2691,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     ratio1 = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["e_phi_rho"] = (
         (
-            data["e_phi_r"].T
+            data["e_zeta_r"].T
             - data["e_phi_theta_PEST"].T * data["theta_PEST_t"]
             - data["e_theta_PEST"].T
             * (data["theta_PEST_rz"] - ratio1 * data["theta_PEST_rt"])

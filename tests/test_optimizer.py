@@ -18,7 +18,7 @@ from scipy.optimize import (
 import desc.examples
 from desc.backend import jit, jnp
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
-from desc.derivatives.derivatives import Derivative
+from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid

@@ -23,7 +23,7 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
-from desc.derivatives.derivatives import Derivative
+from desc.derivatives import Derivative
 from desc.grid import LinearGrid
 
 

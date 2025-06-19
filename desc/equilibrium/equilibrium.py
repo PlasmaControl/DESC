@@ -32,6 +32,8 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
+from desc.integrals.singularities import _kernel_biot_savart
+from desc.integrals.tbd import integrate_surface
 from desc.magnetic_fields import (
     _MagneticField,
     biot_savart_general,
@@ -58,7 +60,6 @@ from desc.utils import (
     setdefault,
     warnif,
 )
-
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
@@ -1259,26 +1260,25 @@ class Equilibrium(Optimizable, _MagneticField):
             magnetic field at specified points
 
         """
+        methods = ['biot-savart','virtual casing','vector potential','']
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
-            )
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Unequal number of field periods")
-            data = self.compute(
-                ["J", "phi", "sqrt(g)", "x"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-            )
-        methods = ['biot-savart','','vector potential','']
         assert (method in methods), f"""Method {method} unknown. Please choose one of the following methods:
             {', '.join(methods)}"""
         method = method.lower().strip()
         if method == methods[0]:
+            if source_grid is None:
+                source_grid = QuadratureGrid(
+                    L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+                )
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Unequal number of field periods")
+                data = self.compute(
+                    ["J", "phi", "sqrt(g)", "x"],
+                    grid=source_grid,
+                    params=params,
+                    transforms=transforms,
+                )
             source_xyz = rpz2xyz(data["x"])
             J = rpz2xyz_vec(data["J"], phi=data["phi"])
             dV = data["sqrt(g)"] * source_grid.weights
@@ -1286,7 +1286,28 @@ class Equilibrium(Optimizable, _MagneticField):
             B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
             if basis.lower() == "rpz":
                 B = xyz2rpz_vec(B, phi=coords[:, 1])
+        elif method == methods[1]:
+            if source_grid is None:
+                source_grid = LinearGrid(
+                    rho=np.array([1.0]),
+                    M=self.M_grid,
+                    N=self.N_grid,
+                    NFP=self.NFP if self.N > 0 else 64,
+                    sym=False,
+                )
+            kernel = _kernel_biot_savart
+            source_data = self.compute(kernel.keys, grid = source_grid)
+            B = B = integrate_surface(
+                coords,
+                source_data,
+                source_grid,
+                kernel,
+                chunk_size=chunk_size)
         elif method == methods[2]:
+            if source_grid is None:
+                source_grid = QuadratureGrid(
+                    L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+                )
             coords = np.array(coords)
             # Default spectral resolution parameters
             if L is None:
@@ -1301,8 +1322,6 @@ class Equilibrium(Optimizable, _MagneticField):
                 transforms=transforms)
             B = curl_cylindrical(A, coords, L, M, N, source_grid.NFP)
         return B
-        
-
     def compute_magnetic_vector_potential(
         self,
         coords,

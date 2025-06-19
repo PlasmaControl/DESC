@@ -1526,7 +1526,7 @@ def plot_section(
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
+    data, _ = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     if normalize:
         norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
@@ -1578,8 +1578,10 @@ def plot_section(
     ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
-    data_index_name = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]
-    units = f"$(${data_index_name['units']}$)" if data_index_name["units"] else "$"
+    data_index_p = data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    units = (
+        f"$(${data_index_p[name]['units']}$)" if data_index_p[name]["units"] else "$"
+    )
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
@@ -1596,7 +1598,7 @@ def plot_section(
 
         ax[i].set_title(
             "$"
-            + data_index_name["label"]
+            + data_index_p[name]["label"]
             + units
             + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
@@ -1606,8 +1608,8 @@ def plot_section(
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
-                    "$" + data_index_name[name]["label"] + "$",
-                    "$" + data_index_name[normalize]["label"] + "$",
+                    "$" + data_index_p[name]["label"] + "$",
+                    "$" + data_index_p[normalize]["label"] + "$",
                     "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),

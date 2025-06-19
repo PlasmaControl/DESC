@@ -231,6 +231,19 @@ class TestPlot2D:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_2d_deprecated(self):
+        """Test deprecated 2d plot of normalized force."""
+        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_2d(eq, "|F|", figsize=(4, 4), norm_F=True, grid=grid)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_2d_surface(self):
         """Test plot_2d function for Surface objects."""
         surf = FourierRZToroidalSurface()
@@ -408,6 +421,20 @@ class TestPlotFSA:
         ax.set_ylim([1e-6, 1e-3])
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_F_normalized_deprecated(self):
+        """Test plotting deprecated fsa normalized force error on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_fsa(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+        return fig
+
 
 class TestPlotSection:
     """Tests for plot_section."""
@@ -456,6 +483,21 @@ class TestPlotSection:
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
         fig, ax = plot_section(eq, "|F|_normalized", log=True)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_section_deprecated(self):
+        """Test old section plot of normalized force on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_section(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_section(eq, "|F|", log=True, norm_F=True)
+
         return fig
 
 

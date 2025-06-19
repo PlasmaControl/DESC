@@ -61,7 +61,7 @@ procedure.
     from scipy.optimize import NonlinearConstraint, BFGS
     import cyipopt
     from scipy.optimize._constraints import new_constraint_to_old
-    from desc.derivatives.derivatives import Derivative
+    from desc.derivatives import Derivative
 
     @register_optimizer(
         name=[

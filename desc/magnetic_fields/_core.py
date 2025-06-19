@@ -28,7 +28,7 @@ from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
-from desc.derivatives.derivatives import Derivative
+from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma

@@ -10,7 +10,7 @@ from sympy.abc import x as x_sym
 from sympy.vector import CoordSys3D
 
 from desc.backend import jit, jnp
-from desc.derivatives.derivatives import Derivative
+from desc.derivatives import Derivative
 from desc.utils import Timer
 
 from ._core import ScalarPotentialField, _MagneticField

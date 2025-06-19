@@ -66,8 +66,8 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     :recursive:
     :template: class.rst
 
-    desc.derivatives.derivatives.AutoDiffDerivative
-    desc.derivatives.derivatives.FiniteDiffDerivative
+    desc.derivatives.AutoDiffDerivative
+    desc.derivatives.FiniteDiffDerivative
 
 Equilibrium
 ***********

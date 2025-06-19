@@ -7,7 +7,7 @@ from numpy.random import default_rng
 
 from desc.backend import jnp, sign
 from desc.basis import DoubleFourierSeries
-from desc.derivatives.derivatives import Derivative
+from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.profiles import PowerSeriesProfile
 from desc.utils import setdefault

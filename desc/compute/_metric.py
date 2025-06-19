@@ -2256,8 +2256,8 @@ def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_PEST2",
-    label="\\sqrt{g}_PEST",
+    name="sqrt(g)_PEST_alt",
+    label="\\sqrt{g}_PEST_{alt}",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of flux coordinate system",
@@ -2268,8 +2268,8 @@ def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_rho|v,p", "e_theta_PEST", "e_phi|r,v"],
 )
-def _sqrtg_PEST2(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST2"] = dot(
+def _sqrtg_PEST_alt(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_alt"] = dot(
         data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi|r,v"])
     )
     return data
@@ -2295,7 +2295,7 @@ def _sqrtg_PEST2(params, transforms, profiles, data, **kwargs):
         "e_phi_rho",
     ],
 )
-def _sqrtg_PEST_r(params, transforms, profiles, data, **kwargs):
+def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST_r|PEST"] = (
         dot(data["e_rho_rho"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_rho"], data["e_phi|r,v"]))
@@ -2325,7 +2325,7 @@ def _sqrtg_PEST_r(params, transforms, profiles, data, **kwargs):
     ],
     aliases=["sqrt(g)_PEST_v|PEST"],
 )
-def _sqrtg_PEST_theta_PEST(params, transforms, profiles, data, **kwargs):
+def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST_t|PEST"] = (
         dot(data["e_rho_theta_PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(
@@ -2356,7 +2356,7 @@ def _sqrtg_PEST_theta_PEST(params, transforms, profiles, data, **kwargs):
         "e_phi_phi",
     ],
 )
-def _sqrtg_PEST_phi(params, transforms, profiles, data, **kwargs):
+def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST_z|PEST"] = (
         dot(data["e_rho_phi"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_phi"], data["e_phi|r,v"]))

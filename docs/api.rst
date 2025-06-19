@@ -298,12 +298,14 @@ Plotting
     desc.plotting.plot_coefficients
     desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces
+    desc.plotting.poincare_plot
 
 Profiles
 ********

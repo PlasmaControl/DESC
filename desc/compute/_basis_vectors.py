@@ -2443,7 +2443,13 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
-    aliases=["e_vartheta"],
+    aliases=[
+        "e_vartheta",
+        "e_vartheta|r,p",
+        "e_theta_PEST|r,p",
+        "e_vartheta|p,r",
+        "e_theta_PEST|p,r",
+    ],
 )
 def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϕ
@@ -2495,14 +2501,14 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+    data=["e_rho", "e_vartheta|r,p", "e_phi|r,v", "theta_PEST_r", "phi_r"],
     aliases=["e_rho|p,v"],
 )
 def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
     # constant ϑ and ϕ
     data["e_rho|v,p"] = (
         data["e_rho"]
-        - data["e_vartheta"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_vartheta|r,p"] * data["theta_PEST_r"][:, jnp.newaxis]
         - data["e_phi|r,v"] * data["phi_r"][:, jnp.newaxis]
     )
     return data
@@ -2596,22 +2602,20 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_theta_PEST",
         "e_zeta_z",  # TODO: 568
+        "e_theta_PEST",
+        "e_theta_PEST_theta_PEST",
         "e_theta_PEST_phi",
-        "theta_PEST_t",
         "theta_PEST_z",
-        "theta_PEST_tz",
         "theta_PEST_zz",
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    ratio1 = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["e_phi_phi"] = (
         data["e_zeta_z"]
-        - data["e_theta_PEST_phi"] * data["theta_PEST_z"][:, jnp.newaxis]
-        - data["e_theta_PEST"]
-        * (data["theta_PEST_zz"] - ratio1 * data["theta_PEST_tz"])[:, jnp.newaxis]
+        - 2 * data["e_theta_PEST_phi"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta_PEST"] * (data["theta_PEST_zz"])[:, jnp.newaxis]
+        - data["e_theta_PEST_theta_PEST"] * (data["theta_PEST_z"] ** 2)[:, jnp.newaxis]
     )
     return data
 
@@ -2639,16 +2643,17 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
         "e_theta_PEST_theta_PEST",
         "theta_PEST_t",
         "theta_PEST_r",
+        "theta_PEST_rt",
     ],
     aliases=["e_vartheta_rho", "e_rho_vartheta", "e_rho_theta_PEST"],
 )
 def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
     data["e_theta_PEST_rho"] = (
         data["e_theta_r"]
-        - data["e_theta_PEST"]
-        * (data["theta_PEST_r"] / data["theta_PEST_t"])[:, jnp.newaxis]
-        - data["e_theta_PEST_theta_PEST"] * (data["theta_PEST_r"][:, jnp.newaxis]) ** 2
-    ) / data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_theta_PEST"] * (data["theta_PEST_rt"])[:, jnp.newaxis]
+        - data["e_theta_PEST_theta_PEST"]
+        * (data["theta_PEST_r"] * data["theta_PEST_t"])[:, jnp.newaxis]
+    ) / data["theta_PEST_t"][:, jnp.newaxis]
     return data
 
 
@@ -2671,24 +2676,25 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_zeta_r",  # in native coordinates
-        "e_theta_PEST",
         "e_phi_theta_PEST",
+        "e_theta_PEST_theta_PEST",
+        "e_theta_PEST",
+        "e_rho_theta_PEST",
         "theta_PEST_r",
-        "theta_PEST_t",
         "theta_PEST_z",
-        "theta_PEST_rt",
         "theta_PEST_rz",
     ],
     aliases=["e_rho_phi"],
 )
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
-    ratio1 = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["e_phi_rho"] = (
         data["e_zeta_r"]
-        - data["e_phi_theta_PEST"] * data["theta_PEST_t"][:, jnp.newaxis]
-        - data["e_theta_PEST"]
-        * (data["theta_PEST_rz"] - ratio1 * data["theta_PEST_rt"])[:, jnp.newaxis]
-    ) / data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_phi_theta_PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_theta_PEST_theta_PEST"]
+        * (data["theta_PEST_r"] * data["theta_PEST_z"])[:, jnp.newaxis]
+        - data["e_theta_PEST"] * (data["theta_PEST_rz"])[:, jnp.newaxis]
+        - data["e_rho_theta_PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -2716,7 +2722,6 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
         "e_theta_PEST_theta_PEST",
         "theta_PEST_r",
         "theta_PEST_rr",
-        "theta_PEST_t",
     ],
 )
 def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
@@ -2724,7 +2729,7 @@ def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwa
         data["e_rho_r"]
         - data["e_rho_theta_PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
         - data["e_theta_PEST"] * data["theta_PEST_rr"][:, jnp.newaxis]
-        - data["e_theta_PEST_theta_PEST"] * data["theta_PEST_t"][:, jnp.newaxis] ** 2
+        - data["e_theta_PEST_theta_PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
     )
     return data
 

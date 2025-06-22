@@ -35,6 +35,16 @@ Equilibrium
     desc.objectives.HelicalForceBalance
 
 
+Fast ion confinement
+--------------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.GammaC
+
+
 Geometry
 --------
 .. autosummary::
@@ -49,7 +59,18 @@ Geometry
     desc.objectives.PrincipalCurvature
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
+    desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+
+
+Neoclassical
+------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.EffectiveRipple
 
 
 Omnigenity
@@ -88,6 +109,31 @@ Free boundary / Single stage optimization
     desc.objectives.VacuumBoundaryError
 
 
+Coil Optimization
+-----------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+
+    desc.objectives.QuadraticFlux
+    desc.objectives.SurfaceQuadraticFlux
+    desc.objectives.CoilLength
+    desc.objectives.CoilCurvature
+    desc.objectives.CoilTorsion
+    desc.objectives.CoilSetLinkingNumber
+    desc.objectives.CoilSetMinDistance
+    desc.objectives.PlasmaCoilSetDistanceBound
+    desc.objectives.PlasmaCoilSetMinDistance
+    desc.objectives.CoilIntegratedCurvature
+    desc.objectives.CoilCurrentLength
+    desc.objectives.CoilArclengthVariance
+    desc.objectives.ToroidalFlux
+    desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
+
+
 Profiles
 --------
 .. autosummary::
@@ -121,12 +167,15 @@ Fixing degrees of freedom
     desc.objectives.FixElectronDensity
     desc.objectives.FixElectronTemperature
     desc.objectives.FixIonTemperature
+    desc.objectives.FixAnisotropy
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
-    desc.objectives.FixParameter
+    desc.objectives.FixCoilCurrent
+    desc.objectives.FixSumCoilCurrent
+    desc.objectives.FixParameters
 
 
 User defined objectives

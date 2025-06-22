@@ -13,8 +13,9 @@ from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
+from ..integrals.surface_integral import surface_averages_map
+from ..profiles import PowerSeriesProfile
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -31,7 +32,9 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
-    n_gauss="n_gauss",
+    resolution_requirement="tz",
+    n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
+    + "Default 20.",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     """Evaluate the effective trapped particle fraction.
@@ -333,7 +336,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "Zeff",
         "rho",
     ],
-    helicity="helicity",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
@@ -395,7 +398,8 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
-    degree="degree",
+    degree="int: Degree of polynomial used for fitting current profile. "
+    + "Default grid.num_rho-1",
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current.
@@ -418,20 +422,21 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].compress(data["<J*B> Redl"])
         / transforms["grid"].compress(data["<|B|^2>"])
     )
-    degree = kwargs.get(
-        "degree",
-        min(
-            (
-                profiles["current"].basis.L
-                if profiles["current"] is not None
-                else transforms["grid"].num_rho - 1
+    if isinstance(profiles["current"], PowerSeriesProfile):
+        degree = kwargs.get(
+            "degree",
+            min(
+                profiles["current"].basis.L,
+                transforms["grid"].num_rho - 1,
             ),
-            transforms["grid"].num_rho - 1,
-        ),
-    )
+        )
+    else:
+        degree = kwargs.get("degree", transforms["grid"].num_rho - 1)
+
     XX = jnp.vander(rho, degree + 1)[:, :-1]  # remove constant term
     c_l_r = jnp.pad(jnp.linalg.lstsq(XX, current_r)[0], (0, 1))  # manual polyfit
     c_l = jnp.polyint(c_l_r)
     current = jnp.polyval(c_l, rho)
+
     data["current Redl"] = transforms["grid"].expand(current)
     return data

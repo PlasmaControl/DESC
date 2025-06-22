@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -17,6 +18,14 @@ from desc.magnetic_fields import (
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
+)
+from desc.profiles import (
+    PowerProfile,
+    PowerSeriesProfile,
+    ProductProfile,
+    ScaledProfile,
+    SumProfile,
+    TwoPowerProfile,
 )
 from desc.transform import Transform
 from desc.utils import equals
@@ -56,10 +65,10 @@ def test_vmec_input(tmpdir_factory):
         lines_direct = f.readlines()
     with open(path_converted_file) as f:
         lines_converted = f.readlines()
-    # skip first 3 lines as they have date and pwd info
-    for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
+    # skip first 4 lines as they have date and pwd info
+    for line1, line2 in zip(lines_correct[4:], lines_converted[4:]):
         assert line1.strip() == line2.strip()
-    for line1, line2 in zip(lines_correct[3:], lines_direct):
+    for line1, line2 in zip(lines_correct[4:], lines_direct):
         assert line1.strip() == line2.strip()
 
 
@@ -169,12 +178,14 @@ def test_desc_output_to_input(tmpdir_factory):
     tmp_path = tmpdir.join("input_iotest_HELIOTRON")
     tmpout_path = tmpdir.join("iotest_HELIOTRON.h5")
     shutil.copyfile(outfile_path, tmpout_path)
+    eq = load(outfile_path)[-1]
 
     ir1 = InputReader()
     ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     pres1 = ir1.parse_inputs()[-1]["pressure"]
+    iota1 = ir1.parse_inputs()[-1]["iota"]
 
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
@@ -184,6 +195,8 @@ def test_desc_output_to_input(tmpdir_factory):
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
     pres2 = ir2.parse_inputs()[-1]["pressure"]
+    iota2 = ir2.parse_inputs()[-1]["iota"]
+
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
@@ -206,7 +219,10 @@ def test_desc_output_to_input(tmpdir_factory):
         atol=1e-8,
     )
 
-    np.testing.assert_allclose(pres1[pres1[:, 1] > 0], pres2[pres2[:, 1] > 0])
+    np.testing.assert_allclose(pres1, pres2)
+    np.testing.assert_allclose(pres1[:, 1], eq.pressure.params)
+    np.testing.assert_allclose(iota1, iota2)
+    np.testing.assert_allclose(iota1[:, 1], eq.iota.params)
 
 
 @pytest.mark.unit
@@ -221,6 +237,72 @@ def test_near_axis_input_files():
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
+    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
+        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
+
+
+@pytest.mark.unit
+def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
+    """Test that from_input_file works for DESC input files."""
+    vmec_path = ".//tests//inputs//input.DSHAPE"
+    desc_path = ".//tests//inputs//input.DSHAPE_desc"
+    kwargs = {"spectral_indexing": "fringe"}
+    with pytest.warns(UserWarning, match="Left handed"):
+        eq = Equilibrium.from_input_file(desc_path, **kwargs)
+    with pytest.warns(UserWarning):
+        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    # make sure the loaded eqs are equivalent
+    np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
+    np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
+    np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
+    np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
+    assert eq.pressure.equiv(eq_VMEC.pressure)
+    assert eq.iota.equiv(eq_VMEC.iota)
+    assert eq.current is None
+    assert eq_VMEC.current is None
+    assert eq.sym == eq_VMEC.sym
+
+    # check against the DSHAPE bdry and profiles
+    eq_example = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq_example.L, M=eq_example.M)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_example.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_example.Zb_lmn)
+    np.testing.assert_allclose(eq.Psi, eq_example.Psi)
+    np.testing.assert_allclose(eq.p_l, eq_example.p_l)
+    # our example's iota is negative of this input files's
+    np.testing.assert_allclose(eq.i_l, -eq_example.i_l)
+    assert eq.sym == eq_example.sym
+
+
+@pytest.mark.unit
+def test_from_input_file_equilibrium_desc_vmec():
+    """Test that from_input_file gives same eq for DESC and VMEC input files."""
+    vmec_path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
+    desc_path = ".//tests//inputs//input.QSC_r2_5.5_desc"
+    kwargs = {"L": 10, "M": 10, "N": 14}
+    eq = Equilibrium.from_input_file(desc_path, **kwargs)
+    with pytest.warns(UserWarning):
+        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
+    np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
+    np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
+    np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
+    assert eq.pressure.equiv(eq_VMEC.pressure)
+    assert eq.current.equiv(eq_VMEC.current)
+    assert eq.iota is None
+    assert eq_VMEC.iota is None
+    assert eq.sym == eq_VMEC.sym
+
     if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
         os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
@@ -478,11 +560,11 @@ def test_reader_read_obj(reader_test_file):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_pickle_io(DSHAPE_current, tmpdir_factory):
+def test_pickle_io(tmpdir_factory):
     """Test saving and loading equilibrium in pickle format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.pkl")
-    eqf = load(load_from=str(DSHAPE_current["desc_h5_path"]))
+    eqf = desc.examples.get("DSHAPE_CURRENT", "all")
     eqf.save(tmp_path, file_format="pickle")
     peqf = load(tmp_path, file_format="pickle")
     assert equals(eqf, peqf)
@@ -490,14 +572,15 @@ def test_pickle_io(DSHAPE_current, tmpdir_factory):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_ascii_io(DSHAPE_current, tmpdir_factory):
+def test_ascii_io(tmpdir_factory):
     """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
-    eq1 = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-        sym=True
-    )
+    eq1 = desc.examples.get("DSHAPE_CURRENT")
+    with pytest.warns(UserWarning, match="existing toroidal current"):
+        eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
+            sym=True
+        )
     write_ascii(tmp_path, eq1)
     with pytest.warns(UserWarning, match="not an even power series"):
         eq2 = read_ascii(tmp_path)
@@ -597,6 +680,26 @@ def test_save_after_load(tmpdir_factory):
     # to the .h5 file not being closed
     eq2.save(tmp_path)
     assert eq2.equiv(eq)
+
+
+@pytest.mark.unit
+def test_io_profiles(tmpdir_factory):
+    """Test saving/loading profiles. Test for GH issue #1448."""
+    p0 = SumProfile(
+        TwoPowerProfile(params=[0.6, 2, 1.5]), PowerSeriesProfile(params=[0.4, 0, -0.4])
+    )
+    n = ScaledProfile(2, PowerProfile(1 / 3, p0))
+    T = ScaledProfile(0.5, PowerProfile(2 / 3, p0))
+    p1 = ProductProfile(n, T)
+
+    tmpdir = tmpdir_factory.mktemp("profiles")
+    tmp_path = tmpdir.join("p0.h5")
+    p1.save(tmp_path)
+    p2 = load(tmp_path)
+
+    x = np.linspace(0.1, 0.9, 9)
+    np.testing.assert_allclose(p0(x), p1(x))
+    np.testing.assert_allclose(p1(x), p2(x))
 
 
 @pytest.mark.unit

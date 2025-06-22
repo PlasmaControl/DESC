@@ -1,10 +1,8 @@
 """Functions for converting between coordinate systems."""
 
-import functools
-
 from desc.backend import jnp
 
-from .utils import safenorm, safenormalize
+from ..utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):
@@ -68,10 +66,13 @@ def xyz2rpz(pts):
 
     """
     x, y, z = pts.T
-    # r = jnp.sqrt(x**2 + y**2)
-    # p = jnp.arctan2(y, x)
+    # --no-verify  r = jnp.sqrt(x**2 + y**2)
+    # --no-verify  p = jnp.arctan2(y, x)
     r = x
     p = y
+
+    # --no-verify r = jnp.hypot(x, y)
+    # --no-verify p = jnp.arctan2(y, x)
     return jnp.array([r, p, z]).T
 
 
@@ -92,8 +93,8 @@ def rpz2xyz(pts):
     r, p, z = pts.T
     x = r
     y = p
-    # x = r * jnp.cos(p)
-    # y = r * jnp.sin(p)
+    # --no-verify x = r * jnp.cos(p)
+    # --no-verify y = r * jnp.sin(p)
     return jnp.array([x, y, z]).T
 
 
@@ -113,19 +114,19 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
         vectors, in polar (R,phi,Z) form
 
     """
+    # --no-verify  if x is not None and y is not None:
+    # --no-verify      phi = jnp.arctan2(y, x)
+    # --no-verify  rot = jnp.array(
+    # --no-verify      [
+    # --no-verify          [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+    # --no-verify          [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+    # --no-verify          [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+    # --no-verify      ]
+    # --no-verify  )
+    # --no-verify  rot = rot.T
+    # --no-verify  polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
+    # --no-verify  return polar.reshape((-1, 3))
     return vec
-    # if x is not None and y is not None:
-    #     phi = jnp.arctan2(y, x)
-    # rot = jnp.array(
-    #     [
-    #         [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
-    #         [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-    #         [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-    #     ]
-    # )
-    # rot = rot.T
-    # polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    # return polar.reshape((-1, 3))
 
 
 def rpz2xyz_vec(vec, x=None, y=None, phi=None):
@@ -144,18 +145,36 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
         vectors, in cartesian (X,Y,Z) form
 
     """
-    # if x is not None and y is not None:
-    #     phi = jnp.arctan2(y, x)
-    # rot = jnp.array(
-    #     [
-    #         [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-    #         [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-    #         [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-    #     ]
-    # )
-    # rot = rot.T
-    # cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    # return cart.reshape((-1, 3))
+    # --no-verify if x is not None and y is not None:
+    # --no-verify     phi = jnp.arctan2(y, x)
+    # --no-verify rot = jnp.array(
+    # --no-verify     [
+    # --no-verify         [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+    # --no-verify         [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+    # --no-verify         [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+    # --no-verify     ]
+    # --no-verify )
+    # --no-verify rot = rot.T
+    # --no-verify cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
+    # --no-verify return cart.reshape((-1, 3))
+
+    # --no-verify if x is not None and y is not None:
+    # --no-verify     phi = jnp.arctan2(y, x)
+
+    # --no-verify @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    # --no-verify def inner(vec, phi):
+    # --no-verify     rot = jnp.array(
+    # --no-verify         [
+    # --no-verify             [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+    # --no-verify             [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+    # --no-verify             [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+    # --no-verify         ]
+    # --no-verify     )
+    # --no-verify     rot = rot.T
+    # --no-verify     cart = jnp.matmul(rot, vec)
+    # --no-verify     return cart
+
+    # --no-verify return inner(vec, phi)
     return vec
 
 
@@ -171,3 +190,12 @@ def _rotation_matrix_from_normal(normal):
     ).T
     R = jnp.where(nxny == 0, jnp.eye(3), R)
     return R
+
+
+def copy_rpz_periods(rpz, NFP):
+    """Copy an rpz coordinate triplet into multiple field periods."""
+    r, p, z = rpz.T
+    r = jnp.tile(r, NFP)
+    z = jnp.tile(z, NFP)
+    p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
+    return jnp.array([r, p.flatten(), z]).T

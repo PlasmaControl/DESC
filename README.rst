@@ -46,6 +46,7 @@ The best place to start learning about DESC is our tutorials:
 - `Basic optimization`_: specifying objectives, fixing degrees of freedom.
 - `Advanced optimization`_: advanced constraints, precise quasi-symmetry, constrained optimization.
 - `Near axis constraints`_: loading solutions from QSC/QIC and fixing near axis expansion.
+- `Coil optimization`_: "second stage" optimization of magnetic coils.
 
 For details on the various objectives, constraints, optimizable objects and more, see
 the full `api documentation`_.
@@ -73,6 +74,7 @@ The equilibrium solution is output in a HDF5 binary file, whose format is detail
 .. _Basic optimization: https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html
 .. _Advanced optimization: https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/advanced_optimization.html
 .. _Near axis constraints: https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/nae_constraint.html
+.. _Coil optimization: https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/coil_stage_two_optimization.html
 .. _api documentation: https://desc-docs.readthedocs.io/en/latest/api.html
 
 Repository Contents
@@ -109,12 +111,12 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml
     :alt: UnitTests
 
-.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml
     :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z

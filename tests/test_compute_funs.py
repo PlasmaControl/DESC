@@ -1285,8 +1285,8 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
     """
     Test calculation of covariant basis vectors in PEST.
 
-    We compare the basis vectors by comparing with finite diff of the position vectorx
-    and lower-order covariant basis vectors.
+    We compare the basis vectors by comparing with finite diff of the position vector
+    x and lower-order covariant basis vectors.
     """
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
@@ -1294,12 +1294,12 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
         "e_rho|v,p",
         "e_vartheta|r,p",
         "e_phi|r,v",
-        "e_vartheta_vartheta",
-        "e_vartheta_phi",
-        "e_vartheta_rho",
-        "e_phi_rho",
-        "e_phi_phi",
-        "e_rho_rho",
+        "e_vartheta_v|PEST",
+        "e_vartheta_z|PEST",
+        "e_vartheta_r|PEST",
+        "e_phi_r|PEST",
+        "e_phi_z|PEST",
+        "e_rho_r|PEST",
     ]
 
     N = 2000
@@ -1342,13 +1342,13 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
         return deriv
 
     for key in keys_PEST:
-        if "|" in key:  # new "e_rho|v,p" style
-            lhs, rhs = key.split("|")
-            deriv_tokn = lhs.split("_")[-1]
-            base_bits = [deriv_tokn]
+        lhs, rhs = key.split("|")
+        parts = lhs.split("_")
+        if len(parts) == 2:  # like "e_rho"
+            deriv_tokn = parts[-1]
+            base_bits = [parts[-1]]
             base = ["X", "Y", "Z"]
-        else:
-            parts = key.split("_")
+        else:  # like "e_rho_v"
             deriv_tokn = parts[-1]
             base_bits = parts[:-1]
             base = []

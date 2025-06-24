@@ -683,11 +683,11 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="low-n lambda",
+    name="finite-n lambda",
     label="low-\\n \\lambda = \\gamma^2",
     units="~",
     units_long="None",
-    description="Normalized squared ideal ballooning growth rate",
+    description="Normalized squared growth rate",
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
@@ -741,7 +741,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     """
     AGNI: Analysis of Global Normal-modes in Ideal MHD.
 
-    A low-n stability eigenvalue solver.
+    Based on the original source here:
+    https://github.com/rahulgaur104/AGNI/tree/master
+
+    A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
     """
@@ -761,24 +764,25 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     n_zeta_max = kwargs.get("n_rho_max", 4)
 
     # Get differentiation matrices
-    D_rho0 = cheb_D1(n_theta_max)
+    # RG: setting the gradient to 0 to save some memory?
+    D_rho0 = jax.lax.stop_gradient(cheb_D1(n_theta_max))
 
-    D_theta0 = fourier_diffmat(n_theta_max)
+    D_theta0 = jax.lax.stop_gradient(fourier_diffmat(n_theta_max))
 
     if axisym:
         D_zeta0 = n_zeta_max * jnp.array([[0, -1], [1, 0]])
     else:
         D_zeta0 = fourier_diffmat(n_zeta_max)
 
-    I_rho0 = jnp.eye(n_rho_max)
-    I_theta0 = jnp.eye(n_theta_max)
-    I_zeta0 = jnp.eye(n_zeta_max)
+    D_zeta0 = jax.lax.stop_gradient(D_zeta0)
+
+    I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
+    I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
+    I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
 
     D_rho = jnp.kron(I_zeta0, jnp.kron(I_theta0, D_rho0))
     D_theta = jnp.kron(I_zeta0, jnp.kron(D_theta0, I_rho0))
     D_zeta = jnp.kron(D_zeta0, jnp.kron(I_theta0, I_rho0))
-
-    # --no-verify I = jnp.kron(I_zeta0, jnp.kron(I_theta0, I_rho0))
 
     D_rho_D_rho = D_rho0 @ D_rho0
     D_theta_D_theta = D_theta0 @ D_theta0

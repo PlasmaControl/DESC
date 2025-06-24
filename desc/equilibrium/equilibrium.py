@@ -10,7 +10,7 @@ import numpy as np
 from scipy import special
 from scipy.constants import mu_0
 
-from desc.backend import execute_on_cpu, jnp
+from desc.backend import execute_on_cpu, fori_loop, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -1260,22 +1260,35 @@ class Equilibrium(Optimizable, _MagneticField):
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         if source_grid is None:
             source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
             )
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Unequal number of field periods")
-            data = self.compute(
-                ["J", "phi", "sqrt(g)", "x"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-            )
-        source_xyz = rpz2xyz(data["x"])
-        J = rpz2xyz_vec(data["J"], phi=data["phi"])
-        dV = data["sqrt(g)"] * source_grid.weights
+        data = self.compute(
+            ["J", "phi", "sqrt(g)", "x"],
+            grid=source_grid,
+            params=params,
+            transforms=transforms,
+        )
+        # surface element, must divide by NFP to remove the NFP multiple on the surface
+        # grid weights, as we account for that when doing the for loop over NFP
+        dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
 
-        B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
+        def nfp_loop(j, f):
+            # calculate (by rotating) rs, rs_t, rz_t
+            phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
+                2 * jnp.pi
+            )
+            # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+            source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
+            source_xyz = rpz2xyz(source_rpz)
+            J = rpz2xyz_vec(data["J"], phi=phi)
+            fj = biot_savart_general(
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+            )
+            f += fj
+            return f
+
+        B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis.lower() == "rpz":
             B = xyz2rpz_vec(B, phi=coords[:, 1])
         return B
@@ -1319,24 +1332,35 @@ class Equilibrium(Optimizable, _MagneticField):
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         if source_grid is None:
             source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
             )
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Unequal number of field periods")
-            data = self.compute(
-                ["J", "phi", "sqrt(g)", "x"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-            )
-        source_xyz = rpz2xyz(data["x"])
-        J = rpz2xyz_vec(data["J"], phi=data["phi"])
-        dV = data["sqrt(g)"] * source_grid.weights
-
-        A = biot_savart_general_vector_potential(
-            eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+        data = self.compute(
+            ["J", "phi", "sqrt(g)", "x"],
+            grid=source_grid,
+            params=params,
+            transforms=transforms,
         )
+        # surface element, must divide by NFP to remove the NFP multiple on the surface
+        # grid weights, as we account for that when doing the for loop over NFP
+        dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
+
+        def nfp_loop(j, f):
+            # calculate (by rotating) rs, rs_t, rz_t
+            phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
+                2 * jnp.pi
+            )
+            # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+            source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
+            source_xyz = rpz2xyz(source_rpz)
+            J = rpz2xyz_vec(data["J"], phi=phi)
+            fj = biot_savart_general_vector_potential(
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+            )
+            f += fj
+            return f
+
+        A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A

@@ -703,25 +703,15 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         "g^zz|PEST",
         "g^rr_t|PEST",
         "g^rr_z|PEST",
-        "g^rt_r|PEST",
-        "g^rt_t|PEST",
-        "g^rt_z|PEST",
-        "g^rz_r|PEST",
-        "g^rz_t|PEST",
-        "g^rz_z|PEST",
         "g^tt_r|PEST",
         "g^tt_z|PEST",
-        "g^tz_r|PEST",
-        "g^tz_t|PEST",
-        "g^tz_z|PEST",
         "g^zz_r|PEST",
         "g^zz_t|PEST",
+        "g^rt_z|PEST",
         "sqrt(g)_PEST",
         "sqrt(g)_r|PEST",
         "sqrt(g)_t|PEST",
         "sqrt(g)_z|PEST",
-        "g^rt|PEST",
-        "g^rz|PEST",
         "iota",
         "iota_r",
         "p_r",
@@ -832,23 +822,24 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     g_zz_r = data["g_zz_r|PEST"][:, None]
     g_zz_t = data["g_zz_t|PEST"][:, None]
 
-    g_rt_r = data["g_rt_r|PEST"][:, None]
-    g_rz_r = data["g_rz_r|PEST"][:, None]
-    g_tz_r = data["g_tz_r|PEST"][:, None]
-
-    g_rt_t = data["g_rt_t|PEST"][:, None]
-    g_rz_t = data["g_rz_t|PEST"][:, None]
-    g_tz_t = data["g_tz_t|PEST"][:, None]
-
     g_rt_z = data["g_rt_z|PEST"][:, None]
-    g_rz_z = data["g_rz_z|PEST"][:, None]
-    g_tz_z = data["g_tz_z|PEST"][:, None]
+
+    g_rt_r = g_rr_t
+    g_rz_r = g_rr_z
+    g_tz_r = g_rt_z
+
+    g_rt_t = g_tt_r
+    g_rz_t = g_rt_z
+    g_tz_t = g_tt_z
+
+    g_rz_z = g_zz_r
+    g_tz_z = g_zz_t
 
     sqrt_g_r = data["sqrt(g)_r|PEST"][:, None]
     sqrt_g_t = data["sqrt(g)_t|PEST"][:, None]
     sqrt_g_z = data["sqrt(g)_z|PEST"][:, None]
 
-    sqrt_g = data["sqrt(g)_PEST_alt"]
+    sqrt_g = data["sqrt(g)_PEST"]
 
     j_sup_theta = data["j_sup_theta"][:, None]
     j_sup_zeta = data["j_sup_zeta"][:, None]

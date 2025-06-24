@@ -643,9 +643,11 @@ def _R_ttz(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[],
     parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
-    ],
+            "desc.equilibrium.equilibrium.Equilibrium",
+            "desc.geometry.surface.FourierRZToroidalSurface",
+            "desc.geometry.surface.ZernikeRZToroidalSection",
+        ],
+
 )
 def _R_tz(params, transforms, profiles, data, **kwargs):
     data["R_tz"] = transforms["R"].transform(params["R_lmn"], 0, 1, 1)
@@ -690,7 +692,9 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _R_z(params, transforms, profiles, data, **kwargs):
     data["R_z"] = transforms["R"].transform(params["R_lmn"], 0, 0, 1)
@@ -712,7 +716,9 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _R_zz(params, transforms, profiles, data, **kwargs):
     data["R_zz"] = transforms["R"].transform(params["R_lmn"], 0, 0, 2)
@@ -1436,7 +1442,9 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _Z_tz(params, transforms, profiles, data, **kwargs):
     data["Z_tz"] = transforms["Z"].transform(params["Z_lmn"], 0, 1, 1)
@@ -1481,7 +1489,9 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
     data["Z_z"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 1)
@@ -1503,7 +1513,9 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _Z_zz(params, transforms, profiles, data, **kwargs):
     data["Z_zz"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 2)
@@ -2677,7 +2689,9 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
     data["omega_tz"] = data["0"]
@@ -2719,10 +2733,12 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
-    parameterization=[
+   parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
     data["omega_z"] = data["0"]
@@ -2744,7 +2760,9 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
     data["omega_zz"] = data["0"]

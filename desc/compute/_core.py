@@ -55,10 +55,12 @@ def _1(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
-    units="m",
-    units_long="meters",
-    description="Position vector",
+    label="\\mathbf{x}",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=[],
     transforms={},

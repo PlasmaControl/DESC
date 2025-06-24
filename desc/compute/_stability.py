@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, scan, vmap
+from desc.backend import jax, jit, jnp, scan, vmap
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -265,8 +265,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
+    "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
 )
-def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
+def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -309,7 +311,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     - p_r: dp/drho, pressure gradient
     - phi: coordinate describing the position in the toroidal angle
     along a field line
+
     """
+    Neigvals = kwargs.get("Neigvals", 1)
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
     rho = source_grid.meshgrid_reshape(data["rho"], "arz")
@@ -347,11 +351,14 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, ...]
 
     gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
-            + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+        jnp.transpose(
+            rho**2
+            * (
+                g_sup_aa
+                - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
+                + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+            ),
+            axes=(1, 0, 2, 3),
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -367,12 +374,18 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
         a_N**3
         * B_N
         * jnp.reshape(
-            2
-            / B_sup_zeta[None, ...]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0),
+            jnp.transpose(
+                2
+                / B_sup_zeta[None, ...]
+                * sign_psi
+                * rho**2
+                * dpdpsi
+                * (
+                    cvdrift
+                    - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
+                ),
+                axes=(1, 0, 2, 3),
+            ),
             (N_alpha, N_zeta0, N_zeta),
         )
     )
@@ -398,13 +411,43 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
 
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
-    w, _ = jnp.linalg.eigh(A_redo)
-    # max over "zeta" axis, still a function of rho, alpha, zeta0
-    gamma = jnp.real(jnp.max(w, axis=(2,)))
+    # TODO: Issue #1750
+    # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
+    w, v = jnp.linalg.eigh(A_redo)
 
-    data["ideal ballooning lambda"] = gamma.flatten()
+    # Find the top_k eigenvalues.
+    top_eigvals, top_theta_idxs = jax.lax.top_k(w, k=Neigvals)
+
+    # v becomes less than the machine precision at some theta points which gives NaNs
+    # stop_gradient prevents that. Not sure how it will affect an objective that
+    # requires both the eigenvalue and eigenfunction
+    top_eigfuns = jnp.take_along_axis(
+        jax.lax.stop_gradient(v), top_theta_idxs[..., None, :], axis=-1
+    )
+
+    data["ideal ballooning lambda"] = top_eigvals
+    data["ideal ballooning eigenfunction"] = top_eigfuns
 
     return data
+
+
+@register_compute_fun(
+    name="ideal ballooning eigenfunction",
+    label="X_{\\mathrm{ballooning}}",
+    units="~",
+    units_long="None",
+    description="Ideal ballooning eigenfunction",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["ideal ballooning lambda"],
+    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+)
+def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -517,11 +560,14 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, :]
 
     gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None] * g_sup_ra
-            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+        jnp.transpose(
+            rho**2
+            * (
+                g_sup_aa
+                - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
+                + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+            ),
+            axes=(1, 0, 2, 3),
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -536,12 +582,18 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         a_N**3
         * B_N
         * jnp.reshape(
-            2
-            / B_sup_zeta[None, :]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None] * cvdrift0),
+            jnp.transpose(
+                2
+                / B_sup_zeta[None, ...]
+                * sign_psi
+                * rho**2
+                * dpdpsi
+                * (
+                    cvdrift
+                    - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
+                ),
+                axes=(1, 0, 2, 3),
+            ),
             (N_alpha, N_zeta0, N_zeta),
         )
     )
@@ -626,5 +678,4 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     )
 
     data["Newcomb ballooning metric"] = jnp.min(metric)
-
     return data

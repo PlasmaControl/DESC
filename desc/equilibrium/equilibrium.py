@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import os
 import warnings
 from collections.abc import MutableSequence
 
@@ -30,7 +31,6 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
-    ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -163,6 +163,7 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
+    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -857,6 +858,46 @@ class Equilibrium(IOAble, Optimizable):
             msg="must pass in a Grid object for argument grid!"
             f" instead got type {type(grid)}",
         )
+        # a check for Redl to prevent computing on-axis or
+        # at a rho=1.0 point where profiles vanish
+        if (
+            any(["Redl" in name for name in names])
+            and self.electron_density is not None
+        ):
+            warnif(
+                grid.axis.size,
+                UserWarning,
+                "Redl formula is undefined at rho=0, "
+                "but grid has grid points at rho=0, note that on-axis"
+                "current will be NaN.",
+            )
+            rho = grid.compress(grid.nodes[:, 0], "rho")
+
+            # check if profiles may go to zero
+            # if they are exactly zero this would cause NaNs since the profiles
+            # vanish.
+            warnif(
+                np.any(np.isclose(self.electron_density(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron density vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
+                np.any(np.isclose(self.electron_temperature(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron temperature vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
+                np.any(np.isclose(self.ion_temperature(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion temperature vanishes at at least one provided"
+                "rho grid point.",
+            )
+
         if grid.coordinates != "rtz":
             inbasis = {
                 "r": "rho",
@@ -983,7 +1024,6 @@ class Equilibrium(IOAble, Optimizable):
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
-                coords = data_index[p][dep]["coordinates"]
                 msg = lambda direction: (
                     f"Dependency {dep} may require more {direction}"
                     " resolution to compute accurately."
@@ -992,7 +1032,9 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more radial resolution
                     "r" in req and grid.L < self.L_grid
                     # and won't override grid to one with more radial resolution
-                    and not (override_grid and coords in {"z", ""}),
+                    and not (
+                        override_grid and (is_1dz_tor_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
                     msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
                 )
@@ -1000,7 +1042,14 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more poloidal resolution
                     "t" in req and grid.M < self.M_grid
                     # and won't override grid to one with more poloidal resolution
-                    and not (override_grid and coords in {"r", "z", ""}),
+                    and not (
+                        override_grid
+                        and (
+                            is_1dr_rad_grid(dep)
+                            or is_1dz_tor_grid(dep)
+                            or is_0d_vol_grid(dep)
+                        )
+                    ),
                     ResolutionWarning,
                     msg("poloidal") + f" got M_grid={grid.M} < {self._M_grid}.",
                 )
@@ -1008,7 +1057,9 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more toroidal resolution
                     "z" in req and grid.N < self.N_grid
                     # and won't override grid to one with more toroidal resolution
-                    and not (override_grid and coords in {"r", ""}),
+                    and not (
+                        override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
                     msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
                 )
@@ -2046,16 +2097,15 @@ class Equilibrium(IOAble, Optimizable):
         A_Zw = A_Z * W[:, None]
         A_Lw = A_L * W[:, None]
 
+        rho = grid.nodes[grid.unique_rho_idx, 0]
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
         L_1D = np.zeros((grid.num_nodes,))
+        phi_cyl_ax = np.linspace(0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False)
+        nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+        phi_B = phi_cyl_ax + nu_B_ax
         for rho_i in rho:
             R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
-            phi_cyl_ax = np.linspace(
-                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
-            )
-            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
-            phi_B = phi_cyl_ax + nu_B_ax
             nu_B = phi_B - phi0_2D
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
@@ -2089,6 +2139,7 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium generated from the given input file.
 
         """
+        path = os.path.expanduser(path)
         inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
@@ -2176,6 +2227,8 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
@@ -2226,8 +2279,8 @@ class Equilibrium(IOAble, Optimizable):
 
     def optimize(
         self,
-        objective=None,
-        constraints=None,
+        objective,
+        constraints,
         optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
@@ -2246,7 +2299,7 @@ class Equilibrium(IOAble, Optimizable):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : Objective or tuple of Objective
-            Objective function to satisfy. Default = fixed-boundary force balance.
+            Objective function representing the constraints to satisfy.
         optimizer : str or Optimizer (optional)
             optimizer to use
         ftol, xtol, gtol, ctol : float
@@ -2280,15 +2333,22 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
-            constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
+        warnif(
+            not any([con._equilibrium for con in constraints]),
+            UserWarning,
+            "Detected no equilibrium constraints passed, equilibrium optimization "
+            "problems usually require equilibrium constraints in order to produce "
+            "meaningful, physical results. Consider adding `ForceBalance` as a "
+            "constraint.",
+        )
 
         things, result = optimizer.optimize(
             self,

@@ -526,6 +526,49 @@ def _B_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="(psi_r/sqrt(g)_PEST)",
+    label="(\\psi' / \\sqrt{g})|PEST",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r", "sqrt(g)"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r|PEST"],
+)
+def _psi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g)_PEST)"] = transforms["grid"].replace_at_axis(
+        safediv(data["psi_r"], data["sqrt(g)_PEST"]),
+        lambda: safediv(data["psi_rr"], data["sqrt(g)_r|PEST"]),
+    )
+    return data
+
+@register_compute_fun(
+    name="(chi_r/sqrt(g)_PEST)",
+    label="(\\chi' / \\sqrt{g})|PEST",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["(psi_r/sqrt(g)_PEST)" , "iota"],
+    axis_limit_data=["psi_rr", "psi_r", "iota", "iota_r", "sqrt(g)_r|PEST"],
+)
+def _chi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):
+    data["(chi_r/sqrt(g)_PEST)"] = transforms["grid"].replace_at_axis(
+        data["(psi_r/sqrt(g)_PEST)"]*data["iota"],
+        lambda: safediv(data["psi_rr"] * data["iota"] + data["psi_r"] * data["iota_r"], data["sqrt(g)_r|PEST"]),
+    )
+    return data
+
+
+@register_compute_fun(
     name="(psi_r/sqrt(g))_t",
     label="\\partial_{\\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",

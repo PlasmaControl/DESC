@@ -689,7 +689,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Normalized squared growth rate",
     dim=1,
-    params=["Psi"],
+    params=["Psi", "NFP"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -720,6 +720,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         "p_rr",
         "psi_r",
         "psi_rr",
+        "(psi_r/sqrt(g)_PEST)",
+        "(chi_r/sqrt(g)_PEST)",
     ],
     n_rho_max="int: 2 x maximum radial mode number",
     n_theta_max="int: 2 x maximum radial mode number",
@@ -740,6 +742,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
 
+    NFP = params["NFP"]
+
     iota = data["iota"][:, None]
     iota_r = data["iota_r"][:, None]
 
@@ -749,6 +753,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
 
     chi_r = psi_r * iota
+
+    psi_r_sqrt_g = data["(psi_r/sqrt(g)_PEST)"][:, None] * (a_N/B_N)
+    chi_r_sqrt_g = data["(chi_r/sqrt(g)_PEST)"][:, None] * (a_N/B_N)
 
     axisym = kwargs.get("axisym", False)
 
@@ -771,27 +778,27 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         m_2 = 2.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1e-3
+        eps = 1e-6
         return eps + (1 - eps) * (lower + upper)
 
     dx_f = jax.grad(_f)
     dxx_f = jax.grad(dx_f)
 
-    x = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+    x = transforms["grid"].nodes[:: n_theta_max, 0][:n_rho_max]
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
     scale_vector2 = (_eval_1D(dxx_f, x)) * scale_vector1
 
     scale_x1 = scale_vector1[:, None]
     scale_x2 = scale_vector2[:, None]
-
+    
     # Get differentiation matrices
     # RG: setting the gradient to 0 to save some memory?
     D_rho0 = jax.lax.stop_gradient(cheb_D1(n_rho_max) * scale_x1)
 
     D_theta0 = jax.lax.stop_gradient(fourier_diffmat(n_theta_max))
 
-    D_zeta0 = jax.lax.stop_gradient(D_zeta0)
+    D_zeta0 = jax.lax.stop_gradient(NFP * D_zeta0)
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -821,9 +828,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Create the full matrix
     A = jnp.zeros((3 * n_total, 3 * n_total))
 
-    Q_sup_rho = jnp.zeros((n_total, 3 * n_total))
-    Q_sup_theta = jnp.zeros((n_total, 3 * n_total))
-    Q_sup_zeta = jnp.zeros((n_total, 3 * n_total))
+    sqrt_g_Q_sup_rho = jnp.zeros((n_total, 3 * n_total))
+    sqrt_g_Q_sup_theta = jnp.zeros((n_total, 3 * n_total))
+    sqrt_g_Q_sup_zeta = jnp.zeros((n_total, 3 * n_total))
 
     partial_zeta_Q_rho = jnp.zeros((n_total, 3 * n_total))
     partial_rho_Q_zeta = jnp.zeros((n_total, 3 * n_total))
@@ -842,11 +849,17 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     all_idx = slice(0, 3 * n_total)
 
     g_rr = data["g_rr|PEST"][:, None] / a_N**2
-    g_rt = data["g_rt|PEST"][:, None] / a_N**2
-    g_rz = data["g_rz|PEST"][:, None] / a_N**2
     g_tt = data["g_tt|PEST"][:, None] / a_N**2
-    g_tz = data["g_tz|PEST"][:, None] / a_N**2
     g_zz = data["g_zz|PEST"][:, None] / a_N**2
+
+    g_rt = data["g_rt|PEST"][:, None] / a_N**2
+    g_tr = g_rt
+
+    g_rz = data["g_rz|PEST"][:, None] / a_N**2
+    g_zr = g_rz
+
+    g_tz = data["g_tz|PEST"][:, None] / a_N**2
+    g_zt = g_tz
 
     g_rr_t = data["g_rr_t|PEST"][:, None] / a_N**2
     g_rr_z = data["g_rr_z|PEST"][:, None] / a_N**2
@@ -860,15 +873,30 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     g_rt_z = data["g_rt_z|PEST"][:, None] / a_N**2
 
     g_rt_r = g_rr_t
+    g_tr_r = g_rr_t
+
     g_rz_r = g_rr_z
+    g_zr_r = g_rr_z
+
+    # all the aliases
     g_tz_r = g_rt_z
+    g_zt_r = g_rt_z
+    g_rt_z = g_rt_z
+    g_tr_z = g_rt_z
+    g_rz_t = g_rt_z
+    g_zr_t = g_rt_z
 
     g_rt_t = g_tt_r
-    g_rz_t = g_rt_z
+    g_tr_t = g_tt_r
+
     g_tz_t = g_tt_z
+    g_zt_t = g_tt_z
 
     g_rz_z = g_zz_r
+    g_zr_z = g_zz_r
+
     g_tz_z = g_zz_t
+    g_zt_z = g_zz_t
 
     sqrt_g_r = data["sqrt(g)_r|PEST"][:, None] / a_N**3
     sqrt_g_t = data["sqrt(g)_t|PEST"][:, None] / a_N**3
@@ -880,252 +908,221 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     j_sup_zeta = data["J^zeta|PEST"][:, None] * a_N**2 / B_N
 
     # Q^ρ
-    Q_sup_rho = Q_sup_rho.at[rho_idx, rho_idx].set(
-        1 / sqrt_g * (1 / iota * D_theta + D_zeta)
+    sqrt_g_Q_sup_rho = sqrt_g_Q_sup_rho.at[rho_idx, rho_idx].set(
+        (1 / iota * D_theta + D_zeta)
     )
 
     # Q^θ
-    Q_sup_theta = Q_sup_theta.at[rho_idx, rho_idx].set(
-        1 / sqrt_g * (-1 / iota * D_rho + iota_r / iota**2)
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, rho_idx].set(
+        (-1 / iota * D_rho + iota_r / iota**2)
     )
-    Q_sup_theta = Q_sup_theta.at[rho_idx, theta_idx].set(1 / sqrt_g * D_zeta)
-    Q_sup_theta = Q_sup_theta.at[rho_idx, zeta_idx].set(-1 / sqrt_g * D_zeta)
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, theta_idx].set(D_zeta)
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, zeta_idx].set(-D_zeta)
 
     # Q^ζ
-    Q_sup_zeta = Q_sup_zeta.at[rho_idx, rho_idx].set(-1 / sqrt_g * D_rho)
-    Q_sup_zeta = Q_sup_zeta.at[rho_idx, theta_idx].set(-1 / sqrt_g * D_theta)
-    Q_sup_zeta = Q_sup_zeta.at[rho_idx, zeta_idx].set(1 / sqrt_g * D_theta)
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, rho_idx].set(-1 * D_rho)
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, theta_idx].set(-1 * D_theta)
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, zeta_idx].set(1 * D_theta)
 
     # rho block
     partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, rho_idx].set(
-        g_rt / sqrt_g * (D_rho_D_theta - iota_r / iota**2 * D_theta + D_rho_D_zeta)
-        - g_tt / sqrt_g * (D_rho_D_rho - iota_r / iota**2)
-        - g_tz / sqrt_g * D_rho_D_rho
-        + (g_rt_r / sqrt_g - g_rt * sqrt_g_r / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_tt_r / sqrt_g - g_tt * sqrt_g_r / sqrt_g**2)
-        * (iota_r / iota**2 - D_rho / iota)
-        - (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2) * D_rho
+          g_tr * (D_rho_D_theta - iota_r / iota**2 * D_theta + D_rho_D_zeta)
+        - g_tt * (D_rho_D_rho - iota_r / iota**2)
+        - g_tz * D_rho_D_rho
+        + 0.*g_tr_r  * (D_theta / iota + D_zeta)
+        + 0.*g_tt_r  * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_tz_r  * D_rho
     )
 
     # theta block
     partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, theta_idx].set(
-        1
-        / sqrt_g
-        * (
-            g_tt * D_rho_D_zeta
-            - g_tz * D_rho_D_theta
-            + (g_tt_r / sqrt_g - g_tt * sqrt_g_r / sqrt_g**2) * D_zeta
-            - (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2) * D_theta
-        )
+        g_tt * D_rho_D_zeta
+        - g_tz * D_rho_D_theta
+        + 0.*g_tt_r * D_zeta
+        - 0.*g_tz_r * D_theta
     )
 
     # zeta block
     partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
             g_tt * D_rho_D_zeta
             - g_tz * D_rho_D_theta
-            + (g_tt_r / sqrt_g - g_tt * sqrt_g_r / sqrt_g**2) * D_zeta
-            - (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2) * D_theta
+            + 0.*g_tt_r * D_zeta
+            - 0.*g_tz_r * D_theta
         )
     )
 
     # rho bloc
     partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, rho_idx].set(
-        g_rr
-        / sqrt_g
-        * (D_theta_D_theta - 0 * iota_r / iota**2 * D_theta + D_theta_D_zeta)
-        - g_rt / sqrt_g * (D_rho_D_theta - 0 * iota_r / iota**2)
-        - g_rz / sqrt_g * D_rho_D_theta
-        + (g_rr_t / sqrt_g - g_rr * sqrt_g_t / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_rt_t / sqrt_g - g_rt * sqrt_g_t / sqrt_g**2)
-        * (0 * iota_r / iota**2 - D_rho / iota)
-        - (g_rz_t / sqrt_g - g_rz * sqrt_g_t / sqrt_g**2) * D_rho
+          g_rr  * (D_theta_D_theta - 0 * iota_r / iota**2 * D_theta + D_theta_D_zeta)
+        - g_rt  * (D_rho_D_theta - 0 * iota_r / iota**2)
+        - g_rz  * D_rho_D_theta
+        + 0.*g_rr_t  * (D_theta / iota + D_zeta)
+        + 0.*g_rt_t  * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_rz_t  * D_rho
     )
 
     # theta block
     partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, theta_idx].set(
         1
-        / sqrt_g
         * (
-            g_rt * D_theta_D_zeta
-            - g_rz * D_theta_D_theta
-            + (g_rt_t / sqrt_g - g_rt * sqrt_g_t / sqrt_g**2) * D_zeta
-            - (g_rz_t / sqrt_g - g_rz * sqrt_g_t / sqrt_g**2) * D_theta
+            g_rt * D_theta_D_zeta - g_rz * D_theta_D_theta
+            + 0.*g_rt_t  * D_zeta
+            - 0.*g_rz_t  * D_theta
         )
     )
 
     # zeta block
     partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
-            g_rt * D_theta_D_zeta
-            - g_rz * D_theta_D_theta
-            + (g_rt_t / sqrt_g - g_rt * sqrt_g_t / sqrt_g**2) * D_zeta
-            - (g_rz_t / sqrt_g - g_rz * sqrt_g_t / sqrt_g**2) * D_theta
+            g_rt * D_theta_D_zeta - g_rz * D_theta_D_theta
+            + 0.*g_rt_t  * D_zeta
+            - 0.*g_rz_t  * D_theta
         )
     )
 
     # rho block
     partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, rho_idx].set(
-        g_rt
-        / sqrt_g
-        * (D_theta_D_zeta - 0 * iota_r / iota**2 * D_theta + D_zeta_D_zeta)
-        - g_tt / sqrt_g * (D_rho_D_zeta - 0 * iota_r / iota**2)
-        - g_tz / sqrt_g * D_rho_D_zeta
-        + (g_rt_z / sqrt_g - g_rt * sqrt_g_z / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_tt_z / sqrt_g - g_tt * sqrt_g_z / sqrt_g**2)
-        * (0 * iota_r / iota**2 - D_rho / iota)
-        - (g_tz_z / sqrt_g - g_tz * sqrt_g_z / sqrt_g**2) * D_rho
+          g_rt  * (D_theta_D_zeta - 0 * iota_r / iota**2 * D_theta + D_zeta_D_zeta)
+        - g_tt  * (D_rho_D_zeta - 0 * iota_r / iota**2)
+        - g_tz  * D_rho_D_zeta
+        + 0.*g_rt_z * (D_theta / iota + D_zeta)
+        + 0.*g_tt_z * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_zt_z * D_rho
     )
 
     # theta block
     partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, theta_idx].set(
         1
-        / sqrt_g
         * (
-            g_tt * D_zeta_D_zeta
-            - g_tz * D_theta_D_zeta
-            + (g_tt_z / sqrt_g - g_tt * sqrt_g_z / sqrt_g**2) * D_zeta
-            - (g_tz_z / sqrt_g - g_tz * sqrt_g_z / sqrt_g**2) * D_theta
+            g_tt * D_zeta_D_zeta - g_tz * D_theta_D_zeta
+            + 0.*g_tt_z * D_zeta
+            - 0.*g_tz_z * D_theta
         )
     )
 
     # zeta block
     partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
-            g_tt * D_zeta_D_zeta
-            - g_tz * D_theta_D_zeta
-            + (g_tt_z / sqrt_g - g_tt * sqrt_g_z / sqrt_g**2) * D_zeta
-            - (g_tz_z / sqrt_g - g_tz * sqrt_g_z / sqrt_g**2) * D_theta
+            g_tt * D_zeta_D_zeta - g_tz * D_theta_D_zeta
+            + 0.*g_tt_z * D_zeta
+            - 0.*g_tz_z * D_theta
         )
     )
 
     # rhobloc
     partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, rho_idx].set(
-        g_rt
-        / sqrt_g
-        * (D_theta_D_zeta - 0 * iota_r / iota**2 * D_theta + D_zeta_D_zeta)
-        - g_tt / sqrt_g * (D_rho_D_zeta - 0 * iota_r / iota**2)
-        - g_tz / sqrt_g * D_rho_D_zeta
-        + (g_rt_z / sqrt_g - g_rt * sqrt_g_z / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_tt_z / sqrt_g - g_tt * sqrt_g_z / sqrt_g**2)
-        * (0 * iota_r / iota**2 - D_rho / iota)
-        - (g_tz_z / sqrt_g - g_tz * sqrt_g_z / sqrt_g**2) * D_rho
+        g_rz
+        * (D_theta_D_theta - 0 * iota_r / iota**2 * D_theta + D_theta_D_zeta)
+        - g_tz  * (D_rho_D_zeta - 0 * iota_r / iota**2)
+        - g_zz  * D_rho_D_zeta
+        + 0.*g_rz_t * (D_theta / iota + D_zeta)
+        + 0.*g_tz_t * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_zz_t * D_rho
     )
 
     # theta block
     partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, theta_idx].set(
         1
-        / sqrt_g
         * (
-            g_tz * D_theta_D_zeta
+            g_zt * D_theta_D_zeta
             - g_zz * D_theta_D_theta
-            + (g_tz_t / sqrt_g - g_tz * sqrt_g_t / sqrt_g**2) * D_zeta
-            - (g_zz_t / sqrt_g - g_zz * sqrt_g_t / sqrt_g**2) * D_theta
+            + 0.*g_zt_t * D_zeta
+            - 0.*g_zz_t * D_theta
         )
     )
 
     # zeta block
     partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
-            g_tz * D_theta_D_zeta
+            g_zt * D_theta_D_zeta
             - g_zz * D_theta_D_theta
-            + (g_tz_t / sqrt_g - g_tz * sqrt_g_t / sqrt_g**2) * D_zeta
-            - (g_zz_t / sqrt_g - g_zz * sqrt_g_t / sqrt_g**2) * D_theta
+            + 0.*g_zt_t * D_zeta
+            - 0.*g_zz_t * D_theta
         )
     )
 
     # rho block
     partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, rho_idx].set(
         g_rr
-        / sqrt_g
         * (D_theta_D_zeta - 0 * iota_r / iota**2 * D_theta + D_zeta_D_zeta)
-        - g_rt / sqrt_g * (D_rho_D_zeta - 0 * iota_r / iota**2)
-        - g_rz / sqrt_g * D_rho_D_zeta
-        + (g_rr_z / sqrt_g - g_rr * sqrt_g_z / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_rt_z / sqrt_g - g_rt * sqrt_g_z / sqrt_g**2)
-        * (0 * iota_r / iota**2 - D_rho / iota)
-        - (g_rz_z / sqrt_g - g_rz * sqrt_g_z / sqrt_g**2) * D_rho
+        - g_rt * (D_rho_D_zeta - 0 * iota_r / iota**2)
+        - g_rz * D_rho_D_zeta
+        + 0.*g_rr_z * (D_theta / iota + D_zeta)
+        + 0.*g_rt_z * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_rz_z * D_rho
     )
 
     # theta block
     partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, theta_idx].set(
         1
-        / sqrt_g
         * (
             g_rt * D_zeta_D_zeta
             - g_rz * D_theta_D_zeta
-            + (g_rt_z / sqrt_g - g_rt * sqrt_g_z / sqrt_g**2) * D_zeta
-            - (g_rz_z / sqrt_g - g_rz * sqrt_g_z / sqrt_g**2) * D_theta
+            + 0.*g_rt_z * D_zeta
+            - 0.*g_rz_z * D_theta
         )
     )
 
     # zeta block
     partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
             g_rt * D_zeta_D_zeta
             - g_rz * D_theta_D_zeta
-            + (g_rt_z / sqrt_g - g_rt * sqrt_g_z / sqrt_g**2) * D_zeta
-            - (g_rz_z / sqrt_g - g_rz * sqrt_g_z / sqrt_g**2) * D_theta
+            + 0.*g_rt_z * D_zeta
+            - 0.*g_rz_z * D_theta
         )
     )
 
     # rho block
     partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, rho_idx].set(
-        g_rz / sqrt_g * (D_rho_D_zeta - iota_r / iota**2 * D_theta + D_rho_D_zeta)
-        - g_tz / sqrt_g * (D_rho_D_rho - iota_r / iota**2)
-        - g_zz / sqrt_g * D_rho_D_rho
-        + (g_rz_r / sqrt_g - g_rz * sqrt_g_r / sqrt_g**2) * (D_theta / iota + D_zeta)
-        + (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2)
-        * (iota_r / iota**2 - D_rho / iota)
-        - (g_zz_r / sqrt_g - g_zz * sqrt_g_r / sqrt_g**2) * D_rho
+        g_rz  * (D_rho_D_zeta - iota_r / iota**2 * D_theta + D_rho_D_zeta)
+        - g_tz  * (D_rho_D_rho - iota_r / iota**2)
+        - g_zz  * D_rho_D_rho
+        + 0.*g_rz_r * (D_theta / iota + D_zeta)
+        + 0.*g_tz_r * (iota_r / iota**2 - D_rho / iota)
+        - 0.*g_zz_r * D_rho
     )
 
     # theta block
     partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, theta_idx].set(
         1
-        / sqrt_g
         * (
-            D_rho_D_zeta
-            - D_rho_D_theta
-            + (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2) * D_zeta
-            - (g_zz_r / sqrt_g - g_zz * sqrt_g_r / sqrt_g**2) * D_theta
+            g_tz * D_rho_D_zeta
+            - g_zz * D_rho_D_theta
+            + 0.*g_tz_r * D_zeta
+            - 0.*g_zz_r * D_theta
         )
     )
 
     # zeta block
     partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, zeta_idx].set(
         -1
-        / sqrt_g
         * (
             g_tz * D_rho_D_zeta
             - g_zz * D_rho_D_theta
-            + (g_tz_r / sqrt_g - g_tz * sqrt_g_r / sqrt_g**2) * D_zeta
-            - (g_zz_r / sqrt_g - g_zz * sqrt_g_r / sqrt_g**2) * D_theta
+            + 0.*g_tz_r * D_zeta
+            - 0.*g_zz_r * D_theta
         )
     )
 
     A = A.at[rho_idx, all_idx].set(
-        1.0 * chi_r / sqrt_g * (partial_zeta_Q_rho - partial_rho_Q_zeta)
-        - 1.0 * psi_r / sqrt_g * (partial_rho_Q_theta - partial_theta_Q_rho)
-        + 1.0 * sqrt_g * (j_sup_theta * Q_sup_zeta - j_sup_zeta * Q_sup_theta)
+        - 1.0 * chi_r_sqrt_g * (partial_zeta_Q_rho - partial_rho_Q_zeta)
+        + 1.0 * psi_r_sqrt_g * (partial_rho_Q_theta - partial_theta_Q_rho)
+        + 1.0 * (j_sup_theta * sqrt_g_Q_sup_zeta - j_sup_zeta * sqrt_g_Q_sup_theta)
     )
     A = A.at[theta_idx, all_idx].set(
-        -psi_r / sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
-        + sqrt_g * j_sup_zeta * Q_sup_rho
+        -1. * psi_r_sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
+        + j_sup_zeta *  sqrt_g_Q_sup_rho
     )
     A = A.at[theta_idx, all_idx].set(
-        chi_r / sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
-        - sqrt_g * j_sup_theta * Q_sup_rho
+        1. * chi_r_sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
+        - j_sup_theta * sqrt_g_Q_sup_rho
     )
 
     # pressure-driven instability term

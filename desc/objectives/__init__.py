@@ -8,6 +8,7 @@ from ._coils import (
     CoilIntegratedCurvature,
     CoilLength,
     CoilSetLinkingNumber,
+    CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
     LinkingCurrentConsistency,

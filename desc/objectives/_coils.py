@@ -4,7 +4,15 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.backend import (
+    jnp,
+    scan,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_stack,
+    tree_unflatten,
+)
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
@@ -848,6 +856,258 @@ class CoilSetMinDistance(_Objective):
         k = jnp.arange(self.dim_f)
         min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
+
+
+class CoilSetMaxB(_Objective):
+    """Target the maximum magnetic field on coil for a given coilset.
+
+    Self field on the coil is computed with the finite build method, and field from
+    other coils on the coil is computed with the filamentary method.
+    Will yield one value for each unique coil in the coilset, which is the maximum
+    magnetic field on that coil in the component chosen. Options for magnetic field are
+    magnitude or components projected in the coil frame. All coils in the coilset must
+    inherit from AbstractFiniteBuildCoil.
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    field : MagneticField, optional
+        External field to be added to the coil field. Defaults to None.
+    component :  {'mag', 't', 'p', 'q'}, optional
+        Component of magnetic field to be targeted. Can be 'mag' for field magnitude,
+        or 't', 'p', 'q' for the respective dimensions of the conductor cross section.
+        Default is 'mag'.
+    xsection_grid : Grid, list, optional
+        Collocation grid used to discretize each coil cross section. Defaults to the
+        default grid for the given coil-type, see ``coils.py`` for more details.
+        If a list, must have the same structure as coils.
+    centerline_grid : Grid, list, optional
+        Collocation grid used to discretize each coil centerline. Defaults to the
+        default grid for the given coil-type, see ``coils.py`` and ``curve.py``
+        for more details. If a list, must have the same structure as coils.
+    use_softmax: bool, optional
+        Use softmax or hard max. Softmax is a smooth approximation to the actual maximum
+        field that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate maximum.
+    softmax_alpha: float, optional
+        Parameter used for softmax. The larger ``softmax_alpha``, the closer the
+        softmax approximates the hardmax. softmax -> hardmax as
+        ``softmax_alpha`` -> infinity.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(T)"
+    _print_value_fmt = "Maximum field on coil: "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        field=None,
+        component="mag",
+        xsection_grid=None,
+        centerline_grid=None,
+        name="field on coil",
+        jac_chunk_size=None,
+        use_softmax=False,
+        softmax_alpha=1.0,
+        bs_chunk_size=None,
+    ):
+        from desc.coils import AbstractFiniteBuildCoil, CoilSet
+
+        if target is None and bounds is None:
+            target = 0
+
+        self._xsection_grid = xsection_grid
+        self._centerline_grid = centerline_grid
+        self._use_softmax = use_softmax
+        self._softmax_alpha = softmax_alpha
+        self._has_field = field is not None
+        self._field = [field] if not isinstance(field, list) else field
+        self._bs_chunk_size = bs_chunk_size
+
+        errorif(
+            not type(coil) is CoilSet,
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil. Mixed coil sets "
+            "are not supported.",
+        )
+        errorif(
+            not all([isinstance(c, AbstractFiniteBuildCoil) for c in coil.coils]),
+            ValueError,
+            "All coils in the CoilSet must inherit from AbstractFiniteBuildCoil",
+        )
+        errorif(
+            component not in {"mag", "t", "p", "q"},
+            ValueError,
+            "Component must be one of 'mag', 't', 'p', 'q'.",
+        )
+        self._component = component
+
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.coils import AbstractFiniteBuildCoil
+        from desc.magnetic_fields import SumMagneticField
+
+        coilset = self.things[0]
+
+        finite_build_grid = AbstractFiniteBuildCoil.prep_grid(
+            self._xsection_grid, self._centerline_grid
+        )
+
+        self._dim_f = coilset.num_coils
+        self._constants = {
+            "coilset": coilset,
+            "finite_build_grid": finite_build_grid,
+            "centerline_grid": self._centerline_grid,
+            "quad_weights": 1.0,
+        }
+
+        if self._has_field:
+            self._constants["field"] = SumMagneticField(self._field)
+
+        if self._normalize:
+            coils = tree_leaves(coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
+            scales = [compute_scaling_factors(coil)["B"] for coil in coils]
+            self._normalization = np.mean(
+                scales
+            )  # mean centerline field strength of coils
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute maximum field on each coil in predefined component.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Maximum field on coil for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        def body(dummy, x):
+            # compute self field and other coil field to find maximum field magnitude
+            # on the coil k
+            coil = constants["coilset"][0]
+            self_field, quad_points, centerline_mask = coil.compute_self_field(
+                constants["finite_build_grid"],
+                coil_frame=False,
+                params=x,  # just this coil's parameters
+            )
+
+            quad_points = jnp.where(
+                centerline_mask[:, None], 100, quad_points
+            )  # TODO: better way to do this
+
+            # compute field from other coils and subtract the coil computation to
+            # prevent double counting
+            other_field = constants["coilset"].compute_magnetic_field(
+                quad_points,
+                params=params,  # all coils' parameters
+                basis="xyz",
+                source_grid=constants["centerline_grid"],
+                chunk_size=self._bs_chunk_size,
+            )
+            other_field -= coil.compute_magnetic_field(
+                quad_points,
+                params=x,
+                basis="xyz",
+                source_grid=constants["centerline_grid"],
+                chunk_size=self._bs_chunk_size,
+            )
+
+            if self._has_field:
+                other_field += constants["field"].compute_magnetic_field(
+                    quad_points,
+                    basis="xyz",
+                    source_grid=constants["centerline_grid"],
+                    chunk_size=self._bs_chunk_size,
+                )
+
+            total_field = self_field + other_field
+
+            # the coil centerline points are not used in the field computation,
+            # which is ok since the field is not maximal on the coil axis
+            total_field = jnp.where(centerline_mask[:, None], 0, total_field)
+
+            if self._component == "mag":
+                field_component = safenorm(total_field, axis=-1)
+            else:
+                total_field_reprojected = coil.project_coil_frame(
+                    total_field,
+                    finite_build_grid=constants["finite_build_grid"],
+                    params=x,  # just this coil's parameters
+                )
+                if self._component == "t":
+                    field_component = jnp.abs(total_field_reprojected[:, 0])
+                elif self._component == "p":
+                    field_component = jnp.abs(total_field_reprojected[:, 1])
+                elif self._component == "q":
+                    field_component = jnp.abs(total_field_reprojected[:, 2])
+                else:
+                    field_component = jnp.zeros_like(total_field[:, 0])
+
+            # return maximum field magnitude on the coil
+            if self._use_softmax:
+                max_comp = softmax(field_component, self._softmax_alpha)
+            else:
+                max_comp = jnp.max(field_component, initial=0)
+
+            return 0, max_comp
+
+        _, max_field_per_coil = scan(body, 0, tree_stack(params))
+
+        return max_field_per_coil
 
 
 class PlasmaCoilSetDistanceBound(_Objective):

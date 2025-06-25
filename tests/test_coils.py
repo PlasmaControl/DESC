@@ -11,6 +11,7 @@ from desc.backend import jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
+    FourierPlanarFiniteBuildCoil,
     FourierRZCoil,
     FourierXYCoil,
     FourierXYZCoil,
@@ -22,6 +23,7 @@ from desc.coils import (
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute.utils import _compute as compute_fun
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -148,6 +150,36 @@ class TestCoil:
             err_msg="Using FourierXYCoil",
         )
 
+        # FourierPlanarFiniteBuildCoil with filamentary field
+        coil = FourierPlanarFiniteBuildCoil(current=I)
+        B_xyz = coil.compute_magnetic_field(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        B_rpz = coil.compute_magnetic_field(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierPlanarFiniteBuildCoil",
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierPlanarFiniteBuildCoil",
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierPlanarFiniteBuildCoil",
+        )
+
         B_true_xyz = np.atleast_2d([0, 0, Bz_true])
         grid_xyz = np.atleast_2d([0, 0, y])
         grid_rpz = xyz2rpz(grid_xyz)
@@ -231,6 +263,10 @@ class TestCoil:
 
         # FourierXYCoil
         coil = FourierXYCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        # FourierPlanarFiniteBuildCoil
+        coil = FourierPlanarFiniteBuildCoil(current=I)
         test(coil, grid_xyz, grid_rpz)
 
         grid_xyz = np.atleast_2d([0, 0, y])
@@ -384,6 +420,20 @@ class TestCoil:
                 atol=1e-12,
             )
 
+            # FourierPlanarFiniteBuildCoil
+            coil = FourierPlanarFiniteBuildCoil(
+                current=I, center=[0, 0, 0], normal=[0, 0, 1], r_n=R
+            )
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
             # FourierRZCoil
             coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
             test(
@@ -462,6 +512,8 @@ class TestCoil:
         coil4 = coil1.to_FourierRZ(N=coil1.N)
         coil5 = coil1.to_FourierXY(N=10, basis="rpz")
         coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
+        coil7 = FourierPlanarFiniteBuildCoil.from_FourierPlanarCoil(coil6)
+        coil8 = coil7.to_FourierPlanar()
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
@@ -475,6 +527,8 @@ class TestCoil:
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x7 = coil7.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x8 = coil8.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -494,17 +548,27 @@ class TestCoil:
         B6 = coil6.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+        B7 = coil7.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
+        B8 = coil8.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
 
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)
         np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(x1, x6, atol=1e-10)
+        np.testing.assert_allclose(x1, x7, atol=1e-12)
+        np.testing.assert_allclose(x1, x8, atol=1e-12)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(B1, B7, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(B1, B8, rtol=1e-8, atol=1e-8)
 
 
 class TestCoilSet:
@@ -1616,3 +1680,214 @@ def test_planar_coil_opposing_normals_fields():
 
     test(coil_r)
     test(coil_xy)
+
+
+class TestFiniteBuildCoil:
+    """Tests for finite build coil objects."""
+
+    @pytest.mark.unit
+    def test_p_q_frame(self):
+        """Test p/q frame of a FramedCoil."""
+        coil = FourierPlanarFiniteBuildCoil()
+        data = coil.compute(
+            ["p_frame", "q_frame", "frenet_tangent"],
+            basis="xyz",
+            grid=0,
+        )
+        p, q = (
+            data["p_frame"],
+            data["q_frame"],
+        )
+
+        np.testing.assert_allclose(p, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(q, np.array([[0, -1, 0]]), atol=1e-12)
+
+        # check that this is a right handed frame
+        t = data["frenet_tangent"]
+
+        np.testing.assert_allclose(t, np.cross(p, q), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_curv_frame(self):
+        """Test curvature projections of a FramedCoil."""
+        coil = FourierPlanarFiniteBuildCoil()
+        data = coil.compute(
+            ["curvature", "curv1_frame", "curv2_frame"],
+            basis="xyz",
+            grid=20,
+        )
+        k, k1, k2 = (
+            data["curvature"],
+            data["curv1_frame"],
+            data["curv2_frame"],
+        )
+        np.testing.assert_allclose(k, 1 / 2, atol=1e-12)
+        np.testing.assert_allclose(k1, -1 / 2, atol=1e-12)
+        np.testing.assert_allclose(k2, 0, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_u_v_xsection(self):
+        """Test u/v coordinates for FiniteBuildCoil cross-section."""
+        coil = FourierPlanarFiniteBuildCoil()
+        grid = LinearGrid(L=2, M=1, N=1, endpoint=True)
+
+        u = compute_fun(
+            coil,
+            "u_fb",
+            transforms={"grid": grid},
+            params={},
+            profiles={},
+        )["u_fb"]
+
+        v = compute_fun(
+            coil,
+            "v_fb",
+            transforms={"grid": grid},
+            params={},
+            profiles={},
+        )["v_fb"]
+
+        u_nominal = np.array([[-1, 0, 1]]) * 0.9999
+        u_nominal = np.repeat(u_nominal, 3)
+        u_nominal = np.tile(u_nominal, 3)
+        u_nominal = u_nominal.flatten()
+
+        v_nominal = np.array([[-1, 0, 1]]) * 0.9999
+        v_nominal = np.tile(v_nominal, 9)
+        v_nominal = v_nominal.flatten()
+
+        np.testing.assert_allclose(u, u_nominal, atol=1e-12)
+        np.testing.assert_allclose(v, v_nominal, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_multifilament_biot_savart(self):
+        """Test multifilament Biot-Savart implementation with centerline field."""
+        coil = FourierPlanarFiniteBuildCoil(
+            current=1e7,
+            cross_section_dims=[0.1, 0.2],
+        )
+        centerline_grid = LinearGrid(N=500, endpoint=False)
+        xsection_grid = 10
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
+        grid_xyz = np.atleast_2d([10, 0, 0])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        B_xyz = coil.compute_magnetic_field(
+            grid_xyz,
+            basis="xyz",
+            source_grid=finite_build_grid,
+        )
+
+        B_rpz = coil.compute_magnetic_field(
+            grid_rpz,
+            basis="rpz",
+            source_grid=finite_build_grid,
+        )
+
+        B_rpz_magnitude = np.linalg.norm(B_rpz, axis=1)
+
+        # Analytic solution for center field
+        # Equation 7 in section 1.1.1 of
+        # https://apps.dtic.mil/sti/tr/pdf/ADA242978.pdf#page=8.06
+        a1 = 2 - coil.cross_section_dims[0] / 2
+        a2 = 2 + coil.cross_section_dims[0] / 2
+        b = coil.cross_section_dims[1] / 2
+        alpha = a2 / a1
+        beta = b / a1
+        j = coil.current / (coil.cross_section_dims[0] * coil.cross_section_dims[1])
+
+        B_analytic = (
+            4
+            * np.pi
+            * 1e-7
+            * j
+            * a1
+            * beta
+            * np.log((alpha + (alpha**2 + beta**2) ** 0.5) / (1 + (1 + beta**2) ** 0.5))
+        )
+
+        np.testing.assert_allclose(B_rpz_magnitude, B_analytic, rtol=1e-5, atol=1e-10)
+
+        B_analytic = np.array([0, B_analytic, 0]).reshape((1, 3))
+
+        np.testing.assert_allclose(B_xyz, B_analytic, rtol=1e-5, atol=1e-10)
+
+    @pytest.mark.unit
+    def test_self_field(self):
+        """Test self field of FourierPlanarFiniteBuildCoil."""
+        coil = FourierPlanarFiniteBuildCoil(
+            current=1e7,
+            cross_section_dims=[0.1, 0.2],
+        )
+        centerline_grid = LinearGrid(N=100, endpoint=False)
+        xsection_grid = 50
+
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
+
+        field_array_coilframe, field_positions, centerline_mask = (
+            coil.compute_self_field(
+                finite_build_grid=finite_build_grid,
+                coil_frame=True,
+            )
+        )
+
+        # compare against results from the CoilForces package in Julia
+        field_t = np.abs(field_array_coilframe[:, 0])
+        max_field_p = np.max(np.abs(field_array_coilframe[:, 1]))
+        max_field_q = np.max(np.abs(field_array_coilframe[:, 2]))
+        field_magnitude_coilframe = np.linalg.norm(field_array_coilframe, axis=1)
+        max_field_magnitude_coilframe = np.max(field_magnitude_coilframe)
+
+        np.testing.assert_allclose(field_t, 0, atol=1e-10)
+        np.testing.assert_allclose(max_field_p, 23.967, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(max_field_q, 25.111, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            max_field_magnitude_coilframe, 25.111, rtol=1e-3, atol=1e-10
+        )
+
+        field_array_labframe, _, _ = coil.compute_self_field(
+            finite_build_grid=finite_build_grid,
+            coil_frame=False,
+        )
+
+        field_q = field_array_coilframe[:, 2]
+        field_y = field_array_labframe[:, 1]
+        field_magnitude_labframe = np.linalg.norm(field_array_labframe, axis=1)
+
+        # q and y vectors are antiparallel
+        np.testing.assert_allclose(field_q, -field_y, atol=1e-10)
+        np.testing.assert_allclose(
+            field_magnitude_labframe, field_magnitude_coilframe, atol=1e-10
+        )
+
+    @pytest.mark.unit
+    def test_project_coil_frame(self):
+        """Test FourierPlanarFiniteBuildCoil vector projection to coil frame."""
+        coil = FourierPlanarFiniteBuildCoil(
+            current=1e7,
+            cross_section_dims=[0.1, 0.2],
+        )
+        centerline_grid = LinearGrid(N=10, endpoint=False)
+        xsection_grid = 2
+
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
+
+        coords = finite_build_grid.nodes
+
+        test_vecs_labframe = np.zeros_like(coords)
+        test_vecs_labframe[:, 1] = 1
+
+        test_vecs_coilframe = coil.project_coil_frame(
+            test_vecs_labframe, finite_build_grid
+        )
+
+        # q and y vectors are antiparallel
+        np.testing.assert_allclose(
+            test_vecs_labframe[:, 1], -test_vecs_coilframe[:, 2], atol=1e-10
+        )

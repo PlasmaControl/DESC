@@ -32,6 +32,7 @@ Coils
     desc.coils.FourierXYZCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.FourierPlanarFiniteBuildCoil
     desc.coils.initialize_modular_coils
     desc.coils.initialize_saddle_coils
 
@@ -183,6 +184,7 @@ Objective Functions
     desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilLength
     desc.objectives.CoilSetLinkingNumber
+    desc.objectives.CoilSetMaxB
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity

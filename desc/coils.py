@@ -21,7 +21,15 @@ from desc.backend import (
     tree_unstack,
     vmap,
 )
-from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.basis import FourierSeries
+from desc.compute import (
+    get_params,
+    get_transforms,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
@@ -38,7 +46,16 @@ from desc.magnetic_fields._core import (
     biot_savart_general_vector_potential,
 )
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import (
+    copy_coeffs,
+    cross,
+    dot,
+    equals,
+    errorif,
+    flatten_list,
+    safenorm,
+    warnif,
+)
 
 
 @partial(jit, static_argnames=["chunk_size"])
@@ -238,6 +255,134 @@ def biot_savart_vector_potential_quad(
     return biot_savart_general_vector_potential(
         eval_pts, coil_pts, current * tangents, chunk_size=chunk_size
     )
+
+
+@jit
+def finite_build_regularization_rect(a, b):
+    """Computes the regularization term for a rectangular finite-build coil.
+
+    The regularization term is used in the denominator of the regularized Biot-Savart
+    integral for the finite-build coil. This term ensures that the singularity at the
+    coil filament centerline is integrated correctly. The finite-build self-field is
+    computed by the procedure outlined in [1].
+
+    Parameters
+    ----------
+    a : float
+        Coil cross section dimension 1 (Order does not matter)
+    b : float
+        Coil cross section dimension 2
+
+    Returns
+    -------
+    float
+       Regularization term for the finite build Biot Savart denominator
+
+    [1] Landreman et. al, "Efficient calculation of self magnetic field, self-force,
+    and self-inductance for electromagnetic coils. II. Rectangular cross-section" (2023)
+    """
+    k = -(a**4 - 6 * a**2 * b**2 + b**4) / (6 * a**2 * b**2) * jnp.log(a / b + b / a)
+    +b * b / (6 * a * a) * jnp.log(b / a)
+    +a * a / (6 * b * b) * jnp.log(a / b)
+    +(4.0 * b) / (3 * a) * jnp.arctan(a / b)
+    +(4.0 * a) / (3 * b) * jnp.arctan(b / a)
+
+    delta = jnp.exp(-(25.0 / 6) + k)
+
+    return a * b * delta
+
+
+@jit
+def biot_savart_quad_regularized_singularity_sub(
+    ds,
+    coil_pts,
+    coil_angles,
+    coil_prime,
+    coil_prime_prime,
+    curvatures,
+    binormals,
+    current,
+    regularization,
+):
+    """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
+
+    Uses singularity subtraction method for coils outlined in [1]. Requires that the
+    evaluation points are on the coil centerline -- this assumes that
+    eval_points = coil_points and eval_angles = coil_angles, etc.
+
+    Parameters
+    ----------
+    ds : array-like shape(m,)
+        Spacing between points in the coil discretization
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    coil_angles : array-like shape(m,)
+        Angles of the coil points (curve parameter s), in radians with a
+        periodicity of 2*pi
+    coil_prime : array-like shape(m,3)
+        Derivative of the coil points with respect to the curve parameter,
+        dx/ds for curve x(s)
+    coil_prime_prime : array-like shape(n,3)
+        Second derivative of the coil points with respect to the curve parameter,
+        d^2x/ds^2 for curve x(s)
+    curvatures : array-like shape(n,)
+        Curvature of the coil centerline at the evaluation points
+    binormals : array-like shape(n,3)
+        Frenet-Serret binormal vectors at the evaluation points
+    current : float
+        Current through the coil (in Amps).
+    regularization : float
+        Regularization term for the Biot Savart denominator
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Landreman et. al, "Efficient calculation of self magnetic field, self-force,
+    and self-inductance for electromagnetic coils. II. Rectangular cross-section" (2023)
+    """
+    eval_pts = coil_pts
+    eval_angles = coil_angles
+    eval_prime = coil_prime
+
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = safenorm(
+        R_vec, axis=-1
+    )  # potential singularity at R=0 if eval and coil points are the same
+    ds = ds[:, jnp.newaxis]
+
+    vec = jnp.cross(coil_prime[:, jnp.newaxis, :], R_vec, axis=-1)
+    denom = (R_mag**2 + regularization) ** (3 / 2) / ds
+
+    phi_diff = coil_angles[:, jnp.newaxis] - eval_angles[jnp.newaxis, :]
+
+    eval_prime_squared = safenorm(eval_prime, axis=-1) ** 2
+
+    vec2 = (
+        -jnp.cross(eval_prime, coil_prime_prime, axis=-1)[jnp.newaxis, :, :]
+        * (1 - jnp.cos(phi_diff))[:, :, jnp.newaxis]
+    )
+    denom2 = (
+        (2 - 2 * jnp.cos(phi_diff)) * eval_prime_squared[jnp.newaxis, :]
+        + regularization
+    ) ** (3 / 2) / ds
+
+    B = jnp.sum(
+        vec / denom[:, :, jnp.newaxis] + vec2 / denom2[:, :, jnp.newaxis], axis=0
+    )
+
+    B += (
+        0.5
+        * curvatures[:, jnp.newaxis]
+        * binormals
+        * (-2 + jnp.log(64 * eval_prime_squared / regularization))[:, jnp.newaxis]
+    )
+
+    # 1e-7 == mu_0/(4 pi)
+    B = 1.0e-7 * current * B
+
+    return B
 
 
 class _Coil(_MagneticField, Optimizable, ABC):
@@ -1440,6 +1585,7 @@ def _check_type(coil0, coil):
         FourierXYCoil: ["X_basis", "Y_basis"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
+        FourierPlanarFiniteBuildCoil: ["r_basis"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -1453,6 +1599,770 @@ def _check_type(coil0, coil):
                 + f"mismatch between attr {attr}, with values {a0} and {a1}."
                 + " Consider using a MixedCoilSet"
             ),
+        )
+
+
+class AbstractFramedCoil(_Coil, Optimizable, ABC):
+    """Base class representing a magnetic field coil with a winding angle frame.
+
+    Parameters
+    ----------
+    alpha_n : array-like
+        Fourier coefficients for the winding angle alpha as a function of
+        toroidal angle phi.
+    modes : array-like
+        Mode numbers associated with alpha_n. If not given defaults to [-n:n].
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + ["_alpha_n", "_alpha_basis"]
+
+    def __init__(self, alpha_n=[0, 0, 0], modes=None, *args, **kwargs):
+
+        alpha_n = np.atleast_1d(alpha_n)
+        if modes is None:
+            modes = np.arange(-(alpha_n.size // 2), alpha_n.size // 2 + 1)
+        else:
+            modes = np.asarray(modes)
+
+        assert issubclass(modes.dtype.type, np.integer)
+
+        assert alpha_n.size == modes.size, "alpha_n and modes must be the same size"
+
+        N = np.max(abs(modes))
+        self._alpha_basis = FourierSeries(N, NFP=1, sym=False)
+        self._alpha_n = copy_coeffs(alpha_n, modes, self.alpha_basis.modes[:, 2])
+
+        super().__init__(*args, **kwargs)
+
+    @optimizable_parameter
+    @property
+    def alpha_n(self):
+        """ndarray: Twist angle of the coil, represented as a fourier series."""
+        return self._alpha_n
+
+    @alpha_n.setter
+    def alpha_n(self, new):
+        if len(new) == self.alpha_basis.num_modes:
+            self._alpha_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"alpha_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.alpha_basis.num_modes} modes."
+            )
+
+    @property
+    def alpha_basis(self):
+        """Spectral basis for alpha Fourier series."""
+        return self._alpha_basis
+
+    @property
+    def alpha_N(self):
+        """Maximum mode number."""
+        return self._alpha_basis.N
+
+
+class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
+    """Base class representing a magnetic field coil with finite build dimensions.
+
+    Implements the compute_self_field method.
+    Subclasses should inherit from this class as well as a subclass of Coil.
+
+    Parameters
+    ----------
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on
+        the cross section shape (circular or rectangular).
+        For circular cross sections, this should be a single value representing
+        the radius. For rectangular cross sections, this should be a 2-element array
+        representing the dimensions in the p and q directions, respectively.
+        Refer to fig 3 in https://arxiv.org/pdf/2310.12087 for the p and q directions.
+
+    """
+
+    _io_attrs_ = AbstractFramedCoil._io_attrs_ + [
+        "_cross_section_shape",
+        "_cross_section_dims",
+    ]
+
+    def __init__(self, cross_section_dims, *args, **kwargs):
+        cross_section_shape = None
+        if np.size(cross_section_dims) == 1:
+            cross_section_shape = "circular"
+        elif np.size(cross_section_dims) == 2:
+            cross_section_shape = "rectangular"
+        else:
+            raise ValueError(
+                "cross_section_dims must be len 1 or 2, got length "
+                f"{np.size(cross_section_dims)}"
+            )
+        self._cross_section_shape = cross_section_shape
+        self._cross_section_dims = np.array(cross_section_dims).astype(float)
+        super().__init__(*args, **kwargs)
+
+    @optimizable_parameter
+    @property
+    def cross_section_dims(self):
+        """ndarray: Geometry of the coil, with cross section dimensions."""
+        return self._cross_section_dims
+
+    @cross_section_dims.setter
+    def cross_section_dims(self, new):
+        cross_section_shape = None
+        if np.size(new) == 1:
+            cross_section_shape = "circular"
+        elif np.size(new) == 2:
+            cross_section_shape = "rectangular"
+        else:
+            raise ValueError(
+                "cross_section_dims must be len 1 or 2, got length " f"{np.size(new)}"
+            )
+        self._cross_section_shape = cross_section_shape
+        self._cross_section_dims = np.array(new).astype(float)
+
+    @property
+    def cross_section_shape(self):
+        """str: Shape of the coil cross section, either 'circular' or 'rectangular'."""
+        return self._cross_section_shape
+
+    @classmethod
+    def prep_grid(cls, xsection_grid, centerline_grid=None):
+        """Prepares grids for self field computations.
+
+        Parameters
+        ----------
+        xsection_grid : LinearGrid, int or None
+            Grid used to evaluate the field on the coil cross section.
+            If an integer, uses that many equally spaced points in each
+            dimension of the cross section. If provided, must be a 2D grid with L and M
+            dimensions corresponding to the cross section spacing desired with
+            endpoint = True.
+        centerline_grid : LinearGrid or int, optional
+            Grid used to evaluate the coil centerline. If an integer, uses 2x that
+            many equally spaced points in each dimension. If provided, must be a 1D
+            grid with N dimension corresponding to the centerline spacing desired.
+
+        Returns
+        -------
+        finite_build_grid : LinearGrid
+           3D grid over coil cross section and centerline length.
+
+        """
+        # set cross section grid if not provided for u,v cross sectional coordinates
+        # L has a doubled grid size to be consistent with how M and N work
+        if xsection_grid is None:
+            L = 4
+            M = 2
+        elif isinstance(xsection_grid, numbers.Integral):
+            L = xsection_grid * 2
+            M = xsection_grid
+        elif isinstance(xsection_grid, LinearGrid):
+            if not xsection_grid.endpoint:
+                raise ValueError(
+                    "The cross section grid must have endpoint=True to compute "
+                    "the self field"
+                )
+            elif xsection_grid.N > 1:
+                raise ValueError("The cross section grid must have dimension N=1")
+            else:
+                L = xsection_grid.L
+                M = xsection_grid.M
+
+        # set centerline grid if not provided for phi cross sectional coordinates
+        if centerline_grid is None:
+            centerline_grid = LinearGrid(N=50)
+        elif isinstance(centerline_grid, numbers.Integral):
+            centerline_grid = LinearGrid(N=centerline_grid)
+        elif isinstance(centerline_grid, LinearGrid):
+            if centerline_grid.L > 1 or centerline_grid.M > 1:
+                raise ValueError("The centerline grid must have dimension L=1 and M=1")
+
+        # expand the xsection grid to include the centerline grid dimensions
+        # Can't just copy N, because there should be no endpoint in the centerline grid
+        zeta = centerline_grid.nodes[:, 2]
+        finite_build_grid = LinearGrid(L=L, M=M, zeta=zeta, endpoint=True)
+
+        return finite_build_grid
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points.
+
+        If a 1D grid or int is passed, the standard single-filament Biot-Savart integral
+        is used. If a 3D grid is passed, the first two dimensions are assumed to be the
+        cross section dimensions and the third dimension is the centerline length,
+        and the multifilament method is used. For more information on the setup of the
+        3D grid, refer to the prep_grid method. The coil current may be overridden
+        by including `current` in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Uses direct quadrature of the Biot-Savart integral for filamentary coils with
+        tangents provided by the underlying curve class. Convergence should be
+        exponential in the number of points used to discretize the curve, though curl(B)
+        may not be zero if not fully converged.
+
+        """
+        multifilament = False
+        if source_grid is not None:
+            if isinstance(source_grid, LinearGrid):
+                if source_grid.L > 1 or source_grid.M > 1:
+                    multifilament = True
+
+        if not multifilament:
+            return super().compute_magnetic_field(
+                coords, params, basis, source_grid, transforms, chunk_size
+            )
+        else:
+            if self.cross_section_shape == "circular":
+                return self._compute_magnetic_field_multifilament_circ(
+                    coords,
+                    params,
+                    basis,
+                    source_grid,
+                    transforms,
+                    chunk_size,
+                )
+            if self.cross_section_shape == "rectangular":
+                return self._compute_magnetic_field_multifilament_rect(
+                    coords,
+                    params,
+                    basis,
+                    source_grid,
+                    transforms,
+                    chunk_size,
+                )
+
+    def _compute_magnetic_field_multifilament_rect(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        finite_build_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis.lower() == "rpz":
+            phi = coords[:, 1]
+            coords = rpz2xyz(coords)
+
+        if params is None:
+            current = self.current
+            cross_section_dims = self.cross_section_dims
+            alpha_n = self.alpha_n
+        else:
+            current = params.pop("current", self.current)
+            cross_section_dims = params.pop(
+                "cross_section_dims", self.cross_section_dims
+            )
+            alpha_n = params.pop("alpha_n", self.alpha_n)
+
+        # this is a somewhat hacky solution, but the points for the cross section must
+        # lie on the centerline of the coil segments, NOT the edges, so the cross
+        # section is rescaled to account for this
+        num_rho = finite_build_grid.num_rho
+        num_theta = finite_build_grid.num_theta
+
+        cross_section_dims_rescale = jnp.array(
+            [
+                cross_section_dims[0] * (num_rho - 1) / num_rho,
+                cross_section_dims[1] * (num_theta - 1) / num_theta,
+            ]
+        )
+
+        # pack the parameters for the cross section computation
+        names = ["p_frame", "q_frame", "curv1_frame", "curv2_frame", "x"]
+
+        if params is not None:
+            fb_params = params | {
+                "current": current,
+                "cross_section_dims": cross_section_dims_rescale,
+                "alpha_n": alpha_n,
+            }
+        else:
+            fb_params = get_params(names, obj=self, basis="rpz") | {
+                "current": current,
+                "cross_section_dims": cross_section_dims_rescale,
+                "alpha_n": alpha_n,
+            }
+
+        transforms = get_transforms(
+            names,
+            obj=self,
+            grid=finite_build_grid,
+            jitable=True,
+        )
+
+        # get position of field measurement points in lab frame
+        x_fb = compute_fun(
+            self,
+            "x_fb",
+            transforms=transforms,
+            params=fb_params,
+            profiles={},
+        )["x_fb"]
+
+        x_fb = rpz2xyz(x_fb)
+
+        filament_count = finite_build_grid.num_nodes // finite_build_grid.num_zeta
+
+        x_fb = x_fb.reshape(finite_build_grid.num_zeta, filament_count, 3)
+        x_fb = x_fb.transpose(1, 0, 2)
+
+        def biot_savart_subfilament(x):
+            coil_pts_start = x
+            coil_pts_end = jnp.roll(x, -1, axis=0)
+            return biot_savart_hh(
+                coords,
+                coil_pts_start,
+                coil_pts_end,
+                current / filament_count,
+                chunk_size=chunk_size,
+            )
+
+        B_vec = vmap(biot_savart_subfilament, in_axes=(0,), out_axes=0)(x_fb)
+
+        B = jnp.sum(B_vec, axis=0)
+
+        if basis.lower() == "rpz":
+            B = xyz2rpz_vec(B, phi=phi)
+        return B
+
+    def _compute_magnetic_field_multifilament_circ(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        finite_build_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        return NotImplementedError(
+            "Multifilament circular cross section coils are not yet implemented."
+        )
+
+    def compute_self_field(
+        self,
+        finite_build_grid,
+        coil_frame=False,
+        params=None,
+        transforms=None,
+    ):
+        """Compute the magnetic field from the coil on the coil itself.
+
+        A mask is returned to indicate which points are on the coil centerline, to
+        allow for separate handling of the field on the centerline. Refer to the
+        `prep_grid` method for information on how `xsection_grid` and `centerline_grid`
+        are handled if `prep_grid` is set to True.
+
+        Parameters
+        ----------
+        finite_build_grid : LinearGrid
+            Refer to `prep_grid` method. This is the full 3D grid over the coil,
+            where the first two dimensions are the cross section dimensions and the
+            third dimension is the centerline length.
+        coil_frame : bool, optional
+            Whether to project the field into the t, p ,q coil frame. Default is False,
+            which computes the field in the lab frame.
+        params : dict, optional
+            Parameters to pass to the coil object.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, at a combination of the coil centerline
+            and cross section grids.
+        positions : ndarray, shape(n,3)
+            positions of the field points in the lab frame, currently in X,Y,Z
+            coordinates.
+        centerline_mask : ndarray, shape(n,)
+            boolean mask indicating whether the field point is on the coil centerline
+            or not.
+        """
+        if self.cross_section_shape == "circular":
+            return self._compute_self_field_circ(
+                finite_build_grid, coil_frame, params, transforms
+            )
+        if self.cross_section_shape == "rectangular":
+            return self._compute_self_field_rect(
+                finite_build_grid, coil_frame, params, transforms
+            )
+
+    def _compute_self_field_rect(
+        self,
+        finite_build_grid,
+        coil_frame=False,
+        params=None,
+        transforms=None,
+    ):
+        """Compute the magnetic field from the coil on the coil itself (rectangular)."""
+        if params is None:
+            current = self.current
+            cross_section_dims = self.cross_section_dims
+        else:
+            current = params.get("current", self.current)
+            cross_section_dims = params.get(
+                "cross_section_dims", self.cross_section_dims
+            )
+
+        L = finite_build_grid.L
+        M = finite_build_grid.M
+
+        centerline_grid = finite_build_grid.copy()
+        centerline_grid.change_resolution(L=0, M=0, N=finite_build_grid.N)
+
+        abdelta = finite_build_regularization_rect(
+            cross_section_dims[0], cross_section_dims[1]
+        )
+
+        # B_b and B_reg are only computed on the centerline
+        B_b_fb = self.compute(
+            "B_b_fb",
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )["B_b_fb"]
+
+        # compute regularized self field integral
+        data = self.compute(
+            ["x", "x_s", "x_ss", "ds", "s", "curvature", "frenet_binormal"],
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )
+        B_reg_fb = biot_savart_quad_regularized_singularity_sub(
+            data["ds"],
+            data["x"],
+            data["s"],
+            data["x_s"],
+            data["x_ss"],
+            data["curvature"],
+            data["frenet_binormal"],
+            current,
+            abdelta,
+        )
+
+        # pack the parameters for the self field computation
+        names = ["p_frame", "q_frame", "curv1_frame", "curv2_frame", "x"]
+
+        if params is not None:
+            B_fb_params = params
+        else:
+            B_fb_params = get_params(names, obj=self, basis="rpz") | {
+                "current": current,
+                "cross_section_dims": cross_section_dims,
+            }
+
+        if transforms is None:
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=finite_build_grid,
+                jitable=True,
+            )
+
+        compute_kwargs = {}
+        # pass the basis_in arg to compute_fun if necessary
+        try:
+            compute_kwargs["basis_in"] = self.basis
+        except KeyError:
+            pass
+
+        B_0_fb = compute_fun(
+            self,
+            "B_0_fb",
+            transforms=transforms,
+            params=B_fb_params,
+            profiles={},
+            **compute_kwargs,
+        )["B_0_fb"]
+        B_kappa_fb = compute_fun(
+            self,
+            "B_kappa_fb",
+            transforms=transforms,
+            params=B_fb_params,
+            profiles={},
+            **compute_kwargs,
+        )["B_kappa_fb"]
+
+        # get position of field measurement points in lab frame
+        x_fb = compute_fun(
+            self,
+            "x_fb",
+            transforms=transforms,
+            params=B_fb_params,
+            profiles={},
+            **compute_kwargs,
+        )["x_fb"]
+
+        x_fb = rpz2xyz(x_fb)
+
+        x_center = xyz2rpz(data["x"])
+        x_center = finite_build_grid.expand(x_center, "zeta")
+        phi = x_center[:, 1]
+        # the vectors for the B components are implicitly anchored to the CENTERLINE
+
+        B_0_fb = rpz2xyz_vec(B_0_fb, phi=phi)
+        B_kappa_fb = rpz2xyz_vec(B_kappa_fb, phi=phi)
+
+        # expand the vector series to include the cross section dimensions
+        B_b_fb = finite_build_grid.expand(B_b_fb, "zeta")
+        B_reg_fb = finite_build_grid.expand(B_reg_fb, "zeta")
+
+        B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
+
+        if coil_frame:  # reproject the field to the t,p,q frame
+            B_self = self.project_coil_frame(B_self, finite_build_grid, params)
+
+        # find mask for the grid axis to prevent downstream singularities with
+        # biot savart
+        centerline_mask = jnp.zeros(len(finite_build_grid.nodes), dtype=bool)
+        centerline_mask = centerline_mask.at[
+            (L + 1) * (2 * M + 1) // 2 :: (L + 1) * (2 * M + 1)
+        ].set(True)
+
+        return B_self, x_fb, centerline_mask
+
+    def _compute_self_field_circ(
+        self,
+        finite_build_grid,
+        coil_frame=False,
+        params=None,
+        transforms=None,
+    ):
+        return NotImplementedError(
+            "Circular cross section self field not implemented yet"
+        )
+
+    def project_coil_frame(
+        self,
+        vec,
+        finite_build_grid,
+        params=None,
+    ):
+        """Reprojects vector from lab xyz frame to tpq coil frame.
+
+        Parameters
+        ----------
+        vec : ndarray, shape(n,3)
+            Desired vector to be reprojected into the coil xsection frame. Must have
+            same dimensionality as the finite_build_grid.
+        finite_build_grid : LinearGrid, int or None
+            Refer to `prep_grid` method. The full 3D finite build grid.
+        params : dict, optional
+            Parameters to pass to the coil object.
+
+        Returns
+        -------
+        vec_proj : ndarray, shape(n,3)
+            Vector reprojected into local coil xsection frame at each point of the
+            centerline grid.
+
+        """
+        centerline_grid = finite_build_grid.copy()
+        centerline_grid.change_resolution(L=0, M=0, N=finite_build_grid.N)
+
+        t_frame = self.compute(
+            "centroid_tangent",
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )["centroid_tangent"]
+        p_frame = self.compute(
+            "p_frame",
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )["p_frame"]
+        q_frame = self.compute(
+            "q_frame",
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )["q_frame"]
+
+        t_frame = finite_build_grid.expand(t_frame, "zeta")
+        p_frame = finite_build_grid.expand(p_frame, "zeta")
+        q_frame = finite_build_grid.expand(q_frame, "zeta")
+
+        vec_t = dot(vec, t_frame)
+        vec_p = dot(vec, p_frame)
+        vec_q = dot(vec, q_frame)
+        vec_proj = jnp.stack((vec_t, vec_p, vec_q), axis=-1)
+
+        return vec_proj
+
+
+class FourierPlanarFiniteBuildCoil(AbstractFiniteBuildCoil, FourierPlanarCoil):
+    """Coil that lies in a plane, with a finite cross section.
+
+    Refer to FourierPlanarCoil for a description of the parameterization for the
+    planar coil centerline. In the case of rectangular cross sections, the coil
+    cross section is assumed to remain aligned with respect to the coil plane.
+    The first dimension of the rectangular cross section is within the coil plane,
+    and the second dimension is in the coil plane normal direction.
+    No twist angle is assumed for this coil.
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on
+        the cross section shape (circular or rectangular).
+    name : str
+        Name for this coil.
+    """
+
+    _io_attrs_ = AbstractFiniteBuildCoil._io_attrs_ + FourierPlanarCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        basis="xyz",
+        cross_section_dims=[0.1, 0.1],
+        name="",
+    ):
+        alpha_n = [0, 0, 0]  # by default, this coil has no twist
+        alpha_modes = None
+        super().__init__(
+            cross_section_dims,
+            alpha_n,
+            alpha_modes,
+            current,
+            center,
+            normal,
+            r_n,
+            modes,
+            basis,
+            name,
+        )
+
+    @classmethod
+    def from_FourierPlanarCoil(
+        cls,
+        coil,
+        cross_section_dims=[0.1, 0.1],
+        name="",
+    ):
+        """Given FourierPlanarCoil, create a FourierPlanarFiniteBuildCoil.
+
+        Preserves all coil properties, but adds cross sectional dimensions.
+
+        Parameters
+        ----------
+        coil : FourierPlanarCoil
+            Coil to copy properties from.
+        cross_section_dims : array-like
+            Dimensions of the coil cross section, with 1 or 2 dimensions depending on
+            the cross section shape (circular or rectangular).
+        name : str
+            Name for this coil.
+
+
+        Returns
+        -------
+        coil : FourierPlanarFiniteBuildCoil
+            New representation of the coil with finite build dimensions.
+
+        """
+        current = coil.current
+        center = coil.center
+        normal = coil.normal
+        r_n = coil.r_n
+        r_basis = coil.r_basis
+        basis = coil.basis
+
+        return FourierPlanarFiniteBuildCoil(
+            current=current,
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=r_basis.modes[:, 2],
+            basis=basis,
+            cross_section_dims=cross_section_dims,
+            name=name,
+        )
+
+    def to_FourierPlanar(self, name="", **kwargs):
+        """Convert FourierPlanarFiniteBuildCoil to FourierPlanarCoil representation.
+
+        Overrides the base _Coil class method, preserving spectral resolution and mode
+        numbers from the finite build version.
+
+        Parameters
+        ----------
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierPlanarCoil
+            New representation of the coil parameterized by Fourier series for minor
+            radius r, without the finite build cross section.
+
+        """
+        current = self.current
+        center = self.center
+        normal = self.normal
+        r_n = self.r_n
+        r_basis = self.r_basis
+        basis = self.basis
+
+        return FourierPlanarCoil(
+            current=current,
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=r_basis.modes[:, 2],
+            basis=basis,
+            name=name,
         )
 
 

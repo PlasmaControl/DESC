@@ -546,6 +546,7 @@ def _psi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):
     )
     return data
 
+
 @register_compute_fun(
     name="(chi_r/sqrt(g)_PEST)",
     label="(\\chi' / \\sqrt{g})|PEST",
@@ -557,13 +558,16 @@ def _psi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["(psi_r/sqrt(g)_PEST)" , "iota"],
+    data=["(psi_r/sqrt(g)_PEST)", "iota"],
     axis_limit_data=["psi_rr", "psi_r", "iota", "iota_r", "sqrt(g)_r|PEST"],
 )
 def _chi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):
     data["(chi_r/sqrt(g)_PEST)"] = transforms["grid"].replace_at_axis(
-        data["(psi_r/sqrt(g)_PEST)"]*data["iota"],
-        lambda: safediv(data["psi_rr"] * data["iota"] + data["psi_r"] * data["iota_r"], data["sqrt(g)_r|PEST"]),
+        data["(psi_r/sqrt(g)_PEST)"] * data["iota"],
+        lambda: safediv(
+            data["psi_rr"] * data["iota"] + data["psi_r"] * data["iota_r"],
+            data["sqrt(g)_r|PEST"],
+        ),
     )
     return data
 

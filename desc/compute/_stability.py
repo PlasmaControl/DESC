@@ -390,7 +390,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    h = phi[1] - phi[0]
+    h = phi[1] - phi[0]  # will break down for non-uniform spacing
 
     i = jnp.arange(N_alpha)[:, None, None, None]
     l = jnp.arange(N_zeta0)[None, :, None, None]

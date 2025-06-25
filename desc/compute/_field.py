@@ -536,7 +536,7 @@ def _B_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["psi_r", "sqrt(g)"],
+    data=["psi_r", "sqrt(g)_PEST"],
     axis_limit_data=["psi_rr", "sqrt(g)_r|PEST"],
 )
 def _psi_r_over_sqrtg_PEST(params, transforms, profiles, data, **kwargs):

@@ -114,6 +114,44 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta|PEST",
+    label="J^{\\theta_PEST}",
+    units="A / m^3",
+    units_long="Amperes / meter**3",
+    description="Contravariant PEST poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^theta", "J^zeta", "lambda_t", "lambda_z"],
+)
+def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta|PEST"] = (
+        data["J^theta"] * (1 + data["lambda_t"]) + data["J^zeta"] * data["lambda_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta|PEST",
+    label="J^{\\zeta_PEST}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant PEST poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^zeta"],
+)
+def _J_sup_zeta_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^zeta|PEST"] = data["J^zeta"]
+    return data
+
+
+@register_compute_fun(
     name="J",
     label="\\mathbf{J}",
     units="A \\cdot m^{-2}",
@@ -324,24 +362,6 @@ def _J_sub_rho(params, transforms, profiles, data, **kwargs):
 )
 def _J_sub_theta(params, transforms, profiles, data, **kwargs):
     data["J_theta"] = dot(data["J"], data["e_theta"])
-    return data
-
-
-@register_compute_fun(
-    name="J_zeta",
-    label="J_{\\zeta}",
-    units="A / m",
-    units_long="Amperes / meter",
-    description="Covariant toroidal component of plasma current density",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["J", "e_zeta"],
-)
-def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
-    data["J_zeta"] = dot(data["J"], data["e_zeta"])
     return data
 
 

@@ -3,8 +3,9 @@
 import functools
 
 import numpy as np
+import nvtx
 
-from desc.backend import jit, jnp, put
+from desc.backend import jit, jnp, pconcat, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -13,6 +14,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.objective_funs import jvp_proximal_per_process
 from desc.objectives.utils import (
     _Project,
     _Recover,
@@ -1198,18 +1200,36 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
+        if not self._constraint._is_mpi:
+            jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+            tangents = batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(v)
+        else:
+            # TODO: implement parallel constraint for ProximalProjection
+            raise NotImplementedError(
+                "Parallel constraint for ProximalProjection not implemented yet. Note: "
+                "This would require putting workers into a second infinite loop which "
+                "break things. One way to do this could be to give pre-build objective "
+                "and constraint to the optimizer and use 2 context managers. Also, "
+                "divide workers for force balance constraint loop and objective loop. "
+                "This is probably a rare use case, so not a priority for now."
+            )
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
-        else:
+        elif not self._objective._is_mpi:
             return _proximal_jvp_blocked_pure(
+                self._objective,
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
+                op,
+            )
+        else:
+            return _proximal_jvp_blocked_parallel(
                 self._objective,
                 jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
                 jnp.split(xg, np.cumsum(self._dimx_per_thing)),
@@ -1280,6 +1300,24 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
+# currently not in use but might be useful later
+def jit_if_not_parallel(func):
+    """Jit a function if not in parallel mode."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        if not getattr(obj, "_is_multi_device", False):
+            # Apply jit if jittable
+            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+            return jitted_func(*args, **kwargs)
+        else:
+            # Run normally if not jittable
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
@@ -1335,3 +1373,49 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
     return jnp.concatenate(out).T
+
+
+def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
+    if objective.rank == 0:
+        message = ("proximal_jvp_" + op, xgs, vgs)
+        objective.comm.bcast(message, root=0)
+
+        obj_idx_rank = objective._obj_per_rank[objective.rank]
+        print(
+            f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
+        )
+        rng_rank = nvtx.start_range(message="JVP Proximal on master", color="green")
+        rng_xv = nvtx.start_range(message="form x and v", color="red")
+        xs = [
+            [xgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        vs = [
+            [vgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        nvtx.end_range(rng_xv)
+        rng_obj = nvtx.start_range(message="form objs and constants", color="red")
+        objs = [objective.objectives[i] for i in obj_idx_rank]
+        constants = [objective.constants[i] for i in obj_idx_rank]
+        nvtx.end_range(rng_obj)
+        J_rank = jit(
+            jvp_proximal_per_process,
+            device=objective.objectives[obj_idx_rank[0]]._device,
+            static_argnames="op",
+        )(
+            xs,
+            vs,
+            objs,
+            constants,
+            op=op,
+        )
+        nvtx.end_range(rng_rank)
+        print(f"Rank {objective.rank} waiting to gather")
+        rng_gat = nvtx.start_range(message="Gather to master", color="green")
+        J = objective.comm.gather(J_rank, root=0)
+        nvtx.end_range(rng_gat)
+        rng_pcat = nvtx.start_range(message="Pconcat", color="blue")
+        J = pconcat(J).T
+        nvtx.end_range(rng_pcat)
+        return J.block_until_ready()

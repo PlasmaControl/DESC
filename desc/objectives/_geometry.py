@@ -134,9 +134,6 @@ class AspectRatio(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom, eg
             Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -145,7 +142,16 @@ class AspectRatio(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -278,9 +284,6 @@ class Elongation(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom,
             eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -289,7 +292,16 @@ class Elongation(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -423,9 +435,6 @@ class Volume(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom,
             eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -434,7 +443,16 @@ class Volume(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -715,9 +733,6 @@ class PlasmaVesselDistance(_Objective):
         params_2 : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
             Only needed if self._surface_fixed = False
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -726,7 +741,16 @@ class PlasmaVesselDistance(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         if self._eq_fixed:
             surface_params = params_1
         elif self._surface_fixed:
@@ -926,9 +950,6 @@ class MeanCurvature(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom,
             eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -937,7 +958,16 @@ class MeanCurvature(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1066,9 +1096,6 @@ class PrincipalCurvature(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom,
             eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1077,7 +1104,16 @@ class PrincipalCurvature(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1195,9 +1231,6 @@ class BScaleLength(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1206,7 +1239,16 @@ class BScaleLength(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1330,9 +1372,6 @@ class GoodCoordinates(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1341,7 +1380,16 @@ class GoodCoordinates(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1477,9 +1525,6 @@ class MirrorRatio(_Objective):
         params : dict
             Dictionary of equilibrium or field degrees of freedom,
             eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1488,7 +1533,16 @@ class MirrorRatio(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,

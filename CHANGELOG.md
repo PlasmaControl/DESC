@@ -11,6 +11,7 @@ New Features
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Support for computing and construction of Jacobian in parallel.
 
 Bug Fixes
 

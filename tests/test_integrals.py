@@ -875,12 +875,12 @@ class TestVacuumSolver:
         )
 
     @pytest.mark.unit
-    def test_secular_splitting(self, chunk_size=100, I=5, Y=12):  # noqa: E741
+    def test_secular_splitting(self, chunk_size=100, I=0, Y=12):  # noqa: E741
         """Test splitting of potential into periodic and secular parts.
 
-        Φ(periodic)/2 + Φ(secular)/2 = H [Φ(periodic) +    Φ(secular)]
-        Φ(periodic)/2                = H  Φ(periodic) + γ ∇Φ(secular)
-                        Φ(secular)/2 = H  Φ(secular)  - γ ∇Φ(secular)
+        Φ(periodic)/2 + Φ(secular)/2 = H [Φ(periodic) + Φ(secular)]
+        Φ(periodic)/2                = H  Φ(periodic) - γ ∇Φ(periodic)
+                        Φ(secular)/2 = H  Φ(secular)  + γ ∇Φ(periodic)
 
         This test confirms the last relation.
         """
@@ -891,15 +891,15 @@ class TestVacuumSolver:
             modes_Z=[[-1, 0], [0, -1]],
         )
         eq = Equilibrium(surface=surf)
-        grid = LinearGrid(M=50, N=50)
+        assert eq.NFP == 1
+        grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         data = eq.compute(
             ["n_rho", "e^theta", "e^zeta", "R", "phi", "Z", "theta", "zeta"], grid=grid
         )
         interpolator = get_interpolator(grid, grid, data)
 
         Phi_secular = I * data["theta"] + Y * data["zeta"]
-        gradPhi_secular = I * data["e^theta"] + Y * data["e^zeta"]
-        basis = DoubleFourierSeries(M=0, N=0)
+        basis = DoubleFourierSeries(M=0, N=0, NFP=eq.NFP)
         data["Phi"] = basis.evaluate(grid, secular=True)
 
         H_secular = singular_integral(
@@ -911,10 +911,29 @@ class TestVacuumSolver:
             ndim=basis.num_modes + 2,
             chunk_size=chunk_size,
         )
-        H_secular = I * H_secular[:, 1] + Y * H_secular[:, 2]
+        H_secular = I * H_secular[:, -2] + Y * H_secular[:, -1]
 
-        data["Bn"] = dot(gradPhi_secular, data["n_rho"])
-        gamma_secular = singular_integral(
+        # now compute phi_periodic consistent with this Y secular
+        Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
+        src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
+        R0 = 1
+        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
+        vac = VacuumSolver(
+            surface=eq.surface,
+            evl_grid=grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            Phi_M=8,
+            Phi_N=8,
+            B0=B0,
+            # Y=Y, # noqa: E800
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        gradPhi_periodic = vac.compute_vacuum_field(chunk_size)["evl"]["grad(Phi)"]
+
+        data["Bn"] = dot(gradPhi_periodic, data["n_rho"])
+        gamma_periodic = singular_integral(
             data,
             data,
             interpolator,
@@ -922,7 +941,7 @@ class TestVacuumSolver:
             chunk_size=chunk_size,
         ).squeeze() / (-4 * jnp.pi)
 
-        np.testing.assert_allclose(Phi_secular / 2, H_secular - gamma_secular)
+        np.testing.assert_allclose(Phi_secular / 2, H_secular + gamma_periodic)
 
     @pytest.mark.unit
     @pytest.mark.slow

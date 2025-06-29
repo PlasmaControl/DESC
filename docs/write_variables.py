@@ -35,6 +35,8 @@ def write_csv(parameterization):
         keys = datidx.keys()
         for key in sorted(keys):
             if key not in data_index[parameterization][key]["aliases"]:
+                if not data_index[parameterization][key]["public"]:
+                    continue
                 d = {
                     "Name": "``" + key + "``",
                     "Label": ":math:`" + datidx[key]["label"].replace("$", "") + "`",
@@ -51,8 +53,6 @@ def write_csv(parameterization):
                 }
                 # stuff like |x| is interpreted as a substitution by rst, need to escape
                 d["Description"] = _escape(d["Description"])
-                if "old" in d["Name"]:
-                    continue
                 writer.writerow(d)
 
 

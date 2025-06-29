@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from netCDF4 import Dataset
+from scipy.constants import mu_0
 from scipy.interpolate import interp1d
 
 import desc.examples
@@ -429,11 +430,7 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^rz",
         ]
 
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         # Fieldline data
         data = eq.compute(data_keys, grid=grid)
@@ -527,6 +524,66 @@ def test_ballooning_geometry(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_grad_alpha_zeta0_maps():
+    """Test computation of gds2 and c ballooning which redefine ∇α."""
+    eq = desc.examples.get("W7-X")
+
+    # This is ι ζ₀ and not ι ζ₀ sign ι.
+    iota_zeta0 = np.linspace(-np.pi / 2, np.pi / 2, 15)[:, np.newaxis]
+    data = eq.compute(
+        [
+            "alpha_r (secular)",
+            "iota",
+            "iota_r",
+            "rho",
+            "a",
+            "psi",
+            "psi_r",
+            "p_r",
+            "B^zeta",
+            "gds2",
+            "c ballooning",
+        ],
+        zeta0=iota_zeta0,
+    )
+
+    g_sup_aa = eq.compute(
+        ["g^aa"],
+        # Redefine ∇α to ∇(α + ι ζ₀ sign ι)
+        data={
+            "alpha_r (secular)": data["alpha_r (secular)"]
+            + data["iota_r"] / jnp.abs(data["iota"]) * iota_zeta0
+        },
+    )["g^aa"]
+
+    np.testing.assert_allclose(data["gds2"], g_sup_aa * data["rho"] ** 2)
+    assert jnp.any(jnp.sign(data["iota"]) < 0), "The test is better if ι < 0."
+
+    cvdrift = eq.compute(
+        ["cvdrift"],
+        # Redefine ∇α to ∇(α + ι ζ₀)
+        data={
+            "alpha_r (secular)": data["alpha_r (secular)"]
+            + data["iota_r"] / data["iota"] * iota_zeta0
+        },
+    )["cvdrift"]
+
+    psi_boundary = eq.Psi / (2 * jnp.pi)
+    np.testing.assert_allclose(
+        data["c ballooning"],
+        (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
+        * jnp.sign(data["psi"])
+        * data["p_r"]
+        / data["psi_r"]
+        / data["B^zeta"]
+        * cvdrift
+        * data["rho"] ** 2
+        * 2,
+    )
+    assert jnp.any(jnp.sign(data["psi"]) < 0), "The test is better if ψ < 0."
+
+
+@pytest.mark.unit
 def test_ballooning_stability_eval():
     """Cross-compare all the stability functions.
 
@@ -562,11 +619,7 @@ def test_ballooning_stability_eval():
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         data_keys0 = [
             "g^aa",
@@ -702,12 +755,14 @@ def test_ballooning_stability_eval():
         X0_full = data["ideal ballooning eigenfunction"]
 
         assert np.shape(lam2_full) == (
+            1,
             N_alpha,
             N_zeta0,
             1,
         ), "output eigenvalue spectrum does not have the right shape"
 
         assert np.shape(X0_full) == (
+            1,
             N_alpha,
             N_zeta0,
             N_zeta - 2,
@@ -722,12 +777,12 @@ def test_ballooning_stability_eval():
 
         if lam2 > 0:
             assert Newcomb_metric <= 0, (
-                "Newcomb metric indicates stabiliy for an unstable equilibrium, "
+                "Newcomb metric indicates stability for an unstable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
         else:
             assert Newcomb_metric > 0, (
-                "Newcomb metric indicates instabiliy for a stable equilibrium, "
+                "Newcomb metric indicates instability for a stable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
 
@@ -785,39 +840,17 @@ def test_ballooning_compare_with_COBRAVMEC():
     root_COBRAVMEC = find_root_simple(rho1, gamma1)
 
     eq = desc.examples.get("HELIOTRON")
-
-    # Flux surfaces on which to evaluate ballooning stability
-    surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
-
-    Nalpha = 8  # Number of field lines
-
-    # Field lines on which to evaluate ballooning stability
+    surfaces = np.array([0.98, 0.985, 0.99, 0.995, 1.0])
+    Nalpha = 8
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
-
-    # Number of toroidal transits of the field line
     ntor = 3
-
-    # Number of point along a field line in ballooning space
     N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
-
-    # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
-
-    lam2_array = np.zeros(
-        len(surfaces),
-    )
-    for i in range(len(surfaces)):
-        rho = surfaces[i]
-        grid = Grid.create_meshgrid(
-            [rho, alpha, zeta],
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
-
-        data_keys = ["ideal ballooning lambda"]
-        data = eq.compute(data_keys, grid=grid)
-
-        lam2_array[i] = np.max(data["ideal ballooning lambda"])
-
-    root_DESC = find_root_simple(np.array(surfaces), lam2_array)
+    lam2_array = []
+    for i in range(surfaces.size):
+        grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
+        data = eq.compute("ideal ballooning lambda", grid=grid)
+        lam2_array.append(data["ideal ballooning lambda"].max())
+    lam2_array = np.array(lam2_array)
+    root_DESC = find_root_simple(surfaces, lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

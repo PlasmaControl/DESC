@@ -7,7 +7,7 @@ from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals import virtual_casing_biot_savart
+from desc.integrals import VacuumSolver, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
@@ -1030,3 +1030,421 @@ class BoundaryErrorNESTOR(_Objective):
         bp = data["|B|^2"]
         g = data["|e_theta x e_zeta|"]
         return (bv - bp - data["p"] * (2 * mu_0)) * g
+
+
+class BoundaryErrorPhi(_Objective):
+    """Target for free boundary conditions on LCFS for finite beta equilibrium.
+
+    Computes the residual of the following:
+
+    𝐁ₒᵤₜ ⋅ 𝐧 = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - 2μ₀p = 0
+    μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
+
+    Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils and virtual casing principle),
+    𝐧 is the outward surface normal, p is the plasma pressure, and Φ is the surface
+    current potential on the LCFS. All residuals are weighted by the local area
+    element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
+
+    The third equation is only included if a sheet current is supplied by making
+    the ``equilibrium.surface`` object a FourierCurrentPotentialField, otherwise it
+    is trivially satisfied. If it is known that the external field accurately reproduces
+    the target equilibrium with low normal field error and pressure at the edge is zero,
+    then the sheet current will generally be negligible and can be omitted to save
+    effort.
+
+    This objective also works for vacuum equilibria, though in that case
+    VacuumBoundaryError will be much faster as it avoids the singular virtual casing
+    integral.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    field : MagneticField
+        External field produced by coils.
+    s : int or tuple[int]
+        Hyperparameter for the singular integration scheme.
+        ``s`` is roughly equal to the size of the local singular grid with
+        respect to the global grid. More precisely the local singular grid
+        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
+        ``source_grid``. That is a subset of
+        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+        If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
+    q : int
+        Order of integration on the local singular grid.
+    source_grid, eval_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at for source terms for Biot-
+        Savart integral and where to evaluate errors. ``source_grid`` should not be
+        stellarator symmetric, and both should be at rho=1.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
+    field_grid : Grid, optional
+        Grid used to discretize field. Defaults to default grid for given field.
+    field_fixed : bool
+        Whether to assume the field is fixed. For free boundary solve, should
+        be fixed. For single stage optimization, should be False (default).
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    __doc__ += """
+    Examples
+    --------
+    Assigning a surface current to the equilibrium:
+
+    .. code-block:: python
+
+        from desc.magnetic_fields import FourierCurrentPotentialField
+        # turn the regular FourierRZToroidalSurface into a current potential on the
+        # last closed flux surface
+        eq.surface = FourierCurrentPotentialField.from_surface(eq.surface,
+                                                              M_Phi=eq.M,
+                                                              N_Phi=eq.N,
+                                                              )
+        objective = BoundaryError(eq, field)
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary Error: "
+    _units = "(T*m^2, T^2*m^2, T*m^2)"
+
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        s=None,
+        q=None,
+        source_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        field_fixed=False,
+        name="Boundary error",
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
+        Phi_M=20,
+        Phi_N=20,
+        **kwargs,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._source_grid = source_grid
+        self._eval_grid = eval_grid
+        self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
+        self._q = q
+        self._field = [field] if not isinstance(field, list) else field
+        self._field_grid = field_grid
+        self._bs_chunk_size = bs_chunk_size
+        B_plasma_chunk_size = parse_argname_change(
+            B_plasma_chunk_size, kwargs, "loop", "B_plasma_chunk_size"
+        )
+        self._Phi_M = Phi_M
+        self._Phi_N = Phi_N
+        if B_plasma_chunk_size == 0:
+            B_plasma_chunk_size = None
+        self._B_plasma_chunk_size = B_plasma_chunk_size
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
+        things = [eq]
+        if not field_fixed:
+            things.append(self._field)
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.magnetic_fields import SumMagneticField
+
+        eq = self.things[0]
+
+        if self._source_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            source_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        else:
+            source_grid = self._source_grid
+
+        eval_grid = setdefault(self._eval_grid, source_grid)
+        self._use_same_grid = eval_grid.equiv(source_grid)
+
+        ratio_data = (
+            eq.compute(["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid)
+            if (self._st is None or self._sz is None or self._q is None)
+            else {}
+        )
+        interpolator = get_interpolator(
+            eval_grid, source_grid, ratio_data, st=self._st, sz=self._sz, q=self._q
+        )
+        del self._st
+        del self._sz
+        del self._q
+
+        edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
+        warnif(
+            (edge_pres * mu_0 > 1e-6) and not self._sheet_current,
+            UserWarning,
+            f"Boundary pressure is nonzero (max {edge_pres} Pa), "
+            + "a sheet current should be included.",
+        )
+
+        self._eq_data_keys = [
+            "K_vc",
+            "B",
+            "|B|^2",
+            "R",
+            "phi",
+            "Z",
+            "e^rho",
+            "n_rho",
+            "|e_theta x e_zeta|",
+            "p",
+            "I",
+            "G",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
+        source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
+        if self._use_same_grid:
+            eval_profiles = source_profiles
+            eval_transforms = source_transforms
+        else:
+            eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
+            eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
+
+        self._constants = {
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "source_transforms": source_transforms,
+            "source_profiles": source_profiles,
+            "interpolator": interpolator,
+            "field": SumMagneticField(self._field),
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
+        }
+
+        self._ext_keys = [
+            "x",
+            "n_rho",
+            "|e_theta x e_zeta|",
+            "e_theta",
+            "e_zeta",
+            "n_rho x grad(theta)",
+            "n_rho x grad(zeta)",
+        ]
+
+        self._ext_transforms_source = get_transforms(self._ext_keys, eq, source_grid)
+        self._ext_transforms_evl = get_transforms(self._ext_keys, eq, eval_grid)
+
+        if self._sheet_current:
+            self._sheet_data_keys = ["K"]
+            self._constants["sheet_source_transforms"] = get_transforms(
+                self._sheet_data_keys, obj=eq.surface, grid=source_grid
+            )
+            self._constants["sheet_eval_transforms"] = (
+                self._constants["sheet_source_transforms"]
+                if self._use_same_grid
+                else get_transforms(
+                    self._sheet_data_keys, obj=eq.surface, grid=eval_grid
+                )
+            )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            B2_norm = scales["B"] ** 2 * scales["R0"] * scales["a"]
+            self._normalization = B2_norm
+
+        self._exterior_solver = VacuumSolver(
+            surface=eq,
+            evl_grid=eval_grid,
+            src_grid=source_grid,
+            Phi_grid=source_grid,
+            Phi_M=self._Phi_M,
+            Phi_N=self._Phi_N,
+            exterior=True,
+            chunk_size=50,
+            B0n=np.zeros(source_grid.num_nodes),
+            use_dft=False,
+            warn_dft=False,
+            warn_fft=False,
+            sym=False,
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, eq_params, *field_params, constants=None):
+        """Compute boundary force error.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        field_params : dict
+            Dictionary of field parameters, if field is not fixed.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Boundary error. First half is √g𝐁⋅𝐧 in T*m^2, second half is
+            √g[[B² + 2μ₀p]] in T^2*m^2. If sheet current is included, third half is
+            √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
+
+        """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
+        if constants is None:
+            constants = self.constants
+        source_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq_data_keys,
+            params=eq_params,
+            transforms=constants["source_transforms"],
+            profiles=constants["source_profiles"],
+        )
+        eval_data = (
+            source_data
+            if self._use_same_grid
+            else compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq_params,
+                transforms=constants["eval_transforms"],
+                profiles=constants["eval_profiles"],
+            )
+        )
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        # can always pass in field params. If they're None, it just uses the
+        # defaults for the given field.
+        Bext = constants["field"].compute_magnetic_field(
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
+        )
+
+        Bext_dot_n = jnp.sum(Bext * eval_data["n_rho"], axis=-1)
+
+        src_data = compute_fun(
+            self._exterior_solver._surface,  # this can be surface or  eq
+            [
+                "x",
+                "n_rho",
+                "|e_theta x e_zeta|",
+                "e_theta",
+                "e_zeta",
+                "n_rho x grad(theta)",
+                "n_rho x grad(zeta)",
+            ],
+            transforms=self._ext_transforms_source,
+            params=eq_params,
+            profiles={},
+        )
+        if self._exterior_solver._src_grid_equals_Phi_grid:
+            Phi_data = src_data
+        evl_data = compute_fun(
+            self._exterior_solver._surface,  # this can be surface or  eq
+            [
+                "x",
+                "n_rho",
+                "|e_theta x e_zeta|",
+                "e_theta",
+                "e_zeta",
+                "n_rho x grad(theta)",
+                "n_rho x grad(zeta)",
+            ],
+            transforms=self._ext_transforms_evl,
+            params=eq_params,
+            profiles={},
+        )
+
+        self._exterior_solver._data = {
+            "evl": evl_data,
+            "Phi": Phi_data,
+            "src": src_data,
+        }
+
+        self._exterior_solver._data["src"]["Bn"] = -Bext_dot_n
+        self._exterior_solver._I = 0.0
+
+        self._exterior_solver.compute_vacuum_field(coords=x)["evl"]["grad(Phi)"]
+        self._exterior_solver._I = eval_data["I"][0].squeeze()
+
+        self._exterior_solver._data["src"].pop("K_vc")
+        self._exterior_solver._data["evl"].pop("grad(Phi)")
+
+        Bext += self._exterior_solver.compute_vacuum_field(coords=x)["evl"]["grad(Phi)"]
+        bsq_out = jnp.sum(Bext * Bext, axis=-1)
+
+        Bin_total = eval_data["B"]
+
+        bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
+
+        g = eval_data["|e_theta x e_zeta|"]
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
+
+        return Bsq_err

@@ -911,7 +911,7 @@ class TestVacuumSolver:
             ndim=basis.num_modes + 2,
             chunk_size=chunk_size,
         )
-        H_secular = I * H_secular[:, 1] + Y * H_secular[:, 2]
+        H_secular = I * H_secular[:, -2] + Y * H_secular[:, -1]
 
         # now compute phi_periodic consistent with this Y secular
         Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)

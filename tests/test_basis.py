@@ -407,15 +407,15 @@ class TestBasis:
         all_types = []
         all_bases.append([PowerSeries(L=3), PowerSeries(L=3)])
         all_bases.append([FourierSeries(N=3), FourierSeries(N=3)])
-        all_bases.append([DoubleFourierSeries(M=3, N=2), DoubleFourierSeries(M=3, N=2)])
-        all_bases.append([ZernikePolynomial(L=3, M=2), ZernikePolynomial(L=3, M=2)])
+        all_bases.append([DoubleFourierSeries(M=3, N=3), DoubleFourierSeries(M=3, N=3)])
+        all_bases.append([ZernikePolynomial(L=3, M=3), ZernikePolynomial(L=3, M=3)])
         all_bases.append(
-            [FourierZernikeBasis(L=3, M=2, N=1), FourierZernikeBasis(L=3, M=2, N=1)]
+            [FourierZernikeBasis(L=3, M=3, N=3), FourierZernikeBasis(L=3, M=3, N=3)]
         )
         all_bases.append(
             [
-                ChebyshevDoubleFourierBasis(L=3, M=2, N=1),
-                ChebyshevDoubleFourierBasis(L=3, M=2, N=1),
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
             ]
         )
         all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
@@ -428,6 +428,13 @@ class TestBasis:
             assert basis1 is not basis2
 
             all_types.append(str(basis1.__class__.__name__))
+
+        bases1 = [hash(basis[0]) for basis in all_bases]
+        bases2 = [hash(basis[1]) for basis in all_bases]
+
+        # check that all bases have unique hashes
+        assert len(bases1) == len(set(bases1))
+        assert len(bases2) == len(set(bases2))
 
         import desc
 

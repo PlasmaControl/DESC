@@ -339,7 +339,6 @@ class _Basis(IOAble, ABC):
                 self._NFP,
                 self._sym,
                 self._spectral_indexing,
-                # add device/sharding info for multi-device support?
             )
         )
 

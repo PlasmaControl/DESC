@@ -115,6 +115,7 @@ class VacuumSolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
+        warnif(I != 0 or Y != 0, msg="This option needs more testing.")
         self._exterior = bool(exterior)
         self._I = I
         self._Y = Y
@@ -673,7 +674,7 @@ def _to_rfft(grid, f):
 
 
 def _upsample_to_source(self, x, is_fourier=False):
-    if not self._same_grid_phi_src:
+    if not self._src_grid_equals_Phi_grid:
         if not is_fourier:
             x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
             x = rfft2(x, norm="forward", axes=(0, 1))

@@ -699,7 +699,6 @@ def singular_integral(
             'nr_over_r3'      : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
             'biot_savart'     : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
             'biot_savart_A'   : μ₀/4π 𝐊' / |𝐫 − 𝐫'| dS
-            'magnetic_dipole' : 〈 Φ(y) ∇_y G(x−y), ds(y) 〉
         If callable, should take 4 arguments:
             eval_data   : dict of data at evaluation points (primed)
             source_data : dict of data at source points (unprimed)
@@ -853,7 +852,7 @@ _dx.keys = ["R", "phi", "Z"]
 
 
 def _kernel_1_over_r(eval_data, source_data, ds, diag=False):
-    """Returns -4π da(y) G(x,y) = ‖e_θ × e_ζ‖ dθ dζ ‖x−y‖⁻¹."""
+    """Returns -4π da(y) G(x-y) = ‖e_θ × e_ζ‖ dθ dζ ‖x−y‖⁻¹."""
     return (-4 * jnp.pi * ds) * safediv(
         source_data["|e_theta x e_zeta|"],
         _1_over_G(_dx(eval_data, source_data, diag)),
@@ -862,18 +861,6 @@ def _kernel_1_over_r(eval_data, source_data, ds, diag=False):
 
 _kernel_1_over_r.ndim = 1
 _kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
-
-
-def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
-    """Returns -4π da(y) Bₙ(y) G(x,y) = da(y) Bₙ(y) ‖x−y‖⁻¹."""
-    return (-4 * jnp.pi * ds) * safediv(
-        source_data["|e_theta x e_zeta|"] * source_data.get("Bn", 0),
-        _1_over_G(_dx(eval_data, source_data, diag)),
-    )
-
-
-_kernel_Bn_over_r.ndim = 1
-_kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
 
 
 def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
@@ -935,12 +922,29 @@ _kernel_biot_savart_coulomb.ndim = 3
 _kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn", "|e_theta x e_zeta|"]
 
 
-def _kernel_magnetic_dipole(eval_data, source_data, ds, diag=False):
-    """Returns 〈 Φ(y) ∇_y G(x−y), ds(y) 〉.
+def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
+    """Returns -4π Bₙ(y) G(x-y) da(y) = Bₙ(y) ‖x−y‖⁻¹ da(y)."""
+    return (-4 * jnp.pi) * _kernel_monopole(eval_data, source_data, ds, diag)
 
-    Φ has units Tesla-meters.
-    Φ is the magnetic dipole layer for the surface current K = −n × ∇Φ.
-    """
+
+_kernel_Bn_over_r.ndim = 1
+_kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
+
+
+def _kernel_monopole(eval_data, source_data, ds, diag=False):
+    """Kernel of single layer operator S[Bₙ]: Bₙ(y) G(x-y) da(y)."""
+    return ds * safediv(
+        source_data["|e_theta x e_zeta|"] * source_data.get("Bn", 0),
+        _1_over_G(_dx(eval_data, source_data, diag)),
+    )
+
+
+_kernel_monopole.ndim = 1
+_kernel_monopole.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
+
+
+def _kernel_dipole(eval_data, source_data, ds, diag=False):
+    """Kernel of double layer operator D[Φ]: Φ(y)〈∇_y G(x−y),n(y)〉da(y)."""
     out = ds * dot(
         rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
@@ -952,8 +956,8 @@ def _kernel_magnetic_dipole(eval_data, source_data, ds, diag=False):
     return source_data["Phi"] * out
 
 
-_kernel_magnetic_dipole.ndim = 1
-_kernel_magnetic_dipole.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
+_kernel_dipole.ndim = 1
+_kernel_dipole.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
 
 
 kernels = {
@@ -963,5 +967,6 @@ kernels = {
     "biot_savart_A": _kernel_biot_savart_A,
     "Bn_over_r": _kernel_Bn_over_r,
     "biot_savart_coulomb": _kernel_biot_savart_coulomb,
-    "magnetic_dipole": _kernel_magnetic_dipole,
+    "monopole": _kernel_monopole,
+    "dipole": _kernel_dipole,
 }

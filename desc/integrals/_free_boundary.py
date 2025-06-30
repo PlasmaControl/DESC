@@ -3,7 +3,7 @@ from functools import partial
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.grid import LinearGrid
-from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi, _surface_gradient
+from desc.integrals._vacuum import _lsmr_Phi, _surface_gradient
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
@@ -13,7 +13,7 @@ from desc.integrals.singularities import (
 )
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import cross, dot, errorif, setdefault, warnif
+from desc.utils import cross, dot, errorif, setdefault
 
 
 @partial(jit, static_argnames=["chunk_size", "loop"])
@@ -165,6 +165,9 @@ def compute_B_plasma(
     return Bplasma
 
 
+# TODO: (kaya) Section 5.2.2 Diagonal and smooth potential formulation
+
+
 class FreeBoundarySolver(IOAble):
     """Compute exterior field for free boundary problem.
 
@@ -188,10 +191,10 @@ class FreeBoundarySolver(IOAble):
         Default is ``src_grid``; lower often slows convergence.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.M``, recommended to be less.
+        Should be at most ``Phi_grid.M``.
     Phi_N : int
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.N``, recommended to be less.
+        Should be at most ``Phi_grid.N``.
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
@@ -255,6 +258,10 @@ class FreeBoundarySolver(IOAble):
         else:
             self._src_grid_equals_Phi_grid = src_grid.equiv(Phi_grid)
 
+        assert evl_grid.can_fft2
+        assert src_grid.can_fft2
+        assert Phi_grid.can_fft2
+
         errorif(
             Phi_M is not None and Phi_M > Phi_grid.M,
             msg=f"Got Phi_M={Phi_M} > {Phi_grid.M}=Phi_grid.M.",
@@ -293,7 +300,6 @@ class FreeBoundarySolver(IOAble):
         )
         Phi_data["n_rho x B_coil"] = cross(Phi_data["n_rho"], Bcoil)
         if Y_coil is None:
-            assert Phi_grid.can_fft2
             # A.3 in [1] averaged over all χ_θ for increased accuracy since we
             # only have discrete interpolation to true B_coil.
             # (l2 norm error of fourier series better than max pointwise).
@@ -338,15 +344,7 @@ class FreeBoundarySolver(IOAble):
         """Return the DoubleFourierBasis used by this solver."""
         return self._phi_transform.basis
 
-    def compute_Phi(
-        self,
-        chunk_size=None,
-        maxiter=0,
-        tol=1e-6,
-        method="simple",
-        Phi_0=None,
-        **kwargs,
-    ):
+    def compute_Phi(self, chunk_size=None):
         """Compute Fourier coefficients of vacuum potential Φ on ∂𝒳.
 
         Parameters
@@ -355,17 +353,6 @@ class FreeBoundarySolver(IOAble):
             Size to split singular integral computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
-        maxiter : int
-            Maximum number of fixed point iterations.
-            Set to zero to invert the system instead.
-        tol : float
-            Stopping tolerance for iteration.
-        method : {"del2", "simple"}
-            Method of finding the fixed-point, defaults to ``simple``.
-        Phi_0 : jnp.ndarray
-            Initial guess for Φ on ``self.Phi_grid`` for iteration.
-            In general, it is best to select the initial guess as truncated
-            Fourier series. Default is a fit to a low resolution solution.
 
         Returns
         -------
@@ -373,20 +360,7 @@ class FreeBoundarySolver(IOAble):
              Fourier coefficients of Φ on ∂𝒳 stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
-        self._data = (
-            _fixed_point_Phi(
-                self,
-                bc=_free_boundary_bc,
-                tol=tol,
-                maxiter=maxiter,
-                method=method,
-                chunk_size=chunk_size,
-                Phi_0=Phi_0,
-            )
-            if (maxiter > 0)
-            else _lsmr_Phi(self, bc=_free_boundary_bc, chunk_size=chunk_size)
-        )
+        self._data = _lsmr_Phi(self, bc=_free_boundary_bc, chunk_size=chunk_size)
         return self._data
 
     def compute_B2(self, chunk_size=None):

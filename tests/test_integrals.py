@@ -1065,7 +1065,7 @@ class TestFreeBoundarySolver:
     def test_potential_map_free_boundary(self):
         """Test potential map formulation of free boundary solver."""
         chunk_size = 1000
-        resolution = 50
+        resolution = 5
         surf = FourierRZToroidalSurface()
         src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
@@ -1079,6 +1079,8 @@ class TestFreeBoundarySolver:
             Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),
             Phi_M=2,
             Phi_N=1,
+            Y_coil=1,
+            Y_plasma=1,
             chunk_size=chunk_size,
             warn_fft=False,
         )

@@ -4,7 +4,7 @@ Changelog
 New Features
 
 - Multiple plotting related changes:
-    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalisation. If you want to get the old behavior `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|_normalized")`.
+    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalisation. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
     - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
     - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
 - Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.

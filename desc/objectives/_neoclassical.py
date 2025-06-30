@@ -292,7 +292,7 @@ class EffectiveRipple(_Objective):
             "<|grad(rho)|>",
             "min_tz |B|",
             "max_tz |B|",
-            "R0",  # TODO (#1094)
+            "R0",
         ]
         num_transit = self._hyperparam.pop("num_transit")
         Y_B = self._hyperparam.pop("Y_B")

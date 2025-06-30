@@ -11,6 +11,7 @@ New Features
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Adds initial support for multiple GPU optimization. This allows to compute derivatives and costs on multiple GPU, and allows more memory intense objectives. Note that, at this phase, the multi-device support is for memory, not speed.
 
 Bug Fixes
 
@@ -86,7 +87,6 @@ New Features
 - Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
 - Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
 for compatibility with other codes which expect such files from the Booz_Xform code.
-- Adds initial support for multiple GPU optimization. This allows to compute derivatives on multiple GPU, and allows more memory intense objectives. Note that: at this phase, the multi-device support is for memory, not speed.
 - Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_Boozer`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.

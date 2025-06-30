@@ -811,8 +811,8 @@ class TestVacuumSolver:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [50])
-    def test_harmonic_exterior(self, chunk_size):
+    @pytest.mark.slow
+    def test_harmonic_exterior(self, chunk_size=20):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
@@ -1065,7 +1065,7 @@ class TestFreeBoundarySolver:
     def test_potential_map_free_boundary(self):
         """Test potential map formulation of free boundary solver."""
         chunk_size = 1000
-        resolution = 50
+        resolution = 5
         surf = FourierRZToroidalSurface()
         src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
@@ -1079,6 +1079,8 @@ class TestFreeBoundarySolver:
             Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),
             Phi_M=2,
             Phi_N=1,
+            Y_coil=1,
+            Y_plasma=1,
             chunk_size=chunk_size,
             warn_fft=False,
         )

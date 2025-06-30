@@ -289,7 +289,7 @@ class FreeBoundarySolver(IOAble):
         ]
         src_data = surface.compute(names, grid=src_grid)
         # Compute data on Phi grid.
-        if self._same_grid_phi_src:
+        if self._src_grid_equals_Phi_grid:
             Phi_data = src_data
         else:
             Phi_data = surface.compute(names, grid=Phi_grid)
@@ -313,7 +313,7 @@ class FreeBoundarySolver(IOAble):
             self._evl_transform = self._phi_transform
         else:
             self._evl_transform = Transform(evl_grid, basis, derivs=1)
-            if not self._same_grid_phi_src and evl_grid.equiv(src_grid):
+            if not self._src_grid_equals_Phi_grid and evl_grid.equiv(src_grid):
                 evl_data = src_data
             else:
                 evl_data = surface.compute(names, grid=evl_grid)
@@ -338,6 +338,19 @@ class FreeBoundarySolver(IOAble):
     def Phi_grid(self):
         """Return the source grid used by this solver."""
         return self._interpolator["Phi"]._eval_grid
+
+    @property
+    def I(self):  # noqa: E743
+        """Net toroidal current in 𝒳 which is a source for the field ∇Φ."""
+        return self._I
+
+    @property
+    def Y(self):
+        """Net poloidal current outside closure(𝒳).
+
+        That is a source for the field ∇Φ.
+        """
+        return self._Y
 
     @property
     def basis(self):

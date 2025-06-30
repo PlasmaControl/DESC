@@ -9,8 +9,8 @@ from desc.basis import DoubleFourierSeries
 from desc.grid import LinearGrid, _Grid
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
-    _kernel_Bn_over_r,
-    _kernel_magnetic_dipole,
+    _kernel_dipole,
+    _kernel_monopole,
     _nonsingular_part,
     get_interpolator,
     singular_integral,
@@ -28,13 +28,18 @@ class VacuumSolver(IOAble):
 
     -            ∆Φ(x) = 0    x ∈ 𝒳
     - (∇Φ + B₀ − B)(x) = 0    x ∈ 𝒳
-    - (μ₀J − ∇ × B)(x) = 0    x ∉ ∂𝒳
+    -   (j − ∇ × B)(x) = 0    x ∉ ∂𝒳
     -         <∇,B>(x) = 0    x ∉ ∂𝒳
     -         <n,B>(x) = 0    x ∈ ∂𝒳
 
-    That is, given a magnetic field B₀ due to volume current sources J,
+    That is, given a magnetic field B₀ due to volume current sources j,
     finds the unique vacuum field ∇Φ such that <n,B> = 0 (without assuming
     nested flux surfaces).
+
+    References
+    ----------
+       [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
 
     Parameters
     ----------
@@ -52,10 +57,10 @@ class VacuumSolver(IOAble):
         Default is ``src_grid``; lower often slows convergence.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.M``, recommended to be less.
+        Should be at most ``Phi_grid.M``.
     Phi_N : int
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.N``, recommended to be less.
+        Should be at most ``Phi_grid.N``.
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
@@ -68,8 +73,8 @@ class VacuumSolver(IOAble):
     Y : float
         Net poloidal current outside closure(𝒳) which is a source for the field ∇Φ.
     B0 : _MagneticField
-        Magnetic field such that ∇ × B₀ = μ₀ J
-        where J is the current in amperes everywhere.
+        Magnetic field such that j = ∇ × B₀
+        where j is the current in Tesla / meter everywhere.
 
         Assumes that ``B0.compute_Bnormal()`` computes <n,B₀> such that n is the
         normal that points out of the plasma. We will automatically flip this normal
@@ -279,6 +284,10 @@ class VacuumSolver(IOAble):
              Fourier coefficients of Φ on ∂𝒳 stored in ``data["Phi"]["Phi_mn"]``.
 
         """
+        errorif(
+            maxiter > 0 and self._exterior,
+            msg="Iterative convergence not possible for exterior problem.",
+        )
         warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
         self._data = (
             _fixed_point_Phi(
@@ -512,7 +521,7 @@ def _surface_gradient(data, transform, c, I=0, Y=0):
 
 
 def _vacuum_bc(self, chunk_size):
-    """Returns γ = ∫_y 〈 G(x−y) B₀(y), ds(y) 〉."""
+    """Returns gamma = S[<B₀,n>]."""
     if "gamma" in self._data["Phi"]:
         return self._data
 
@@ -523,21 +532,20 @@ def _vacuum_bc(self, chunk_size):
             self._data["Phi"],
             self._data["src"],
             interpolator=self._interpolator["Phi"],
-            kernel=_kernel_Bn_over_r,
+            kernel=_kernel_monopole,
             chunk_size=chunk_size,
         ).squeeze(axis=-1)
-        / (-4 * jnp.pi)
     )
     return self._data
 
 
-def _H(self, src_data, chunk_size, basis=None):
-    """Compute H Φ(x) = ∫_y 〈 ∇_y G(x−y), ds(y) 〉 Φ(y) or, if basis is supplied, H Φ₁.
+def _double_layer(self, src_data, chunk_size, basis=None):
+    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_y G(x−y), ds(y)〉or, if basis is supplied, D[Φ₁].
 
-    If ``basis`` is not supplied, then computes H Φ.
-    If ``basis`` is supplied, then computes H Φ₁ = ℱ⁻¹ H̃ Φ̃₁
-    where Φ̃₁ = ℱ Φ₁ = [1, ..., 1] are the coefficients of the given orthogonal
-    basis that interpolates Φ₁(x) = ∑ₘ Φ̃₁ᵐ fₘ(x) = ∑ₘ fₘ(x) for x ∈ ∂𝒳.
+    If ``basis`` is not supplied, then computes D[Φ].
+    If ``basis`` is supplied, then computes D[Φ₁] = ℱ⁻¹(ℱD)(ℱΦ₁)
+    where ℱ Φ₁ = [1, ..., 1] are the coefficients of the given orthogonal
+    basis that interpolates Φ₁(x) = ∑ₘ (ℱΦ₁)ᵐ fₘ(x) = ∑ₘ fₘ(x) for x ∈ ∂𝒳.
 
     Parameters
     ----------
@@ -549,17 +557,15 @@ def _H(self, src_data, chunk_size, basis=None):
     if basis is not None:
         kwargs["known_map"] = ("Phi", partial(basis.evaluate, secular=True))
         kwargs["ndim"] = basis.num_modes + 2
-    H = singular_integral(
+    D = singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
         interpolator=self._interpolator["Phi"],
-        kernel=_kernel_magnetic_dipole,
+        kernel=_kernel_dipole,
         chunk_size=chunk_size,
         **kwargs,
     )
-    if self._exterior:
-        H = -H
-    return H
+    return -D if self._exterior else D
 
 
 @partial(jit, static_argnames=["bc", "chunk_size"])
@@ -600,7 +606,7 @@ def _lsmr_Phi(
         if self._src_grid_equals_Phi_grid
         else self.basis.evaluate(self.src_grid, secular=True)
     )
-    A = evl_Phi / 2 - _H(self, src_data, chunk_size, self.basis)
+    A = evl_Phi / 2 - _double_layer(self, src_data, chunk_size, self.basis)
     assert A.shape == (self.Phi_grid.num_nodes, self.basis.num_modes + 2)
 
     gamma = gamma - (self.I * A[:, -2] + self.Y * A[:, -1])
@@ -635,15 +641,11 @@ def _iteration_operator(Phi_k, self, chunk_size=None):
         Iteration operator applied to input.
 
     """
-    # Phi_k = _to_rfft(self.Phi_grid, Phi_k)  # noqa
     src_data = self._data["src"].copy()
     src_data["Phi"] = _upsample_to_source(self, Phi_k, is_fourier=False)
-    # TODO: Don't need to re-interpolate Phi since we already have it.
-    #       Requires resolving issue described in _interpax_mod.py.
     gamma = self._data["Phi"]["gamma"]
-    H = _H(self, src_data, chunk_size).squeeze(axis=-1)
-    return H + 0.5 * Phi_k + gamma
-    # Phi_k1 = _to_real_coef(self.Phi_grid, H + 0.5 * Phi_k + gamma)  # noqa
+    D = _double_layer(self, src_data, chunk_size).squeeze(axis=-1)
+    return D + 0.5 * Phi_k + gamma
 
 
 @partial(
@@ -675,7 +677,6 @@ def _fixed_point_Phi(
         )
         self._data = _lsmr_Phi(self, bc=bc, basis=basis, chunk_size=chunk_size)
         Phi_0 = basis.evaluate(self.Phi_grid) @ self._data["Phi"]["Phi_mn"]
-    # Phi_0 = _to_real_coef(self.Phi_grid, Phi_0)   # noqa
     Phi = fixed_point(
         _iteration_operator,
         Phi_0,
@@ -685,14 +686,6 @@ def _fixed_point_Phi(
         method,
         scalar=True,
     )
-    # Phi = irfft2(   # noqa
-    #     _to_rfft(self.Phi_grid, Phi),  # noqa
-    #     s=(self.Phi_grid.num_theta, self.Phi_grid.num_zeta),  # noqa
-    #     norm="forward",  # noqa
-    #     axes=(0, 1),  # noqa
-    # ).reshape(self.Phi_grid.num_nodes, order="F")  # noqa
-
-    # TODO: Reviewer should check that this is proper use of transform fit.
     self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(Phi)
     return self._data
 

@@ -16,6 +16,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
@@ -262,9 +263,7 @@ def test_qh_optimization():
         NFP=4,
     )
     eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
-    eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
-        -1
-    ]
+    eq.solve(verbose=3)
 
     eq1 = run_qh_step(0, eq)
 
@@ -1894,6 +1893,7 @@ def test_second_stage_optimization_CoilSet():
     [
         "FourierPlanarCoil",
         "FourierRZCoil",
+        "FourierXYCoil",
         "FourierXYZCoil",
         "SplineXYZCoil",
         "CoilSet sym",
@@ -1923,6 +1923,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
     types = {
         "FourierPlanarCoil": (FourierPlanarCoil(), "fmintr"),
         "FourierRZCoil": (FourierRZCoil(), "fmintr"),
+        "FourierXYCoil": (FourierXYCoil(), "fmintr"),
         "FourierXYZCoil": (FourierXYZCoil(), "fmintr"),
         "SplineXYZCoil": (spline_coil, "fmintr"),
         "CoilSet sym": (sym_coils, "lsq-exact"),
@@ -2336,7 +2337,7 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ballooning lambda"]
+        data_keys = ["ideal ballooning lambda", "ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
         lam2_initial[i] = np.max(data["ideal ballooning lambda"])
@@ -2361,6 +2362,8 @@ def test_ballooning_stability_opt():
             nturns=ntor,
             nzetaperturn=2 * (eq.M_grid * eq.N_grid),
             weight=eq_ball_weight,
+            w0=0.1,
+            w1=10,
         )
 
     modes_R = np.vstack(
@@ -2417,7 +2420,9 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ballooning lambda"]
+        data_keys = [
+            "ideal ballooning lambda",
+        ]
         data = eq.compute(data_keys, grid=grid)
 
         lam2_optimized[i] = np.max(data["ideal ballooning lambda"])

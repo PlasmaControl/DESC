@@ -164,7 +164,7 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
 
 
 def copy_rpz_periods(rpz, NFP):
-    """Copy a rpz position vector into multiple field periods."""
+    """Copy an rpz coordinate triplet into multiple field periods."""
     r, p, z = rpz.T
     r = jnp.tile(r, NFP)
     z = jnp.tile(z, NFP)

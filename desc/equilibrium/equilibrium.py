@@ -23,7 +23,7 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.curl import curl_cylindrical
+from desc.compute.nabla import curl_cylindrical
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -32,8 +32,8 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
-from desc.integrals.singularities import _kernel_biot_savart
-from desc.integrals.tbd import integrate_surface
+from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
+from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
     _MagneticField,
     biot_savart_general,
@@ -1224,7 +1224,8 @@ class Equilibrium(Optimizable, _MagneticField):
         L = None,
         M = 8,
         N = None,
-        method="vector potential"
+        method="virtual casing",
+        A_coords = None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1260,7 +1261,7 @@ class Equilibrium(Optimizable, _MagneticField):
             magnetic field at specified points
 
         """
-        methods = ['biot-savart','virtual casing','vector potential','']
+        methods = ['biot-savart','virtual casing','vector potential','virtual casing vector potential']
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         assert (method in methods), f"""Method {method} unknown. Please choose one of the following methods:
@@ -1296,31 +1297,32 @@ class Equilibrium(Optimizable, _MagneticField):
                     sym=False,
                 )
             kernel = _kernel_biot_savart
+            
             source_data = self.compute(kernel.keys, grid = source_grid)
-            B = B = integrate_surface(
+            B = integrate_surface(
                 coords,
                 source_data,
                 source_grid,
                 kernel,
                 chunk_size=chunk_size)
-        elif method == methods[2]:
-            if source_grid is None:
-                source_grid = QuadratureGrid(
-                    L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
-                )
-            coords = np.array(coords)
+        elif method in methods[2:4]:
+            if A_coords is None:
+                A_coords = coords
+            # TO DO ADD A SOURCE GRID 2 THAT IS WHERE A IS DEFINED
+            #coords = np.array(coords)
+            A = self.compute_magnetic_vector_potential(A_coords,
+                chunk_size=chunk_size,
+                source_grid=source_grid,
+                params=params,
+                basis=basis,
+                transforms=transforms,
+                )#method=method.replace(' vector potential', ''))
             # Default spectral resolution parameters
             if L is None:
                 L = M
             if N is None:
                 N = M
-            A = self.compute_magnetic_vector_potential(coords,
-                chunk_size=chunk_size,
-                source_grid=source_grid,
-                params=params,
-                basis=basis,
-                transforms=transforms)
-            B = curl_cylindrical(A, coords, L, M, N, source_grid.NFP)
+            B = curl_cylindrical(A, A_coords, coords, L, M, N, source_grid.NFP)
         return B
     def compute_magnetic_vector_potential(
         self,
@@ -1330,6 +1332,7 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        method = "biot-savart"
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1357,28 +1360,48 @@ class Equilibrium(Optimizable, _MagneticField):
             magnetic vector potential at specified points
 
         """
+        methods = ['biot-savart','virtual casing']
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
-            )
+        if method == methods[0]:
+            if source_grid is None:
+                source_grid = QuadratureGrid(
+                    L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+                )
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Unequal number of field periods")
-            data = self.compute(
-                ["J", "phi", "sqrt(g)", "x"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-            )
-        source_xyz = rpz2xyz(data["x"])
-        J = rpz2xyz_vec(data["J"], phi=data["phi"])
-        dV = data["sqrt(g)"] * source_grid.weights
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Unequal number of field periods")
+                data = self.compute(
+                    ["J", "phi", "sqrt(g)", "x"],
+                    grid=source_grid,
+                    params=params,
+                    transforms=transforms,
+                )
+            source_xyz = rpz2xyz(data["x"])
+            J = rpz2xyz_vec(data["J"], phi=data["phi"])
+            dV = data["sqrt(g)"] * source_grid.weights
 
-        A = biot_savart_general_vector_potential(
-            eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
-        )
+            A = biot_savart_general_vector_potential(
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+            )
+        elif method == methods[1]:
+            if source_grid is None:
+                source_grid = LinearGrid(
+                    rho=np.array([1.0]),
+                    M=self.M_grid,
+                    N=self.N_grid,
+                    NFP=self.NFP if self.N > 0 else 64,
+                    sym=False,
+                )
+            kernel = _kernel_biot_savart_A
+            source_data = self.compute(kernel.keys, grid = source_grid)
+            A = integrate_surface(
+                coords,
+                source_data,
+                source_grid,
+                kernel,
+                chunk_size=chunk_size)
+            
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A

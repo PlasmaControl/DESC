@@ -3,21 +3,22 @@ import sys
 
 # Add the path to the parent directory to augment search for module
 sys.path.insert(0, os.path.abspath("."))
+sys.path.append(os.path.abspath("../../../"))
 sys.path.append(os.path.abspath("../../../../"))
 
-import nvtx
 from mpi4py import MPI
 
-from desc import set_device
+from desc import _set_cpu_count, set_device
 
-# ====== Using CPUs ======
+kind = "cpu"  # or "gpu"
 num_device = 2
+# ====== Using CPUs ======
 # These will be used for diving the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
-
-# !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
-# _set_cpu_count(num_device)
-# set_device("cpu", num_device=num_device, mpi=MPI)
+if kind == "cpu":
+    # !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
+    _set_cpu_count(num_device)
+    set_device("cpu", num_device=num_device, mpi=MPI)
 
 # ====== Using GPUs ======
 # When we have multiple processes using the same devices (for example, 3 processes
@@ -25,9 +26,9 @@ num_device = 2
 # cause the memory allocation to fail. To avoid this, we can set the allocator to `platform`
 # such that there is no pre-allocation. This is a bit conservative (and probably there is room
 # for improvement), but if a process needs more memory, it can use more memory on the fly.
-
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-set_device("gpu", num_device=num_device)
+elif kind == "gpu":
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    set_device("gpu", num_device=num_device)
 
 from desc import config as desc_config
 from desc.backend import jax, print_backend_info
@@ -62,14 +63,16 @@ if __name__ == "__main__":
         print_backend_info()
         print("\n")
 
-    with nvtx.annotate("Setup"):
-        eq = get("HELIOTRON")
+    eq = get("HELIOTRON")
+    if desc_config["kind"] == "cpu":
+        # for local testing use lower resolution
+        eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
 
-        # this will create a parallel objective function
-        # user can create their own parallel objective function as well which will be
-        # shown in the next example
-        obj = get_parallel_forcebalance(eq, num_device=num_device, mpi=MPI, verbose=1)
-        cons = get_fixed_boundary_constraints(eq)
+    # this will create a parallel objective function
+    # user can create their own parallel objective function as well which will be
+    # shown in the next example
+    obj = get_parallel_forcebalance(eq, num_device=num_device, mpi=MPI, verbose=1)
+    cons = get_fixed_boundary_constraints(eq)
 
     # Until this line, the code is performed on all ranks, so it might print some
     # information multiple times. The following part will only be performed on the
@@ -77,19 +80,18 @@ if __name__ == "__main__":
 
     # this context manager will put the workers in a loop to listen to the master
     # to compute the objective function and its derivatives
-    with nvtx.annotate("Solve"):
-        with obj as obj:
-            # apart from cost evaluation and derivatives, everything else will be only
-            # performed on the master rank
-            if rank == 0:
-                eq.solve(
-                    objective=obj,
-                    constraints=cons,
-                    maxiter=10,
-                    ftol=0,
-                    gtol=0,
-                    xtol=0,
-                    verbose=3,
-                )
+    with obj as obj:
+        # apart from cost evaluation and derivatives, everything else will be only
+        # performed on the master rank
+        if rank == 0:
+            eq.solve(
+                objective=obj,
+                constraints=cons,
+                maxiter=10,
+                ftol=0,
+                gtol=0,
+                xtol=0,
+                verbose=3,
+            )
 
     # if you put a code here, it will be performed on all ranks

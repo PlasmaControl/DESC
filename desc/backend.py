@@ -538,35 +538,11 @@ if use_jax:  # noqa: C901
         nvtx.end_range(rng_pconcat)
         return out
 
-    def jit_with_device(method):
-        """Decorator to Just-in-time compile a class method with a dynamic device.
-
-        Decorates a method of a class with a dynamic device, allowing the method to be
-        compiled with jax.jit for the specific device. This is needed since
-        @functools.partial(jax.jit, device=obj._device) is not
-        allowed in a class definition.
-
-        Parameters
-        ----------
-        method : callable
-            Class method to decorate. If DESC is running on GPU, the class should have
-            a device_id attribute.
-        """
-
-        @functools.wraps(method)
-        def wrapper(self, *args, **kwargs):
-            # Compile the method with jax.jit for the specific device
-            wrapped = jax.jit(method, device=self._device)
-            return wrapped(self, *args, **kwargs)
-
-        return wrapper
-
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
-    jit_with_device = jit
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401

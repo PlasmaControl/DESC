@@ -11,7 +11,6 @@ from desc.backend import (
     execute_on_cpu,
     jax,
     jit,
-    jit_with_device,
     jnp,
     pconcat,
     tree_flatten,
@@ -1569,12 +1568,14 @@ class _Objective(IOAble, ABC):
 
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
-        # if device_id is not 0, this typically means we are using multiple devices and
-        # we won't jit the ObjectiveFunction methods. For single device, if we set
-        # _device to a jaxlib.xla_extension.Device type, jit will throw error expecting
-        # it to be static. So we set _device to None in that case which is simpler then
-        # making it static.
-        if device_id != 0 and desc_config["kind"] == "gpu":
+        # if we have multiple GPU devices, this will help the data placement
+        # TODO: figure out why we cannot use it with constraints? Computation
+        # gets stuck!
+        if (
+            desc_config["num_device"] != 1
+            and desc_config["kind"] == "gpu"
+            and not self._linear
+        ):
             self._device = jax.devices("gpu")[device_id]
         else:
             # we won't transfer data for multiple CPUs because their rank should
@@ -1693,6 +1694,9 @@ class _Objective(IOAble, ABC):
             self._unjit()
 
         self._built = True
+        # put the constants to device as jax arrays
+        if desc_config["kind"] == "gpu":
+            self._constants = jax.device_put(self.constants, self._device)
 
     @abstractmethod
     def compute(self, *args, **kwargs):
@@ -1708,7 +1712,7 @@ class _Objective(IOAble, ABC):
                 argsout += (arg,)
         return argsout
 
-    @jit_with_device
+    @jit
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
@@ -1717,7 +1721,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(f)
 
-    @jit_with_device
+    @jit
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1726,7 +1730,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
-    @jit_with_device
+    @jit
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1769,7 +1773,7 @@ class _Objective(IOAble, ABC):
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
-    @jit_with_device
+    @jit
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
@@ -1778,19 +1782,19 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    @jit_with_device
+    @jit
     def grad(self, *args, **kwargs):
         """Compute gradient vector of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="grad")(*args, **kwargs)
 
-    @jit_with_device
+    @jit
     def hess(self, *args, **kwargs):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="hess")(*args, **kwargs)
 
-    @jit_with_device
+    @jit
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1801,7 +1805,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit_with_device
+    @jit
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1812,7 +1816,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit_with_device
+    @jit
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1846,7 +1850,7 @@ class _Objective(IOAble, ABC):
             # sum over different things.
             return jnp.sum(jnp.asarray(Jv), axis=0).T
 
-    @jit_with_device
+    @jit
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
@@ -1862,7 +1866,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled")
 
-    @jit_with_device
+    @jit
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
@@ -1878,7 +1882,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled_error")
 
-    @jit_with_device
+    @jit
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 

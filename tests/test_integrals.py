@@ -811,8 +811,8 @@ class TestVacuumSolver:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [50])
-    def test_harmonic_exterior(self, chunk_size):
+    @pytest.mark.slow
+    def test_harmonic_exterior(self, chunk_size=20):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).

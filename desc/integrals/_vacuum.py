@@ -115,6 +115,7 @@ class VacuumSolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
+        warnif(I != 0 or Y != 0, msg="This option needs more testing.")
         self._exterior = bool(exterior)
         self._I = I
         self._Y = Y

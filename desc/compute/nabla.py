@@ -1,7 +1,7 @@
 from desc.transform import Transform
 import numpy as np
 import jax.numpy as jnp
-from desc.grid import Grid
+from desc.grid import Grid, _Grid
 from desc.basis import DoubleChebyshevFourierBasis
 from desc.transform import Transform
 
@@ -101,11 +101,7 @@ def _get_del_inputs(in_coords,out_coords,L,M,N,NFP):
         out_coords = in_coords
     Rs = np.unique(np.hstack([in_coords[:,0],out_coords[:,0]]))
     Zs = np.unique(np.hstack([in_coords[:,2],out_coords[:,2]]))
-
-    alpha = 1E-5 # The smallest normalized value of R and Z (should never be 0)
-    shifts = np.array([Rs.min(),0,Zs.min()])
-    scales = np.array([(1/(1-alpha))*((Rs-shifts[0]).max()),1,(1/(1-alpha))*((Zs-shifts[2]).max())])
-    shifts -= np.array([alpha/2,0,alpha/2]) * scales
+    shifts,scales = _normalize_rpz(Rs, Zs)
 
     # Create the grids for the in and out coordinates
     source_grid = Grid(nodes = (in_coords-shifts)/scales)
@@ -178,7 +174,7 @@ def _curl_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     curl_A = np.vstack([curl_A_R,curl_A_phi,curl_A_z]).T
     return curl_A
 
-def _div_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
+def _div_cylindrical(A,in_R,out_R,in_transform,out_transform):
     A_coeff = in_transform.fit(A * np.vstack([in_R,np.ones_like(in_R),np.ones_like(in_R)]).T)
     # Calculate matrix of terms for the curl
     # (dims: datapoint, component index, derivative index)
@@ -193,3 +189,9 @@ def _div_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     # Calculate curl from the partial derivatives
     div = terms.sum(axis=1)
     return div
+
+def _normalize_rpz(Rs,Zs,alpha=1E-5):
+    shifts = np.array([Rs.min(),0,Zs.min()])
+    scales = np.array([(1/(1-alpha))*((Rs-shifts[0]).max()),1,(1/(1-alpha))*((Zs-shifts[2]).max())])
+    shifts -= np.array([alpha/2,0,alpha/2]) * scales
+    return shifts,scales

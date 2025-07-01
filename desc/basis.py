@@ -10,7 +10,7 @@ import numpy as np
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.grid import Grid, _Grid
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, flatten_list
+from desc.utils import check_nonnegint, check_posint, flatten_list, safediv
 from scipy.special import binom, factorial
 
 __all__ = [
@@ -1115,7 +1115,7 @@ class DoubleChebyshevFourierBasis(_Basis):
     """
     # phi is actually the toroidal coordinate, but I am assuming here this referring to the
     # second coordinate, which in our case is phi
-    _fft_poloidal = True
+    _fft_poloidal = False
     _fft_toroidal = False
 
     def __init__(self, L, M, N, NFP=1, sym=False):
@@ -1269,6 +1269,365 @@ class DoubleChebyshevFourierBasis(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
+            self._set_up()
+
+class PowerDoubleFourierBasis(_Basis):
+    """3D basis: tensor product of power series and two Fourier series.
+
+    Fourier series in both the poloidal and toroidal coordinates.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+
+    _fft_poloidal = True
+    _fft_toroidal = True
+
+    def __init__(self, L, M, N, NFP=1, sym=False):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L, M, N):
+        """Get mode numbers for power-Fourier series.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1)
+        m = np.arange(-M, M + 1)
+        n = np.arange(-N, N + 1)
+        l, m, n = np.meshgrid(l, m, n, indexing="ij")
+        l = l.ravel()
+        m = m.ravel()
+        n = n.ravel()
+        return np.array([l, m, n]).T
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is given by
+            ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
+            an outer product of Chebyshev and Fourier matrices with order
+            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
+            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
+
+        """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+        if modes is None:
+            modes = self.modes
+            lidx = self.unique_L_idx
+            midx = self.unique_M_idx
+            nidx = self.unique_N_idx
+            loutidx = self.inverse_L_idx
+            moutidx = self.inverse_M_idx
+            noutidx = self.inverse_N_idx
+        else:
+            lidx = loutidx = np.arange(len(modes))
+            midx = moutidx = np.arange(len(modes))
+            nidx = noutidx = np.arange(len(modes))
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+
+        r, t, z = grid.nodes.T
+        l, m, n = modes.T
+
+        try:
+            ridx = grid.unique_rho_idx
+            routidx = grid.inverse_rho_idx
+        except AttributeError:
+            ridx = routidx = np.arange(grid.num_nodes)
+        try:
+            tidx = grid.unique_theta_idx
+            toutidx = grid.inverse_theta_idx
+        except AttributeError:
+            tidx = toutidx = np.arange(grid.num_nodes)
+        try:
+            zidx = grid.unique_zeta_idx
+            zoutidx = grid.inverse_zeta_idx
+        except AttributeError:
+            zidx = zoutidx = np.arange(grid.num_nodes)
+
+        r = r[ridx]
+        t = t[tidx]
+        z = z[zidx]
+        l = l[lidx]
+        m = m[midx]
+        n = n[nidx]
+
+        radial = powers(r[:, np.newaxis], l, dr=derivatives[0])
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+
+        radial = radial[routidx][:, loutidx]
+        poloidal = poloidal[toutidx][:, moutidx]
+        toroidal = toroidal[zoutidx][:, noutidx]
+
+        return radial * poloidal * toroidal
+
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = NFP if NFP is not None else self.NFP
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
+            self._set_up()
+
+class TripleChebyshevBasis(_Basis):
+    """3D basis: tensor product of three Chebyshev polynomials.
+
+    Intended for use with Cartesian coordinates.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+    M : int
+        Maximum toroidal resolution.
+    N : int
+        Maximum vertical resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+    _fft_poloidal = False
+    _fft_toroidal = False
+
+    def __init__(self, L, M, N, sym=False):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L, M, N):
+        """Get mode numbers for Chebyshev series.
+
+        Parameters
+        ----------
+        L : int
+            Maximum x resolution.
+        M : int
+            Maximum y resolution.
+        N : int
+            Maximum z resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1)
+        m = np.arange(-M, M + 1)
+        n = np.arange(N + 1)
+        l, m, n = np.meshgrid(l, m, n, indexing="ij")
+        l = l.ravel()
+        m = m.ravel()
+        n = n.ravel()
+        return np.array([l, m, n]).T
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,phi,Z).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,phi,Z).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is given by
+            ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
+            an outer product of Chebyshev matrices.
+        """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+        if modes is None:
+            modes = self.modes
+            # The indices of the unique modes in the first, second, and third dims
+            lidx = self.unique_L_idx
+            midx = self.unique_M_idx
+            nidx = self.unique_N_idx
+
+            # The indices that can be used to reconstruct the modes based on the unique values
+            loutidx = self.inverse_L_idx
+            moutidx = self.inverse_M_idx
+            noutidx = self.inverse_N_idx
+        else:
+            lidx = loutidx = np.arange(len(modes))
+            midx = moutidx = np.arange(len(modes))
+            nidx = noutidx = np.arange(len(modes))
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+        
+        # Get the nodes of the grid
+        x, y, z = grid.nodes.T
+        l, m, n = modes.T
+
+        # The coordinates in the grid are hardcoded to be called rho, theta, zeta,
+        # but these variables are just the unique values for the first, second, and third coordinates 
+        try:
+            xidx = grid.unique_rho_idx
+            xoutidx = grid.inverse_rho_idx
+        except AttributeError:
+            xidx = xoutidx = np.arange(grid.num_nodes)
+        try:
+            yidx = grid.unique_theta_idx
+            youtidx = grid.inverse_theta_idx
+        except AttributeError:
+            yidx = poutidx = np.arange(grid.num_nodes)
+        try:
+            zidx = grid.unique_zeta_idx
+            zoutidx = grid.inverse_zeta_idx
+        except AttributeError:
+            zidx = zoutidx = np.arange(grid.num_nodes)
+
+        # Get only the unique coordinates
+        x = x[xidx]
+        y = y[yidx]
+        z = z[zidx]
+        l = l[lidx]
+        m = m[midx]
+        n = n[nidx]
+
+        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial 
+        # and the toroidal (phi) derivative as a Fourier series with N field periods
+        # up to the l/m/n order
+        dx = chebyshev(x[:, np.newaxis], l, dr=derivatives[0])
+        dy = chebyshev(y[:, np.newaxis], m, dr=derivatives[1])
+        dz = chebyshev(z[:, np.newaxis], n, dr=derivatives[2])
+
+        # Reshape the arrays to not just be the unique values for both the grid and the modes
+        dx = dx[xoutidx][:, loutidx]
+        dy = dy[youtidx][:, moutidx]
+        dz = dz[zoutidx][:, noutidx]
+
+        return dx * dy * dz
+
+    def change_resolution(self, L, M, N, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+          Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
         if (
             L != self.L
             or M != self.M
@@ -2043,10 +2402,18 @@ def chebyshev_second_kind(r, l, dr=0):
     if dr == 0:
         return jnp.where(jnp.abs(x)==1,
                         l+1,
-                        jnp.sin((l+1)*jnp.arccos(x))/jnp.sqrt(1-x**2))
+                        safediv(jnp.sin((l+1)*jnp.arccos(x)),jnp.sqrt(1-x**2)))
+    elif dr == 1:
+        a = (l+1)*chebyshev(r, l+1, dr = 0) - x * chebyshev_second_kind(r, l, dr = 0)
+        b = x**2 - 1
+        dydx = jnp.where(jnp.abs(x)==1,
+                        x**(l+1)/3*((l+1)**3-(l+1)),
+                        safediv(a,b))
+        dydr = 2 * dydx
+        return dydr
     else:
         raise NotImplementedError(
-            "Analytic second-degree derivatives of Chebyshev polynomials "
+            "Analytic third-degree derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
 

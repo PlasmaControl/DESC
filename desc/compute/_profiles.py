@@ -518,6 +518,28 @@ def _p_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="p_rr",
+    label="\\partial_{\\rho \\rho} p",
+    units="Pa",
+    units_long="Pascals",
+    description="Pressure, second radial derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="r",
+    data=[],
+)
+def _p_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["pressure"] is not None:
+        data["p_rr"] = profiles["pressure"].compute(
+            transforms["grid"], params["p_l"], dr=2
+        )
+    # TODO: Implement second derivative of kinetic quantities
+    return data
+
+
+@register_compute_fun(
     name="p_t",
     label="\\partial_{\\theta} p",
     units="Pa",

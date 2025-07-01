@@ -15,6 +15,7 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
+from ..diffmat_utils import cheb_D1, cheb_D2, fourier_diffmat
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -577,4 +578,493 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         .min((-1, -2))
         .squeeze(0)
     )
+    return data
+
+
+@register_compute_fun(
+    name="finite-n lambda",
+    label="low-\\n \\lambda = \\gamma^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared growth rate",
+    dim=1,
+    params=["Psi", "NFP"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "g_rr|PEST",
+        "g_rt|PEST",
+        "g_rz|PEST",
+        "g_tt|PEST",
+        "g_tz|PEST",
+        "g_zz|PEST",
+        "J^theta|PEST",
+        "J^zeta|PEST",
+        "sqrt(g)_PEST",
+        "sqrt(g)_r|PEST",
+        "sqrt(g)_t|PEST",
+        "sqrt(g)_z|PEST",
+        "iota",
+        "iota_r",
+        "iota_rr",
+        "p",
+        "p_r",
+        "p_rr",
+        "psi_r",
+        "psi_rr",
+        "(psi_r/sqrt(g)_PEST)",
+        "(chi_r/sqrt(g)_PEST)",
+    ],
+    n_rho_max="int: 2 x maximum radial mode number",
+    n_theta_max="int: 2 x maximum radial mode number",
+    n_zeta_max="int: 2 x maximum toroidal mode number",
+    axisym="bool: if the equilibrium is axisymmetric",
+)
+def _AGNI(params, transforms, profiles, data, **kwargs):
+    """
+    AGNI: Analysis of Global Normal-modes in Ideal MHD.
+
+    Based on the original source here:
+    https://github.com/rahulgaur104/AGNI/tree/master
+
+    A finite-n stability eigenvalue solver.
+    Currenly only finds fixed boundary unstable modes at
+    low to medium resolution.
+    """
+    a_N = data["a"]
+    B_N = params["Psi"] / (jnp.pi * a_N**2)
+
+    # --no-verify NFP = params["NFP"]
+    NFP = 1
+
+    iota = data["iota"][:, None]
+    iota_r = data["iota_r"][:, None]
+    iota_rr = data["iota_rr"][:, None]
+
+    p = mu_0 * data["p"][:, None] / B_N**2
+    p_r = mu_0 * data["p_r"][:, None] / B_N**2
+    p_rr = mu_0 * data["p_rr"][:, None] / B_N**2
+    psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
+    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
+
+    psi_r_sqrt_g = data["(psi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
+    chi_r_sqrt_g = data["(chi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
+
+    axisym = kwargs.get("axisym", False)
+
+    n_rho_max = kwargs.get("n_rho_max", 8)
+    n_theta_max = kwargs.get("n_theta_max", 8)
+    n_zeta_max = kwargs.get("n_zeta_max", 4)
+
+    if axisym:
+        D_zeta0 = n_zeta_max * jnp.array([[0, -1], [1, 0]])
+        n_zeta_max = 2
+    else:
+        D_zeta0 = fourier_diffmat(n_zeta_max)
+
+    def _eval_1D(f, x):
+        return vmap(lambda x_val: f(x_val))(x)
+
+    def _f(x):
+        x_0 = 0.5
+        m_1 = 2.1
+        m_2 = 2.1
+        lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
+        upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
+        eps = 1.0e-3
+        return eps + (1 - eps) * (lower + upper)
+
+    dx_f = jax.grad(_f)
+    dxx_f = jax.grad(dx_f)
+
+    # The points in the supplied grid must be consistent with how
+    # the kronecker product is created
+    x = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+
+    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
+    scale_vector2 = (_eval_1D(dxx_f, x)) * scale_vector1
+
+    scale_x1 = scale_vector1[:, None]
+    scale_x2 = scale_vector2[:, None]
+
+    # Get differentiation matrices
+    # RG: setting the gradient to 0 to save some memory?
+    D_rho0 = jax.lax.stop_gradient(cheb_D1(n_rho_max) * scale_x1)
+    D_rho0 = jax.lax.stop_gradient(D_rho0)
+
+    D_theta0 = jax.lax.stop_gradient(fourier_diffmat(n_theta_max))
+
+    D_zeta0 = jax.lax.stop_gradient(NFP * D_zeta0)
+
+    I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
+    I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
+    I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
+
+    D_rho = jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0))
+    D_theta = jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0))
+    D_zeta = jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0))
+
+    D_rho_D_rho = jax.lax.stop_gradient(
+        jnp.kron(
+            (cheb_D2(n_rho_max) - cheb_D1(n_rho_max) * scale_x2) * scale_x1**2,
+            jnp.kron(I_theta0, I_zeta0),
+        )
+    )
+
+    D_theta_D_theta = D_theta @ D_theta
+    D_zeta_D_zeta = D_zeta @ D_zeta
+
+    D_rho_D_theta = D_rho @ D_theta
+    D_rho_D_zeta = D_rho @ D_zeta
+    D_theta_D_zeta = D_theta @ D_zeta
+
+    n_total = n_rho_max * n_theta_max * n_zeta_max
+    # Create the full matrix
+    A = jnp.zeros((3 * n_total, 3 * n_total))
+
+    sqrt_g_Q_sup_rho = jnp.zeros((n_total, 3 * n_total))
+    sqrt_g_Q_sup_theta = jnp.zeros((n_total, 3 * n_total))
+    sqrt_g_Q_sup_zeta = jnp.zeros((n_total, 3 * n_total))
+
+    partial_zeta_Q_rho = jnp.zeros((n_total, 3 * n_total))
+    partial_rho_Q_zeta = jnp.zeros((n_total, 3 * n_total))
+
+    partial_theta_Q_rho = jnp.zeros((n_total, 3 * n_total))
+    partial_rho_Q_theta = jnp.zeros((n_total, 3 * n_total))
+
+    partial_theta_Q_zeta = jnp.zeros((n_total, 3 * n_total))
+    partial_zeta_Q_theta = jnp.zeros((n_total, 3 * n_total))
+
+    # Define field component indices
+    rho_idx = slice(0, n_total)
+    theta_idx = slice(n_total, 2 * n_total)
+    zeta_idx = slice(2 * n_total, 3 * n_total)
+
+    all_idx = slice(0, 3 * n_total)
+
+    g_rr = data["g_rr|PEST"][:, None] / a_N**2
+    g_tt = data["g_tt|PEST"][:, None] / a_N**2
+    g_zz = data["g_zz|PEST"][:, None] / a_N**2
+
+    g_rt = data["g_rt|PEST"][:, None] / a_N**2
+    g_tr = g_rt
+
+    g_rz = data["g_rz|PEST"][:, None] / a_N**2
+    # --no-verify g_zr = g_rz
+
+    g_tz = data["g_tz|PEST"][:, None] / a_N**2
+    g_zt = g_tz
+
+    j_sup_theta = data["J^theta|PEST"][:, None] * a_N**2 / B_N
+    j_sup_zeta = data["J^zeta|PEST"][:, None] * a_N**2 / B_N
+
+    sqrt_g = data["sqrt(g)_PEST"][:, None] / a_N**3
+    sqrt_g_r = data["sqrt(g)_r|PEST"][:, None] / a_N**3
+    sqrt_g_t = data["sqrt(g)_t|PEST"][:, None] / a_N**3
+    sqrt_g_z = data["sqrt(g)_z|PEST"][:, None] / a_N**3
+
+    C_zeta = (sqrt_g_z / sqrt_g) + D_zeta
+    C_theta = (sqrt_g_t / sqrt_g) + D_theta
+    C_rho = (sqrt_g_r / sqrt_g) + D_rho
+
+    # √g Q^ρ
+    sqrt_g_Q_sup_rho = sqrt_g_Q_sup_rho.at[rho_idx, rho_idx].add(
+        iota * D_theta + D_zeta
+    )
+
+    # √g Q^θ
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, rho_idx].add(
+        -iota * D_rho - iota_r
+    )
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, theta_idx].add(D_zeta)
+    sqrt_g_Q_sup_theta = sqrt_g_Q_sup_theta.at[rho_idx, zeta_idx].add(-D_zeta)
+
+    # √g Q^ζ
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, rho_idx].add(-1 * D_rho)
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, theta_idx].add(-1 * D_theta)
+    sqrt_g_Q_sup_zeta = sqrt_g_Q_sup_zeta.at[rho_idx, zeta_idx].add(1 * D_theta)
+
+    # ∂ᵨ (√g Q_ϑ) rho block
+    partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, rho_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_tr * (iota * D_rho_D_theta + iota_r * D_theta + D_rho_D_zeta)
+            - g_tt * (D_rho_D_rho + 2 * iota_r * D_rho + iota_rr)
+            - g_tz * D_rho_D_rho
+            - g_tr * sqrt_g_r / sqrt_g * (iota * D_theta + D_zeta)
+            + g_tt * sqrt_g_r / sqrt_g * (iota_r + iota * D_rho)
+            + g_tz * sqrt_g_r / sqrt_g * D_rho
+        )
+    )
+
+    # ∂ᵨ (√g Q_ϑ) theta block
+    partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_tt * D_rho_D_zeta
+            - g_tz * D_rho_D_theta
+            - g_tt * sqrt_g_r / sqrt_g * D_zeta
+            + g_tz * sqrt_g_r / sqrt_g * D_theta
+        )
+    )
+
+    # ∂ᵨ (√g Q_ϑ) zeta block
+    partial_rho_Q_theta = partial_rho_Q_theta.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_tt * D_rho_D_zeta
+            - g_tz * D_rho_D_theta
+            - g_tt * sqrt_g_r / sqrt_g * D_zeta
+            + g_tz * sqrt_g_r / sqrt_g * D_theta
+        )
+    )
+
+    # ∂_θ (√g Qᵨ) rho bloc
+    partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, rho_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_rr * (iota * D_theta_D_theta + 0 * iota_r * D_theta + D_theta_D_zeta)
+            - g_rt * (D_rho_D_theta + 1.0 * iota_r * D_theta)
+            - g_rz * D_rho_D_theta
+            - g_rr * sqrt_g_t / sqrt_g * (iota * D_theta + D_zeta)
+            + g_rt * sqrt_g_t / sqrt_g * (iota_r + iota * D_rho)
+            + g_rz * sqrt_g_t / sqrt_g * D_rho
+        )
+    )
+
+    # ∂_θ (√g Qᵨ) theta block
+    partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_rt * D_theta_D_zeta
+            - g_rz * D_theta_D_theta
+            - g_rt * sqrt_g_t / sqrt_g * D_zeta
+            + g_rz * sqrt_g_t / sqrt_g * D_theta
+        )
+    )
+
+    # ∂_θ (√g Qᵨ) zeta block
+    partial_theta_Q_rho = partial_theta_Q_rho.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_rt * D_theta_D_zeta
+            - g_rz * D_theta_D_theta
+            - g_rt * sqrt_g_t / sqrt_g * D_zeta
+            + g_rz * sqrt_g_t / sqrt_g * D_theta
+        )
+    )
+
+    # rho block
+    partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, rho_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_rt * (iota * D_theta_D_zeta + 0 * iota_r * D_theta + D_zeta_D_zeta)
+            - g_tt * (D_rho_D_zeta + 1 * iota_r * D_zeta)
+            - g_tz * D_rho_D_zeta
+            - g_rt * sqrt_g_z / sqrt_g * (iota * D_theta + D_zeta)
+            + g_tt * sqrt_g_z / sqrt_g * (iota_r + iota * D_rho)
+            + g_tz * sqrt_g_z / sqrt_g * D_rho
+        )
+    )
+
+    # theta block
+    partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_tt * D_zeta_D_zeta
+            - g_tz * D_theta_D_zeta
+            - g_tt * sqrt_g_z / sqrt_g * D_zeta
+            + g_tz * sqrt_g_z / sqrt_g * D_theta
+        )
+    )
+
+    # zeta block
+    partial_zeta_Q_theta = partial_zeta_Q_theta.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_tt * D_zeta_D_zeta
+            - g_tz * D_theta_D_zeta
+            - g_tt * sqrt_g_z / sqrt_g * D_zeta
+            + g_tz * sqrt_g_z / sqrt_g * D_theta
+        )
+    )
+
+    # rhobloc
+    partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, rho_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_rz * (iota * D_theta_D_theta + 0 * iota_r * D_theta + D_theta_D_zeta)
+            - g_tz * (D_rho_D_theta + 1 * iota_r * D_theta)
+            - g_zz * D_rho_D_theta
+            - g_rz * sqrt_g_t / sqrt_g * (iota * D_theta + D_zeta)
+            + g_tz * sqrt_g_t / sqrt_g * (iota_r + iota * D_rho)
+            + g_zz * sqrt_g_t / sqrt_g * D_rho
+        )
+    )
+
+    # theta block
+    partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_zt * D_theta_D_zeta
+            - g_zz * D_theta_D_theta
+            - g_zt * sqrt_g_t / sqrt_g * D_zeta
+            + g_zz * sqrt_g_t / sqrt_g * D_theta
+        )
+    )
+
+    # zeta block
+    partial_theta_Q_zeta = partial_theta_Q_zeta.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_zt * D_theta_D_zeta
+            - g_zz * D_theta_D_theta
+            - g_zt * sqrt_g_t / sqrt_g * D_zeta
+            + g_zz * sqrt_g_t / sqrt_g * D_theta
+        )
+    )
+
+    # rho block
+    partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, rho_idx].add(
+        g_rr * (iota * D_theta_D_zeta + 0 * iota_r * D_theta + D_zeta_D_zeta)
+        - g_rt * (D_rho_D_zeta + 1 * iota_r * D_zeta + 0.0 * iota_rr)
+        - g_rz * D_rho_D_zeta
+        - g_rr * sqrt_g_z / sqrt_g * (iota * D_theta + D_zeta)
+        + g_rt * sqrt_g_z / sqrt_g * (iota_r + iota * D_rho)
+        + g_rz * sqrt_g_z / sqrt_g * D_rho
+    )
+
+    # theta block
+    partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_rt * D_zeta_D_zeta
+            - g_rz * D_theta_D_zeta
+            - g_rt * sqrt_g_z / sqrt_g * D_zeta
+            + g_rz * sqrt_g_z / sqrt_g * D_theta
+        )
+    )
+
+    # zeta block
+    partial_zeta_Q_rho = partial_zeta_Q_rho.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_rt * D_zeta_D_zeta
+            - g_rz * D_theta_D_zeta
+            - g_rt * sqrt_g_z / sqrt_g * D_zeta
+            + g_rz * sqrt_g_z / sqrt_g * D_theta
+        )
+    )
+
+    # rho block
+    partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, rho_idx].add(
+        g_rz * (iota * D_rho_D_theta + iota_r * D_theta + D_rho_D_zeta)
+        - g_tz * (D_rho_D_rho + 2 * iota_r * D_rho + iota_rr)
+        - g_zz * D_rho_D_rho
+        - g_rz * sqrt_g_r / sqrt_g * (iota * D_theta + D_zeta)
+        + g_tt * sqrt_g_r / sqrt_g * (iota_r + iota * D_rho)
+        + g_zz * sqrt_g_r / sqrt_g * D_rho
+    )
+
+    # theta block
+    partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, theta_idx].add(
+        1
+        / sqrt_g
+        * (
+            g_tz * D_rho_D_zeta
+            - g_zz * D_rho_D_theta
+            - g_tz * sqrt_g_r / sqrt_g * D_zeta
+            + g_zz * sqrt_g_r / sqrt_g * D_theta
+        )
+    )
+
+    # zeta block
+    partial_rho_Q_zeta = partial_rho_Q_zeta.at[rho_idx, zeta_idx].add(
+        -1
+        / sqrt_g
+        * (
+            g_tz * D_rho_D_zeta
+            - g_zz * D_rho_D_theta
+            - g_tz * sqrt_g_r / sqrt_g * D_zeta
+            + g_zz * sqrt_g_r / sqrt_g * D_theta
+        )
+    )
+
+    A = A.at[rho_idx, all_idx].add(
+        +1.0 * psi_r_sqrt_g * (partial_zeta_Q_rho - partial_rho_Q_zeta)
+        - 1.0 * chi_r_sqrt_g * (partial_rho_Q_theta - partial_theta_Q_rho)
+        + 1.0 * (j_sup_theta * sqrt_g_Q_sup_zeta - j_sup_zeta * sqrt_g_Q_sup_theta)
+    )
+    A = A.at[theta_idx, all_idx].add(
+        -1.0 * psi_r_sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
+        + j_sup_zeta * sqrt_g_Q_sup_rho
+    )
+    A = A.at[zeta_idx, all_idx].add(
+        1.0 * chi_r_sqrt_g * (partial_theta_Q_zeta - partial_zeta_Q_theta)
+        - j_sup_theta * sqrt_g_Q_sup_rho
+    )
+
+    # pressure-driven instability term
+    A = A.at[rho_idx, rho_idx].add(
+        (p_rr / psi_r - p_r * psi_rr / psi_r**2) + p_r / psi_r * D_rho
+    )
+    A = A.at[theta_idx, rho_idx].add(p_r / psi_r * D_theta)
+    A = A.at[zeta_idx, rho_idx].add(p_r / psi_r * D_zeta)
+
+    gamma0 = 5 / 3
+
+    compress_rho = jnp.zeros((n_total, 3 * n_total))
+    compress_theta = jnp.zeros((n_total, 3 * n_total))
+    compress_zeta = jnp.zeros((n_total, 3 * n_total))
+
+    # compressional term
+    D_rho_C_rho = D_rho @ C_rho
+    D_rho_C_theta = D_rho @ C_theta
+    D_rho_C_zeta = D_rho @ C_zeta
+
+    compress_rho = compress_rho.at[rho_idx, rho_idx].set(p_r * C_rho + p * D_rho_C_rho)
+    compress_rho = compress_rho.at[rho_idx, theta_idx].set(
+        p_r * C_theta + p * D_rho_C_theta
+    )
+    compress_rho = compress_rho.at[rho_idx, zeta_idx].set(
+        p_r * C_zeta + p * D_rho_C_zeta
+    )
+
+    compress_theta = compress_theta.at[rho_idx, rho_idx].set(p * D_theta @ C_rho)
+    compress_theta = compress_theta.at[rho_idx, theta_idx].set(p * D_theta @ C_theta)
+    compress_theta = compress_theta.at[rho_idx, zeta_idx].set(p * D_theta @ C_zeta)
+
+    compress_zeta = compress_zeta.at[rho_idx, rho_idx].set(p * D_zeta @ C_rho)
+    compress_zeta = compress_zeta.at[rho_idx, theta_idx].set(p * D_zeta @ C_theta)
+    compress_zeta = compress_zeta.at[rho_idx, zeta_idx].set(p * D_zeta @ C_zeta)
+
+    A = A.at[rho_idx, all_idx].add(gamma0 * compress_rho)
+    A = A.at[theta_idx, all_idx].add(gamma0 * compress_theta)
+    A = A.at[zeta_idx, all_idx].add(gamma0 * compress_zeta)
+
+    # apply dirichlet BC to ξ^ρ
+    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    w, v = jnp.linalg.eig(A[jnp.ix_(keep, keep)])
+
+    data["finite-n lambda"] = w
+
     return data

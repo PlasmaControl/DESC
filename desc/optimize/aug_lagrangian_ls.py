@@ -54,7 +54,7 @@ def lsq_auglag(  # noqa: C901
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
+        objective to be minimized. Should have a signature like fun(x)-> 1d array
     x0 : array-like
         initial guess
     jac : callable:
@@ -67,7 +67,7 @@ def lsq_auglag(  # noqa: C901
     constraint : scipy.optimize.NonlinearConstraint
         constraint to be satisfied
     args : tuple
-        additional arguments passed to fun, grad, and hess
+        additional arguments passed to fun, grad, and hess (not used)
     x_scale : array_like or ``'hess'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -105,10 +105,9 @@ def lsq_auglag(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector, and ``args``
-        are the same arguments passed to fun and jac. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -192,10 +191,10 @@ def lsq_auglag(  # noqa: C901
     constraint = setdefault(
         constraint,
         NonlinearConstraint(  # create a dummy constraint
-            fun=lambda x, *args: jnp.array([0.0]),
+            fun=lambda x: jnp.array([0.0]),
             lb=0.0,
             ub=0.0,
-            jac=lambda x, *args: jnp.zeros((1, x.size)),
+            jac=lambda x: jnp.zeros((1, x.size)),
         ),
     )
 
@@ -214,7 +213,6 @@ def lsq_auglag(  # noqa: C901
         None,
         constraint,
         bounds,
-        *args,
     )
 
     # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
@@ -225,9 +223,9 @@ def lsq_auglag(  # noqa: C901
         c = -y / sqrt_mu + sqrt_mu * c
         return jnp.concatenate((f, c))
 
-    def lagjac(z, y, mu, *args):
-        Jf = jac_wrapped(z, *args)
-        Jc = constraint_wrapped.jac(z, *args)
+    def lagjac(z, y, mu):
+        Jf = jac_wrapped(z)
+        Jc = constraint_wrapped.jac(z)
         Jc = jnp.sqrt(mu)[:, None] * Jc
         return jnp.vstack((Jf, Jc))
 
@@ -236,9 +234,9 @@ def lsq_auglag(  # noqa: C901
     iteration = 0
 
     z = z0.copy()
-    f = fun_wrapped(z, *args)
+    f = fun_wrapped(z)
     cost = 1 / 2 * jnp.dot(f, f)
-    c = constraint_wrapped.fun(z, *args)
+    c = constraint_wrapped.fun(z)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -250,14 +248,14 @@ def lsq_auglag(  # noqa: C901
     mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
-        _J = constraint_wrapped.jac(z, *args)
-        _g = f @ jac_wrapped(z, *args)
+        _J = constraint_wrapped.jac(z)
+        _g = f @ jac_wrapped(z)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
     L = lagfun(f, c, y, mu)
-    J = lagjac(z, y, mu, *args)
+    J = lagjac(z, y, mu)
     Lcost = 1 / 2 * jnp.dot(L, L)
     g = L @ J
 
@@ -437,9 +435,9 @@ def lsq_auglag(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
-            f_new = fun_wrapped(z_new, *args)
+            f_new = fun_wrapped(z_new)
             cost_new = 0.5 * jnp.dot(f_new, f_new)
-            c_new = constraint_wrapped.fun(z_new, *args)
+            c_new = constraint_wrapped.fun(z_new)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 
@@ -497,7 +495,7 @@ def lsq_auglag(  # noqa: C901
             L = L_new
             cost = cost_new
             Lcost = Lcost_new
-            J = lagjac(z, y, mu, *args)
+            J = lagjac(z, y, mu)
             njev += 1
             g = jnp.dot(J.T, L)
 
@@ -522,7 +520,7 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                J = lagjac(z, y, mu, *args)
+                J = lagjac(z, y, mu)
                 njev += 1
                 g = jnp.dot(J.T, L)
 
@@ -551,7 +549,7 @@ def lsq_auglag(  # noqa: C901
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]
 
-            if callback(jnp.copy(z2xs(z)[0]), *args):
+            if callback(jnp.copy(z2xs(z)[0])):
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:

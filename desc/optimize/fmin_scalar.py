@@ -48,7 +48,7 @@ def fmintr(  # noqa: C901
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x,*args)-> float
+        objective to be minimized. Should have a signature like fun(x)-> float
     x0 : array-like
         initial guess
     grad : callable
@@ -62,7 +62,7 @@ def fmintr(  # noqa: C901
         bound will be the same for all variables. Use np.inf with an appropriate sign
         to disable bounds on all or some variables.
     args : tuple
-        additional arguments passed to fun, grad, and hess
+        additional arguments passed to fun, grad, and hess (not used)
     x_scale : array_like or ``'hess'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -96,10 +96,9 @@ def fmintr(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector, and ``args``
-        are the same arguments passed to fun and grad. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -190,9 +189,9 @@ def fmintr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x, *args)
+    f = fun(x)
     nfev += 1
-    g = grad(x, *args)
+    g = grad(x)
     ngev += 1
 
     if isinstance(hess, str) and hess.lower() == "bfgs":
@@ -203,7 +202,7 @@ def fmintr(  # noqa: C901
         hess_min_curvature = options.pop("hessian_minimum_curvature", None)
         hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
     if callable(hess):
-        H = hess(x, *args)
+        H = hess(x)
         nhev += 1
         bfgs = False
     elif isinstance(hess, BFGS):
@@ -356,7 +355,7 @@ def fmintr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new, *args)
+            f_new = fun(x_new)
             nfev += 1
             actual_reduction = f - f_new
 
@@ -404,13 +403,13 @@ def fmintr(  # noqa: C901
             x = x_new
             f = f_new
             g_old = g
-            g = grad(x, *args)
+            g = grad(x)
             ngev += 1
             if bfgs:
                 hess.update(x - x_old, g - g_old)
                 H = hess.get_matrix()
             else:
-                H = hess(x, *args)
+                H = hess(x)
                 nhev += 1
 
             if hess_scale:
@@ -442,7 +441,7 @@ def fmintr(  # noqa: C901
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"]
 
-            if callback(jnp.copy(x), *args):
+            if callback(jnp.copy(x)):
                 success, message = False, STATUS_MESSAGES["callback"]
 
             allx.append(x)

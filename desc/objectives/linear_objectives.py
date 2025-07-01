@@ -205,9 +205,6 @@ class FixParameters(_Objective):
         ----------
         params : list of dict
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -322,9 +319,6 @@ class BoundaryRSelfConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -423,9 +417,6 @@ class BoundaryZSelfConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -510,9 +501,6 @@ class AxisRSelfConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -598,9 +586,6 @@ class AxisZSelfConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1400,9 +1385,6 @@ class FixSumModesR(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1567,9 +1549,6 @@ class FixSumModesZ(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -1736,9 +1715,6 @@ class FixSumModesLambda(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -2806,9 +2782,6 @@ class FixSumCoilCurrent(FixCoilCurrent):
         ----------
         params : list of dict
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -3023,9 +2996,6 @@ class FixOmniBmax(_FixedObjective):
         ----------
         params : dict
             Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -3230,9 +3200,6 @@ class FixNearAxisR(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -3382,9 +3349,6 @@ class FixNearAxisZ(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -3508,9 +3472,6 @@ class FixNearAxisLambda(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------

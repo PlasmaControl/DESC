@@ -20,8 +20,8 @@ physics quantities we need to evaluate the objective (``_data_keys``), and the n
 residuals that will be returned by ``compute`` (``_dim_f``). Next, we use some helper
 functions to build the required ``Transform`` and ``Profile`` objects needed to compute
 the desired physics quantities. These ``transforms`` and ``profiles`` are then packaged
-into ``constants``, which will be passed to the ``compute`` method. Other "constant"
-values that are needed to compute the given quantity such as hyperparameters or other
+into ``constants``, which will be used in the ``compute`` method. Other "constant"
+values that are needed to compute the given quantity such as hyper-parameters or other
 objects that will not be optimized should also be included in ``constants``. Finally, we
 call the base class ``build`` method to do some checking of array sizes and other
 miscellaneous stuff.
@@ -156,16 +156,11 @@ A full example objective with comments describing the key points is given below:
         def compute(self, params, constants=None):
             """Signature should take params (or possibly multiple params, one for each thing in self.things),
                which is the params_dict of the expected thing(s) to be optimized.
-               It also takes in constants, which is a dictionary of any other constant data needed to compute
-               the objective, and is usually none by default so the self.constants are used.
 
             Parameters
             ----------
             params : dict
                 Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-            constants : dict
-                Dictionary of constant data, eg transforms, profiles etc. Defaults to
-                self.constants
 
             Returns
             -------
@@ -173,8 +168,8 @@ A full example objective with comments describing the key points is given below:
                 Quasi-symmetry flux function error at each node (T^4/m^2).
 
             """
-            if constants is None:
-                constants = self.constants
+            # these are defined in the build method
+            constants = self._constants
 
             # here we get the physics quantities from ``desc.compute.utils._compute``
             data = compute_fun(

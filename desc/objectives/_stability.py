@@ -163,9 +163,6 @@ class MercierStability(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -174,7 +171,16 @@ class MercierStability(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -316,9 +322,6 @@ class MagneticWell(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -327,7 +330,16 @@ class MagneticWell(_Objective):
 
         """
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
 
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -546,9 +558,6 @@ class BallooningStability(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -559,7 +568,16 @@ class BallooningStability(_Objective):
         eq = self.things[0]
 
         if constants is None:
-            constants = self.constants
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         # we first compute iota on a uniform grid to get correct averaging etc.
         iota_data = compute_fun(
             eq,

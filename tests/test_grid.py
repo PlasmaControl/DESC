@@ -11,6 +11,7 @@ from desc.grid import (
     Grid,
     LinearGrid,
     QuadratureGrid,
+    CylindricalGrid,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -536,7 +537,22 @@ class TestGrid:
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         np.testing.assert_allclose(vol, vol_quad)
+    @pytest.mark.unit
+    def test_cylindrical_grid(self): 
+        L = N = 6
+        M = 0
+        NFP = 1
 
+        grid = CylindricalGrid(L,M,N,z_endpoint=False,r_endpoint=False, NFP = NFP)
+        Z,phi,R = np.meshgrid([0.025,0.25,0.75,0.975],[0],[0.025,0.25,0.75,0.975],indexing='ij')
+        np.testing.assert_allclose(np.stack([R.flatten(),phi.flatten(),Z.flatten()]).T,grid.nodes)
+    @pytest.mark.unit
+    def test_cylindrical_grid_volume_integration(self):
+        L = M = N = 4
+        NFP = 2
+
+        grid = CylindricalGrid(L,M,N,z_endpoint=True,r_endpoint=True, NFP = NFP)
+        np.testing.assert_allclose((grid.weights * grid.nodes[:,0]).sum(),np.pi)
     @pytest.mark.unit
     def test_repr(self):
         """Test string representations of grid objects."""
@@ -590,6 +606,35 @@ class TestGrid:
         cg = ConcentricGrid(2, 3, 4)
         cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
         test(cg, cg.L, cg.M, cg.N, 5)
+
+    @pytest.mark.unit
+    def test_change_resolution_cylindrical(self):
+        grid = CylindricalGrid(8,8,8,NFP=2)
+        desired_resolution = (5,2,6,3)
+        grid.change_resolution(*desired_resolution)
+
+        assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
+        assert grid.num_r == grid.unique_r_idx.size
+        assert grid.num_phi == grid.unique_phi_idx.size
+        assert grid.num_z == grid.unique_z_idx.size
+        np.testing.assert_equal(
+            (grid.unique_r_idx, grid.inverse_r_idx),
+            np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
+        )
+        np.testing.assert_equal(
+            (grid.unique_phi_idx, grid.inverse_phi_idx),
+            np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+        )
+        np.testing.assert_equal(
+            (grid.unique_z_idx, grid.inverse_z_idx),
+            np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+        )
+
+        # test that changing NFP updated the nodes
+        assert np.isclose(
+            grid.nodes[grid.unique_phi_idx[-1], 1],
+            (grid.num_phi - 1) / grid.num_phi * 2 * np.pi / grid.NFP,
+        )
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):

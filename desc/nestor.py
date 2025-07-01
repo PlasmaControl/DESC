@@ -1010,6 +1010,8 @@ class Nestor(IOAble):
         Grid used to discretize external field.
     """
 
+    _static_attrs = ["M", "N", "ntheta", "nzeta", "sym", "NFP"]
+
     def __init__(
         self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None, field_grid=None
     ):

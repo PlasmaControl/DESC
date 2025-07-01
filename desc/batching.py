@@ -4,8 +4,7 @@ References
 ----------
 The ``_batch_and_remainder``, ``_evaluate_in_chunks``, ``jacrev_chunked``,
 and ``jacfwd_chunked`` functions are adapted from JAX.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2139.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2209.
+https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
 https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 
 The original copyright notice is as follows
@@ -15,6 +14,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 
 from functools import partial
 
+from jax._src import core
 from jax._src.api import (
     _check_input_dtype_jacfwd,
     _check_input_dtype_jacrev,
@@ -27,13 +27,16 @@ from jax._src.api import (
     _vjp,
 )
 from jax._src.api_util import _ensure_index, argnums_partial, check_callable
+from jax._src.mesh import get_abstract_mesh
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
-from jax._src.util import wraps
+from jax._src.pjit import auto_axes
+from jax._src.util import unzip2, wraps
+from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -42,8 +45,8 @@ from jax.tree_util import (
     tree_transpose,
 )
 
-from desc.backend import jax, jnp, scan
-from desc.utils import errorif
+from desc.backend import jax, jnp, scan, vmap
+from desc.utils import Index, errorif
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -51,23 +54,55 @@ else:
     from jax import linear_util as lu
 
 
+def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
+    def f(l):
+        return l[:batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+
+    aval = core.typeof(leaf)
+    if aval.sharding.spec[0] is not None:
+        raise ValueError(
+            "0th dimension of leaf passed to `jax.lax.map` should be replicated."
+            f" Got {aval.str_short(True, True)}"
+        )
+    if get_abstract_mesh()._are_all_axes_explicit:
+        out_s = aval.sharding.with_spec(
+            PartitionSpec(None, None, *aval.sharding.spec[1:])
+        )
+        return auto_axes(f, out_sharding=out_s)(leaf)
+    return f(leaf)
+
+
+def _remainder_leaf(leaf, batch_elems):
+    def f(l):
+        return l[batch_elems:]
+
+    if get_abstract_mesh()._are_all_axes_explicit:
+        return auto_axes(f, out_sharding=core.typeof(leaf).sharding)(leaf)
+    return f(leaf)
+
+
 def _batch_and_remainder(x, batch_size: int):
     leaves, treedef = tree_flatten(x)
-
-    scan_leaves = []
-    remainder_leaves = []
-
-    for leaf in leaves:
-        num_batches = leaf.shape[0] // batch_size
-        total_batch_elems = num_batches * batch_size
-        scan_leaves.append(
-            leaf[:total_batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+    if not leaves:
+        return x, None
+    num_batches, remainder = divmod(leaves[0].shape[0], batch_size)
+    batch_elems = num_batches * batch_size
+    if remainder:
+        scan_leaves, remainder_leaves = unzip2(
+            [
+                (
+                    _scan_leaf(leaf, batch_elems, num_batches, batch_size),
+                    _remainder_leaf(leaf, batch_elems),
+                )
+                for leaf in leaves
+            ]
         )
-        remainder_leaves.append(leaf[total_batch_elems:])
-
-    scan_tree = treedef.unflatten(scan_leaves)
-    remainder_tree = treedef.unflatten(remainder_leaves)
-    return scan_tree, remainder_tree
+        return treedef.unflatten(scan_leaves), treedef.unflatten(remainder_leaves)
+    else:
+        scan_leaves = tuple(
+            _scan_leaf(leaf, batch_elems, num_batches, batch_size) for leaf in leaves
+        )
+        return treedef.unflatten(scan_leaves), None
 
 
 def _identity(y):
@@ -86,7 +121,7 @@ def _scan_append(f, x, reduction=None, carry_init_fun=None):
     def body(carry, x):
         return (), f(x)
 
-    _, result = scan(body, (), x, unroll=1)
+    _, result = scan(body, (), x)
     return result
 
 
@@ -102,7 +137,7 @@ def _scan_reduce(
         return reduction(carry, f(x)), None
 
     carry_init = carry_init_fun(jax.eval_shape(f, _get_first_chunk(x)))
-    result, _ = scan(body, carry_init, x, unroll=1)
+    result, _ = scan(body, carry_init, x)
     return result
 
 
@@ -143,6 +178,29 @@ def _evaluate_in_chunks(
     *args,
     **kwargs,
 ):
+    if kwargs.get("shard", False):
+        kwargs.pop("shard")
+        args_shardable, args_remainder = make_shardable(args)
+        out_shardable = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            args_shardable,
+            **kwargs,
+        )
+        out_remainder = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            args_remainder,
+            **kwargs,
+        )
+        return _concat(out_shardable, out_remainder)
+
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
@@ -190,8 +248,9 @@ def vmap_chunked(
     chunk_size=None,
     reduction=None,
     chunk_reduction=_identity,
+    shard=False,
 ):
-    """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
+    """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
     Parameters
     ----------
@@ -220,7 +279,7 @@ def vmap_chunked(
     if isinstance(argnums, int):
         argnums = (argnums,)
 
-    f = jax.vmap(f, in_axes=in_axes)
+    f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
@@ -230,6 +289,7 @@ def vmap_chunked(
         argnums,
         reduction,
         chunk_reduction,
+        shard=shard,
     )
 
 
@@ -241,15 +301,15 @@ def batch_map(
     *,
     reduction=None,
     chunk_reduction=_identity,
+    shard=False,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
-    This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
-    ``fun`` is assumed to be vectorized natively. No JAX vectorization such as ``vmap``
-    is applied to the supplied function. This makes compilation faster and avoids the
-    weaknesses of applying JAX vectorization, such as executing all branches of code
-    conditioned on dynamic values. For example, this function would be useful for
-    GitHub issue #1303.
+    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
+    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
+    supplied function. This makes compilation faster and avoids the weaknesses of
+    applying JAX vectorization, such as executing all branches of code conditioned on
+    dynamic values. For example, this function would be useful for GitHub issue #1303
 
     Parameters
     ----------
@@ -265,7 +325,8 @@ def batch_map(
         Should take two arguments and return one output, e.g. ``jnp.add``.
     chunk_reduction : callable
         Chunk-wise reduction operation.
-        Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+        Should typically apply ``reduction`` along the mapped axis,
+        e.g. ``jnp.add.reduce``.
 
     Returns
     -------
@@ -283,6 +344,7 @@ def batch_map(
             reduction,
             chunk_reduction,
             fun_input,
+            shard=shard,
         )
     )
 
@@ -564,3 +626,43 @@ def jacrev_chunked(
             return jac_tree, aux
 
     return jacfun
+
+
+def make_shardable(f, axis=0, num_devices=None):
+    """Return sharded and remainder portions of ``f``.
+
+    Parameters
+    ----------
+    f : Pytree
+    axis : int
+        Axis across which ``f`` should be sharded.
+    num_devices : int
+        Number of devices to shard on.
+        If not given, then determined according to ``jax_device_count()``.
+
+    Return
+    ------
+    sf : Pytree
+        Sharded portion of ``f``.
+    rf : Pytree
+        Remainder portion of ``f``.
+
+    """
+    if num_devices is None:
+        num_devices = jax.device_count()
+
+    mesh = jax.make_mesh((num_devices,), ("x"))
+    P = PartitionSpec("x")
+    leaves, treedef = tree_flatten(f)
+    out = [_shard(leaf, axis, num_devices, mesh, P) for leaf in leaves]
+    sf = treedef.unflatten(f[0] for f in out)
+    rf = treedef.unflatten(f[1] for f in out)
+    return sf, rf
+
+
+def _shard(f, axis, num_devices, mesh, P):
+    shardable_size = f.shape[axis] - (f.shape[axis] % num_devices)
+    sf = f[Index.get(slice(0, shardable_size), axis, f.ndim)]
+    rf = f[Index.get(slice(shardable_size, f.shape[axis]), axis, f.ndim)]
+    sf = jax.device_put(sf, NamedSharding(mesh, P))
+    return sf, rf

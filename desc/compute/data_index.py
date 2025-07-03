@@ -65,6 +65,8 @@ def register_compute_fun(  # noqa: C901
     resolution_requirement="",
     grid_requirement=None,
     source_grid_requirement=None,
+    *,
+    public=True,
     **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -126,6 +128,9 @@ def register_compute_fun(  # noqa: C901
         which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
         ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
         zeta coordinates in ``transforms["grid"]``.
+    public : bool
+        Whether to include this quantity in the public documentation.
+        Default is true.
 
     Notes
     -----
@@ -178,6 +183,7 @@ def register_compute_fun(  # noqa: C901
             "resolution_requirement": resolution_requirement,
             "grid_requirement": grid_requirement,
             "source_grid_requirement": source_grid_requirement,
+            "public": public,
         }
         for p in parameterization:
             flag = False

@@ -26,11 +26,11 @@ class VacuumSolver(IOAble):
     Let 𝒳 be an open set with smooth closed boundary ∂𝒳.
     Computes the magnetic field B in units of Tesla such that
 
-    -            ∆Φ(x) = 0    x ∈ 𝒳
-    - (∇Φ + B₀ − B)(x) = 0    x ∈ 𝒳
-    -   (j − ∇ × B)(x) = 0    x ∉ ∂𝒳
-    -         <∇,B>(x) = 0    x ∉ ∂𝒳
-    -         <n,B>(x) = 0    x ∈ ∂𝒳
+    -                   ∆Φ(x) = 0    x ∈ 𝒳
+    -        (∇Φ + B₀ − B)(x) = 0    x ∈ 𝒳
+    -          (j − ∇ × B)(x) = 0    x ∉ ∂𝒳
+    -                <∇,B>(x) = 0    x ∉ ∂𝒳
+    - <n,B>(x) = <n,∇Φ+B₀>(x) = 0    x ∈ ∂𝒳
 
     That is, given a magnetic field B₀ due to volume current sources j,
     finds the unique vacuum field ∇Φ such that <n,B> = 0 (without assuming
@@ -286,8 +286,8 @@ class VacuumSolver(IOAble):
 
         """
         errorif(
-            maxiter > 0 and self._exterior,
-            msg="Iterative convergence not possible for exterior problem.",
+            (not self._exterior) and (maxiter > 0),
+            msg="Fixed point method will not convergence for interior problem.",
         )
         warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
         self._data = (
@@ -306,7 +306,7 @@ class VacuumSolver(IOAble):
         return self._data
 
     def _compute_virtual_current(self):
-        """𝐊_vc = -𝐧 × ∇Φ.
+        """𝐊_vc = -n × ∇Φ for interior and n × ∇Φ for exterior.
 
         This is the vacuum portion of the virtual surface current.
         """
@@ -522,7 +522,7 @@ def _surface_gradient(data, transform, c, I=0, Y=0):
 
 
 def _vacuum_bc(self, chunk_size):
-    """Returns gamma = S[<B₀,n>]."""
+    """Returns gamma = S[<B₀,n>] for interior and -S[<B₀,n>] for exterior."""
     if "gamma" in self._data["Phi"]:
         return self._data
 
@@ -541,7 +541,7 @@ def _vacuum_bc(self, chunk_size):
 
 
 def _double_layer(self, src_data, chunk_size, basis=None):
-    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_y G(x−y), ds(y)〉or, if basis is supplied, D[Φ₁].
+    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y), ds(y)〉or, if basis is supplied, D[Φ₁].
 
     If ``basis`` is not supplied, then computes D[Φ].
     If ``basis`` is supplied, then computes D[Φ₁] = ℱ⁻¹(ℱD)(ℱΦ₁)
@@ -569,12 +569,13 @@ def _double_layer(self, src_data, chunk_size, basis=None):
     return -D if self._exterior else D
 
 
-@partial(jit, static_argnames=["bc", "chunk_size"])
+@partial(jit, static_argnames=["bc", "chunk_size", "interior_dirichlet"])
 def _lsmr_Phi(
     self,
     *,
     bc,
     chunk_size=None,
+    interior_dirichlet=False,
 ):
     """Compute Fourier harmonics Φ̃ by solving least squares system.
 
@@ -607,9 +608,12 @@ def _lsmr_Phi(
         if self._src_grid_equals_Phi_grid
         else self.basis.evaluate(self.src_grid, secular=True)
     )
-    A = evl_Phi / 2 - _double_layer(self, src_data, chunk_size, self.basis)
+    A = (-evl_Phi if interior_dirichlet else evl_Phi) / 2 + _double_layer(
+        self, src_data, chunk_size, self.basis
+    )
     assert A.shape == (self.Phi_grid.num_nodes, self.basis.num_modes + 2)
 
+    # TODO: check this with our new sign conventions
     gamma = gamma - (self.I * A[:, -2] + self.Y * A[:, -1])
     A = A[:, :-2]
     # Solving overdetermined system useful to reduce size of A while
@@ -623,7 +627,7 @@ def _lsmr_Phi(
     return self._data
 
 
-def _iteration_operator(Phi_k, self, chunk_size=None):
+def _iteration_operator(Phi_k, self, chunk_size=None, interior_dirichlet=False):
     """Compute iteration operator T(Φ).
 
     Parameters
@@ -646,12 +650,24 @@ def _iteration_operator(Phi_k, self, chunk_size=None):
     src_data["Phi"] = _upsample_to_source(self, Phi_k, is_fourier=False)
     gamma = self._data["Phi"]["gamma"]
     D = _double_layer(self, src_data, chunk_size).squeeze(axis=-1)
+    if interior_dirichlet:
+        gamma = -gamma
+    else:
+        # doing exterior Neumann and D was negated already
+        D = -D
     return D + 0.5 * Phi_k + gamma
 
 
 @partial(
     jit,
-    static_argnames=["bc", "tol", "maxiter", "method", "chunk_size"],
+    static_argnames=[
+        "bc",
+        "tol",
+        "maxiter",
+        "method",
+        "chunk_size",
+        "interior_dirichlet",
+    ],
 )
 def _fixed_point_Phi(
     self,
@@ -662,6 +678,7 @@ def _fixed_point_Phi(
     method="del2",
     chunk_size=None,
     Phi_0=None,
+    interior_dirichlet=False,
 ):
     assert self.Phi_grid.can_fft2
     if "Phi_mn" in self._data["Phi"]:

@@ -1,9 +1,11 @@
 """Legacy functions for reading and writing ascii format."""
 
+import warnings
+
 import numpy as np
 
 
-def write_ascii(fname, eq):
+def write_ascii(fname, eqq):
     """Print the equilibrium solution to a text file.
 
     Parameters
@@ -14,6 +16,11 @@ def write_ascii(fname, eq):
         dictionary of equilibrium parameters.
 
     """
+    eq = eqq.copy()  # so dont mess up original one
+    if eq.iota is None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            eq.iota = eq.get_profile("iota", kind="power_series")
     # can't import other stuff in io due to circular imports, so have to check by name
     assert (
         eq.pressure.__class__.__name__ == "PowerSeriesProfile"

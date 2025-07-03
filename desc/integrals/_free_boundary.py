@@ -445,7 +445,7 @@ def _sg_mat(data, basis, grid):
 
 
 def _free_boundary_bc(self, chunk_size=None):
-    """Returns γ = -(n × ∇)⁻¹ (n × B_coil)."""
+    """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
     data = self._data["Phi"]
     if "gamma" in data:
         return self._data

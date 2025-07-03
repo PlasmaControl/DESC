@@ -829,7 +829,7 @@ def _1_over_G(dx, keepdims=False):
 
 
 def _grad_G(dx):
-    """∇_y G(x−y) where G is the fundamental solution to the Laplacian in ℝ³.
+    """∇_x G(x−y) where G is the fundamental solution to the Laplacian in ℝ³.
 
     Parameters
     ----------
@@ -841,11 +841,11 @@ def _grad_G(dx):
     Returns
     -------
     grad_G : jnp.ndarray
-        ∇_y G(x−y) = -(4π)⁻¹ ‖x−y‖⁻³ (x-y).
+        ∇_x G(x−y) = (4π)⁻¹ ‖x−y‖⁻³ (x-y).
         Shape (num eval, num source).
 
     """
-    return safediv(dx, -4 * jnp.pi * safenorm(dx, axis=-1, keepdims=True) ** 3)
+    return safediv(dx, 4 * jnp.pi * safenorm(dx, axis=-1, keepdims=True) ** 3)
 
 
 _dx.keys = ["R", "phi", "Z"]
@@ -864,8 +864,8 @@ _kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
 
 
 def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
-    """Returns -4π ds(y) ⋅ ∇_y G(x−y) = ds(y) ⋅ ‖x−y‖⁻³ (x-y)."""
-    return (-4 * jnp.pi * ds) * dot(
+    """Returns 4π ds(y) ⋅ ∇_x G(x−y) = ds(y) ⋅ ‖x−y‖⁻³ (x-y)."""
+    return (4 * jnp.pi * ds) * dot(
         rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
@@ -876,13 +876,13 @@ _kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta"]
 
 
 def _kernel_biot_savart(eval_data, source_data, ds, diag=False):
-    """Returns ∇_y G(x−y) × μ₀ K(y) da(y) = (μ₀/4π) K(y) da(y) × (x-y) ‖x−y‖⁻³."""
+    """Returns (μ₀ K(y) x ∇_x G(x−y)) da(y) = (μ₀/4π) K(y) da(y) × (x-y) ‖x−y‖⁻³."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     return ds * jnp.cross(
-        _grad_G(_dx(eval_data, source_data, diag)),
         mu_0 * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
+        _grad_G(_dx(eval_data, source_data, diag)),
     )
 
 
@@ -906,15 +906,15 @@ _kernel_biot_savart_A.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
 def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
-    """Returns ∇_y G(x−y) × K(y) (Tesla) da(y) - ∇_y G(x−y) Bₙ(y) da(y)."""
+    """Returns K(y) (Tesla) x ∇_x G(x−y) da(y) + ∇_x G(x−y) Bₙ(y) da(y)."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     a = source_data["|e_theta x e_zeta|"]
     grad_G = _grad_G(_dx(eval_data, source_data, diag))
     return ds * (
-        jnp.cross(grad_G, K * a[:, jnp.newaxis])
-        - grad_G * (source_data.get("Bn", 0) * a)[:, jnp.newaxis]
+        jnp.cross(K * a[:, jnp.newaxis], grad_G)
+        + grad_G * (source_data.get("Bn", 0) * a)[:, jnp.newaxis]
     )
 
 
@@ -944,7 +944,7 @@ _kernel_monopole.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
 
 
 def _kernel_dipole(eval_data, source_data, ds, diag=False):
-    """Kernel of double layer operator D[Φ]: Φ(y)〈∇_y G(x−y),n(y)〉da(y)."""
+    """Kernel of double layer operator D[Φ]: Φ(y)〈∇_x G(x−y),n(y)〉da(y)."""
     out = ds * dot(
         rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),

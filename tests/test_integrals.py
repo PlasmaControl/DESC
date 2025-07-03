@@ -697,16 +697,7 @@ class TestVacuumSolver:
     """Test vacuum field solver."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "maxiter",
-        [
-            0,
-            pytest.param(
-                40, marks=pytest.mark.xfail(strict=False, reason="Expiremental.")
-            ),
-        ],
-    )
-    def test_harmonic_simple(self, maxiter):
+    def test_harmonic_simple(self):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
@@ -740,7 +731,7 @@ class TestVacuumSolver:
         np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
 
-        data = vac.compute_Phi(chunk_size, maxiter, warn=False)
+        data = vac.compute_Phi(chunk_size)
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         Z = data["evl"]["Z"]
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
@@ -812,7 +803,7 @@ class TestVacuumSolver:
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_harmonic_exterior(self, chunk_size=20):
+    def test_harmonic_exterior(self, maxiter=0, chunk_size=20):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
@@ -831,15 +822,11 @@ class TestVacuumSolver:
         Phi_grid = LinearGrid(M=35, N=35, NFP=surf.NFP)
 
         src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
-        # y is inside the torus so G is harmonic outside the torus
-        y = rpz2xyz(np.array([R0, 0, 0]))
+        # x0 is inside the torus so G is harmonic outside the torus
+        x0 = rpz2xyz(np.array([R0, 0, 0]))
 
         def G(x):
-            return np.reciprocal(_1_over_G(x - y))
-
-        def grad_G(x):
-            # ∇G(x) = -∇_y G(x-y)
-            return -_grad_G(x - y)
+            return np.reciprocal(_1_over_G(x - x0))
 
         vac = VacuumSolver(
             surface=surf,
@@ -848,11 +835,11 @@ class TestVacuumSolver:
             Phi_grid=Phi_grid,
             exterior=True,
             chunk_size=chunk_size,
-            B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
+            B0n=-dot(_grad_G(src_data["x"] - x0), src_data["n_rho"]),
             warn_fft=False,
         )
 
-        data = vac.compute_Phi(chunk_size)
+        data = vac.compute_Phi(chunk_size=chunk_size, maxiter=maxiter, warn=False)
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
         np.testing.assert_allclose(np.ptp(G(evl_data["x"]) - Phi), 0, atol=atol)
@@ -860,7 +847,7 @@ class TestVacuumSolver:
         data = vac.compute_vacuum_field(chunk_size)["evl"]
         grad_Phi = rpz2xyz_vec(data["grad(Phi)"], phi=evl_data["phi"])
         np.testing.assert_allclose(
-            dot(grad_G(evl_data["x"]) - grad_Phi, evl_data["n_rho"]),
+            dot(_grad_G(evl_data["x"] - x0) - grad_Phi, evl_data["n_rho"]),
             0,
             atol=atol,
         )

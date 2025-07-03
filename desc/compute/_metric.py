@@ -2076,7 +2076,7 @@ def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla(p + B^2/2))"
+    label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla( \\mu_0 p + B^2/2))"
     + "\\cdot \\nabla \\alpha",
     units="1 / Wb",
     units_long="Inverse webers",
@@ -2119,7 +2119,7 @@ def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4 up to dimensionless factors.
-    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
+    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla \\vert B \\vert)"
     + "\\cdot (2 \\rho \\nabla \\rho)",
     units="1 / Wb",
     units_long="Inverse webers",

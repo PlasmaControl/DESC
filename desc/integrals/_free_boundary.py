@@ -3,7 +3,7 @@ from functools import partial
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.grid import LinearGrid
-from desc.integrals._vacuum import _lsmr_Phi, _surface_gradient
+from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi, _surface_gradient
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
@@ -13,7 +13,7 @@ from desc.integrals.singularities import (
 )
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import cross, dot, errorif, setdefault
+from desc.utils import cross, dot, errorif, setdefault, warnif
 
 
 @partial(jit, static_argnames=["chunk_size", "loop"])
@@ -238,7 +238,7 @@ class FreeBoundarySolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
-        self._exterior = True
+        self._exterior = False
         self._I = 0
         self._Y = Y_coil + Y_plasma
         errorif(
@@ -357,7 +357,15 @@ class FreeBoundarySolver(IOAble):
         """Return the DoubleFourierBasis used by this solver."""
         return self._phi_transform.basis
 
-    def compute_Phi(self, chunk_size=None):
+    def compute_Phi(
+        self,
+        chunk_size=None,
+        maxiter=0,
+        tol=1e-6,
+        method="simple",
+        Phi_0=None,
+        **kwargs,
+    ):
         """Compute Fourier coefficients of vacuum potential Φ on ∂𝒳.
 
         Parameters
@@ -366,6 +374,17 @@ class FreeBoundarySolver(IOAble):
             Size to split singular integral computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
+        maxiter : int
+            Maximum number of fixed point iterations.
+            Set to zero to invert the system instead.
+        tol : float
+            Stopping tolerance for iteration.
+        method : {"del2", "simple"}
+            Method of finding the fixed-point, defaults to ``simple``.
+        Phi_0 : jnp.ndarray
+            Initial guess for Φ on ``self.Phi_grid`` for iteration.
+            In general, it is best to select the initial guess as truncated
+            Fourier series. Default is a fit to a low resolution solution.
 
         Returns
         -------
@@ -373,7 +392,26 @@ class FreeBoundarySolver(IOAble):
              Fourier coefficients of Φ on ∂𝒳 stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        self._data = _lsmr_Phi(self, bc=_free_boundary_bc, chunk_size=chunk_size)
+        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
+        self._data = (
+            _fixed_point_Phi(
+                self,
+                bc=_free_boundary_bc,
+                tol=tol,
+                maxiter=maxiter,
+                method=method,
+                chunk_size=chunk_size,
+                Phi_0=Phi_0,
+                interior_dirichlet=True,
+            )
+            if (maxiter > 0)
+            else _lsmr_Phi(
+                self,
+                bc=_free_boundary_bc,
+                chunk_size=chunk_size,
+                interior_dirichlet=True,
+            )
+        )
         return self._data
 
     def compute_B2(self, chunk_size=None):
@@ -407,7 +445,7 @@ def _sg_mat(data, basis, grid):
 
 
 def _free_boundary_bc(self, chunk_size=None):
-    """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
+    """Returns γ = -(n × ∇)⁻¹ (n × B_coil)."""
     data = self._data["Phi"]
     if "gamma" in data:
         return self._data

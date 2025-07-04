@@ -571,22 +571,53 @@ def test_pickle_io(tmpdir_factory):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_ascii_io(tmpdir_factory):
     """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("solovev_test.txt")
+    tmp_path = tmpdir.join("ascii_test.txt")
     eq1 = desc.examples.get("DSHAPE_CURRENT")
-    with pytest.warns(UserWarning, match="existing toroidal current"):
-        eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-            sym=True
-        )
+    with pytest.warns(UserWarning, match="Setting"):
+        eq1.iota = eq1.get_profile("iota").to_powerseries(sym=True)
     write_ascii(tmp_path, eq1)
-    with pytest.warns(UserWarning, match="not an even power series"):
-        eq2 = read_ascii(tmp_path)
-    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
-    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
-    assert np.allclose(eq1.L_lmn, eq2.L_lmn)
+    eq2 = read_ascii(tmp_path)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(np.nonzero(eq1.iota.params), np.nonzero(eq2.iota.params))
+    np.testing.assert_allclose(
+        np.nonzero(eq1.pressure.params), np.nonzero(eq2.pressure.params)
+    )
+    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
+    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+
+    # test with different profile type
+    eq1.pressure = eq1.get_profile("p", kind="spline")
+
+    write_ascii(tmp_path, eq1)
+    eq2 = read_ascii(tmp_path)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    rho = np.linspace(0, 1, 20)
+    np.testing.assert_allclose(np.nonzero(eq1.iota.params), np.nonzero(eq2.iota.params))
+    np.testing.assert_allclose(
+        eq1.pressure(rho), eq2.pressure(rho), rtol=1e-3, atol=1e-3
+    )
+    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
+    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+
+
+@pytest.mark.unit
+def test_ascii_io_errors(tmpdir_factory):
+    """Test saving and loading equilibrium in ASCII format."""
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("ascii_test.txt")
+    eq1 = desc.examples.get("DSHAPE_CURRENT")
+    eq1.pressure = eq1.pressure.to_fourierzernike()
+    with pytest.raises(ValueError, match="FourierZernikeProfile as ascii"):
+        write_ascii(tmp_path, eq1)
 
 
 @pytest.mark.unit

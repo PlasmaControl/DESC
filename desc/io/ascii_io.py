@@ -4,9 +4,17 @@ import warnings
 
 import numpy as np
 
+from desc.utils import errorif
 
-def write_ascii(fname, eqq):
+
+def write_ascii(fname, eqq):  # noqa: C901
     """Print the equilibrium solution to a text file.
+
+    Note: will save the pressure and iota profile as
+    power series profiles. If not an iota constrained
+    equilibrium, the iota profile will be computed and
+    fit with a fourier series of the equilibrium's L
+    resolution.
 
     Parameters
     ----------
@@ -21,17 +29,39 @@ def write_ascii(fname, eqq):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             eq.iota = eq.get_profile("iota", kind="power_series")
+    from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+
     # can't import other stuff in io due to circular imports, so have to check by name
-    assert (
-        eq.pressure.__class__.__name__ == "PowerSeriesProfile"
-        and eq.iota.__class__.__name__ == "PowerSeriesProfile"
-    ), "Equilibrium must have power series profiles for ascii io"
+    errorif(
+        isinstance(eq.pressure, FourierZernikeProfile)
+        or isinstance(eq.iota, FourierZernikeProfile),
+        ValueError,
+        "cannot save FourierZernikeProfile as ascii",
+    )
 
     pressure = eq.pressure
     iota = eq.iota
+
+    if not isinstance(iota, PowerSeriesProfile):
+        iota = iota.to_powerseries(order=eq.L, sym=True)
+    if not isinstance(pressure, PowerSeriesProfile):
+        pressure = pressure.to_powerseries(order=eq.L, sym=True)
+
     L = max(pressure.basis.L, iota.basis.L)
     pressure.change_resolution(L)
     iota.change_resolution(L)
+    # always save as a full mode basis for legacy codes
+    # which expect this
+    if pressure.sym:
+        pressure = PowerSeriesProfile(
+            params=pressure.params, modes=pressure.basis.modes[:, 0], sym=False
+        )
+    if iota.sym:
+        iota = PowerSeriesProfile(
+            params=iota.params, modes=iota.basis.modes[:, 0], sym=False
+        )
+
+    assert pressure.sym == iota.sym
 
     # open file
     file = open(fname, "w+")
@@ -70,15 +100,14 @@ def write_ascii(fname, eqq):
             )
 
     # profile coefficients
-    nprof = len(np.nonzero(np.abs(pressure.params) + np.abs(iota.params))[0])
+    nprof = pressure.params.size
     file.write("Nprof = {:3d}\n".format(nprof))
     for k, (l, m, n) in enumerate(pressure.basis.modes):
-        if (pressure.params[k] != 0) or (iota.params[k] != 0):
-            file.write(
-                "l: {:3d} cP = {:16.8E} cI = {:16.8E}\n".format(
-                    k, pressure.params[k], iota.params[k]
-                )
+        file.write(
+            "l: {:3d} cP = {:16.8E} cI = {:16.8E}\n".format(
+                l, pressure.params[k], iota.params[k]
             )
+        )
 
     # R, Z & L Fourier-Zernike coefficients
     if eq.sym:

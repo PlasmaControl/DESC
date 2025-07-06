@@ -186,7 +186,7 @@ def get_interpolator(
     warnif(
         use_dft and warn_dft,
         RuntimeWarning,
-        msg="Matrix multiplication may be performed incorrectly for large matrices "
+        msg="Computaitons may be performed incorrectly for large matrices "
         "due to open issues with JAX. Until this is fixed, it is recommended to "
         "validate results against computations with small chunk size when using "
         "the DFT interpolator.",
@@ -526,6 +526,9 @@ def _nonsingular_part(
     source_phi = source_data["phi"]
 
     # slim down to skip batching quantities that aren't used
+    kernel_keys = kernel.keys
+    if hasattr(kernel, "evl_keys"):
+        kernel_keys += kernel.evl_keys
     eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     if eval_grid is not None:
         eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
@@ -571,7 +574,6 @@ def _nonsingular_part(
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
     source_data["phi"] = source_phi
-
     return f
 
 
@@ -959,6 +961,26 @@ def _kernel_dipole(eval_data, source_data, ds, diag=False):
 _kernel_dipole.ndim = 1
 _kernel_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
 
+
+def _kernel_dipole_smooth(eval_data, source_data, ds, diag=False):
+    """Kernel of operator (D[Φ] - D[1]Φ)(x): (Φ(y)-Φ(x))〈∇_x G(x−y),n(y)〉da(y)."""
+    evl_Phi = eval_data["evl_Phi"]
+    if not diag:
+        evl_Phi = evl_Phi[:, jnp.newaxis]
+    out = ds * dot(
+        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        _grad_G(_dx(eval_data, source_data, diag)),
+    )
+    if source_data["Phi"].ndim > 1:
+        out = out[..., jnp.newaxis]
+    # Do operation with Φ at the end, so that the following
+    # outer product plus reduction is more likely to be fused.
+    return (source_data["Phi"] - evl_Phi) * out
+
+
+_kernel_dipole_smooth.ndim = 1
+_kernel_dipole_smooth.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_dipole_smooth.evl_keys = ["evl_Phi"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,

@@ -10,6 +10,7 @@ from desc.grid import LinearGrid, _Grid
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
     _kernel_dipole,
+    _kernel_dipole_smooth,
     _kernel_monopole,
     _nonsingular_part,
     get_interpolator,
@@ -27,14 +28,10 @@ class VacuumSolver(IOAble):
     Computes the magnetic field B in units of Tesla such that
 
     -                   ∆Φ(x) = 0    x ∈ 𝒳
-    -        (∇Φ + B₀ − B)(x) = 0    x ∈ 𝒳
-    -          (j − ∇ × B)(x) = 0    x ∉ ∂𝒳
-    -                <∇,B>(x) = 0    x ∉ ∂𝒳
+    -        (B - ∇Φ - B₀)(x) = 0    x ∈ 𝒳
     - <n,B>(x) = <n,∇Φ+B₀>(x) = 0    x ∈ ∂𝒳
-
-    That is, given a magnetic field B₀ due to volume current sources j,
-    finds the unique vacuum field ∇Φ such that <n,B> = 0 (without assuming
-    nested flux surfaces).
+    -         ∇ × (B - B₀)(x) = 0    x ∉ ∂𝒳
+    -                <∇,B>(x) = 0    ∀x
 
     References
     ----------
@@ -69,21 +66,16 @@ class VacuumSolver(IOAble):
         If true, then 𝒳 is exterior of plasma.
         Default is false.
     I : float
-        Net toroidal current in 𝒳 which is a source for the field ∇Φ.
+        Poloidal secular coefficient for Φ.
     Y : float
-        Net poloidal current outside closure(𝒳) which is a source for the field ∇Φ.
+        Toroidal secular coefficient for Φ.
     B0 : _MagneticField
-        Magnetic field such that j = ∇ × B₀
-        where j is the current in Tesla / meter everywhere.
-
-        Assumes that ``B0.compute_Bnormal()`` computes <n,B₀> such that n is the
-        normal that points out of the plasma. We will automatically flip this normal
-        when the exterior problem is to be solved.
+        Assumes that ``B0.compute_Bnormal()`` computes <n,B₀> with the
+        normal that points to the exterior.
     B0n : jnp.ndarray
         Optional, <n,B₀> on ``src_grid``.
-        Assumes <n,B₀> is such that n is the
-        normal that points out of the plasma. We will automatically flip this normal
-        when the exterior problem is to be solved.
+        Assumes <n,B₀> is computed with the
+        normal that points to the exterior.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -127,7 +119,7 @@ class VacuumSolver(IOAble):
                 M=surface.M * 4,
                 N=surface.N * 4,
                 NFP=surface.NFP if surface.N > 0 else 64,
-                sym=False,  # TODO (#1206)
+                sym=False,
             )
         if Phi_grid is None:
             Phi_grid = src_grid
@@ -300,7 +292,7 @@ class VacuumSolver(IOAble):
                 Phi_0=Phi_0,
             )
             if (maxiter > 0)
-            else _lsmr_Phi(self, bc=_vacuum_bc, chunk_size=chunk_size)
+            else _lsmr_Phi_smoother(self, bc=_vacuum_bc, chunk_size=chunk_size)
         )
         return self._data
 
@@ -508,7 +500,7 @@ def _vacuum_bc(self, chunk_size):
 
 
 def _double_layer(self, src_data, chunk_size, basis=None):
-    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y), ds(y)〉or, if basis is supplied, D[Φ₁].
+    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y),ds(y)〉or, if basis is supplied, D[Φ₁].
 
     If ``basis`` is not supplied, then computes D[Φ].
     If ``basis`` is supplied, then computes D[Φ₁] = ℱ⁻¹(ℱD)(ℱΦ₁)
@@ -534,6 +526,93 @@ def _double_layer(self, src_data, chunk_size, basis=None):
         **kwargs,
     )
     return -D if self._exterior else D
+
+
+def _double_layer_smoother(self, src_data, chunk_size, basis=None):
+    """Compute (D[Φ] - D[1]Φ)(x) = ∫_y (Φ(y)-Φ(x))〈∇_x G(x−y),ds(y).
+
+    Parameters
+    ----------
+    basis : DoubleFourierSeries
+        Optional. If supplied changes the meaning of the output. See note.
+
+    """
+    kwargs = {}
+    if basis is not None:
+        kwargs["known_map"] = ("Phi", partial(basis.evaluate, secular=True))
+        kwargs["ndim"] = basis.num_modes + 2
+    D = singular_integral(
+        eval_data=self._data["Phi"],
+        source_data=src_data,
+        interpolator=self._interpolator["Phi"],
+        kernel=_kernel_dipole_smooth,
+        chunk_size=chunk_size,
+        **kwargs,
+    )
+    if self._exterior:
+        D = -D
+    return D
+
+
+@partial(jit, static_argnames=["bc", "chunk_size", "interior_dirichlet"])
+def _lsmr_Phi_smoother(
+    self,
+    *,
+    bc,
+    chunk_size=None,
+    interior_dirichlet=False,
+):
+    """Compute Fourier harmonics Φ̃ by solving least squares system.
+
+    Parameters
+    ----------
+    self : VacuumSolver or FreeBoundarySolver
+    bc : callable
+        Signature should match bc(self, chunk_size)
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    data : dict[str, jnp.ndarray]
+        Returns ``self._data`` with ``Phi_mn`` in ``self._data["Phi"]``.
+
+    """
+    if "Phi_mn" in self._data["Phi"]:
+        return self._data
+
+    self._data = bc(self, chunk_size)
+    gamma = self._data["Phi"]["gamma"]
+
+    evl_Phi = self.basis.evaluate(self.Phi_grid, secular=True)
+    self._data["Phi"]["evl_Phi"] = evl_Phi
+    src_data = self._data["src"].copy()
+    src_data["Phi"] = (
+        evl_Phi
+        if self._src_grid_equals_Phi_grid
+        else self.basis.evaluate(self.src_grid, secular=True)
+    )
+    A = _double_layer_smoother(self, src_data, chunk_size, self.basis)
+    if interior_dirichlet:
+        A = A - evl_Phi
+    elif self._exterior:
+        A = A + evl_Phi
+    assert A.shape == (self.Phi_grid.num_nodes, self.basis.num_modes + 2)
+
+    # TODO: check this with our new sign conventions
+    gamma = gamma - (self.I * A[:, -2] + self.Y * A[:, -1])
+    A = A[:, :-2]
+    # Solving overdetermined system useful to reduce size of A while
+    # retaining FFT interpolation accuracy in the singular integrals.
+    # TODO: https://github.com/patrick-kidger/lineax/pull/86
+    self._data["Phi"]["Phi_mn"] = (
+        jnp.linalg.solve(A, gamma)
+        if (self.Phi_grid.num_nodes == self.basis.num_modes)
+        else jnp.linalg.lstsq(A, gamma)[0]
+    )
+    return self._data
 
 
 @partial(jit, static_argnames=["bc", "chunk_size", "interior_dirichlet"])

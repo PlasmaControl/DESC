@@ -279,7 +279,7 @@ def test_compute_everything():
             )
             # and do the same for grad(grad(rho))
             names_xyz = (
-                names_xyz - {"grad(grad(rho))", "finite-n_instability_drive"}
+                names_xyz - {"grad(grad(rho))", "finite-n instability drive"}
                 if "grad(grad(rho))" in names_xyz
                 else names_xyz
             )

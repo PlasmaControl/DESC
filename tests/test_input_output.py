@@ -578,8 +578,10 @@ def test_ascii_io(tmpdir_factory):
     eq1 = desc.examples.get("DSHAPE_CURRENT")
     with pytest.warns(UserWarning, match="Setting"):
         eq1.iota = eq1.get_profile("iota").to_powerseries(sym=True)
-    write_ascii(tmp_path, eq1)
-    eq2 = read_ascii(tmp_path)
+    with pytest.warns(DeprecationWarning):
+        write_ascii(tmp_path, eq1)
+    with pytest.warns(DeprecationWarning):
+        eq2 = read_ascii(tmp_path)
     np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
     np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
@@ -593,9 +595,10 @@ def test_ascii_io(tmpdir_factory):
 
     # test with different profile type
     eq1.pressure = eq1.get_profile("p", kind="spline")
-
-    write_ascii(tmp_path, eq1)
-    eq2 = read_ascii(tmp_path)
+    with pytest.warns(DeprecationWarning):
+        write_ascii(tmp_path, eq1)
+    with pytest.warns(DeprecationWarning):
+        eq2 = read_ascii(tmp_path)
     np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
     np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
@@ -617,7 +620,8 @@ def test_ascii_io_errors(tmpdir_factory):
     eq1 = desc.examples.get("DSHAPE_CURRENT")
     eq1.pressure = eq1.pressure.to_fourierzernike()
     with pytest.raises(ValueError, match="FourierZernikeProfile as ascii"):
-        write_ascii(tmp_path, eq1)
+        with pytest.warns(DeprecationWarning):
+            write_ascii(tmp_path, eq1)
 
 
 @pytest.mark.unit

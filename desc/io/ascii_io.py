@@ -24,6 +24,13 @@ def write_ascii(fname, eq):  # noqa: C901
         dictionary of equilibrium parameters.
 
     """
+    warnings.warn(
+        "text-based IO is not as well-tested or maintained as the .h5"
+        " format and is therefore not recommended, please use the"
+        " .h5 output format instead. text-based IO will be deprecated"
+        "in a future release",
+        DeprecationWarning,
+    )
     eq = eq.copy()  # so don't mess up original one
     if eq.iota is None:
         with warnings.catch_warnings():
@@ -161,6 +168,13 @@ def read_ascii(filename):
     from desc.equilibrium import Equilibrium
     from desc.utils import copy_coeffs
 
+    warnings.warn(
+        "text-based IO is not as well-tested or maintained as the .h5"
+        " format and is therefore not recommended, please use the"
+        " .h5 output format instead. text-based IO will be deprecated"
+        "in a future release",
+        DeprecationWarning,
+    )
     eq = {}
     f = open(filename)
     lines = list(f)

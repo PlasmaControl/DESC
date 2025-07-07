@@ -86,6 +86,24 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta_PEST",
+    label="J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e^theta_PEST"],
+)
+def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST"] = dot(["J"], data["e^theta_PEST"])
+    return data
+
+
+@register_compute_fun(
     name="J^zeta",
     label="J^{\\zeta}",
     units="A \\cdot m^{-3}",

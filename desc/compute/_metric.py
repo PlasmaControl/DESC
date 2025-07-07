@@ -2096,6 +2096,26 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_PEST_alt",
+    label="\\sqrt{g}_PEST_{alt}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho|v,p", "e_theta_PEST", "e_phi|r,v"],
+)
+def _sqrtg_PEST_alt(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_alt"] = dot(
+        data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi|r,v"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="g_rr|PEST",
     label="g_{\\rho\\rho}|PEST",
     units="m^{2}",
@@ -2209,14 +2229,9 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
-################################################################################
-###########------------METRIC ELEMENT DERIVATIVES PEST---------------###########
-################################################################################
-
-
 @register_compute_fun(
-    name="g_rr_t|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
+    name="g^rv|PEST",
+    label="g_{\\rho \\vartheta}",
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of covariant metric tensor",
@@ -2225,213 +2240,110 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho|v,p", "e_rho_v|PEST"],
+    data=["e^rho", "e^vartheta"],
 )
-def _g_sub_rr_t_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rr_t|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_v|PEST"])
+def _g_sub_rv(params, transforms, profiles, data, **kwargs):
+    data["g^rv"] = dot(data["e^rho"], data["e^vartheta"])
     return data
 
 
 @register_compute_fun(
-    name="g_rr_z|PEST",
-    label="\\partial_{\\phi} g_{\\rho\\rho}|PEST",
-    units="m^{2}",
-    units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho|v,p", "e_rho_z|PEST"],
-)
-def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rr_z|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_z|PEST"])
-    return data
-
-
-@register_compute_fun(
-    name="g_tt_r|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
-    units="m^{2}",
-    units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_vartheta|r,p", "e_vartheta_r|PEST"],
-)
-def _g_sub_tt_r_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tt_r|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_r|PEST"])
-    return data
-
-
-@register_compute_fun(
-    name="g_tt_z|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\vartheta\\vartheta}|PEST",
-    units="m^{2}",
-    units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_vartheta|r,p", "e_vartheta_z|PEST"],
-)
-def _g_sub_tt_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tt_z|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_z|PEST"])
-    return data
-
-
-@register_compute_fun(
-    name="g_zz_t|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\zeta\\zeta}|PEST",
-    units="m^{2}",
-    units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_phi|r,v", "e_phi_t|PEST"],
-)
-def _g_sub_zz_t_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_zz_t|PEST"] = 2 * dot(data["e_phi|r,v"], data["e_phi_t|PEST"])
-    return data
-
-
-@register_compute_fun(
-    name="g_rt_z|PEST",
-    label="\\partial_{\\rho} g_{\\zeta\\zeta}|PEST",
-    units="m^{2}",
-    units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho|v,p", "e_vartheta|r,p", "e_rho_z|PEST", "e_vartheta_z|PEST"],
-)
-def _g_sub_rt_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rt_z|PEST"] = dot(data["e_rho|v,p"], data["e_vartheta_z|PEST"]) + dot(
-        data["e_rho_z|PEST"], data["e_vartheta|r,p"]
-    )
-    return data
-
-
-################################################################################
-#############--------------JACOBIAN DERIVATIVES PEST---------------#############
-################################################################################
-
-
-@register_compute_fun(
-    name="sqrt(g)_PEST_alt",
-    label="\\sqrt{g}_PEST_{alt}",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho|v,p", "e_theta_PEST", "e_phi|r,v"],
-)
-def _sqrtg_PEST_alt(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_alt"] = dot(
-        data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi|r,v"])
-    )
-    return data
-
-
-@register_compute_fun(
-    name="sqrt(g)_PEST_r|PEST",
-    label="\\partial_{\\rho} \\sqrt{g}_PEST",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
-    dim=1,
+    name="grad(grad(rho))",
+    label="\\nabla(\\nabla(\\rho))",
+    units="m^{-2}",
+    units_long="inverse square meters",
+    description="Gradient of gradient of rho",
+    dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_rho|v,p",
-        "e_theta_PEST",
-        "e_phi|r,v",
-        "e_rho_r|PEST",
-        "e_theta_PEST_r|PEST",
-        "e_phi_r|PEST",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+        "e_rho",
+        "e_zeta",
+        "e_rho_r",
+        "e_rho_t",
+        "e_rho_z",
+        "e_zeta_r",
+        "e_zeta_t",
+        "e_zeta_z",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_t",
+        "sqrt(g)_z",
     ],
 )
-def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_r|PEST"] = (
-        dot(data["e_rho_r|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_r|PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_r|PEST"]))
-    )
+def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
+    data["grad(grad(rho))"] = (
+        cross(data["e_rho_r"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
+        + cross(data["e_rho"], data["e_zeta_r"]) / data["sqrt_g"][jnp.newaxis, :]
+        - cross(data["e_rho"], data["e_zeta"])
+        * data["sqrt(g)_r"][jnp.newaxis, :]
+        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+    )[:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis]
+    +(
+        cross(data["e_rho_t"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
+        + cross(data["e_rho"], data["e_zeta_t"]) / data["sqrt_g"][jnp.newaxis, :]
+        - cross(data["e_rho"], data["e_zeta"])
+        * data["sqrt(g)_t"][jnp.newaxis, :]
+        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+    )[:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis]
+    +(
+        cross(data["e_rho_z"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
+        + cross(data["e_rho"], data["e_zeta_z"]) / data["sqrt_g"][jnp.newaxis, :]
+        - cross(data["e_rho"], data["e_zeta"])
+        * data["sqrt(g)_z"][jnp.newaxis, :]
+        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+    )[:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis]
+
     return data
 
 
 @register_compute_fun(
-    name="sqrt(g)_PEST_t|PEST",
-    label="\\partial_{\\rho} \\sqrt{g}_PEST",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
-    dim=1,
+    name="J_cross_grad(rho)",
+    label="\\mathbf{J} \\times (\\nabla \\rho)",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubed meter",
+    description="Plasma current density cross with grad(rho)",
+    dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_rho|v,p",
-        "e_theta_PEST",
-        "e_phi|r,v",
-        "e_rho_v|PEST",
-        "e_theta_PEST_v|PEST",
-        "e_phi_v|PEST",
+        "J",
+        "e^rho",
     ],
-    aliases=["sqrt(g)_PEST_v|PEST"],
 )
-def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_t|PEST"] = (
-        dot(data["e_rho_v|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_v|PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_v|PEST"]))
-    )
+def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
+    data["J_cross_grad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 
 @register_compute_fun(
-    name="sqrt(g)_PEST_z|PEST",
-    label="\\partial_{\\rho} \\sqrt{g}_PEST",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
+    name="finite-n_instability_drive",
+    label="(\\mathbf{J} \\times (\\nabla \\rho))/g^{\\rho \\rho} \\mathbf{B}"
+    + "\\cdot \\cdot \\mathbf{\\nabla} \\mathbf{\\nabla} \\rho",
+    units="T A \\cdot m^{-1}",
+    units_long="Tesla Amperes / meter",
+    description="finite-n instability drive term",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e_rho|v,p",
-        "e_theta_PEST",
-        "e_phi|r,v",
-        "e_theta_PEST_z|PEST",
-        "e_rho_z|PEST",
-        "e_phi_z|PEST",
-    ],
+    data=["J_cross_grad(rho)", "B", "grad(grad(rho))", "g^rr"],
 )
-def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_z|PEST"] = (
-        dot(data["e_rho_z|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_z|PEST"], data["e_phi|r,v"]))
-        + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_z|PEST"]))
+def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
+    data["finite-n_instability_drive"] = (
+        dot(
+            data["J_cross_grad(rho)"][:, None],
+            dot(data["B"][:, None, None], data["grad(grad(rho))"], axis=1),
+            axis=1,
+        )
+        / data["g^rr"]
     )
     return data

@@ -1294,12 +1294,6 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
         "e_rho|v,p",
         "e_vartheta|r,p",
         "e_phi|r,v",
-        "e_vartheta_v|PEST",
-        "e_vartheta_z|PEST",
-        "e_vartheta_r|PEST",
-        "e_phi_r|PEST",
-        "e_phi_z|PEST",
-        "e_rho_r|PEST",
     ]
 
     N = 2000

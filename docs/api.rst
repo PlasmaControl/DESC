@@ -46,7 +46,7 @@ Compatibility
     :toctree: _api/compat
     :recursive:
 
-    desc.compate.contract_equilibrium
+    desc.compat.contract_equilibrium
     desc.compat.ensure_positive_jacobian
     desc.compat.flip_helicity
     desc.compat.flip_theta

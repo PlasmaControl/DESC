@@ -13,7 +13,7 @@ def write_ascii(fname, eq):  # noqa: C901
     Note: will save the pressure and iota profile as
     power series profiles. If not an iota constrained
     equilibrium, the iota profile will be computed and
-    fit with a fourier series of the equilibrium's L
+    fit with a power series of the equilibrium's L
     resolution.
 
     Parameters

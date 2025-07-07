@@ -28,7 +28,7 @@ def write_ascii(fname, eq):  # noqa: C901
         "text-based IO is not as well-tested or maintained as the .h5"
         " format and is therefore not recommended, please use the"
         " .h5 output format instead. text-based IO will be deprecated"
-        "in a future release",
+        " in a future release",
         DeprecationWarning,
     )
     eq = eq.copy()  # so don't mess up original one

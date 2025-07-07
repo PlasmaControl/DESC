@@ -2323,7 +2323,7 @@ def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="finite-n instability drive",
     label="(\\mathbf{J} \\times (\\nabla \\rho))/g^{\\rho \\rho} \\mathbf{B}"
-    + "\\cdot \\cdot \\mathbf{\\nabla} \\mathbf{\\nabla} \\rho",
+    + "\\cdot \\cdot \\mathbf{\\nabla} (\\mathbf{\\nabla} \\rho)",
     units="T A \\cdot m^{-1}",
     units_long="Tesla Amperes / meter",
     description="finite-n instability drive term",

@@ -23,13 +23,13 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.nabla import curl_cylindrical
+from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
@@ -1220,12 +1220,16 @@ class Equilibrium(Optimizable, _MagneticField):
         basis="rpz",
         source_grid=None,
         transforms=None,
-        chunk_size=None,
+        chunk_size=50,
         L = None,
         M = 8,
         N = None,
         method="virtual casing",
-        A_coords = None
+        A_grid = None,
+        R_bounds = [5,11],
+        phi_bounds = None,
+        Z_bounds = [-5,5],
+        return_A = False
     ):
         """Compute magnetic field at a set of points.
 
@@ -1306,23 +1310,56 @@ class Equilibrium(Optimizable, _MagneticField):
                 kernel,
                 chunk_size=chunk_size)
         elif method in methods[2:4]:
-            if A_coords is None:
-                A_coords = coords
-            # TO DO ADD A SOURCE GRID 2 THAT IS WHERE A IS DEFINED
-            #coords = np.array(coords)
-            A = self.compute_magnetic_vector_potential(A_coords,
-                chunk_size=chunk_size,
-                source_grid=source_grid,
-                params=params,
-                basis=basis,
-                transforms=transforms,
-                )#method=method.replace(' vector potential', ''))
+            
+            
+            shifts = np.array([R_bounds[0],0,Z_bounds[0]])
+            scales = np.array([R_bounds[1]-R_bounds[0],1,Z_bounds[1]-Z_bounds[0]])
+            if A_grid is None:
+                if phi_bounds is None:
+                    A_grid = CylindricalGrid(L=128,M=32,N=128)
+                else:
+                    phi = np.linspace(phi_bounds[0],phi_bounds[1],64)
+                    A_grid = CylindricalGrid(L=128,phi=phi,N=128)
+            A_coords = A_grid.nodes * scales + shifts
+            # If we have already computed the vector potential at these same coordinates, just use those
+            if ((not hasattr(self,'A_coords')) or A_coords != self.A_coords) or source_grid is not None:
+                A = self.compute_magnetic_vector_potential(A_coords,
+                    chunk_size=chunk_size,
+                    source_grid=source_grid,
+                    params=params,
+                    basis=basis,
+                    transforms=transforms,
+                )
+                if source_grid is None:
+                    self.A_grid = A_grid
+                    self.A_coords = A_coords
+                    self.vector_potential = A
+            else:
+                A = self.vector_potential
+
             # Default spectral resolution parameters
             if L is None:
                 L = M
             if N is None:
                 N = M
-            B = curl_cylindrical(A, A_coords, coords, L, M, N, source_grid.NFP)
+
+            # Build spectral transforms
+            basis_obj = DoubleChebyshevFourierBasis(L, M, N)
+            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False)
+            out_grid = Grid((coords-shifts)/scales)
+            out_transform = Transform(out_grid,basis_obj,build_pinv=False,build=True,derivs=1)
+
+            A = self.compute_magnetic_vector_potential(A_coords,
+                chunk_size=chunk_size,
+                source_grid=source_grid,
+                params=params,
+                basis='rpz',
+                transforms=transforms,
+                )
+            
+            B = _curl_cylindrical(A,A_coords[:,0],coords[:,0],in_transform,out_transform,scales)
+            if return_A:
+                B = (B, A)
         return B
     def compute_magnetic_vector_potential(
         self,
@@ -1331,9 +1368,7 @@ class Equilibrium(Optimizable, _MagneticField):
         basis="rpz",
         source_grid=None,
         transforms=None,
-        chunk_size=None,
-        method = "biot-savart"
-    ):
+        chunk_size=None):
         """Compute magnetic vector potential at a set of points.
 
         Parameters
@@ -1360,48 +1395,28 @@ class Equilibrium(Optimizable, _MagneticField):
             magnetic vector potential at specified points
 
         """
-        methods = ['biot-savart','virtual casing']
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        if method == methods[0]:
-            if source_grid is None:
-                source_grid = QuadratureGrid(
-                    L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
-                )
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message="Unequal number of field periods")
-                data = self.compute(
-                    ["J", "phi", "sqrt(g)", "x"],
-                    grid=source_grid,
-                    params=params,
-                    transforms=transforms,
-                )
-            source_xyz = rpz2xyz(data["x"])
-            J = rpz2xyz_vec(data["J"], phi=data["phi"])
-            dV = data["sqrt(g)"] * source_grid.weights
-
-            A = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+        if source_grid is None:
+            source_grid = QuadratureGrid(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
             )
-        elif method == methods[1]:
-            if source_grid is None:
-                source_grid = LinearGrid(
-                    rho=np.array([1.0]),
-                    M=self.M_grid,
-                    N=self.N_grid,
-                    NFP=self.NFP if self.N > 0 else 64,
-                    sym=False,
-                )
-            kernel = _kernel_biot_savart_A
-            source_data = self.compute(kernel.keys, grid = source_grid)
-            A = integrate_surface(
-                coords,
-                source_data,
-                source_grid,
-                kernel,
-                chunk_size=chunk_size)
-            
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            data = self.compute(
+                ["J", "phi", "sqrt(g)", "x"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+            )
+        source_xyz = rpz2xyz(data["x"])
+        J = rpz2xyz_vec(data["J"], phi=data["phi"])
+        dV = data["sqrt(g)"] * source_grid.weights
+
+        A = biot_savart_general_vector_potential(
+            eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+        )            
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A

@@ -7,7 +7,7 @@ import numpy as np
 from desc.utils import errorif
 
 
-def write_ascii(fname, eqq):  # noqa: C901
+def write_ascii(fname, eq):  # noqa: C901
     """Print the equilibrium solution to a text file.
 
     Note: will save the pressure and iota profile as
@@ -24,7 +24,7 @@ def write_ascii(fname, eqq):  # noqa: C901
         dictionary of equilibrium parameters.
 
     """
-    eq = eqq.copy()  # so dont mess up original one
+    eq = eq.copy()  # so don't mess up original one
     if eq.iota is None:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")

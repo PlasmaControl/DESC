@@ -172,7 +172,7 @@ def read_ascii(filename):
         "text-based IO is not as well-tested or maintained as the .h5"
         " format and is therefore not recommended, please use the"
         " .h5 output format instead. text-based IO will be deprecated"
-        "in a future release",
+        " in a future release",
         DeprecationWarning,
     )
     eq = {}

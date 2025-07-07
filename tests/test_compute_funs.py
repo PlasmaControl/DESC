@@ -1740,14 +1740,7 @@ def test_clebsch_sfl_funs():
 def test_parallel_grad_fd(DummyStellarator):
     """Test that the parallel gradients match with numerical gradients."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    grid = get_rtz_grid(
-        eq,
-        0.5,
-        0,
-        np.linspace(0, 2 * np.pi, 50),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
+    grid = get_rtz_grid(eq, 0.5, 0, np.linspace(0, 2 * np.pi, 50), coordinates="raz")
     data = eq.compute(
         [
             "|B|",

@@ -515,13 +515,14 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^theta", "e^rho", "e_zeta", "theta_PEST_r", "theta_PEST_t", "theta_PEST_z"],
+    data=["e^theta", "e^rho", "e^zeta", "theta_PEST_r", "theta_PEST_t", "theta_PEST_z"],
+    aliases=["e^theta_PEST"],
 )
 def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     data["e^vartheta"] = (
-        data["theta_PEST_r"] * data["e_rho"]
-        + (1 + data["theta_PEST_t"]) * data["e^theta"]
-        + data["theta_PEST_z"] * data["e_zeta"]
+        data["theta_PEST_r"][:, jnp.newaxis] * data["e^rho"]
+        + (1 + data["theta_PEST_t"])[:, jnp.newaxis] * data["e^theta"]
+        + data["theta_PEST_z"][:, jnp.newaxis] * data["e^zeta"]
     )
     return data
 

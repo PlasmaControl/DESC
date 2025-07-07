@@ -277,6 +277,12 @@ def test_compute_everything():
                 if "grad(B)" in names
                 else names
             )
+            # and do the same for grad(grad(rho))
+            names_xyz = (
+                names_xyz - {"grad(grad(rho))", "finite-n_instability_drive"}
+                if "grad(grad(rho))" in names_xyz
+                else names_xyz
+            )
             this_branch_data_xyz = things[p].compute(
                 list(names_xyz), **grid.get(p, {}), basis="xyz"
             )

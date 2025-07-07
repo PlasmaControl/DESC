@@ -2242,8 +2242,8 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^rho", "e^vartheta"],
 )
-def _g_sub_rv(params, transforms, profiles, data, **kwargs):
-    data["g^rv"] = dot(data["e^rho"], data["e^vartheta"])
+def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rv|PEST"] = dot(data["e^rho"], data["e^vartheta"])
     return data
 
 
@@ -2253,7 +2253,7 @@ def _g_sub_rv(params, transforms, profiles, data, **kwargs):
     units="m^{-2}",
     units_long="inverse square meters",
     description="Gradient of gradient of rho",
-    dim=3,
+    dim=(3, 3),
     params=[],
     transforms={},
     profiles=[],
@@ -2278,25 +2278,25 @@ def _g_sub_rv(params, transforms, profiles, data, **kwargs):
 )
 def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
     data["grad(grad(rho))"] = (
-        cross(data["e_rho_r"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
-        + cross(data["e_rho"], data["e_zeta_r"]) / data["sqrt_g"][jnp.newaxis, :]
+        cross(data["e_rho_r"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
+        + cross(data["e_rho"], data["e_zeta_r"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_rho"], data["e_zeta"])
-        * data["sqrt(g)_r"][jnp.newaxis, :]
-        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+        * data["sqrt(g)_r"][:, jnp.newaxis]
+        / data["sqrt(g)"][:, jnp.newaxis] ** 2
     )[:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis]
     +(
-        cross(data["e_rho_t"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
-        + cross(data["e_rho"], data["e_zeta_t"]) / data["sqrt_g"][jnp.newaxis, :]
+        cross(data["e_rho_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
+        + cross(data["e_rho"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_rho"], data["e_zeta"])
-        * data["sqrt(g)_t"][jnp.newaxis, :]
-        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+        * data["sqrt(g)_t"][:, jnp.newaxis]
+        / data["sqrt(g)"][:, jnp.newaxis] ** 2
     )[:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis]
     +(
-        cross(data["e_rho_z"], data["e_zeta"]) / data["sqrt_g"][jnp.newaxis, :]
-        + cross(data["e_rho"], data["e_zeta_z"]) / data["sqrt_g"][jnp.newaxis, :]
+        cross(data["e_rho_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
+        + cross(data["e_rho"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_rho"], data["e_zeta"])
-        * data["sqrt(g)_z"][jnp.newaxis, :]
-        / data["sqrt(g)"][jnp.newaxis, :] ** 2
+        * data["sqrt(g)_z"][:, jnp.newaxis]
+        / data["sqrt(g)"][:, jnp.newaxis] ** 2
     )[:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis]
 
     return data
@@ -2338,11 +2338,11 @@ def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
     data=["J_cross_grad(rho)", "B", "grad(grad(rho))", "g^rr"],
 )
 def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
+
     data["finite-n_instability_drive"] = (
         dot(
-            data["J_cross_grad(rho)"][:, None],
-            dot(data["B"][:, None, None], data["grad(grad(rho))"], axis=1),
-            axis=1,
+            data["J_cross_grad(rho)"],
+            dot(data["B"][:, :, jnp.newaxis], data["grad(grad(rho))"], axis=1),
         )
         / data["g^rr"]
     )

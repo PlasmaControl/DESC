@@ -477,8 +477,10 @@ class ObjectiveFromUser(_Objective):
             # q here is the kwarg for "quantity" as in, quantity to be averaged
             f_fsa = surface_averages(grid, q=f, sqrt_g=data['sqrt(g)'])
             # this has the FSA values on the full grid,
-            # but we just want the unique values:
-            return grid.compress(f_fsa)
+            # but we just want the unique values, so we use the
+            # grid.compress method, which only returns the unique values
+            # along the desired coordinate
+            return grid.compress(f_fsa, "rho")
 
         myobj = ObjectiveFromUser(fun=myfun, thing=eq)
 

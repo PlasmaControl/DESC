@@ -1032,10 +1032,10 @@ def _compute_A_or_B_from_CurrentPotentialField(
         whether to compute the magnetic vector potential "A" or the magnetic field
         "B". Defaults to "B"
     data : dict
-        if provided, do not compute here but instead use provided
+        if provided, do not compute any dependency data, but instead use provided
         dictionary corresponding to the source_grid.
-        dict needs "K", "| e_theta x e_zeta |" and "x" as keys,
-        with "x" and "K" in rpz basis
+        data dictionary requires keys `"K", "| e_theta x e_zeta |"` and `"x"`,
+        with `"K"` and `"x"` in rpz basis.
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input

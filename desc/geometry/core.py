@@ -494,12 +494,16 @@ class Surface(IOAble, Optimizable, ABC):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
             rho surfaces or a Quadrature grid for constant zeta surfaces.
-        params : dict of ndarray
-            Parameters from the equilibrium. Defaults to attributes of self.
+        params : dict[str, jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
-        data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+        data : dict[str, jnp.ndarray]
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested

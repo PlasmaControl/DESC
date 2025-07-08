@@ -260,6 +260,16 @@ class _BIESTInterpolator(IOAble, ABC):
         self._shift_z = self._hz * sz / 2 * r * jnp.cos(w)
 
     @property
+    def eval_grid(self):
+        """Evaluation points."""
+        return self._eval_grid
+
+    @property
+    def source_grid(self):
+        """Source points for quadrature of kernels."""
+        return self._source_grid
+
+    @property
     def st(self):
         """Extent of polar grid support.
 
@@ -374,7 +384,7 @@ class FFTInterpolator(_BIESTInterpolator):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
         # TODO (#1206)
         return jnp.fft.ifft2(
-            self._source_grid.meshgrid_reshape(f, "rtz")[0], axes=(0, 1)
+            self.source_grid.meshgrid_reshape(f, "rtz")[0], axes=(0, 1)
         )
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
@@ -410,14 +420,14 @@ class FFTInterpolator(_BIESTInterpolator):
             f = self.fourier(f)
         return fft_interp2d(
             f,
-            n1=self._eval_grid.num_theta,
-            n2=self._eval_grid.num_zeta,
+            n1=self.eval_grid.num_theta,
+            n2=self.eval_grid.num_zeta,
             sx=self._shift_t[i],
             sy=self._shift_z[i],
             dx=self._ht,
             dy=self._hz,
             is_fourier=True,
-        ).reshape(self._eval_grid.num_nodes, *f.shape[2:], order="F")
+        ).reshape(self.eval_grid.num_nodes, *f.shape[2:], order="F")
 
 
 class DFTInterpolator(_BIESTInterpolator):
@@ -451,12 +461,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def fourier(self, f):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
-        if (self._source_grid.num_zeta % 2) == 0:
+        if (self.source_grid.num_zeta % 2) == 0:
             i = (0, -1)
         else:
             i = 0
         return 2 * rfft2(
-            self._source_grid.meshgrid_reshape(f, "rtz")[0],
+            self.source_grid.meshgrid_reshape(f, "rtz")[0],
             axes=(0, 1),
             norm="forward",
         ).at[:, i].divide(2).reshape(-1, *f.shape[1:])
@@ -464,13 +474,13 @@ class DFTInterpolator(_BIESTInterpolator):
     def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
         return rfft2_vander(
-            self._eval_grid.unique_theta + self._shift_t[i],
-            self._eval_grid.unique_zeta + self._shift_z[i],
+            self.eval_grid.unique_theta + self._shift_t[i],
+            self.eval_grid.unique_zeta + self._shift_z[i],
             self._modes_fft,
             self._modes_rfft,
-            inverse_idx_fft=self._eval_grid.inverse_theta_idx,
-            inverse_idx_rfft=self._eval_grid.inverse_zeta_idx,
-        ).reshape(self._eval_grid.num_nodes, -1)
+            inverse_idx_fft=self.eval_grid.inverse_theta_idx,
+            inverse_idx_rfft=self.eval_grid.inverse_zeta_idx,
+        ).reshape(self.eval_grid.num_nodes, -1)
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate ``f`` to polar node ``i`` around evaluation grid.
@@ -527,8 +537,8 @@ def _nonsingular_part(
 
     # slim down to skip batching quantities that aren't used
     kernel_keys = kernel.keys
-    if hasattr(kernel, "evl_keys"):
-        kernel_keys += kernel.evl_keys
+    if hasattr(kernel, "eval_keys"):
+        kernel_keys += kernel.eval_keys
     eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     if eval_grid is not None:
         eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
@@ -636,8 +646,8 @@ def _singular_part(
             )
             # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
             #  singular point for hypersingular kernels such as the Biot-Savart kernel.
-            #  Hence the quadrature may not converge to the Hadamard finite part.
-            #  Prove otherwise or use uniform grid in θ, ϕ and map coordinates.
+            #  Hence the quadrature may not converge to the Cauchy principal value.
+            #  Prove otherwise or remove singularity.
         if known_map is not None:
             source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
         return kernel(eval_data, source_data_polar, v[i], diag=True)
@@ -685,8 +695,8 @@ def singular_integral(
     ----------
     eval_data : dict
         Dictionary of data at evaluation points (eval_grid passed to interpolator).
-        Keys should be those required by kernel as kernel.keys. Vector data should be
-        in rpz basis.
+        Should store (R, ϕ, Z) coordinates to evaluate field.
+        Vector data should be in rpz basis.
     source_data : dict
         Dictionary of data at source points (source_grid passed to interpolator). Keys
         should be those required by kernel as kernel.keys. Vector data should be in
@@ -916,17 +926,20 @@ def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
     grad_G = _grad_G(_dx(eval_data, source_data, diag))
     return ds * (
         jnp.cross(K * a[:, jnp.newaxis], grad_G)
-        + grad_G * (source_data.get("Bn", 0) * a)[:, jnp.newaxis]
+        + grad_G * (source_data["B0*n"] * a)[:, jnp.newaxis]
     )
 
 
 _kernel_biot_savart_coulomb.ndim = 3
-_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn", "|e_theta x e_zeta|"]
+_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "B0*n", "|e_theta x e_zeta|"]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
     """Returns -4π Bₙ(y) G(x-y) da(y) = Bₙ(y) ‖x−y‖⁻¹ da(y)."""
-    return (-4 * jnp.pi) * _kernel_monopole(eval_data, source_data, ds, diag)
+    return (-4 * jnp.pi) * safediv(
+        source_data["|e_theta x e_zeta|"] * source_data["Bn"],
+        _1_over_G(_dx(eval_data, source_data, diag)),
+    )
 
 
 _kernel_Bn_over_r.ndim = 1
@@ -934,15 +947,15 @@ _kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
 
 
 def _kernel_monopole(eval_data, source_data, ds, diag=False):
-    """Kernel of single layer operator S[Bₙ]: Bₙ(y) G(x-y) da(y)."""
+    """Kernel of single layer operator S[B0*n]: (B0*n)(y) G(x-y) da(y)."""
     return ds * safediv(
-        source_data["|e_theta x e_zeta|"] * source_data.get("Bn", 0),
+        source_data["|e_theta x e_zeta|"] * source_data["B0*n"],
         _1_over_G(_dx(eval_data, source_data, diag)),
     )
 
 
 _kernel_monopole.ndim = 1
-_kernel_monopole.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
+_kernel_monopole.keys = _dx.keys + ["B0*n", "|e_theta x e_zeta|"]
 
 
 def _kernel_dipole(eval_data, source_data, ds, diag=False):
@@ -964,9 +977,9 @@ _kernel_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
 
 def _kernel_dipole_smooth(eval_data, source_data, ds, diag=False):
     """Kernel of operator (D[Φ] - D[1]Φ)(x): (Φ(y)-Φ(x))〈∇_x G(x−y),n(y)〉da(y)."""
-    evl_Phi = eval_data["evl_Phi"]
+    eval_Phi = eval_data["Phi(x)"]
     if not diag:
-        evl_Phi = evl_Phi[:, jnp.newaxis]
+        eval_Phi = eval_Phi[:, jnp.newaxis]
     out = ds * dot(
         rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
@@ -975,12 +988,12 @@ def _kernel_dipole_smooth(eval_data, source_data, ds, diag=False):
         out = out[..., jnp.newaxis]
     # Do operation with Φ at the end, so that the following
     # outer product plus reduction is more likely to be fused.
-    return (source_data["Phi"] - evl_Phi) * out
+    return (source_data["Phi"] - eval_Phi) * out
 
 
 _kernel_dipole_smooth.ndim = 1
 _kernel_dipole_smooth.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
-_kernel_dipole_smooth.evl_keys = ["evl_Phi"]
+_kernel_dipole_smooth.eval_keys = ["Phi(x)"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,

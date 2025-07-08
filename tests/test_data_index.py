@@ -72,6 +72,7 @@ def test_data_index_deps():
     pattern_profiles = re.compile(r"profiles\[(.*?)]")
     pattern_params = re.compile(r"params\[(.*?)]")
     pattern_dep_ignore = re.compile("noqa: unused dependency")
+
     for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
         if module_name[0] == "_":
             # JITed functions are not functions according to inspect,

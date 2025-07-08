@@ -2797,7 +2797,7 @@ class Bxdl(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Curve Bxdl error: "
-    _units = "(T m)"
+    _units = "(T)"
     _coordinates = "rtz"
 
     def __init__(
@@ -2905,9 +2905,11 @@ class Bxdl(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        if self._normalize:
-            scales = compute_scaling_factors(curve)
-            self._normalization = scales["a"] * 1  # assume field of scale unity
+        if self._normalize and self._eq is not None:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]  # assume field of same scale as eq
+        elif self._normalize and self._eq is None:
+            self._normalization = 1
 
         super().build(use_jit=use_jit, verbose=verbose)
 

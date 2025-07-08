@@ -17,9 +17,17 @@ from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, _Grid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    Timer,
+    broadcast_tree,
+    cross,
+    errorif,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -2743,6 +2751,202 @@ class ToroidalFlux(_Objective):
             )
 
         return Psi
+
+
+class Bxdl(_Objective):
+    """Target Bxdl = 0 on a curve.
+
+    Computes field from MagneticField object(s), and optimizes them to produce a field
+    which is parallel relative to a given Curve object.
+
+    Parameters
+    ----------
+    curve : Curve
+        Curve along which magnetic field will be optimized.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the perpendicular component to the Curve.
+    eq : Equilibrium, optional
+        Equilibrium to compute the B_plasma contribution from at the curve.
+        Assumed to be fixed. If ``eq`` is not fixed, input it as part of the list
+        for ``field``.
+    eq_grid : Grid, optional
+        Collocation grid containing the nodes in the equilibrium to compute the plasma
+        magnetic field from.
+        Default grid is: ``QuadratureGrid(L=2*eq.L_grid, M=2*eq.M_grid, N=2 *
+        eq.N_grid, NFP=eq.NFP)``
+    eval_grid : Grid, optional
+        Collocation grid for the points to evaluate the objective at on the curve.
+        Default grid is determined by the Curve object.
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Curve Bxdl error: "
+    _units = "(T m)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        curve,
+        field,
+        eq=None,
+        eq_grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        eval_grid=None,
+        field_grid=None,
+        name="Bxdl",
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
+    ):
+
+        if target is None and bounds is None:
+            target = 0
+
+        self._eval_grid = eval_grid
+        self._curve = curve
+        self._field = [field] if not isinstance(field, list) else field
+        self._field_grid = field_grid
+        self._eq = eq
+        self._eq_grid = eq_grid
+        self._bs_chunk_size = bs_chunk_size
+
+        super().__init__(
+            things=self._field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.magnetic_fields import SumMagneticField
+
+        curve = self._curve
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(N=2 * curve.N + 5)
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = ["R", "Z", "phi", "ds", "frenet_tangent"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        eval_data = curve.compute(self._data_keys, grid=eval_grid, basis="rpz")
+
+        self._dim_f = eval_grid.num_nodes
+        w = eval_data["ds"]
+
+        if self._eq is not None:
+            eq = self._eq
+            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+            if self._eq_grid is None:
+                eq_grid = QuadratureGrid(
+                    L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
+                )
+            else:
+                eq_grid = self._eq_grid
+            B_plasma = eq.compute_magnetic_field(
+                coords=x,
+                chunk_size=self._bs_chunk_size,
+                source_grid=eq_grid,
+                basis="rpz",
+            )
+        else:
+            B_plasma = None
+
+        self._constants = {
+            "field": SumMagneticField(self._field),
+            "field_grid": self._field_grid,
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "B_plasma": B_plasma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(curve)
+            self._normalization = scales["a"] * 1  # assume field of scale unity
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *field_params, constants=None):
+        """Compute Bxdl error on curve.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bxdl error at points
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        eval_data = constants["eval_data"]
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+
+        # B_ext is not pre-computed because field is not fixed
+        B_ext = constants["field"].compute_magnetic_field(
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
+        )
+        if constants["B_plasma"] is not None:
+            B_ext = B_ext + constants["B_plasma"]
+        f = safenorm(cross(B_ext, eval_data["frenet_tangent"], axis=-1), axis=-1)
+        return f
 
 
 class LinkingCurrentConsistency(_Objective):

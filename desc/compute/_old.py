@@ -95,8 +95,8 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         "fieldline length",
     ]
     + Bounce1D.required_names,
-    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
@@ -168,6 +168,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["old effective ripple 3/2"],
+    public=False,
 )
 def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     """Proxy for neoclassical transport in the banana regime.
@@ -215,6 +216,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
@@ -317,6 +319,7 @@ def _poloidal_drift(data, B, pitch):
     data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])

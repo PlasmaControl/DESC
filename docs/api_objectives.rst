@@ -96,6 +96,7 @@ Stability
 
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
+    desc.objectives.BallooningStability
 
 
 Free boundary / Single stage optimization
@@ -124,6 +125,7 @@ Coil Optimization
     desc.objectives.CoilTorsion
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
+    desc.objectives.PlasmaCoilSetDistanceBound
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilCurrentLength

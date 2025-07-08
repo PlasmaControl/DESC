@@ -68,19 +68,19 @@ class _Grid(IOAble, ABC):
             del self._unique_theta_idx
 
     def _enforce_symmetry(self):
-        """Enforce stellarator symmetry.
+        """Remove unnecessary nodes assuming poloidal symmetry.
 
-        1. Remove nodes with theta > pi.
-        2. Rescale theta spacing to preserve dtheta weight.
-            Need to rescale on each theta coordinate curve by a different factor.
-            dtheta should = 2π / number of nodes remaining on that theta curve.
-            Nodes on the symmetry line should not be rescaled.
+        1. Remove nodes with θ > π.
+        2. Rescale θ spacing to preserve dθ weight.
+           Need to rescale on each θ coordinate curve by a different factor.
+           dθ = 2π / number of nodes remaining on that θ curve.
+           Nodes on the symmetry line should not be rescaled.
 
         """
         if not self.sym:
             return
         # indices where poloidal coordinate is off the symmetry line of
-        # poloidal coord=0 or pi
+        # poloidal coord=0 or π
         off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
         __, inverse, off_sym_line_per_rho_surf_count = np.unique(
             self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
@@ -111,7 +111,7 @@ class _Grid(IOAble, ABC):
         # The first two assumptions let _per_poloidal_curve = _per_rho_surf.
         # The third assumption lets the scale factor be constant over a
         # particular theta curve, so that each node in the open interval
-        # (0, pi) has its spacing scaled up by the same factor.
+        # (0, π) has its spacing scaled up by the same factor.
         # Nodes at endpoints 0, π should not be scaled.
         scale = off_sym_line_per_rho_surf_count / (
             off_sym_line_per_rho_surf_count - to_delete_per_rho_surf_count
@@ -236,7 +236,14 @@ class _Grid(IOAble, ABC):
 
     @property
     def sym(self):
-        """bool: True for stellarator symmetry, False otherwise."""
+        """bool: ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+
+        Whether the poloidal domain of this grid is truncated to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
+        """
         return self.__dict__.setdefault("_sym", False)
 
     @property
@@ -1127,7 +1134,13 @@ class LinearGrid(_Grid):
         Change this only if your nodes are placed within one field period
         or should be interpreted as spanning one field period.
     sym : bool
-        True for stellarator symmetry, False otherwise (Default = False).
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
     endpoint : bool
@@ -1620,7 +1633,13 @@ class ConcentricGrid(_Grid):
     NFP : int
         number of field periods (Default = 1)
     sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}

@@ -24,6 +24,7 @@ from desc.compute.utils import (
     get_transforms,
 )
 from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
+from desc.compute.extend_flux_coords import _compute_s_edge, _rescale_rho
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -1420,6 +1421,26 @@ class Equilibrium(Optimizable, _MagneticField):
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A
+
+    def build_extended_coords(self,
+        res = 24,
+        ds = 0.01,
+        dist = 0.5):
+        self.R_v_c, self.Z_v_c, self.s_tilde_c, self.s_tilde_basis, self.basis_1D, self.max_rho = _rescale_rho(self,*_compute_s_edge(self,res,ds,dist),res)
+        self.extended_coords = True
+    
+    def compute_extended(self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        override_grid=True,
+        **kwargs):
+        if not self.extended_coords:
+            self.build_extended_coords()
+        
 
     def map_coordinates(
         self,

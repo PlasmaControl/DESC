@@ -99,6 +99,7 @@ def _get_del_inputs(in_coords,out_coords,L,M,N,NFP):
     # Normalize R and Z to [alpha/2,1-alpha/2] so they can be used in the Chebyshev basis
     if out_coords is None:
         out_coords = in_coords
+
     Rs = np.unique(np.hstack([in_coords[:,0],out_coords[:,0]]))
     Zs = np.unique(np.hstack([in_coords[:,2],out_coords[:,2]]))
     shifts,scales = _normalize_rpz(Rs, Zs)
@@ -174,7 +175,7 @@ def _curl_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     curl_A = np.vstack([curl_A_R,curl_A_phi,curl_A_z]).T
     return curl_A
 
-def _div_cylindrical(A,in_R,out_R,in_transform,out_transform):
+def _div_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     A_coeff = in_transform.fit(A * np.vstack([in_R,np.ones_like(in_R),np.ones_like(in_R)]).T)
     # Calculate matrix of terms for the curl
     # (dims: datapoint, component index, derivative index)
@@ -191,7 +192,15 @@ def _div_cylindrical(A,in_R,out_R,in_transform,out_transform):
     return div
 
 def _normalize_rpz(Rs,Zs,alpha=1E-5):
+    Rs,Zs = np.atleast_1d(Rs),np.atleast_1d(Zs)
     shifts = np.array([Rs.min(),0,Zs.min()])
-    scales = np.array([(1/(1-alpha))*((Rs-shifts[0]).max()),1,(1/(1-alpha))*((Zs-shifts[2]).max())])
+    scales = np.array([(1/(1-alpha))*((Rs-shifts[0]).max()),
+                       1,
+                       (1/(1-alpha))*((Zs-shifts[2]).max())])
     shifts -= np.array([alpha/2,0,alpha/2]) * scales
+
+    # If the minimum R and Z are the same as the max, shift to 0.5
+    shifts -= np.where(scales==0,0.5,0)
+    scales = np.where(scales==0,1,scales)
+
     return shifts,scales

@@ -1910,6 +1910,7 @@ class CylindricalGrid(_Grid):
         self._period = (np.inf, 2 * np.pi/self._NFP, np.inf)
         
         # R (Chebyshev extrema nodes)
+        alpha = 1E-6
         if L is not None:
             self._L = check_nonnegint(L, "L", False)
             R = (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2
@@ -1918,8 +1919,8 @@ class CylindricalGrid(_Grid):
                 R[0] = 0
                 R[-1] = 1
             else:
-                R[0] = R[1] / 10
-                R[-1] = 1-(1-R[-2])/10
+                R[0] = R[1] * alpha
+                R[-1] = 1-(1-R[-2]) * alpha
 
         dR = _midpoint_spacing(R, jnp=np)
 
@@ -1938,8 +1939,8 @@ class CylindricalGrid(_Grid):
                 Z[0] = 0
                 Z[-1] = 1
             else:
-                Z[0] = Z[1] / 10
-                Z[-1] = 1-(1-Z[-2])/10
+                Z[0] = Z[1] * alpha
+                Z[-1] = 1-(1-Z[-2]) * alpha
 
         dZ = _midpoint_spacing(Z, jnp=np)
 

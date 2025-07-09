@@ -4099,9 +4099,14 @@ def plot_gammac(
         fig, ax = plot_gammac(eq, rho=0.5)
     """
     if rho is None:
-        rho = np.array([0.5])
-    elif isinstance(rho, float):
-        rho = np.array([rho])
+        rho = np.array([0.5], dtype=float)
+    else:
+        rho = np.asarray(rho, dtype=float)
+        if rho.size != 1:
+            raise ValueError("rho must be a scalar or length-1 array")
+        rho = rho.reshape(
+            1,
+        )
 
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)

@@ -358,7 +358,9 @@ class LinearObjectiveFromUser(_FixedObjective):
     Examples
     --------
 
-    For example use, see the Omnigenity Optimization notebook in the documentation.
+    For example use, see the Omnigenity Optimization notebook,
+    the Advanced QS Optimization notebook, or
+    the documentation page for adding new objective functions.
 
     """
 
@@ -499,7 +501,6 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom objective value: "
     _static_attrs = ["_compute_kwargs"]
 
     def __init__(
@@ -514,7 +515,7 @@ class ObjectiveFromUser(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="custom",
+        name="Custom",
         jac_chunk_size=None,
         compute_kwargs=None,
         **kwargs,
@@ -529,6 +530,8 @@ class ObjectiveFromUser(_Objective):
             target = 0
         self._fun = fun
         self._grid = grid
+        self._print_value_fmt = f"{name} objective value: "
+
         self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,

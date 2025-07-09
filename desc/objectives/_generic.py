@@ -204,8 +204,15 @@ class GenericObjective(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    __doc__ += """
+    Examples
+    --------
 
-    _print_value_fmt = "Generic objective value: "
+    For examples, see the Advanced QS Optimization notebook in the documentation, or
+    the documentation page for adding new objective functions.
+
+    """
+
     _static_attrs = ["_compute_kwargs"]
 
     def __init__(
@@ -220,7 +227,7 @@ class GenericObjective(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="generic",
+        name="Generic",
         jac_chunk_size=None,
         compute_kwargs=None,
         **kwargs,
@@ -248,6 +255,7 @@ class GenericObjective(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
         )
+        self._print_value_fmt = f"{name} objective value: "
         self._p = _parse_parameterization(thing)
         self._scalar = not bool(data_index[self._p][self.f]["dim"])
         self._coordinates = data_index[self._p][self.f]["coordinates"]

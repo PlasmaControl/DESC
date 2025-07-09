@@ -608,8 +608,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         "iota",
         "iota_r",
         "p",
-        "p_r",
-        "psi_r",
         "a",
     ],
     n_rho_max="int: 2 x maximum radial mode number",
@@ -631,20 +629,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
 
-    NFP = 1
-
     iota = data["iota"][:, None]
     iota_r = data["iota_r"][:, None]
-    iota_rr = data["iota_rr"][:, None]
 
     p = mu_0 * data["p"][:, None] / B_N**2
-    p_r = mu_0 * data["p_r"][:, None] / B_N**2
-    p_rr = mu_0 * data["p_rr"][:, None] / B_N**2
-    psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
-    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
-
-    psi_r_sqrt_g = data["(psi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
-    chi_r_sqrt_g = data["(chi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
 
     axisym = kwargs.get("axisym", False)
 
@@ -659,7 +647,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         D_zeta0 = fourier_diffmat(n_zeta_max)
 
     def _eval_1D(f, x):
-        return vmap(lambda x_val: f(x_val))(x)
+        return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
         x_0 = 0.5
@@ -671,35 +659,30 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         return eps + (1 - eps) * (lower + upper)
 
     dx_f = jax.grad(_f)
-    dxx_f = jax.grad(dx_f)
 
     # The points in the supplied grid must be consistent with how
     # the kronecker product is created
     x = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
-    scale_vector2 = (_eval_1D(dxx_f, x)) * scale_vector1
 
     scale_x1 = scale_vector1[:, None]
-    scale_x2 = scale_vector2[:, None]
 
     # Get differentiation matrices
     # RG: setting the gradient to 0 to save some memory?
     D_rho0 = legendre_D1(n_rho_max) * scale_x1
     D_theta0 = fourier_diffmat(n_theta_max)
-    D_zeta0 = D_zeta0
+    D_zeta0 = fourier_diffmat(n_zeta_max)
 
-    W0 = scale_x1 * jnp.diagonal(legendre_lobatto_weights(n_rho_max))
+    w0 = scale_x1 * legendre_lobatto_weights(n_rho_max)
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
 
-    D_rho = stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
-    D_theta = stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
-    D_zeta = stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
-
-    W = stop_gradient(jnp.kron(W0, jnp.kron(I_theta0, I_zeta0)))
+    D_rho = jax.lax.stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
+    D_theta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
+    D_zeta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
     # Create the full matrix
@@ -712,33 +695,88 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     all_idx = slice(0, 3 * n_total)
 
-    g_rr = data["g_rv|PEST"][:, None] / a_N**2
-    g_vv = data["g_vv|PEST"][:, None] / a_N**2
-    g_zz = data["g_zz|PEST"][:, None] / a_N**2
+    sqrt_g = data["sqrt(g)_PEST"][:, None]
 
-    g_rv = data["g_rv|PEST"][:, None] / a_N**2
-    g_vr = g_rt
+    g_rr_over_sqrtg = data["g_rv|PEST"][:, None] / sqrt_g * a_N
+    g_vv_over_sqrtg = data["g_vv|PEST"][:, None] / sqrt_g * a_N
+    g_zz_over_sqrtg = data["g_zz|PEST"][:, None] / sqrt_g * a_N
+    g_rv_over_sqrtg = data["g_rv|PEST"][:, None] / sqrt_g * a_N
+    g_vr_over_sqrtg = g_rv_over_sqrtg
 
-    g_rz = data["g_rz|PEST"][:, None] / a_N**2
-    # --no-verify g_zr = g_rz
+    g_rz_over_sqrtg = data["g_rz|PEST"][:, None] / sqrt_g * a_N
 
-    g_vz = data["g_vz|PEST"][:, None] / a_N**2
-    g_zv = g_tz
+    g_vz_over_sqrtg = data["g_vz|PEST"][:, None] / sqrt_g * a_N
+    g_zv_over_sqrtg = g_vz_over_sqrtg
 
+    g_sup_rr = data["g^rr"][:, None] * a_N**2
+    g_sup_rv = data["g^rv"][:, None] * a_N**2
+    g_sup_rz = data["g^rz"][:, None] * a_N**2
+
+    J2 = data["J2"][:, None] * (a_N / B_N) ** 2
     j_sup_theta = data["J^theta_PEST"][:, None] * a_N**2 / B_N
     j_sup_zeta = data["J^zeta"][:, None] * a_N**2 / B_N
 
-    sqrt_g = data["sqrt(g)_PEST"][:, None] / a_N**3
+    F = data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
 
-    gamma0 = 5 / 3
+    # Q_11
+    A = A.at[rho_idx, rho_idx].add(
+        D_theta.T * iota**2 * w0 * g_rr_over_sqrtg * D_theta
+        + D_zeta.T * w0 * g_rr_over_sqrtg * D_zeta
+        + D_theta.T * iota**2 * w0 * g_rr_over_sqrtg * D_zeta
+        + D_zeta.T * iota**2 * w0 * g_rr_over_sqrtg * D_theta
+    )
 
-    compress_rho = jnp.zeros((n_total, 3 * n_total))
-    compress_theta = jnp.zeros((n_total, 3 * n_total))
-    compress_zeta = jnp.zeros((n_total, 3 * n_total))
+    # Q_22
+    A = A.at[theta_idx, theta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
+    A = A.at[zeta_idx, zeta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
+    A = A.at[theta_idx, zeta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
+    A = A.at[rho_idx, rho_idx].add()
+    A = A.at[rho_idx, theta_idx].add()
+    A = A.at[rho_idx, zeta_idx].add()
 
-    A = A.at[rho_idx, all_idx].add(gamma0 * compress_rho)
-    A = A.at[theta_idx, all_idx].add(gamma0 * compress_theta)
-    A = A.at[zeta_idx, all_idx].add(gamma0 * compress_zeta)
+    # Q_33
+    A = A.at[theta_idx, theta_idx].add(D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
+    A = A.at[zeta_idx, zeta_idx].add(D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
+    A = A.at[rho_idx, rho_idx].add(
+        w0 * g_zz_over_sqrtg
+        + D_rho.T * w0 * g_zz_over_sqrtg * D_rho
+        + D_rho.T * w0 * g_zz_over_sqrtg
+        + w0 * g_zz_over_sqrtg * D_rho
+    )
+    A = A.at[theta_idx, zeta_idx].add(-D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
+
+    # Q_12
+    # Q_23
+    # Q_13
+
+    A = A.at[rho_idx, rho_idx].add(w0 * sqrt_g * J2)
+
+    A = A.at[rho_idx, rho_idx].add(
+        -2
+        * (
+            w0
+            * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
+            / g_sup_rr
+            * (D_theta + iota * D_zeta)
+            + w0 * j_sup_theta * iota_r
+            + w0 * iota * D_rho
+            + w0 * j_sup_zeta * D_rho
+        )
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        w0 * j_sup_theta * D_zeta - w0 * j_sup_zeta * D_theta
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        -w0 * j_sup_theta * D_zeta + w0 * j_sup_zeta * iota * D_theta
+    )
+
+    A = A.at[rho_idx, rho_idx].add(w0 * sqrt_g * F)
+
+    # symmetrizing the matrix
+    A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx])
+    A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx])
+    A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx])
 
     # apply dirichlet BC to ξ^ρ
     keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)

@@ -1864,7 +1864,7 @@ class CylindricalGrid(_Grid):
     r_endpoint : bool
         True to include R=0 and R=1, False otherwise (Default = False)
     z_endpoint : bool
-        True to include Z=0 and a=1, False otherwise (Default = False)
+        True to include Z=0 and R=1, False otherwise (Default = False)
     """
 
     _fft_poloidal = False
@@ -1929,7 +1929,7 @@ class CylindricalGrid(_Grid):
         self._period = (np.inf, 2 * np.pi/self._NFP, np.inf)
         
         # R (Chebyshev extrema nodes)
-        alpha = 1E-6
+        alpha = 1E-3
         if L is not None:
             self._L = check_nonnegint(L, "L", False)
             R = (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2

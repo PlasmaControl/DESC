@@ -150,7 +150,7 @@ Profiles
 
 
 Power Balance
---------
+-------------
 .. autosummary::
     :toctree: _api/objectives
     :recursive:

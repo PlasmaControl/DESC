@@ -2,6 +2,45 @@
 Adding new objective functions
 ==============================
 
+.. attention::
+    This page is mainly intended to explain some of the logic inside of objective functions.
+    For simple objectives like shown in this page, it is recommended to use the [``GenericObjective``]() (for objectives that simply just use values computable already in the data index, see [List of Variables](https://desc-docs.readthedocs.io/en/latest/variables.html))
+    or [``ObjectiveFromUser``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser) (for quantities which are derived from things computable from the data index)
+    class. The benefit of making a full objective class like shown in this page is mainly when dealing with multiple objects at once (see e.g [``PlasmaVesselObjective``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance)),
+    or more complicated objectives (like [``EffectiveRipple``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple)).
+    Both of the below objectives can trivially be made with ``ObjectiveFromUser``:
+    ::
+        from desc.objectives import ObjectiveFromUser, GenericObjective
+        from desc.equilibrium import Equilibrium
+
+        eq = Equilibrium()
+
+        # QS triple product, already exists as "f_T" in the data index
+        obj_QS_triple = GenericObjective(f="f_T", thing=eq)
+
+        # Mirror ratio, manually computed from "|B|"
+        fun_mirror_ratio(grid,data):
+            max_tz_B = surface_max(
+                grid=grid, x=data["|B|"], surface_label="rho"
+            )
+            min_tz_B = surface_min(
+                grid=grid, x=data["|B|"], surface_label="rho"
+            )
+            max_tz_B = grid.compress(
+                max_tz_B, surface_label="rho"
+            )
+            min_tz_B = grid.compress(
+                min_tz_B, surface_label="rho"
+            )
+            mirror_ratio = (max_tz_B - min_tz_B) / (min_tz_B + max_tz_B)
+
+            return mirror_ratio
+            # alternatively, "mirror ratio" is something that can be computed in the data index
+            # directly (see List of Variables docs), so can replace entirety of the above function code with this return statement
+            # or just use GenericObjective like given above
+            # return grid.compress(data["mirror ratio"])
+        obj_mirror_ratio = ObjectiveFromUser(fun=fun_QS_triple_product, thing=eq)
+
 This guide walks through creating a new objective to optimize using Quasi-symmetry and mirror ratio as
 an example. The primary methods needed for a new objective are ``__init__``, ``build``,
 and ``compute``. The base class ``_Objective`` provides a number of other methods that

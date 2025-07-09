@@ -187,6 +187,25 @@ class ExternalObjective(_Objective):
 class GenericObjective(_Objective):
     """A generic objective that can compute any quantity from the `data_index`.
 
+        Note that the grid passed-in should be the grid that is required to compute
+        the quantity. For example, "max_tz |B|" is a flux-surface quantity of the max
+        |B| on the flux surface. This requires knowledge of |B| on the whole flux
+        surface, so the passed-in grid must have poloidal and toroidal resolution, in
+        addition to whatever radial surfaces are desired. The same thing applies for
+        quantities needing flux surface averages, such as anything depending on iota
+        for a current-constrained equilibrium.
+
+        Also note that if a quantity is only a function of flux surface
+        (like "max_tz |B|"), ``GenericObjective`` will detect this and only return
+        the unique values, one per flux surface, instead of the values corresponding to
+        every node of the passed-in grid (which may be 3-D as explained above).
+
+        Finally, this objective is intended for quantities computed in native DESC flux
+        coordinates (rho, theta, zeta). For quantities which require more complicated
+        transformations and calculations in other coordinate systems
+        (such as "Gamma_c"), this objective cannot be used and it is recommended to use
+        the dedicated objectives for those quantities.
+
     Parameters
     ----------
     f : str

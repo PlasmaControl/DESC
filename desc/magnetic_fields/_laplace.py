@@ -204,7 +204,7 @@ class SourceFreeField(FourierRZToroidalSurface):
             )
         if RpZ_coords is None and grid is not None and not self._grid.equiv(grid):
             # then user forgot to supply RpZ coords for evaluation grid
-            RpZ = super().compute(
+            RpZ_coords = super().compute(
                 ["R", "phi", "Z"],
                 grid,
                 params,
@@ -212,7 +212,6 @@ class SourceFreeField(FourierRZToroidalSurface):
                 override_grid=override_grid,
                 **kwargs,
             )
-            RpZ_coords = {"R": RpZ["R"], "phi": RpZ["phi"], "Z": RpZ["Z"]}
         if RpZ_coords is not None:
             kwargs["RpZ_coords"] = RpZ_coords
         if "B0" in kwargs:

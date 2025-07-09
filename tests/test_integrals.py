@@ -743,20 +743,27 @@ class TestSourceFreeField:
             modes_Z=[[-1, 0], [0, -1]],
         )
         grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
+        eval_grid = LinearGrid(M=15, N=15, NFP=surface.NFP)
+
         data = {"B0*n": -surface.compute("n_rho", grid=grid)["n_rho"][:, 2]}
+        RpZ = surface.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+        RpZ["B0*n"] = -RpZ["n_rho"][:, 2]
 
         # Φ = Z, so result must be exact for this M,N.
         field = SourceFreeField(surface, grid, M=surface.M, N=surface.N)
         data = field.compute(
             ["grad(Phi)", "Phi", "Z", "n_rho"],
+            RpZ_coords=RpZ,
+            grid=eval_grid,
             data=data,
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
+            warn_fft=False,
         )
         np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
-            dot(data["grad(Phi)"], data["n_rho"]) + data["B0*n"],
+            dot(data["grad(Phi)"], RpZ["n_rho"]) + RpZ["B0*n"],
             0,
             atol=atol,
         )
@@ -859,19 +866,25 @@ class TestSourceFreeField:
         Y = grid.compress(data["G"])[-1]
         B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
         field = SourceFreeField(eq.surface, grid, M=8, N=8)
+
+        eval_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
+        RpZ = eq.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+
         data = field.compute(
             ["B*n"],
+            grid=eval_grid,
             data=data,
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
             B0=B0,
+            warn_fft=False,
+            RpZ_coords=RpZ,
         )
-        np.testing.assert_allclose(data["B*n"], 0, atol=4e-4)
+        np.testing.assert_allclose(data["B*n"], 0, atol=5e-4)
 
         # test off surface evaluation
-        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP, sym=eq.sym)
-        RpZ = eq.compute(["R", "phi", "Z"], grid=mid_grid)
+        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP)
         data = field.compute(
             ["B"],
             data={
@@ -883,7 +896,7 @@ class TestSourceFreeField:
             on_boundary=False,
             chunk_size=chunk_size,
             B0=B0,
-            RpZ_coords={"R": RpZ["R"], "phi": RpZ["phi"], "Z": RpZ["Z"]},
+            RpZ_coords=eq.compute(["R", "phi", "Z"], grid=mid_grid),
         )
         assert np.isfinite(data["B"]).all()
 

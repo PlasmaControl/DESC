@@ -76,10 +76,10 @@ def _lsmr_compute_potential(
     boundary_condition,
     I,  # noqa: E741
     Y,
-    basis,
-    interpolator,
     potential_data,
     source_data,
+    interpolator,
+    basis,
     *,
     problem,
     same_grid,
@@ -201,10 +201,10 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
         boundary_condition,
         params["I"],
         params["Y"],
-        transforms["Phi"].basis,
+        data,
+        data,
         data["interpolator"],
-        data,
-        data,
+        transforms["Phi"].basis,
         problem=problem,
         same_grid=True,
         chunk_size=chunk_size,
@@ -238,10 +238,10 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
         data["Phi_coil"],
         params["I"],
         params["Y"],
-        transforms["Phi"].basis,
+        data,
+        data,
         data["interpolator"],
-        data,
-        data,
+        transforms["Phi"].basis,
         problem="interior Dirichlet",
         same_grid=True,
         chunk_size=kwargs.get("chunk_size", None),
@@ -526,9 +526,15 @@ def _total_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     data=["B", "n_rho"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    RpZ_coords=RpZ_coords,
 )
 def _B_dot_n_laplace(params, transforms, profiles, data, **kwargs):
-    data["B*n"] = dot(data["B"], data["n_rho"])
+    # TODO: Plumb through RpZ /evaluation data dictinoary as well.
+    #       Below n_rho should be computed on evaluation grid
+    #       but right now it is computed on source grid.
+    #       want to be able to query eval_data["n_rho"]
+    n_rho = kwargs.get("RpZ_coords", data).get("n_rho", data["n_rho"])
+    data["B*n"] = dot(data["B"], n_rho)
     return data
 
 

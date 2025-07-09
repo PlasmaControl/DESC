@@ -660,15 +660,14 @@ def _singular_part(
         # Coordinates of the polar nodes around the evaluation point.
         t = eval_theta + interpolator.shift_t[i]
         z = eval_zeta + interpolator.shift_z[i]
-        if known_map is not None:
-            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
-
         source_data_polar["theta"] = t[eval_grid.inverse_theta_idx]
         source_data_polar["zeta"] = z[eval_grid.inverse_zeta_idx]
         if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
+        if known_map is not None:
+            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
 
         return kernel(eval_data, source_data_polar, v[i], diag=True)
 

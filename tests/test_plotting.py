@@ -974,7 +974,7 @@ def test_plot_poincare():
 def test_plot_gammac():
     """Test plotting gamma_c."""
     eq = get("W7-X")
-    fig, ax = plot_gammac(eq, rhos=0.5)
+    fig, ax = plot_gammac(eq, rho=0.5)
     return fig
 
 

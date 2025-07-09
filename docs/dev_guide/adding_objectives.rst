@@ -4,14 +4,14 @@ Adding new objective functions
 
 .. attention::
     This page is mainly intended to explain some of the logic inside of objective functions.
-    For simple objectives like shown in this page, it is recommended to use the [``GenericObjective``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.GenericObjective.html#desc.objectives.GenericObjective)
+    For simple objectives like shown in this page, it is recommended to use the ` ``GenericObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.GenericObjective.html#desc.objectives.GenericObjective>`__
     (for objectives that simply just use values computable already in the data index, see
-    [List of Variables](https://desc-docs.readthedocs.io/en/latest/variables.html))
-    or [``ObjectiveFromUser``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser)
+    `List of Variables <https://desc-docs.readthedocs.io/en/latest/variables.html>`__)
+    or ` ``ObjectiveFromUser`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser>`__
     (for quantities which are derived from things computable from the data index)
     classes. The benefit of making a full objective class like shown in this page is mainly when dealing
-    with multiple objects at once (see e.g [``PlasmaVesselObjective``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance)),
-    or more complicated objectives (like [``EffectiveRipple``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple))
+    with multiple objects at once (see e.g ` ``PlasmaVesselObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
+    or more complicated objectives (like ` ``EffectiveRipple`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple>`__)
     or having better control over default values and overriding some methods such as ``print_value``.
     Most objectives can trivially be made with ``GenericObjective`` and ``ObjectiveFromUser``:
     ::
@@ -244,7 +244,7 @@ This method takes in the parameters of the thing(s) to be optimized, which is th
 state vector such as `R_lmn`, `Z_lmn`, etc. for the ``Equilibrium`` object. Objectives with multiple ``things``
 can have multiple parameters, one for each thing in ``self.things``, in this case, the function signature would be
 ``compute(self, params_1, params_2, params3, ..., constants=None)``, see the
-[``PlasmaVesselDistance``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance)
+` ``PlasmaVesselDistance`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__
 objective for an example of this. The ``constants`` argument is a dictionary of any other constant and usually set to ``None``
 so that the ``self.constants`` are used.
 ::

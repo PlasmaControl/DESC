@@ -13,8 +13,11 @@ def curl_cylindrical(A,in_coords,out_coords=None,L=None,M=8,N=None,NFP=1):
     ----------
     A : ndarray, shape(n,3)
         Vector field, in cylindrical (R,phi,Z) form
-    coords : ndarray, shape(n,3)
+    in_coords : ndarray, shape(n,3)
         Coordinates for each point of A, corresponding to (R,phi,Z)
+    out_coords : ndarray, shape(m,3), optional
+        Coordinates at which to evaluate the curl of A, corresponding 
+        to (R,phi,Z). Defaults to in_coords.
     L: integer
         Radial resolution to use for the spectral decomposition. 
         Default is M
@@ -42,8 +45,11 @@ def div_cylindrical(A,in_coords,out_coords=None,L=None,M=8,N=None,NFP=1):
     ----------
     A : ndarray, shape(n,3)
         Vector field, in cylindrical (R,phi,Z) form
-    coords : ndarray, shape(n,3)
+    in_coords : ndarray, shape(n,3)
         Coordinates for each point of A, corresponding to (R,phi,Z)
+    out_coords : ndarray, shape(m,3), optional
+        Coordinates at which to evaluate the divergence of A, corresponding 
+        to (R,phi,Z). Defaults to in_coords.
     L: integer
         Radial resolution to use for the spectral decomposition. 
         Default is M
@@ -58,7 +64,7 @@ def div_cylindrical(A,in_coords,out_coords=None,L=None,M=8,N=None,NFP=1):
     Returns
     -------
     div_A : ndarray, shape(n,3)
-        The curl of the vector field, in cylindrical coordinates.    
+        The divergence of the vector field, in cylindrical coordinates.    
     """
     # Take the curl of A
     return _div_cylindrical(A,*_get_del_inputs(in_coords,out_coords,L,M,N,NFP))
@@ -70,10 +76,11 @@ def _get_del_inputs(in_coords,out_coords,L,M,N,NFP):
 
     Parameters
     ----------
-    A : ndarray, shape(n,3)
-        Vector field, in cylindrical (R,phi,Z) form
-    coords : ndarray, shape(n,3)
+    in_coords : ndarray, shape(n,3)
         Coordinates for each point of A, corresponding to (R,phi,Z)
+    out_coords : ndarray, shape(m,3), optional
+        Coordinates at which to evaluate the curl of A, corresponding 
+        to (R,phi,Z). Defaults to in_coords.
     L: integer
         Radial resolution to use for the spectral decomposition. 
         Default is M
@@ -87,8 +94,8 @@ def _get_del_inputs(in_coords,out_coords,L,M,N,NFP):
         Number of field periods. Default is 1
     Returns
     -------
-    A, in_R, out_R, in_transform, out_transform, scales
-        Outputs, in order, for _curl_cylindrical and _div_cylindrical
+    in_R, out_R, in_transform, out_transform, scales
+        Outputs, in order, for _curl_cylindrical and _div_cylindrical (except for A)
     """
     # Default spectral resolution parameters
     if L is None:
@@ -124,17 +131,25 @@ def _get_del_inputs(in_coords,out_coords,L,M,N,NFP):
 def _curl_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     """
     Take the curl of A in cylindrical coordinates,
-    given a Transform to spectral coordinates.
+    given Transforms to and from spectral coordinates.
 
     Parameters
     ----------
     A : ndarray, shape(n,3)
         vector field, in cylindrical (R,phi,Z) form
-    R : ndarray, shape(n,)
+    in_R : ndarray, shape(n,)
         radial distance for each point of A
-    transform: Transform
-        transform from the real basis of A to a spectral basis in which
-        partial derivatives of A can be evaluated
+    out_R : ndarray, shape(n,)
+        radial location for each point at which to calculate
+        the curl
+    in_transform: Transform
+        transform from the real grid on which A is defined to
+        a spectral basis in which partial derivatives of A can be evaluated.
+        the pseudoinverse of the transform must have been built.
+    out_transform: Transform
+        transform from the spectral basis on which A is calculated to the 
+        real grid on which the curl is to be evaluated.
+        the transform must have been built, with derivs>=1.
     scales: np.ndarray, shape (3,)
         If the real coordinates in the transform object are scaled to be dimensionless,
         this parameter adjusts the dimensions of the partial derivatives
@@ -176,6 +191,37 @@ def _curl_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     return curl_A
 
 def _div_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
+    """
+    Take the divergence of A in cylindrical coordinates,
+    given Transforms to and from spectral coordinates.
+
+    Parameters
+    ----------
+    A : ndarray, shape(n,3)
+        vector field, in cylindrical (R,phi,Z) form
+    in_R : ndarray, shape(n,)
+        radial distance for each point of A
+    out_R : ndarray, shape(n,)
+        radial location for each point at which to calculate
+        the curl
+    in_transform: Transform
+        transform from the real grid on which A is defined to
+        a spectral basis in which partial derivatives of A can be evaluated.
+        the pseudoinverse of the transform must have been built.
+    out_transform: Transform
+        transform from the spectral basis on which A is calculated to the 
+        real grid on which the divergence is to be evaluated.
+        the transform must have been built, with derivs>=1.
+    scales: np.ndarray, shape (3,)
+        If the real coordinates in the transform object are scaled to be dimensionless,
+        this parameter adjusts the dimensions of the partial derivatives
+        so they are taken with the normal coordinates, not the coordinates in the transform.
+
+    Returns
+    -------
+    div_A : ndarray, shape(n,3)
+        The divergence of the vector field, in cylindrical coordinates.
+    """
     A_coeff = in_transform.fit(A * np.vstack([in_R,np.ones_like(in_R),np.ones_like(in_R)]).T)
     # Calculate matrix of terms for the curl
     # (dims: datapoint, component index, derivative index)
@@ -192,6 +238,30 @@ def _div_cylindrical(A,in_R,out_R,in_transform,out_transform,scales):
     return div
 
 def _normalize_rpz(Rs,Zs,alpha=1E-5):
+    """
+    Convenience function to calculate the shifts and scales to normalize R and Z.
+    ([R,phi,Z].T - shifts)/scales will leave phi untouched while
+    rescaling R and Z to between [alpha/2,1-alpha/2].
+
+    Parameters
+    ----------
+    Rs : array-like
+        Array of R coordinates to normalize.
+    Zs : array-like
+        Array of Z coordinates to normalize.
+    alpha : array-like 
+        R and Z will be rescaled to between [alpha/2,1-alpha/2].
+        Prevents numerical instabilities at 0 and 1.
+
+    Returns
+    -------
+    shifts : np.ndarray
+        Values to shift R, phi, and Z into the desired range
+        shifts[1]=0 always.
+    scales : np.ndarray
+        Values to scale R, phi, and Z into the desired range.
+        scales[1]=1 always.
+    """
     Rs,Zs = np.atleast_1d(Rs),np.atleast_1d(Zs)
     shifts = np.array([Rs.min(),0,Zs.min()])
     scales = np.array([(1/(1-alpha))*((Rs-shifts[0]).max()),

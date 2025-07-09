@@ -72,7 +72,6 @@ class ExternalObjective(_Objective):
         myobj = ExternalObjective(
             eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,
         )
-    )
 
     """
 

@@ -15,7 +15,7 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..diffmat_utils import fourier_diffmat, legendre_D1
+from ..diffmat_utils import fourier_diffmat, legendre_D1, legendre_lobatto_weights
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun

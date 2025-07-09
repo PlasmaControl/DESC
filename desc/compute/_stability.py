@@ -14,7 +14,8 @@ from functools import partial
 from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
-from ..diffmat_utils import legendre_D1, fourier_diffmat
+
+from ..diffmat_utils import fourier_diffmat, legendre_D1
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -694,11 +695,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
 
-    D_rho   = stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
+    D_rho = stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
     D_theta = stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
-    D_zeta  = stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
+    D_zeta = stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
 
-    W       = stop_gradient(jnp.kron(W0, jnp.kron(I_theta0, I_zeta0)))
+    W = stop_gradient(jnp.kron(W0, jnp.kron(I_theta0, I_zeta0)))
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
     # Create the full matrix
@@ -729,7 +730,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     sqrt_g = data["sqrt(g)_PEST"][:, None] / a_N**3
 
-
     gamma0 = 5 / 3
 
     compress_rho = jnp.zeros((n_total, 3 * n_total))
@@ -750,4 +750,3 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     data["finite-n lambda"] = w
 
     return data
-

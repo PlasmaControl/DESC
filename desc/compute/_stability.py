@@ -14,7 +14,7 @@ from functools import partial
 from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
-
+from ..diffmat_utils import legendre_D1, fourier_diffmat
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -578,3 +578,176 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         .squeeze(0)
     )
     return data
+
+
+@register_compute_fun(
+    name="finite-n lambda",
+    label="low-\\n \\lambda = \\gamma^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared growth rate",
+    dim=1,
+    params=["Psi", "NFP"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rz|PEST",
+        "g_vv|PEST",
+        "g_vz|PEST",
+        "g_zz|PEST",
+        "g^rr",
+        "g^rv",
+        "g^rz",
+        "J^theta_PEST",
+        "J^zeta",
+        "sqrt(g)_PEST",
+        "iota",
+        "iota_r",
+        "p",
+        "p_r",
+        "psi_r",
+        "a",
+    ],
+    n_rho_max="int: 2 x maximum radial mode number",
+    n_theta_max="int: 2 x maximum radial mode number",
+    n_zeta_max="int: 2 x maximum toroidal mode number",
+    axisym="bool: if the equilibrium is axisymmetric",
+)
+def _AGNI(params, transforms, profiles, data, **kwargs):
+    """
+    AGNI: Analysis of Global Normal-modes in Ideal MHD.
+
+    Based on the original source here:
+    https://github.com/rahulgaur104/AGNI/tree/master
+
+    A finite-n stability eigenvalue solver.
+    Currenly only finds fixed boundary unstable modes at
+    low to medium resolution.
+    """
+    a_N = data["a"]
+    B_N = params["Psi"] / (jnp.pi * a_N**2)
+
+    NFP = 1
+
+    iota = data["iota"][:, None]
+    iota_r = data["iota_r"][:, None]
+    iota_rr = data["iota_rr"][:, None]
+
+    p = mu_0 * data["p"][:, None] / B_N**2
+    p_r = mu_0 * data["p_r"][:, None] / B_N**2
+    p_rr = mu_0 * data["p_rr"][:, None] / B_N**2
+    psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
+    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
+
+    psi_r_sqrt_g = data["(psi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
+    chi_r_sqrt_g = data["(chi_r/sqrt(g)_PEST)"][:, None] * (a_N / B_N)
+
+    axisym = kwargs.get("axisym", False)
+
+    n_rho_max = kwargs.get("n_rho_max", 8)
+    n_theta_max = kwargs.get("n_theta_max", 8)
+    n_zeta_max = kwargs.get("n_zeta_max", 4)
+
+    if axisym:
+        D_zeta0 = n_zeta_max * jnp.array([[0, -1], [1, 0]])
+        n_zeta_max = 2
+    else:
+        D_zeta0 = fourier_diffmat(n_zeta_max)
+
+    def _eval_1D(f, x):
+        return vmap(lambda x_val: f(x_val))(x)
+
+    def _f(x):
+        x_0 = 0.5
+        m_1 = 2.1
+        m_2 = 2.1
+        lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
+        upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
+        eps = 1.0e-3
+        return eps + (1 - eps) * (lower + upper)
+
+    dx_f = jax.grad(_f)
+    dxx_f = jax.grad(dx_f)
+
+    # The points in the supplied grid must be consistent with how
+    # the kronecker product is created
+    x = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+
+    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
+    scale_vector2 = (_eval_1D(dxx_f, x)) * scale_vector1
+
+    scale_x1 = scale_vector1[:, None]
+    scale_x2 = scale_vector2[:, None]
+
+    # Get differentiation matrices
+    # RG: setting the gradient to 0 to save some memory?
+    D_rho0 = legendre_D1(n_rho_max) * scale_x1
+    D_theta0 = fourier_diffmat(n_theta_max)
+    D_zeta0 = D_zeta0
+
+    W0 = scale_x1 * jnp.diagonal(legendre_lobatto_weights(n_rho_max))
+
+    I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
+    I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
+    I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
+
+    D_rho   = stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
+    D_theta = stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
+    D_zeta  = stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
+
+    W       = stop_gradient(jnp.kron(W0, jnp.kron(I_theta0, I_zeta0)))
+
+    n_total = n_rho_max * n_theta_max * n_zeta_max
+    # Create the full matrix
+    A = jnp.zeros((3 * n_total, 3 * n_total))
+
+    # Define field component indices
+    rho_idx = slice(0, n_total)
+    theta_idx = slice(n_total, 2 * n_total)
+    zeta_idx = slice(2 * n_total, 3 * n_total)
+
+    all_idx = slice(0, 3 * n_total)
+
+    g_rr = data["g_rv|PEST"][:, None] / a_N**2
+    g_vv = data["g_vv|PEST"][:, None] / a_N**2
+    g_zz = data["g_zz|PEST"][:, None] / a_N**2
+
+    g_rv = data["g_rv|PEST"][:, None] / a_N**2
+    g_vr = g_rt
+
+    g_rz = data["g_rz|PEST"][:, None] / a_N**2
+    # --no-verify g_zr = g_rz
+
+    g_vz = data["g_vz|PEST"][:, None] / a_N**2
+    g_zv = g_tz
+
+    j_sup_theta = data["J^theta_PEST"][:, None] * a_N**2 / B_N
+    j_sup_zeta = data["J^zeta"][:, None] * a_N**2 / B_N
+
+    sqrt_g = data["sqrt(g)_PEST"][:, None] / a_N**3
+
+
+    gamma0 = 5 / 3
+
+    compress_rho = jnp.zeros((n_total, 3 * n_total))
+    compress_theta = jnp.zeros((n_total, 3 * n_total))
+    compress_zeta = jnp.zeros((n_total, 3 * n_total))
+
+    A = A.at[rho_idx, all_idx].add(gamma0 * compress_rho)
+    A = A.at[theta_idx, all_idx].add(gamma0 * compress_theta)
+    A = A.at[zeta_idx, all_idx].add(gamma0 * compress_zeta)
+
+    # apply dirichlet BC to ξ^ρ
+    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    w, v = jnp.linalg.eig(A[jnp.ix_(keep, keep)])
+
+    data["finite-n lambda"] = w
+
+    return data
+

@@ -2232,7 +2232,7 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g^rv|PEST",
+    name="g^rv",
     label="g_{\\rho \\vartheta}",
     units="m^{2}",
     units_long="square meters",
@@ -2245,8 +2245,8 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^rho", "e^vartheta"],
 )
-def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
-    data["g^rv|PEST"] = dot(data["e^rho"], data["e^vartheta"])
+def _g_sup_rv(params, transforms, profiles, data, **kwargs):
+    data["g^rv"] = dot(data["e^rho"], data["e^vartheta"])
     return data
 
 

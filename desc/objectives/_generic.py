@@ -354,6 +354,13 @@ class LinearObjectiveFromUser(_FixedObjective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    __doc__ += """
+    Examples
+    --------
+
+    For example use, see the Omnigenity Optimization notebook in the documentation.
+
+    """
 
     _scalar = False
     _linear = True

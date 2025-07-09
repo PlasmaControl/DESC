@@ -3839,14 +3839,16 @@ def plot_logo(save_path=None, **kwargs):
     return fig, ax
 
 
-def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
+def plot_gammac(
+    eq, rho=None, alphas=None, num_pitch=None, ax=None, return_data=False, **kwargs
+):
     """Plot the energetic proxy metric γ_c for a single flux surface.
 
     Parameters
     ----------
     eq : object
         Equilibrium object containing magnetic field information
-    rhos : float, optional
+    rho : float, optional
         Flux surface radius. If float, plots single surface.
         Default: 0.5
     alphas : array_like, optional
@@ -3855,6 +3857,8 @@ def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
         Default: 16
+    **kwargs : dict, optional
+        Arguments to the Bounce2D class and figure object
 
     Returns
     -------
@@ -3863,17 +3867,19 @@ def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
     ax : matplotlib.axes.Axes
         The axes object for further customization
 
-    Notes
-    -----
-    An example
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_gammac.png
 
-    fig, ax = plot_gammac(eq, rhos=0.5)
-    fig.show()
+    .. code-bloack:: python
+
+        from desc.plotting import plot_gammac
+        fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rhos is None:
-        rhos = np.array([0.5])
-    elif isinstance(rhos, float):
-        rhos = np.array([rhos])
+    if rho is None:
+        rho = np.array([0.5])
+    elif isinstance(rho, float):
+        rho = np.array([rho])
 
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
@@ -3882,20 +3888,24 @@ def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
         num_pitch = 16
 
     # TODO(#1352)
-    X = kwargs.get("X", 32)
-    Y = kwargs.get("Y", 32)
-    Y_B = kwargs.get("Y_B", 64)
-    num_quad = kwargs.get("num_quad", 24)
-    num_transit = kwargs.get("num_transit", 1)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 32)
+    Y_B = kwargs.pop("Y_B", 64)
+    num_quad = kwargs.pop("num_quad", 24)
+    num_transit = kwargs.pop("num_transit", 1)
 
-    figsize = kwargs.get("figsize", (6, 5))
-    cmap = kwargs.get("cmap", "plasma")
+    figsize = kwargs.pop("figsize", (6, 5))
+    cmap = kwargs.pop("cmap", "plasma")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot gammac got unexpected keyword argument: {kwargs.keys()}"
 
     from desc.integrals.bounce_integral import Bounce2D
 
     # Compute bounce integral
-    theta = Bounce2D.compute_theta(eq, X, Y, rhos)
-    grid = LinearGrid(rho=rhos, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    theta = Bounce2D.compute_theta(eq, X, Y, rho)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
@@ -3914,18 +3924,21 @@ def plot_gammac(eq, rhos=None, alphas=None, num_pitch=None, **kwargs):
     inv_pitch = np.linspace(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
-    fig = plt.figure(figsize=figsize)
+    fig, ax = _format_ax(ax, figsize=figsize)
+    divider = make_axes_locatable(ax)
 
     # Plot γ_c as function of α and 1/λ
-    plt.contourf(
+    im = ax.contourf(
         inv_pitch,
         alphas,
         data_full[0],
         cmap=cmap,
     )
 
-    cbar = plt.colorbar()
-    cbar.ax.tick_params(labelsize=22)
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
 
     # Format scientific notation
     import matplotlib.ticker as ticker

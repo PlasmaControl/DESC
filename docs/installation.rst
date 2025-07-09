@@ -185,7 +185,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 # optionally install developer requirements (if you want to run tests)
                 pip install -r devtools/dev-requirements.txt
 
-            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process for the JAX/CUDA initalization to work properly.
+            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initalization to work properly.
 
 
         .. dropdown:: Della and Stellar Clusters (Princeton)

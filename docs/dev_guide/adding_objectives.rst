@@ -65,7 +65,8 @@ also performs any necessary checks on the inputs before starting the optimizatio
 generally return a vector of residuals that are minimized in a least squares sense,
 though the exact method will depend on the optimization algorithm. The main thing here
 is calling ``compute_fun`` to get physics quantities, and then performing any
-post-processing we want such as averaging, combining, etc.
+post-processing we want such as averaging, combining, etc. ``compute`` must always return
+a 1-D array.
 
 Now let's look at ``QuasisymmetryTripleProduct`` as an example. This objective takes in an ``Equilibrium``
 object and computes the quasi-symmetry triple product.

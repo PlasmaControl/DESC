@@ -55,7 +55,7 @@ def _vanilla_params(grid):
     return s, s, q
 
 
-def best_params(grid, ratio):
+def _best_params(grid, ratio):
     """Parameters for heuristic support size and quadrature resolution.
 
     These parameters account for global grid anisotropy which ensures
@@ -106,7 +106,7 @@ def best_params(grid, ratio):
     return st, sz, q
 
 
-def best_ratio(data):
+def _best_ratio(data):
     """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
@@ -127,12 +127,12 @@ def best_ratio(data):
 def get_interpolator(
     eval_grid,
     source_grid,
-    src_data,
-    use_dft=False,
-    *,
+    source_data,
     st=None,
     sz=None,
     q=None,
+    *,
+    use_dft=False,
     warn_dft=True,
     warn_fft=True,
     **kwargs,
@@ -143,7 +143,7 @@ def get_interpolator(
     ----------
     eval_grid, source_grid : Grid
         Evaluation and source points for the integral transform.
-    src_data : dict[str, jnp.ndarray]
+    source_data : dict[str, jnp.ndarray]
         Dictionary of data evaluated on single flux surface grid that ``can_fft2``
         with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     use_dft : bool
@@ -161,7 +161,7 @@ def get_interpolator(
 
     """
     if st is None or sz is None or q is None:
-        _st, _sz, _q = best_params(source_grid, best_ratio(src_data))
+        _st, _sz, _q = _best_params(source_grid, _best_ratio(source_data))
         st = setdefault(st, _st)
         sz = setdefault(sz, _sz)
         q = setdefault(q, _q)
@@ -510,6 +510,35 @@ class DFTInterpolator(_BIESTInterpolator):
         return jnp.real(vander @ f)
 
 
+def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
+    """Returns new dictionaries with data that has been cast to jax arrays."""
+    keys = _dx.keys + ["theta", "zeta"]
+    if hasattr(kernel, "eval_keys"):
+        keys = keys + kernel.eval_keys
+    # to skip batching stuff that is not needed
+    eval_data = {key: jnp.asarray(eval_data[key]) for key in keys if key in eval_data}
+
+    if eval_grid is not None:
+        # only need these for change of variable with nonzero η
+        if "theta" not in eval_data:
+            eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
+        if "zeta" not in eval_data:
+            eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
+
+    # Can't prune ω because ω is need to interpolate ϕ in _singular_part.
+    keys = kernel.keys + ["omega", "theta", "zeta"]
+    source_data = {
+        key: jnp.asarray(source_data[key]) for key in keys if key in source_data
+    }
+    # to avoid adding keys to dictionary during iteration
+    if "theta" not in source_data:
+        source_data["theta"] = jnp.asarray(source_grid.nodes[:, 1])
+    if "zeta" not in source_data:
+        source_data["zeta"] = jnp.asarray(source_grid.nodes[:, 2])
+
+    return eval_data, source_data
+
+
 def _nonsingular_part(
     eval_data,
     eval_grid,
@@ -517,35 +546,24 @@ def _nonsingular_part(
     source_grid,
     st,
     sz,
-    *,
     kernel,
+    *,
     ndim=None,
     chunk_size=None,
 ):
     """Integrate kernel over non-singular points.
 
     Generally follows sec 3.2.1 of [2].
-    If ``eval_grid`` is ``None``, then take eta = 0.
+    If ``eval_grid`` is ``None``, then take η = 0.
     """
     assert source_grid.can_fft2
-    ndim = setdefault(ndim, kernel.ndim)
-    source_data.setdefault("theta", source_grid.nodes[:, 1])
-    # make sure source dict has zeta and phi to avoid
-    # adding keys to dict during iteration
-    source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
-    source_phi = source_data["phi"]
-
-    # slim down to skip batching quantities that aren't used
-    kernel_keys = kernel.keys
-    if hasattr(kernel, "eval_keys"):
-        kernel_keys += kernel.eval_keys
-    eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
-    if eval_grid is not None:
-        eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
-        eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
-
     ht = 2 * jnp.pi / source_grid.num_theta
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
+
+    ndim = setdefault(ndim, kernel.ndim)
+
+    source_zeta = source_data["zeta"]
+    source_phi = source_data["phi"]
 
     def func(zeta_j):
         source_data["zeta"] = zeta_j
@@ -576,19 +594,18 @@ def _nonsingular_part(
         return batch_map(eval_pt, eval_data, chunk_size).reshape(-1, ndim)
 
     f = nfp_loop(source_grid, func, jnp.zeros((eval_data["phi"].size, ndim)))
-    # we sum vectors at different points, so they need to be in xyz for that to work
-    # but then need to convert vectors back to rpzs
     if kernel.ndim == 3:
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
-    # undo rotation of source_zeta
+    # undo rotation of ζ and ϕ
     source_data["zeta"] = source_zeta
     source_data["phi"] = source_phi
+
     return f
 
 
 def _singular_part(
-    eval_data, source_data, interpolator, *, kernel, known_map=None, chunk_size=None
+    eval_data, source_data, interpolator, kernel, *, known_map=None, chunk_size=None
 ):
     """Integrate singular point by interpolating to polar grid.
 
@@ -597,7 +614,12 @@ def _singular_part(
     - hyperparameter M replaced by ``st`` and ``sz``.
     - density sigma / function f is absorbed into kernel.
     """
-    eval_grid = interpolator._eval_grid
+    # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
+    #  singular point. Hence the quadrature may not converge for Cauchy
+    #  principal values. Prove otherwise or remove singularity.
+
+    eval_grid = interpolator.eval_grid
+    # TODO: (for reviewers) should these be wrapped in jnp.asarray()?
     eval_theta = eval_grid.unique_theta
     eval_zeta = eval_grid.unique_zeta
 
@@ -614,7 +636,7 @@ def _singular_part(
     if known_map is not None:
         map_name, map_fun = known_map
         keys.remove(map_name)
-    # Note that it is necessary to take the Fourier transforms of the
+    # It is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
     fsource = [
@@ -638,18 +660,16 @@ def _singular_part(
         # Coordinates of the polar nodes around the evaluation point.
         t = eval_theta + interpolator.shift_t[i]
         z = eval_zeta + interpolator.shift_z[i]
+        if known_map is not None:
+            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
+
         source_data_polar["theta"] = t[eval_grid.inverse_theta_idx]
         source_data_polar["zeta"] = z[eval_grid.inverse_zeta_idx]
         if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
-            # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
-            #  singular point for hypersingular kernels such as the Biot-Savart kernel.
-            #  Hence the quadrature may not converge to the Cauchy principal value.
-            #  Prove otherwise or remove singularity.
-        if known_map is not None:
-            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
+
         return kernel(eval_data, source_data_polar, v[i], diag=True)
 
     f = vmap_chunked(
@@ -658,8 +678,6 @@ def _singular_part(
         reduction=jnp.add,
         chunk_reduction=_add_reduce,
     )(jnp.arange(v.size)).reshape(eval_grid.num_nodes, -1)
-    # we sum vectors at different points, so they need to be in xyz for that to work
-    # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
@@ -675,8 +693,8 @@ def singular_integral(
     eval_data,
     source_data,
     interpolator,
-    *,
     kernel,
+    *,
     known_map=None,
     ndim=None,
     chunk_size=None,
@@ -759,30 +777,36 @@ def singular_integral(
     chunk_size = parse_argname_change(chunk_size, kwargs, "loop", "chunk_size")
     if chunk_size == 0:
         chunk_size = None
-    # sanitize inputs, we need everything as jax arrays so they can be indexed
-    # properly in the loops
-    source_data = {key: jnp.asarray(val) for key, val in source_data.items()}
-    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
 
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
+    eval_grid = interpolator.eval_grid
+    source_grid = interpolator.source_grid
+    if kwargs.get("prune_data", True):
+        eval_data, source_data = _prune_data(
+            eval_data,
+            eval_grid,
+            source_data,
+            source_grid,
+            kernel,
+        )
     out1 = _singular_part(
         eval_data,
         source_data,
         interpolator,
-        kernel=kernel,
+        kernel,
         known_map=known_map,
         chunk_size=chunk_size,
     )
     out2 = _nonsingular_part(
         eval_data,
-        interpolator._eval_grid,
+        eval_grid,
         source_data,
-        interpolator._source_grid,
+        source_grid,
         interpolator.st,
         interpolator.sz,
-        kernel=kernel,
+        kernel,
         ndim=ndim,
         chunk_size=chunk_size,
     )
@@ -975,8 +999,8 @@ _kernel_dipole.ndim = 1
 _kernel_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
 
 
-def _kernel_dipole_smooth(eval_data, source_data, ds, diag=False):
-    """Kernel of operator (D[Φ] - D[1]Φ)(x): (Φ(y)-Φ(x))〈∇_x G(x−y),n(y)〉da(y)."""
+def _kernel_dipole_plus_half(eval_data, source_data, ds, diag=False):
+    """Kernel of operator (D[Φ] + Φ/2)(x)."""
     eval_Phi = eval_data["Phi(x)"]
     if not diag:
         eval_Phi = eval_Phi[:, jnp.newaxis]
@@ -991,17 +1015,18 @@ def _kernel_dipole_smooth(eval_data, source_data, ds, diag=False):
     return (source_data["Phi"] - eval_Phi) * out
 
 
-_kernel_dipole_smooth.ndim = 1
-_kernel_dipole_smooth.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
-_kernel_dipole_smooth.eval_keys = ["Phi(x)"]
+_kernel_dipole_plus_half.ndim = 1
+_kernel_dipole_plus_half.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_dipole_plus_half.eval_keys = ["Phi(x)"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
-    "Bn_over_r": _kernel_Bn_over_r,
     "biot_savart_coulomb": _kernel_biot_savart_coulomb,
+    "Bn_over_r": _kernel_Bn_over_r,
     "monopole": _kernel_monopole,
     "dipole": _kernel_dipole,
+    "dipole_plus_half": _kernel_dipole_plus_half,
 }

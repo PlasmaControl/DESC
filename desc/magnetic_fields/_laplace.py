@@ -1,4 +1,10 @@
-"""High order accurate source free field solver."""
+"""High order accurate source free field solver.
+
+References
+----------
+    [1] Unalmis et al. New high-order accurate free surface stellarator
+        equilibria optimization and boundary integral methods in DESC.
+"""
 
 from desc.basis import DoubleFourierSeries
 from desc.geometry import FourierRZToroidalSurface
@@ -177,21 +183,36 @@ class SourceFreeField(FourierRZToroidalSurface):
 
         """
         if grid is not None and "eval_interpolator" not in kwargs:
+            warn_fft = kwargs.pop("warn_fft", True)
             kwargs["eval_interpolator"] = get_interpolator(
                 eval_grid=grid,
                 source_grid=self._grid,
-                data=super().compute(
+                source_data=super().compute(
                     ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-                    grid,
+                    self._grid,
                     params,
                     transforms,
                     # Do not pass in data since the expectation
                     # is that quantities computed on self.grid.
+                    # whereas input data may have things on eval
+                    # grid as well.
                     override_grid=override_grid,
                     **kwargs,
                 ),
+                warn_fft=warn_fft,
                 **kwargs,
             )
+        if RpZ_coords is None and grid is not None and not self._grid.equiv(grid):
+            # then user forgot to supply RpZ coords for evaluation grid
+            RpZ = super().compute(
+                ["R", "phi", "Z"],
+                grid,
+                params,
+                transforms,
+                override_grid=override_grid,
+                **kwargs,
+            )
+            RpZ_coords = {"R": RpZ["R"], "phi": RpZ["phi"], "Z": RpZ["Z"]}
         if RpZ_coords is not None:
             kwargs["RpZ_coords"] = RpZ_coords
         if "B0" in kwargs:
@@ -204,6 +225,8 @@ class SourceFreeField(FourierRZToroidalSurface):
 
 class FreeSurfaceOuterField(SourceFreeField):
     """Compute field on outer plasma for free surface.
+
+    Implements the interior Dirichlet formulation described in [1].
 
     Parameters
     ----------

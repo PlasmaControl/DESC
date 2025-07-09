@@ -4,15 +4,14 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
+from desc.integrals import get_interpolator, singular_integral
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
-    _kernel_dipole,
-    _kernel_dipole_smooth,
+    _kernel_dipole_plus_half,
     _kernel_monopole,
     _nonsingular_part,
-    get_interpolator,
-    singular_integral,
+    _prune_data,
 )
 from desc.utils import cross, dot, errorif
 
@@ -46,31 +45,12 @@ RpZ_coords = """dict[str, jnp.ndarray] :
         """
 
 
-def _D(eval_data, source_data, interpolator, basis=None, chunk_size=None):
-    """Compute D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y),ds(y)〉.
-
-    If ``basis`` is not supplied, then computes D[Φ].
-    If ``basis`` is supplied, then constructs the operator which
-    acts on the spectral coefficients of Φ in the supplied + secular basis.
-
-    """
-    kwargs = {}
-    if basis is not None:
-        kwargs["known_map"] = ("Phi", partial(basis.evaluate, secular=True))
-        kwargs["ndim"] = basis.num_modes + 2
-    return singular_integral(
-        eval_data=eval_data,
-        source_data=source_data,
-        interpolator=interpolator,
-        kernel=_kernel_dipole,
-        chunk_size=chunk_size,
-        **kwargs,
-    )
-
-
-def _D_plus_half(eval_data, source_data, interpolator, basis=None, chunk_size=None):
+def _D_plus_half(
+    eval_data, source_data, interpolator, basis=None, chunk_size=None, _prune_data=True
+):
     """Compute (D[Φ] + Φ/2)(x).
 
+    D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y),ds(y)〉.
     If ``basis`` is not supplied, then computes (D[Φ] + Φ/2)(x).
     If ``basis`` is supplied, then constructs the operator which
     acts on the spectral coefficients of Φ in the supplied + secular basis.
@@ -82,17 +62,17 @@ def _D_plus_half(eval_data, source_data, interpolator, basis=None, chunk_size=No
         kwargs["ndim"] = basis.num_modes + 2
     # TODO: This integral is not singular. See prescription in shared paper.
     return singular_integral(
-        eval_data=eval_data,
-        source_data=source_data,
-        interpolator=interpolator,
-        kernel=_kernel_dipole_smooth,
+        eval_data,
+        source_data,
+        interpolator,
+        _kernel_dipole_plus_half,
         chunk_size=chunk_size,
+        _prune_data=_prune_data,
         **kwargs,
     )
 
 
 def _lsmr_compute_potential(
-    problem,
     boundary_condition,
     I,  # noqa: E741
     Y,
@@ -100,6 +80,8 @@ def _lsmr_compute_potential(
     interpolator,
     potential_data,
     source_data,
+    *,
+    problem,
     same_grid,
     chunk_size=None,
 ):
@@ -111,11 +93,20 @@ def _lsmr_compute_potential(
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
 
+    potential_data, source_data = _prune_data(
+        potential_data,
+        potential_grid,
+        source_data,
+        source_grid,
+        _kernel_dipole_plus_half,
+    )
     Phi = basis.evaluate(potential_grid, secular=True)
     potential_data["Phi(x)"] = Phi
     source_data["Phi"] = Phi if same_grid else basis.evaluate(source_grid, secular=True)
 
-    D = _D_plus_half(potential_data, source_data, interpolator, basis, chunk_size)
+    D = _D_plus_half(
+        potential_data, source_data, interpolator, basis, chunk_size, _prune_data=False
+    )
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
     assert D.shape == (potential_grid.num_nodes, basis.num_modes + 2)
@@ -160,7 +151,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     # Grids with resolution less than source grid yield poor convergence
     # due to FFT frequency spectrum truncation.
     grid = transforms["grid"]
-    data["interpolator"] = get_interpolator(grid, grid, data, **kwargs)
+    data["interpolator"] = get_interpolator(grid, grid, data)
     return data
 
 
@@ -176,7 +167,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     transforms={"Phi": [[0, 0, 0]]},
     profiles=[],
     data=list(
-        set(_kernel_dipole_smooth.keys + _kernel_monopole.keys + ["interpolator"])
+        set(_kernel_dipole_plus_half.keys + _kernel_monopole.keys + ["interpolator"])
         - {"Phi"}
     ),
     resolution_requirement="tz",
@@ -185,10 +176,12 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
+@partial(jit, static_argnames=["problem", "chunk_size"])
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     problem = kwargs["problem"]
     maxiter = kwargs.get("maxiter", 0)
+    chunk_size = kwargs.get("chunk_size", None)
 
     # TODO: Fixed point method.
     errorif(
@@ -196,27 +189,25 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
         msg="Fixed point method not possible for the interior Neumann.",
     )
 
-    copy_data = data.copy()
-    interpolator = copy_data.pop("interpolator")
-    bc = singular_integral(
-        eval_data=copy_data,
-        source_data=copy_data,
-        interpolator=interpolator,
-        kernel=_kernel_monopole,
-        chunk_size=kwargs.get("chunk_size", None),
+    boundary_condition = singular_integral(
+        data,
+        data,
+        data["interpolator"],
+        _kernel_monopole,
+        chunk_size=chunk_size,
     ).squeeze(axis=-1)
 
     data["Phi_mn"] = _lsmr_compute_potential(
+        boundary_condition,
+        params["I"],
+        params["Y"],
+        transforms["Phi"].basis,
+        data["interpolator"],
+        data,
+        data,
         problem=problem,
-        boundary_condition=bc,
-        I=params["I"],
-        Y=params["Y"],
-        basis=transforms["Phi"].basis,
-        interpolator=interpolator,
-        potential_data=copy_data,
-        source_data=copy_data,
         same_grid=True,
-        chunk_size=kwargs.get("chunk_size", None),
+        chunk_size=chunk_size,
     )
     return data
 
@@ -232,25 +223,26 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     params=["I", "Y"],
     transforms={"Phi": [[0, 0, 0]]},
     profiles=[],
-    data=list(set(_kernel_dipole_smooth.keys) - {"Phi"}) + ["interpolator", "Phi_coil"],
+    data=list(set(_kernel_dipole_plus_half.keys) - {"Phi"})
+    + ["interpolator", "Phi_coil"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
     **_doc,
 )
+@partial(jit, static_argnames=["chunk_size"])
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     # TODO: Fixed point method.
-    copy_data = data.copy()
     data["Phi_mn"] = _lsmr_compute_potential(
+        data["Phi_coil"],
+        params["I"],
+        params["Y"],
+        transforms["Phi"].basis,
+        data["interpolator"],
+        data,
+        data,
         problem="interior Dirichlet",
-        boundary_condition=copy_data["Phi_coil"],
-        I=params["I"],
-        Y=params["Y"],
-        basis=transforms["Phi"].basis,
-        interpolator=copy_data.pop("interpolator"),
-        potential_data=copy_data,
-        source_data=copy_data,
         same_grid=True,
         chunk_size=kwargs.get("chunk_size", None),
     )
@@ -406,37 +398,39 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
 )
 def _grad_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    # TODO: avoid near singular integral by removing singularity
     chunk_size = kwargs.get("chunk_size", None)
-    copy = data.copy()
-    RpZ_coords = kwargs.get("RpZ_coords", copy)
-    interpolator = kwargs.get("eval_interpolator", copy.pop("interpolator", None))
+    RpZ_coords = kwargs.get("RpZ_coords", data)
+    interpolator = kwargs.get("eval_interpolator", data.get("interpolator", None))
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
+    # TODO: avoid near singular integral by removing singularity
     if kwargs["on_boundary"]:
         data["grad(Phi)"] = (
             sign
             * 2
             * singular_integral(
-                eval_data=RpZ_coords,
-                source_data=copy,
-                interpolator=interpolator,
-                kernel=_kernel_biot_savart_coulomb,
+                RpZ_coords,
+                data,
+                interpolator,
+                _kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
             )
         )
     else:
+        grid = transforms["grid"]
+        RpZ_coords, source_data = _prune_data(
+            RpZ_coords, None, data, grid, _kernel_biot_savart_coulomb
+        )
         data["grad(Phi)"] = sign * _nonsingular_part(
-            eval_data=RpZ_coords,
-            eval_grid=None,
-            source_data=copy,
-            source_grid=transforms["grid"],
+            RpZ_coords,
+            None,
+            source_data,
+            grid,
             st=jnp.nan,
             sz=jnp.nan,
             kernel=_kernel_biot_savart_coulomb,
             chunk_size=chunk_size,
         )
-
     return data
 
 

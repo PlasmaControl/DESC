@@ -73,8 +73,8 @@ def virtual_casing_biot_savart(
     return singular_integral(
         eval_data,
         source_data,
-        interpolator=interpolator,
-        kernel=_kernel_biot_savart,
+        interpolator,
+        _kernel_biot_savart,
         chunk_size=chunk_size,
         **kwargs,
     )

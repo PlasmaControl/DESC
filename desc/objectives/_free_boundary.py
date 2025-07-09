@@ -7,7 +7,7 @@ from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals import virtual_casing_biot_savart
+from desc.integrals import get_interpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
@@ -19,7 +19,6 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import get_interpolator
 from .normalization import compute_scaling_factors
 
 

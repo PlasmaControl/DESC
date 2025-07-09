@@ -58,12 +58,12 @@ from desc.integrals.quad_utils import (
 )
 from desc.integrals.singularities import (
     _1_over_G,
+    _best_params,
+    _best_ratio,
     _grad_G,
     _kernel_biot_savart_coulomb,
     _kernel_nr_over_r3,
     _vanilla_params,
-    best_params,
-    best_ratio,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import SourceFreeField, ToroidalMagneticField
@@ -644,7 +644,7 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        st, sz, q = best_params(grid, best_ratio(data))
+        st, sz, q = _best_params(grid, _best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(
@@ -675,7 +675,7 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            st, sz, q = best_params(grid, best_ratio(data))
+            st, sz, q = _best_params(grid, _best_ratio(data))
             atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
@@ -711,24 +711,26 @@ class TestSourceFreeField:
         a = 1
         surface = FourierRZToroidalSurface()  # Choosing a = 1.
         grid = LinearGrid(M=resolution, N=resolution, NFP=surface.NFP)
+        eval_grid = LinearGrid(M=5, N=5, NFP=surface.NFP)
         theta = grid.nodes[:, 1]
 
         field = SourceFreeField(surface, grid, M=1, N=0)
         data = field.compute(
             ["grad(Phi)", "Phi", "Z", "n_rho"],
+            grid=eval_grid,
             data={"B0*n": np.sin(theta)},
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
+            warn_fft=False,
         )
         np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(data["n_rho"][:, 2], -data["B0*n"], atol=1e-12)
         np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
-        np.testing.assert_allclose(
-            dot(data["grad(Phi)"], data["n_rho"]) + data["B0*n"],
-            0,
-            atol=atol,
-        )
+
+        n_rho = surface.compute("n_rho", grid=eval_grid)["n_rho"]
+        B0n = np.sin(eval_grid.nodes[:, 1])
+        np.testing.assert_allclose(dot(data["grad(Phi)"], n_rho) + B0n, 0, atol=atol)
 
     @pytest.mark.unit
     def test_harmonic_interior(self, chunk_size=1000):
@@ -1405,30 +1407,28 @@ class TestBounce:
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        # 3. Compute input data.
         eq = get("HELIOTRON")
-
-        # 3. Convert above coordinates to DESC computational coordinates.
-        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-        # 4. Compute input data.
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, check=True)
+        # 4. Make the bounce integration operator.
+        bounce = Bounce1D(grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 6. Compute bounce points.
+        # 5. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 7. Optionally check for correctness of bounce points.
+        # 6. Optionally check for correctness of bounce points.
         bounce.check_points(points, pitch_inv, plot=False)
-        # 8. Integrate.
+        # 7. Integrate.
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
+            data={"g_zz": Bounce1D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1448,7 +1448,7 @@ class TestBounce:
             "to see if this is expected.",
         )
 
-        # 9. Example manipulation of the output
+        # 8. Example manipulation of the output
         # Sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
@@ -1457,7 +1457,7 @@ class TestBounce:
         # corresponds to the 1/λ value
         print("1/λ(ρ, λ):", pitch_inv[l, p])
         # for the Clebsch field line coordinates
-        nodes = bounce.reshape(grid.source_grid, grid.source_grid.nodes[:, :2])
+        nodes = bounce.reshape(grid, grid.nodes[:, :2])
         print("(ρ, α):", nodes[l, m, 0])
 
         # 10. Plotting

@@ -12,6 +12,7 @@ Adding new objective functions
     ::
         from desc.objectives import ObjectiveFromUser, GenericObjective
         from desc.equilibrium import Equilibrium
+from desc.integrals import surface_min, surface_max
 
         eq = Equilibrium()
 

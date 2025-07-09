@@ -2100,7 +2100,7 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_PEST_{alt}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
+    description="Jacobian determinant of flux (PEST) coordinate system",
     dim=1,
     params=[],
     transforms={},
@@ -2120,7 +2120,7 @@ def _sqrtg_PEST_alt(params, transforms, profiles, data, **kwargs):
     label="g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial/Radial element of covariant metric tensor" + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2134,21 +2134,22 @@ def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_rt|PEST",
+    name="g_rv|PEST",
     label="g_{\\rho\\theta}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial-Poloidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["e_rho|v,p", "e_theta_PEST"],
-    aliases=["g_tr|PEST"],
+    aliases=["g_vr|PEST"],
 )
-def _g_sub_rt_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rt|PEST"] = dot(data["e_rho|v,p"], data["e_theta_PEST"])
+def _g_sub_rv_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rv|PEST"] = dot(data["e_rho|v,p"], data["e_theta_PEST"])
     return data
 
 
@@ -2157,7 +2158,8 @@ def _g_sub_rt_PEST(params, transforms, profiles, data, **kwargs):
     label="g_{\\rho\\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial-Toroidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2172,11 +2174,12 @@ def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_tt|PEST",
+    name="g_vv|PEST",
     label="g_{\\theta_PEST \\theta_PEST}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Poloidal-Poloidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2184,27 +2187,28 @@ def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_theta_PEST"],
 )
-def _g_sub_tt_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tt|PEST"] = dot(data["e_theta_PEST"], data["e_theta_PEST"])
+def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vv|PEST"] = dot(data["e_theta_PEST"], data["e_theta_PEST"])
     return data
 
 
 @register_compute_fun(
-    name="g_tz|PEST",
+    name="g_vz|PEST",
     label="g_{\\theta_PEST \\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Poloidal-Toroidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["e_theta_PEST", "e_phi|r,v"],
-    aliases=["g_zt|PEST"],
+    aliases=["g_zv|PEST"],
 )
-def _g_sub_tz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])
+def _g_sub_vz_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])
     return data
 
 
@@ -2213,7 +2217,8 @@ def _g_sub_tz_PEST(params, transforms, profiles, data, **kwargs):
     label="g_{\\phi \\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Toroidal-Toroidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2231,7 +2236,8 @@ def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
     label="g_{\\rho \\vartheta}",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial-Poloidal element of covariant metric tensor"
+    + "PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2249,7 +2255,7 @@ def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
     label="\\nabla(\\nabla(\\rho))",
     units="m^{-2}",
     units_long="inverse square meters",
-    description="Gradient of gradient of rho",
+    description="Gradient of gradient of rho tensor",
     dim=(3, 3),
     params=[],
     transforms={},

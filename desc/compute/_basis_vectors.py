@@ -510,7 +510,7 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}^{\\vartheta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant poloidal basis vector in PEST coords",
+    description="Contravariant PEST poloidal basis vector",
     dim=3,
     params=[],
     transforms={},

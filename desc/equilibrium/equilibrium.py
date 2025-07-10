@@ -1348,7 +1348,8 @@ class Equilibrium(Optimizable, _MagneticField):
                         grid=source_grid,
                         params=params,
                         transforms=transforms,
-                        override_grid=True)
+                        #override_grid=True)
+            )
             B = integrate_surface(
                 coords, source_data, source_grid, kernel, chunk_size=chunk_size
             )
@@ -2197,7 +2198,7 @@ class Equilibrium(Optimizable, _MagneticField):
     @property
     def Z_basis(self):
         """FourierZernikeBasis: Spectral basis for Z."""
-        return self._Z_basisdef 
+        return self._Z_basis
 
     @property
     def L_basis(self):

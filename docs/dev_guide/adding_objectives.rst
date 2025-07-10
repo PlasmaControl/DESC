@@ -4,15 +4,21 @@ Adding new objective functions
 
 .. attention::
     This page is mainly intended to explain some of the logic inside of objective functions.
-    For simple objectives like shown in this page, it is recommended to use the [``GenericObjective``]() (for objectives that simply just use values computable already in the data index, see [List of Variables](https://desc-docs.readthedocs.io/en/latest/variables.html))
-    or [``ObjectiveFromUser``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser) (for quantities which are derived from things computable from the data index)
-    classes. The benefit of making a full objective class like shown in this page is mainly when dealing with multiple objects at once (see e.g [``PlasmaVesselObjective``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance)),
-    or more complicated objectives (like [``EffectiveRipple``](https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple)).
-    Both of the below objectives can trivially be made with ``GenericObjective`` and ``ObjectiveFromUser``:
+    For simple objectives like shown in this page, it is recommended to use the ` ``GenericObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.GenericObjective.html#desc.objectives.GenericObjective>`__
+    (for objectives that simply just use values computable already in the data index, see
+    `List of Variables <https://desc-docs.readthedocs.io/en/latest/variables.html>`__)
+    or ` ``ObjectiveFromUser`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser>`__
+    (for quantities which are derived from things computable from the data index)
+    classes. The benefit of making a full objective class like shown in this page is mainly when dealing
+    with multiple objects at once (see e.g ` ``PlasmaVesselObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
+    or more complicated objectives (like ` ``EffectiveRipple`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple>`__)
+    or having better control over default values and overriding some methods such as ``print_value``.
+    Most objectives can trivially be made with ``GenericObjective`` and ``ObjectiveFromUser``:
     ::
+
         from desc.objectives import ObjectiveFromUser, GenericObjective
         from desc.equilibrium import Equilibrium
-from desc.integrals import surface_min, surface_max
+        from desc.integrals import surface_min, surface_max
 
         eq = Equilibrium()
 
@@ -20,7 +26,7 @@ from desc.integrals import surface_min, surface_max
         obj_QS_triple = GenericObjective(f="f_T", thing=eq)
 
         # Mirror ratio, manually computed from "|B|"
-        fun_mirror_ratio(grid,data):
+        def fun_mirror_ratio(grid, data):
             max_tz_B = surface_max(grid=grid, x=data["|B|"], surface_label="rho")
             min_tz_B = surface_min(grid=grid, x=data["|B|"], surface_label="rho")
 
@@ -34,40 +40,41 @@ from desc.integrals import surface_min, surface_max
             # directly (see List of Variables docs), so can replace entirety of the above function code with this return statement
             # return grid.compress(data["mirror ratio"])
             # or can just use GenericObjective(f="mirror ratio", thing=eq) like given above
-        obj_mirror_ratio = ObjectiveFromUser(fun=fun_QS_triple_product, thing=eq)
+        obj_mirror_ratio = ObjectiveFromUser(fun=fun_mirror_ratio, thing=eq)
 
 This guide walks through creating a new objective to optimize using Quasi-symmetry and mirror ratio as
 an example. The primary methods needed for a new objective are ``__init__``, ``build``,
 and ``compute``. The base class ``_Objective`` provides a number of other methods that
-generally do not need to be re-implemented for subclasses.
+generally do not need to be re-implemented for subclasses such as derivative calculation,
+deviation from the target value, scaled cost and many common attributes.
 
-``__init__`` should generally just assign attributes and store inputs. It should not do
+``__init__`` should generally just assign attributes and store inputs. The object(s) that will be optimized by
+the objective is (are) also defined in the ``__init__`` method. This (these) can be any object that is inherited from
+``Optimizable`` super-class, i.e. ``Equilibrium``, ``Coil``, ``Surface``. ``__init__`` method should not do
 any expensive calculations, these should be in ``build`` or ``compute``. The main
 arguments are summarized in the example below.
 
-``build`` is called before optimization with the ``Equilibrium`` to be optimized. It is
-used to precompute things like transform matrices that convert between spectral
-coefficients and real space values. In the build method, we first ensure that a ``Grid``
-is assigned, using default values from the equilibrium if necessary. The grid defines
-the points in flux coordinates where we evaluate the residuals. Next, we define the
-physics quantities we need to evaluate the objective (``_data_keys``), and the number of
-residuals that will be returned by ``compute`` (``_dim_f``). Next, we use some helper
-functions to build the required ``Transform`` and ``Profile`` objects needed to compute
-the desired physics quantities. These ``transforms`` and ``profiles`` are then packaged
-into ``constants``, which will be passed to the ``compute`` method. Other "constant"
-values that are needed to compute the given quantity such as hyperparameters or other
-objects that will not be optimized should also be included in ``constants``. Finally, we
-call the base class ``build`` method to do some checking of array sizes and other
-miscellaneous stuff.
+``build`` is called before optimization either by user or automatically. It is used to
+precompute things that will be constant during the optimization like transform matrices that convert spectral
+coefficients to real space values, the values of the fixed plasma profiles, names of the physics quantities
+required that are registered as compute functions, shape of the objective value etc.
+The quantities that will be used by ``compute`` are then packaged into ``constants``. ``build`` method
+also performs any necessary checks on the inputs before starting the optimization.
 
-``compute`` is where the actual calculation of the residual takes place. Objectives
+``compute`` is where the actual calculation of the objective takes place. Objectives
 generally return a vector of residuals that are minimized in a least squares sense,
 though the exact method will depend on the optimization algorithm. The main thing here
 is calling ``compute_fun`` to get physics quantities, and then performing any
-post-processing we want such as averaging, combining, etc. ``compute`` always must return
+post-processing we want such as averaging, combining, etc. ``compute`` must always return
 a 1-D array.
 
-A full example objective with comments describing the key points is given below:
+Now let's look at ``QuasisymmetryTripleProduct`` as an example. This objective takes in an ``Equilibrium``
+object and computes the quasi-symmetry triple product.
+
+First, we need some common imports that almost all objectives in DESC need. One thing to keep in mind here is that ``desc.compute.utils``
+offers 2 functions namely ``compute`` and ``_compute``. The latter is the JIT compatible version of the former, and is used
+in the ``compute`` method of the objective. The former has additional checks that make it incompatible to use in JIT-compiled
+functions. We import ``_compute`` with an alias ``compute_fun`` to avoid confusion with the ``compute`` method of the objective.
 ::
 
     from desc.objectives.objective_funs import _Objective
@@ -76,6 +83,13 @@ A full example objective with comments describing the key points is given below:
     from desc.compute.utils import _compute as compute_fun
     from desc.grid import LinearGrid
 
+
+``_Objective`` parent class provides a lot of functionality for objectives, such as ``compute_scaled`` for scaling the result of
+``compute`` method, ``compute_scaled_error`` for computing the error from the target, ``jac_scaled_error`` for computing the
+Jacobian of the scaled error, and many other methods. The docstring of the objective should explain special inputs. The docstrings
+for common inputs (i.e. ``target``, ``bounds``, ``weight``, ``jac_chunk_size`` etc)  can be inherited from the base class
+and can be adjusted as shown below.
+::
 
     class QuasisymmetryTripleProduct(_Objective):  # need to subclass from ``desc.objectives._Objective``
         """Give a description of what it is and what it's useful for.
@@ -99,6 +113,13 @@ A full example objective with comments describing the key points is given below:
                                 # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
         _units = "(T^4/m^2)"    # units of the output
         _print_value_fmt = "Quasi-symmetry error: "    # string with the name of the printed value, used when showing results of an optimization
+
+
+``__init__`` method should assign the optimizable thing(s) to the ``things`` attribute, which is a list of objects
+that will be optimized. For this example, we will optimize an ``Equilibrium`` object, so we assign it to the
+``things`` as a list. As explained before, the ``__init__`` method should not do any expensive calculations, so we just assign the
+attributes and call the parent class's ``__init__`` method which will handle common inputs and finalize the initialization.
+::
 
         def __init__(
             self,
@@ -127,6 +148,34 @@ A full example objective with comments describing the key points is given below:
                 jac_chunk_size=jac_chunk_size
             )
 
+``build`` method can be thought as a pre-computation step that prepares the objective for optimization by storing the constants
+needed for ``compute`` method to prevent extra computations. This method is not JIT-compiled, so it can perform any Python code.
+
+``grid`` is a ``Grid`` object that contains the nodes where the objective will be evaluated. If it is not provided, a default
+grid is created based on the grid requirements for the objective. For example, if the objective needs to compute a volumetric
+quantity, a grid that covers the entire plasma volume needs to be chosen as default, or if there is an integral quantity
+a grid with proper quadrature points needs to be chosen. Sometimes 2 grids are needed, for example coil objectives, one for the
+evaluation points on plasma surface and one for the coil segments for Biot-Savart integration.
+
+Probably the most important part of the ``build`` method is to call ``get_profiles`` and ``get_transforms`` functions
+from ``desc.compute.utils``. These functions return the profiles and transforms needed to compute the physics
+quantities from the equilibrium object. Both functions return dictionaries. Since these require information on the
+computation grid, one needs to call them after assigning the grid to the objective.
+
+``_data_keys`` is a list of strings that specifies which physics quantities are needed
+to be computed, for this example, from the equilibrium object. If there are multiple things in ``self.things``, one
+can create separate lists for each thing. One can use a different name instead of ``_data_keys``, but it is a convention
+in most DESC objectives. ``_dim_f`` is the size of the output vector returned by ``compute`` method.
+This quantity is used in ``ObjectiveFunction`` class to conduct concatenation or splitting and the name
+``_dim_f`` has to be kept to prevent errors. One should also define the proper normalization factor for
+the objective, if needed. The units of the normalization factor should be such that the objective value is unitless.
+
+We put all the constants into a dictionary called ``self._constants``. This dictionary will be passed to the
+``compute`` method as the ``constants`` argument, so it can access the transforms and profiles needed to compute the objective.
+Alternatively, one can also store the constants as attributes of the objective, for instance ``self._transforms``
+and ``self._profiles``. Finally, we call the parent class's ``build`` method for common parts of building the objective.
+::
+
         def build(self, use_jit=True, verbose=1):
             """Build constant arrays.
 
@@ -148,7 +197,7 @@ A full example objective with comments describing the key points is given below:
             else:
                 grid = self._grid
             # dim_f = size of the output vector returned by self.compute
-            # usually the same as self.grid.num_nodes, unless you're doing some downsampling
+            # usually the same as self.grid.num_nodes, unless you're doing some down-sampling
             # or averaging etc.
             self._dim_f = self.grid.num_nodes
             # What data from desc.compute is needed? Here we want the QS triple product.
@@ -188,6 +237,18 @@ A full example objective with comments describing the key points is given below:
 
             # finally, call ``super.build()``
             super().build(use_jit=use_jit, verbose=verbose)
+
+
+The actual computation of the objective happens in ``compute`` method. This method is JIT-compiled
+(unless ``use_jit=False`` is passed to ``build`` method), so it should only contain JIT-compatible code.
+This method takes in the parameters of the thing(s) to be optimized, which is the dictionary form of the
+state vector such as `R_lmn`, `Z_lmn`, etc. for the ``Equilibrium`` object. Objectives with multiple ``things``
+can have multiple parameters, one for each thing in ``self.things``, in this case, the function signature would be
+``compute(self, params_1, params_2, params3, ..., constants=None)``, see the
+` ``PlasmaVesselDistance`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__
+objective for an example of this. The ``constants`` argument is a dictionary of any other constant and usually set to ``None``
+so that the ``self.constants`` are used.
+::
 
         def compute(self, params, constants=None):
             """Signature should take params (or possibly multiple params, one for each thing in self.things),
@@ -238,10 +299,8 @@ A full example objective with comments describing the key points is given below:
     from desc.compute import get_profiles, get_transforms
     from desc.compute.utils import _compute as compute_fun
     from desc.grid import LinearGrid
-    from desc.integrals.surface_integral import (
-    surface_max,
-    surface_min,
-    )
+    from desc.integrals.surface_integral import surface_max, surface_min
+
     class MirrorRatio(_Objective):
         """Target a particular value mirror ratio.
 
@@ -448,7 +507,7 @@ A full example objective with comments describing the key points is given below:
 Converting to Cartesian coordinates
 -----------------------------------
 
-The above example of quasi-symmetry is a scalar quantity that is independent of the
+The above examples of quasi-symmetry and mirror ratio are quantities that are independent of the
 coordinate system. ``desc.compute.utils._compute`` always returns all vector quantities
 in toroidal coordinates :math:`(R,\phi,Z)`. If you would prefer to work in Cartesian
 coordinates :math:`(X,Y,Z)` for any intermediate computations within your new objective,

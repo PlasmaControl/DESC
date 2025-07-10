@@ -4,14 +4,14 @@ Adding new objective functions
 
 .. attention::
     This page is mainly intended to explain some of the logic inside of objective functions.
-    For simple objectives like shown in this page, it is recommended to use the ` ``GenericObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.GenericObjective.html#desc.objectives.GenericObjective>`__
+    For simple objectives like shown in this page, it is recommended to use the `GenericObjective <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.GenericObjective.html#desc.objectives.GenericObjective>`__
     (for objectives that simply just use values computable already in the data index, see
     `List of Variables <https://desc-docs.readthedocs.io/en/latest/variables.html>`__)
-    or ` ``ObjectiveFromUser`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser>`__
+    or `ObjectiveFromUser <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser>`__
     (for quantities which are derived from things computable from the data index)
     classes. The benefit of making a full objective class like shown in this page is mainly when dealing
-    with multiple objects at once (see e.g ` ``PlasmaVesselDistance`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
-    or more complicated objectives (like ` ``EffectiveRipple`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple>`__)
+    with multiple objects at once (see e.g `PlasmaVesselDistance <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
+    or more complicated objectives (like `EffectiveRipple <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple>`__)
     or having better control over default values and overriding some methods such as ``print_value``.
     Most objectives can trivially be made with ``GenericObjective`` and ``ObjectiveFromUser``:
     ::
@@ -245,7 +245,7 @@ This method takes in the parameters of the thing(s) to be optimized, which is th
 state vector such as `R_lmn`, `Z_lmn`, etc. for the ``Equilibrium`` object. Objectives with multiple ``things``
 can have multiple parameters, one for each thing in ``self.things``, in this case, the function signature would be
 ``compute(self, params_1, params_2, params3, ..., constants=None)``, see the
-` ``PlasmaVesselDistance`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__
+`PlasmaVesselDistance <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__
 objective for an example of this. The ``constants`` argument is a dictionary of any other constant and usually set to ``None``
 so that the ``self.constants`` are used.
 ::
@@ -386,14 +386,18 @@ from above are not repeated here)
             # computation of |B| across the entire volume (i.e. poloidally and toroidally
             # on each flux surface) so that we can take the necessary min/maxes.
             if self._grid is None and isinstance(eq, Equilibrium):
-                grid = LinearGrid( # default grid here only has rho=1.0 so a single flux surface, but the objective is written generally for arbitrary number of surfaces
+                # default grid here only has rho=1.0 so a single flux surface, but the objective
+                # is written generally for arbitrary number of surfaces
+                grid = LinearGrid(
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                     sym=eq.sym,
                 )
             elif self._grid is None and isinstance(eq, OmnigenousField):
-                grid = LinearGrid( # we have a different default grid when an OmnigenousField is the object being optimized
+                # we have a different default grid when an OmnigenousField is the
+                # object being optimized
+                grid = LinearGrid(
                     theta=2 * eq.M_B,
                     N=2 * eq.N_x,
                     NFP=eq.NFP,
@@ -408,9 +412,10 @@ from above are not repeated here)
             self._dim_f = grid.num_rho
 
             # we will only need "|B|" to compute this quantity. For this example objective
-            # we compute mirror ratio manually in the objective compute method, but one may look at the List of Variables docs
-            # and see that you could also compute "mirror ratio" as a key directly, but
-            # for the sake of demonstrating functionality we compute it manually here
+            # we compute mirror ratio manually in the objective compute method, but one
+            # may look at the List of Variables docs and see that you could also compute
+            # "mirror ratio" as a key directly, but for the sake of demonstrating
+            # functionality we compute it manually here
             self._data_keys = ["|B|"]
 
             timer = Timer()
@@ -457,11 +462,13 @@ from above are not repeated here)
             # we jit our objective compute functions and some logic inside of
             # `eq.compute` does not work under jit.
             data = compute_fun(
-                # parameterization is the object (or type of object) that we are computing quantities with i.e. ``desc.equilibrium.equilibrium.Equilibrium`` or just the Equilibrium object directly
+                # parameterization is the object (or type of object) that we are computing quantities with
+                # i.e. ``desc.equilibrium.equilibrium.Equilibrium`` or just the Equilibrium object directly
                 parameterization=self.things[0],
                 # names is the names of the data (see List of Variables doc page) we want to compute
                 names=self._data_keys,
-                # params is the dict of the DOFs of the parameterization, and are used to compute these quantities, i.e. for Equilibrium this contains R_lmn, Z_lmn, etc.
+                # params is the dict of the DOFs of the parameterization, and are used to compute these
+                # quantities, i.e. for Equilibrium this contains R_lmn, Z_lmn, etc.
                 params=params,
                 # transforms and profiles pre-computed from the build method
                 transforms=constants["transforms"],

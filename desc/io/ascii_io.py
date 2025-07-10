@@ -10,6 +10,9 @@ from desc.utils import errorif
 def write_ascii(fname, eq):  # noqa: C901
     """Print the equilibrium solution to a text file.
 
+    This is not the recommended output file format, please
+    use the HDF5 format instead.
+
     Note: will save the pressure and iota profile as
     power series profiles. If not an iota constrained
     equilibrium, the iota profile will be computed and
@@ -36,9 +39,12 @@ def write_ascii(fname, eq):  # noqa: C901
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             eq.iota = eq.get_profile("iota", kind="power_series")
+    if eq.pressure is None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            eq.pressure = eq.get_profile("p", kind="power_series")
     from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 
-    # can't import other stuff in io due to circular imports, so have to check by name
     errorif(
         isinstance(eq.pressure, FourierZernikeProfile)
         or isinstance(eq.iota, FourierZernikeProfile),
@@ -53,7 +59,6 @@ def write_ascii(fname, eq):  # noqa: C901
         iota = iota.to_powerseries(order=eq.L, sym=True)
     if not isinstance(pressure, PowerSeriesProfile):
         pressure = pressure.to_powerseries(order=eq.L, sym=True)
-
     L = max(pressure.basis.L, iota.basis.L)
     pressure.change_resolution(L)
     iota.change_resolution(L)

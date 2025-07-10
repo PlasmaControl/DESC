@@ -3,7 +3,8 @@ Outputs
 =======
 
 This page explains the output file formats for equilibrium solutions
-computed by DESC.
+computed by DESC. the HDF5 is the recommended way to interface with DESC,
+as the ASCII format is deprecated.
 
 HDF5
 ************

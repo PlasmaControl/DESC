@@ -1,4 +1,4 @@
-"""Compute functions for magnetic fields which do not assume nested surfaces."""
+"""Compute functions for Laplace solver."""
 
 from functools import partial
 
@@ -38,11 +38,6 @@ _doc = {
         Initial guess for iteration.
         """,
 }
-RpZ_coords = """dict[str, jnp.ndarray] :
-        (R, ϕ, Z) coordinates at which to evaluate quantities.
-        Should store the three entries ``"R"``, ``"phi"``, and ``"Z"``.
-        If not given, the entries for these keys in ``data`` are used.
-        """
 
 
 def _D_plus_half(
@@ -393,23 +388,21 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    RpZ_coords=RpZ_coords,
     on_boundary="bool : Whether coords are on boundary surface.",
 )
-def _grad_potential(params, transforms, profiles, data, **kwargs):
+def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
     chunk_size = kwargs.get("chunk_size", None)
-    RpZ_coords = kwargs.get("RpZ_coords", data)
     interpolator = kwargs.get("eval_interpolator", data.get("interpolator", None))
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
     # TODO: avoid near singular integral by removing singularity
     if kwargs["on_boundary"]:
-        data["grad(Phi)"] = (
+        RpZ_data["grad(Phi)"] = (
             sign
             * 2
             * singular_integral(
-                RpZ_coords,
+                RpZ_data,
                 data,
                 interpolator,
                 _kernel_biot_savart_coulomb,
@@ -418,11 +411,11 @@ def _grad_potential(params, transforms, profiles, data, **kwargs):
         )
     else:
         grid = transforms["grid"]
-        RpZ_coords, source_data = _prune_data(
-            RpZ_coords, None, data, grid, _kernel_biot_savart_coulomb
+        eval_data, source_data = _prune_data(
+            RpZ_data, None, data, grid, _kernel_biot_savart_coulomb
         )
-        data["grad(Phi)"] = sign * _nonsingular_part(
-            RpZ_coords,
+        RpZ_data["grad(Phi)"] = sign * _nonsingular_part(
+            eval_data,
             None,
             source_data,
             grid,
@@ -431,7 +424,7 @@ def _grad_potential(params, transforms, profiles, data, **kwargs):
             kernel=_kernel_biot_savart_coulomb,
             chunk_size=chunk_size,
         )
-    return data
+    return RpZ_data
 
 
 @register_compute_fun(
@@ -470,28 +463,26 @@ def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     label="B0",
     units="T",
     units_long="Tesla",
-    description="Magnetic field due to volume current "
-    "where the potential is defined and due to net currents elsewhere.",
+    description="Auxillary field.",
     dim=3,
     coordinates="RpZ",
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=[],
+    data=["R", "phi", "Z"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    RpZ_coords=RpZ_coords,
     chunk_size=_doc["chunk_size"],
     B0="_MagneticField : Field object to compute with.",
+    public=False,
 )
-def _B0_field(params, transforms, profiles, data, **kwargs):
-    RpZ_coords = kwargs.get("RpZ_coords", data)
-    coords = jnp.column_stack([RpZ_coords["R"], RpZ_coords["phi"], RpZ_coords["Z"]])
-    data["B0"] = kwargs["B0"].compute_magnetic_field(
+def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
+    coords = jnp.column_stack([RpZ_data["R"], RpZ_data["phi"], RpZ_data["Z"]])
+    RpZ_data["B0"] = kwargs["B0"].compute_magnetic_field(
         coords=coords,
         source_grid=transforms["grid"],
         chunk_size=kwargs.get("chunk_size", None),
     )
-    return data
+    return RpZ_data
 
 
 @register_compute_fun(
@@ -508,33 +499,33 @@ def _B0_field(params, transforms, profiles, data, **kwargs):
     data=["grad(Phi)", "B0"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
 )
-def _total_B(params, transforms, profiles, data, **kwargs):
-    data["B"] = data["grad(Phi)"] + data["B0"]
-    return data
+def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
+    RpZ_data["B"] = RpZ_data["grad(Phi)"] + RpZ_data["B0"]
+    return RpZ_data
 
 
 @register_compute_fun(
-    name="B*n",
-    label="B \\cdot n_{\\rho}",
+    name="B_coil",
+    label="B_{\\text{coil}}",
     units="T",
     units_long="Tesla",
-    description="Magnetic field",
-    dim=1,
-    coordinates="RpZ",
+    description="Magnetic field due to coils",
+    dim=3,
+    coordinates="rtz",
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
-    data=["B", "n_rho"],
+    data=["x"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    RpZ_coords=RpZ_coords,
+    chunk_size=_doc["chunk_size"],
+    B_coil="_MagneticField : Field object to compute with.",
 )
-def _B_dot_n_laplace(params, transforms, profiles, data, **kwargs):
-    # TODO: Plumb through RpZ /evaluation data dictinoary as well.
-    #       Below n_rho should be computed on evaluation grid
-    #       but right now it is computed on source grid.
-    #       want to be able to query eval_data["n_rho"]
-    n_rho = kwargs.get("RpZ_coords", data).get("n_rho", data["n_rho"])
-    data["B*n"] = dot(data["B"], n_rho)
+def _B_coil_field(params, transforms, profiles, data, **kwargs):
+    data["B_coil"] = kwargs["B_coil"].compute_magnetic_field(
+        coords=data["x"],
+        source_grid=transforms["grid"],
+        chunk_size=kwargs.get("chunk_size", None),
+    )
     return data
 
 
@@ -549,24 +540,17 @@ def _B_dot_n_laplace(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=["e_zeta", "x"],
-    # TODO: make this vector potential
-    B_coil="""_MagneticField : Magnetic field due to coils.""",
+    data=["e_zeta", "B_coil"],
     chunk_size=_doc["chunk_size"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Y_coil(params, transforms, profiles, data, **kwargs):
     assert transforms["grid"].num_rho == 1
     assert np.isclose(transforms["grid"].nodes[0, 0], 1)
-    B_coil = kwargs["B_coil"].compute_magnetic_field(
-        coords=data["x"],
-        source_grid=transforms["grid"],
-        chunk_size=kwargs.get("chunk_size", None),
-    )
     # Equation B.2 averaged over all χ_θ for increased accuracy
     # since we only have discrete interpolation to true B_coil.
     # (L2 error of Fourier series better than max pointwise).
-    data["Y_coil"] = dot(B_coil, data["e_zeta"]).mean()
+    data["Y_coil"] = dot(data["B_coil"], data["e_zeta"]).mean()
     return data
 
 
@@ -581,13 +565,11 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    data=["n_rho"],
-    # TODO: make this vector potential
-    B_coil="_MagneticField : Magnetic field due to coils.",
+    data=["n_rho", "B_coil"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
-    data["n_rho x B_coil"] = cross(data["n_rho"], kwargs["B_coil"])
+    data["n_rho x B_coil"] = cross(data["n_rho"], data["B_coil"])
     return data
 
 
@@ -606,6 +588,9 @@ def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
+    assert transforms["grid"].num_rho == 1
+    assert np.isclose(transforms["grid"].nodes[0, 0], 1)
+
     basis = transforms["Phi"].basis
     grid = transforms["Phi"].grid
 
@@ -617,6 +602,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
         + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
     ).reshape(grid.num_nodes * 3, basis.num_modes)
 
+    # TODO: compute this vector or scalar potential
     data["Phi_coil_mn"] = jnp.linalg.lstsq(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),

@@ -8,9 +8,9 @@ References
 
 from desc.basis import DoubleFourierSeries
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
 from desc.integrals.singularities import get_interpolator
-from desc.utils import errorif, setdefault
+from desc.magnetic_fields import ToroidalMagneticField
+from desc.utils import errorif
 
 
 class SourceFreeField(FourierRZToroidalSurface):
@@ -29,9 +29,6 @@ class SourceFreeField(FourierRZToroidalSurface):
     ----------
     surface : Surface
         Geometry defining ∂𝒳.
-    grid : Grid
-        Points on ∂𝒳 for quadrature and interpolation
-        used to solve for the potential.
     M : int
         Poloidal Fourier resolution to interpolate potential on ∂𝒳.
         Default is ``grid.M``.
@@ -47,40 +44,29 @@ class SourceFreeField(FourierRZToroidalSurface):
     Y : float
         Net poloidal current parameter.
         Default is zero.
+    B0 : _MagneticField
+        Magnetic field due to currents in 𝒳 and net currents outside 𝒳
+        which are not accounted for ``I`` and ``Y``.
 
     """
 
-    _immediate_attributes_ = ["_surface", "_grid", "_Phi_basis", "I", "Y"]
+    _immediate_attributes_ = ["_surface", "_Phi_basis", "I", "Y", "_B0"]
 
     def __init__(
         self,
         surface,
-        grid=None,
-        M=None,
-        N=None,
+        M,
+        N,
         sym=False,
         I=0,  # noqa: E741
         Y=0,
-        **kwargs,
+        B0=ToroidalMagneticField(0, 1),
     ):
         self._surface = surface
-        if grid is None:
-            grid = LinearGrid(
-                M=surface.M * 4,
-                N=surface.N * 4,
-                NFP=surface.NFP if surface.N > 0 else 64,
-                # TODO(for reviewers) set this based off surface or Phi sym?
-                sym=False,
-            )
-        errorif(not grid.can_fft2)
-        self._grid = grid
-        M = setdefault(M, grid.M)
-        N = setdefault(N, grid.N)
-        errorif(M > grid.M, msg=f"Got M={M} > {grid.M}=grid.M.")
-        errorif(N > grid.N, msg=f"Got N={N} > {grid.N}=grid.N.")
         self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
         self.I = I
         self.Y = Y
+        self._B0 = B0
 
     def __getattr__(self, attr):
         return getattr(self._surface, attr)
@@ -98,11 +84,6 @@ class SourceFreeField(FourierRZToroidalSurface):
     def surface(self):
         """Surface geometry defining boundary."""
         return self._surface
-
-    @property
-    def grid(self):
-        """Points on boundary for quadrature and interpolation."""
-        return self._grid
 
     @property
     def Phi_basis(self):
@@ -127,13 +108,13 @@ class SourceFreeField(FourierRZToroidalSurface):
     def compute(
         self,
         names,
-        grid=None,
+        grid,
         params=None,
         transforms=None,
         data=None,
+        RpZ_data=None,
+        RpZ_grid=None,
         override_grid=True,
-        *,
-        RpZ_coords=None,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -142,30 +123,27 @@ class SourceFreeField(FourierRZToroidalSurface):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        RpZ_coords : dict[str, jnp.ndarray]
-            (R, ϕ, Z) coordinates at which to evaluate
-            quantities that support evaluation off ``self.grid``.
-            Should store the three entries ``"R"``, ``"phi"``, and ``"Z"``.
-            The precise behavior is stated for each quantity
-            in the public documentation for the list of variables.
         grid : Grid
-            Optional grid of coordinates at which to evaluate
-            quantities that support evaluation off ``self.grid``.
-            The precise behavior is stated for each quantity
-            in the public documentation for the list of variables.
-            If given, then ``RpZ_coords`` may be ignored.
-            If ``grid`` is not given and ``RpZ_coords`` is not given,
-            then ``grid`` will default to ``self.grid``.
+            Grid of coordinates on which to perform computation.
         params : dict[str, jnp.ndarray]
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to attributes of self.
         transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from ``self.grid``.
+            Transforms for R, Z, lambda, etc. Default is to build from ``grid``.
         data : dict[str, jnp.ndarray]
             Data computed so far, generally output from other compute functions.
             Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
             v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
             of the cylindrical coordinates R, ϕ, Z.
+        RpZ_data : dict[str, jnp.ndarray]
+            Data evaluated so far on the (R, ϕ, Z) coordinates in this dictionary.
+            Should store the three entries ``"R"``, ``"phi"``, and ``"Z"``
+            if the intention is to compute something at these coordinates.
+            If not given, then computes from ``RpZ_grid``.
+        RpZ_grid : Grid
+            Grid of coordinates on which to evaluate quantities that support
+            evaluation off of ``grid``.
+            If not given, then default is ``grid``.
         override_grid : bool
             If True, override ``self.grid`` if necessary and use a full
             resolution grid to compute quantities and then downsample to ``self.grid``.
@@ -175,50 +153,68 @@ class SourceFreeField(FourierRZToroidalSurface):
         Returns
         -------
         data : dict[str, jnp.ndarray]
-            Computed quantities and intermediate variables on ``self.grid``.
-            May also store data evaluated on ``RpZ_coords`` or ``grid``
-            for those quantities that support evaluation off ``self.grid``.
-            The precise behavior is stated for each quantity
-            in the public documentation for the list of variables.
+            Quantities and intermediate variables computed on ``grid``.
+        RpZ_data : dict[str, jnp.ndarray]
+            Quantities and intermediate variables computed on the
+            (R, ϕ, Z) coordinates in ``RpZ_data``.
 
         """
-        if grid is not None and "eval_interpolator" not in kwargs:
-            warn_fft = kwargs.pop("warn_fft", True)
-            kwargs["eval_interpolator"] = get_interpolator(
-                eval_grid=grid,
-                source_grid=self._grid,
-                source_data=super().compute(
-                    ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-                    self._grid,
-                    params,
-                    transforms,
-                    # Do not pass in data since the expectation
-                    # is that quantities computed on self.grid.
-                    # whereas input data may have things on eval
-                    # grid as well.
-                    override_grid=override_grid,
+        errorif(self.M_Phi > grid.M, msg=f"Got M_Phi={self.M_Phi} > {grid.M}=grid.M.")
+        errorif(self.N_Phi > grid.N, msg=f"Got N_Phi={self.N_Phi} > {grid.N}=grid.N.")
+
+        # cludge until all magnetic field classes use new API
+        kwargs.setdefault("B0", self._B0)
+        kwargs.setdefault("surface", self._surface)
+
+        # to simplify computation of a singular integral for grad(Phi)
+        if kwargs.get("on_boundary", False) and "eval_interpolator" not in kwargs:
+            if RpZ_grid is None:
+                errorif(RpZ_data is not None, msg="Please supply RpZ_grid.")
+                # grad(Phi) computation will proceed assuming RpZ_grid is grid.
+            else:
+                warn_fft = kwargs.pop("warn_fft", True)
+                kwargs["eval_interpolator"] = get_interpolator(
+                    eval_grid=RpZ_grid,
+                    source_grid=grid,
+                    source_data=super().compute(
+                        ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
+                        grid,
+                        params,
+                        transforms,
+                        # Do not pass in data since the expectation
+                        # is that quantities computed on self.grid.
+                        # whereas input data may have things on eval
+                        # grid as well.
+                        override_grid=override_grid,
+                        **kwargs,
+                    ),
+                    warn_fft=warn_fft,
                     **kwargs,
-                ),
-                warn_fft=warn_fft,
-                **kwargs,
-            )
-        if RpZ_coords is None and grid is not None and not self._grid.equiv(grid):
-            # then user forgot to supply RpZ coords for evaluation grid
-            RpZ_coords = super().compute(
+                )
+
+        if RpZ_data is None:
+            if RpZ_grid is None:
+                RpZ_grid = grid
+                RpZ_data = data
+            RpZ_data = super().compute(
                 ["R", "phi", "Z"],
-                grid,
+                RpZ_grid,
                 params,
                 transforms,
+                data=RpZ_data,
                 override_grid=override_grid,
                 **kwargs,
             )
-        if RpZ_coords is not None:
-            kwargs["RpZ_coords"] = RpZ_coords
-        if "B0" in kwargs:
-            kwargs.setdefault("surface", self._surface)
 
         return super().compute(
-            names, self._grid, params, transforms, data, override_grid, **kwargs
+            names,
+            grid,
+            params,
+            transforms,
+            data,
+            override_grid,
+            RpZ_data=RpZ_data,
+            **kwargs,
         )
 
 
@@ -235,22 +231,22 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     """
 
-    _immediate_attributes_ = ["Y_coil"]
+    _immediate_attributes_ = ["_B_coil", "_Y_coil"]
 
     def __init__(
         self,
         surface,
-        grid=None,
+        B_coil,
         M=None,
         N=None,
         sym=False,
         I=0,  # noqa: E741
         Y=0,
         Y_coil=None,
-        **kwargs,
     ):
-        super().__init__(surface, grid, M, N, sym, I, Y, **kwargs)
-        self.Y_coil = Y_coil
+        super().__init__(surface, M, N, sym, I, Y)
+        self._B_coil
+        self._Y_coil = Y_coil
 
     def __setattr__(self, name, value):
         if (
@@ -264,25 +260,27 @@ class FreeSurfaceOuterField(SourceFreeField):
     def compute(
         self,
         names,
-        grid=None,
+        grid,
         params=None,
         transforms=None,
         data=None,
+        RpZ_data=None,
+        RpZ_grid=None,
         override_grid=True,
-        *,
-        RpZ_coords=None,
         **kwargs,
     ):
         """Compute the quantity given by name on grid."""
-        if self.Y_coil is not None and "Y_coil" not in data:
-            data["Y_coil"] = self.Y_coil
+        if self._Y_coil is not None and "Y_coil" not in data:
+            data["Y_coil"] = self._Y_coil
+        kwargs.setdefault("B_coil", self._B_coil)
         return super().compute(
             names,
             grid,
             params,
             transforms,
             data,
+            RpZ_data,
+            RpZ_grid,
             override_grid,
-            RpZ_coords=RpZ_coords,
             **kwargs,
         )

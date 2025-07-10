@@ -516,6 +516,8 @@ class Surface(IOAble, Optimizable, ABC):
             Computed quantity and intermediate variables.
 
         """
+        RpZ_data = kwargs.pop("RpZ_data", None)
+
         if isinstance(names, str):
             names = [names]
         if grid is None:
@@ -612,6 +614,7 @@ class Surface(IOAble, Optimizable, ABC):
             transforms=transforms,
             profiles=profiles,
             data=data,
+            RpZ_data=RpZ_data,
             **kwargs,
         )
         return data

@@ -711,26 +711,31 @@ class TestSourceFreeField:
         a = 1
         surface = FourierRZToroidalSurface()  # Choosing a = 1.
         grid = LinearGrid(M=resolution, N=resolution, NFP=surface.NFP)
-        eval_grid = LinearGrid(M=5, N=5, NFP=surface.NFP)
+        RpZ_grid = LinearGrid(M=5, N=5, NFP=surface.NFP)
         theta = grid.nodes[:, 1]
 
-        field = SourceFreeField(surface, grid, M=1, N=0)
-        data = field.compute(
+        field = SourceFreeField(surface, M=1, N=0)
+        data, RpZ_data = field.compute(
             ["grad(Phi)", "Phi", "Z", "n_rho"],
-            grid=eval_grid,
+            grid,
             data={"B0*n": np.sin(theta)},
+            RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
             warn_fft=False,
         )
+        assert "grad(Phi)" not in data
+
         np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(data["n_rho"][:, 2], -data["B0*n"], atol=1e-12)
         np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
 
-        n_rho = surface.compute("n_rho", grid=eval_grid)["n_rho"]
-        B0n = np.sin(eval_grid.nodes[:, 1])
-        np.testing.assert_allclose(dot(data["grad(Phi)"], n_rho) + B0n, 0, atol=atol)
+        RpZ_data = surface.compute("n_rho", grid=RpZ_grid, data=RpZ_data)
+        B0n = np.sin(RpZ_grid.nodes[:, 1])
+        np.testing.assert_allclose(
+            dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]), -B0n, atol=atol
+        )
 
     @pytest.mark.unit
     def test_harmonic_interior(self, chunk_size=1000):
@@ -743,19 +748,21 @@ class TestSourceFreeField:
             modes_Z=[[-1, 0], [0, -1]],
         )
         grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
-        eval_grid = LinearGrid(M=15, N=15, NFP=surface.NFP)
+        data = surface.compute("n_rho", grid=grid)
+        data["B0*n"] = -data["n_rho"][:, 2]
 
-        data = {"B0*n": -surface.compute("n_rho", grid=grid)["n_rho"][:, 2]}
-        RpZ = surface.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
-        RpZ["B0*n"] = -RpZ["n_rho"][:, 2]
+        RpZ_grid = LinearGrid(M=15, N=15, NFP=surface.NFP)
+        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
 
         # Φ = Z, so result must be exact for this M,N.
-        field = SourceFreeField(surface, grid, M=surface.M, N=surface.N)
-        data = field.compute(
-            ["grad(Phi)", "Phi", "Z", "n_rho"],
-            RpZ_coords=RpZ,
-            grid=eval_grid,
+        field = SourceFreeField(surface, M=surface.M, N=surface.N)
+        data, RpZ_data = field.compute(
+            ["grad(Phi)", "Phi", "Z"],
+            grid,
             data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
@@ -763,8 +770,8 @@ class TestSourceFreeField:
         )
         np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
-            dot(data["grad(Phi)"], RpZ["n_rho"]) + RpZ["B0*n"],
-            0,
+            dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]),
+            -RpZ_data["B0*n"],
             atol=atol,
         )
 
@@ -789,9 +796,10 @@ class TestSourceFreeField:
         data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
 
-        field = SourceFreeField(surface, grid)
-        data = field.compute(
+        field = SourceFreeField(surface, M=grid.M, N=grid.N)
+        data, RpZ_data = field.compute(
             ["grad(Phi)", "Phi", "x", "n_rho"],
+            grid,
             data=data,
             problem="exterior Neumann",
             on_boundary=True,
@@ -799,6 +807,7 @@ class TestSourceFreeField:
             maxiter=maxiter,
             basis="xyz",
         )
+        assert data is RpZ_data
         np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
             dot(data["grad(Phi)"] - _grad_G(data["x"] - x0), data["n_rho"]),
@@ -862,43 +871,43 @@ class TestSourceFreeField:
 
         grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         data = eq.compute(["G"], grid=grid)
-        R0 = 1
         Y = grid.compress(data["G"])[-1]
-        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
-        field = SourceFreeField(eq.surface, grid, M=8, N=8)
+        field = SourceFreeField(
+            eq.surface, M=8, N=8, B0=ToroidalMagneticField(B0=Y, R0=1)
+        )
 
-        eval_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
-        RpZ = eq.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+        RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
+        RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
 
-        data = field.compute(
-            ["B*n"],
-            grid=eval_grid,
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
             data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
             chunk_size=chunk_size,
-            B0=B0,
             warn_fft=False,
-            RpZ_coords=RpZ,
         )
-        np.testing.assert_allclose(data["B*n"], 0, atol=5e-4)
+        np.testing.assert_allclose(dot(RpZ_data["B"], RpZ_data["n_rho"]), 0, atol=5e-4)
 
         # test off surface evaluation
-        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP)
-        data = field.compute(
-            ["B"],
-            data={
-                key: val
-                for key, val in data.items()
-                # dependencies of grad(Phi)
-                if key in _kernel_biot_savart_coulomb.keys
-            },
+        data = {
+            key: val
+            for key, val in data.items()
+            # dependencies of grad(Phi)
+            if key in _kernel_biot_savart_coulomb.keys
+        }
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
+            data=data,
+            RpZ_grid=LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP),
             on_boundary=False,
             chunk_size=chunk_size,
-            B0=B0,
-            RpZ_coords=eq.compute(["R", "phi", "Z"], grid=mid_grid),
         )
-        assert np.isfinite(data["B"]).all()
+        assert np.isfinite(RpZ_data["B"]).all()
 
     @staticmethod
     def _merkel_surf(C_r, C_z):

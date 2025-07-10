@@ -510,8 +510,9 @@ class DFTInterpolator(_BIESTInterpolator):
         return jnp.real(vander @ f)
 
 
+# TODO (reviewer): Do we need to cast to jax array?
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
-    """Returns new dictionaries with data that has been cast to jax arrays."""
+    """Returns new dictionaries with only required data."""
     keys = _dx.keys + ["theta", "zeta"]
     if hasattr(kernel, "eval_keys"):
         keys = keys + kernel.eval_keys

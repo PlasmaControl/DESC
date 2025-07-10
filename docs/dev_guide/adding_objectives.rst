@@ -290,11 +290,13 @@ so that the ``self.constants`` are used.
             # and to make the objective value independent of grid resolution.
             return f
 
-    An example that is slightly more complex is shown below for computing the mirror ratio
-    on each flux surface in the passed-in grid for an Equilibrium. (Some of the redundant comments
-    from above are not repeated here)
+
+An example that is slightly more complex is shown below for computing the mirror ratio
+on each flux surface in the passed-in grid for an Equilibrium. (Some of the redundant comments
+from above are not repeated here)
 
 ::
+
         from desc.objectives.objective_funs import _Objective
         from desc.compute import get_profiles, get_transforms
         from desc.compute.utils import _compute as compute_fun
@@ -501,6 +503,7 @@ so that the ``self.constants`` are used.
                 mirror_ratio = (max_tz_B - min_tz_B) / (min_tz_B + max_tz_B)
 
                 return mirror_ratio # return the value of the objective
+
 
 
 

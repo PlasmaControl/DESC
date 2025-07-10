@@ -11,7 +11,12 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, DoubleChebyshevFourierBasis, fourier, zernike_radial
+from desc.basis import (
+    FourierZernikeBasis,
+    DoubleChebyshevFourierBasis,
+    fourier,
+    zernike_radial,
+)
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -1233,14 +1238,14 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=50,
-        L = None,
-        M = 8,
-        N = None,
-        A_grid = None,
-        R_bounds = [5,11],
-        phi_bounds = None,
-        Z_bounds = [-5,5],
-        return_A = False
+        L=None,
+        M=8,
+        N=None,
+        A_grid=None,
+        R_bounds=[5, 11],
+        phi_bounds=None,
+        Z_bounds=[-5, 5],
+        return_A=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1296,10 +1301,12 @@ class Equilibrium(Optimizable, _MagneticField):
             Vector potential at the coordinates specified by A_grid, R_bounds, and Z_bounds.
             Only returned if return_A = True.
         """
-        methods = ['biot-savart','virtual casing','vector potential']
+        methods = ["biot-savart", "virtual casing", "vector potential"]
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        assert (method in methods), f"""Method {method} unknown. Please choose one of the following methods:
+        assert (
+            method in methods
+        ), f"""Method {method} unknown. Please choose one of the following methods:
             {', '.join(methods)}"""
         method = method.lower().strip()
         if method == methods[0]:
@@ -1308,7 +1315,9 @@ class Equilibrium(Optimizable, _MagneticField):
                     L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
                 )
             with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message="Unequal number of field periods")
+                warnings.filterwarnings(
+                    "ignore", message="Unequal number of field periods"
+                )
                 data = self.compute(
                     ["J", "phi", "sqrt(g)", "x"],
                     grid=source_grid,
@@ -1319,7 +1328,9 @@ class Equilibrium(Optimizable, _MagneticField):
             J = rpz2xyz_vec(data["J"], phi=data["phi"])
             dV = data["sqrt(g)"] * source_grid.weights
 
-            B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
+            B = biot_savart_general(
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+            )
             if basis.lower() == "rpz":
                 B = xyz2rpz_vec(B, phi=coords[:, 1])
         elif method == methods[1]:
@@ -1332,29 +1343,29 @@ class Equilibrium(Optimizable, _MagneticField):
                     sym=False,
                 )
             kernel = _kernel_biot_savart
-            
-            source_data = self.compute(kernel.keys, grid = source_grid)
+
+            source_data = self.compute(kernel.keys, grid=source_grid)
             B = integrate_surface(
-                coords,
-                source_data,
-                source_grid,
-                kernel,
-                chunk_size=chunk_size)
+                coords, source_data, source_grid, kernel, chunk_size=chunk_size
+            )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
         elif method == methods[2]:
-            shifts = np.array([R_bounds[0],0,Z_bounds[0]])
-            scales = np.array([R_bounds[1]-R_bounds[0],1,Z_bounds[1]-Z_bounds[0]])
+            shifts = np.array([R_bounds[0], 0, Z_bounds[0]])
+            scales = np.array([R_bounds[1] - R_bounds[0], 1, Z_bounds[1] - Z_bounds[0]])
             if A_grid is None:
                 if phi_bounds is None:
-                    A_grid = CylindricalGrid(L=128,M=32,N=128,NFP=self.NFP)
+                    A_grid = CylindricalGrid(L=128, M=32, N=128, NFP=self.NFP)
                 else:
-                    phi = np.linspace(phi_bounds[0],phi_bounds[1],64)
-                    A_grid = CylindricalGrid(L=128,phi=phi,N=128,NFP=self.NFP)
+                    phi = np.linspace(phi_bounds[0], phi_bounds[1], 64)
+                    A_grid = CylindricalGrid(L=128, phi=phi, N=128, NFP=self.NFP)
             A_coords = A_grid.nodes * scales + shifts
             # If we have already computed the vector potential at these same coordinates, just use those
-            if ((not hasattr(self,'A_coords')) or A_coords != self.A_coords) or source_grid is not None:
-                A = self.compute_magnetic_vector_potential(A_coords,
+            if (
+                (not hasattr(self, "A_coords")) or A_coords != self.A_coords
+            ) or source_grid is not None:
+                A = self.compute_magnetic_vector_potential(
+                    A_coords,
                     chunk_size=chunk_size,
                     source_grid=source_grid,
                     params=params,
@@ -1377,27 +1388,33 @@ class Equilibrium(Optimizable, _MagneticField):
             # Build spectral transforms
             basis_obj = DoubleChebyshevFourierBasis(L, M, N)
             in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False)
-            out_grid = Grid((coords-shifts)/scales)
-            out_transform = Transform(out_grid,basis_obj,build_pinv=False,build=True,derivs=1)
+            out_grid = Grid((coords - shifts) / scales)
+            out_transform = Transform(
+                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
+            )
 
-            A = self.compute_magnetic_vector_potential(A_coords,
+            A = self.compute_magnetic_vector_potential(
+                A_coords,
                 chunk_size=chunk_size,
                 source_grid=source_grid,
                 params=params,
                 basis=basis,
                 transforms=transforms,
-                )
+            )
             if basis.lower == "xyz":
                 A_rpz = xyz2rpz_vec(A, phi=coords[:, 1])
             else:
                 A_rpz = A
 
-            B = _curl_cylindrical(A_rpz,A_coords[:,0],coords[:,0],in_transform,out_transform,scales)
+            B = _curl_cylindrical(
+                A_rpz, A_coords[:, 0], coords[:, 0], in_transform, out_transform, scales
+            )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
             if return_A:
                 B = (B, A)
         return B
+
     def compute_magnetic_vector_potential(
         self,
         coords,
@@ -1405,7 +1422,8 @@ class Equilibrium(Optimizable, _MagneticField):
         basis="rpz",
         source_grid=None,
         transforms=None,
-        chunk_size=None):
+        chunk_size=None,
+    ):
         """Compute magnetic vector potential at a set of points.
 
         Parameters
@@ -1453,21 +1471,22 @@ class Equilibrium(Optimizable, _MagneticField):
 
         A = biot_savart_general_vector_potential(
             eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
-        )            
+        )
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A
 
-    def build_extended_coords(self,
-        res = 24,
-        ds = 0.01,
-        dist = 0.5):
-        self.R_v_c, self.Z_v_c, self.extended_basis, self.rho_max = build_extended_coords(self,res,ds,dist)
+    def build_extended_coords(self, res=24, ds=0.01, dist=0.5):
+        self.R_v_c, self.Z_v_c, self.extended_basis, self.rho_max = (
+            build_extended_coords(self, res, ds, dist)
+        )
         self.extended_coords = True
+
     def compute_g_extended(self, grid):
         if not self.extended_coords:
             self.build_extended_coords()
-        return metric(self,grid)
+        return metric(self, grid)
+
     def map_coordinates(
         self,
         coords,

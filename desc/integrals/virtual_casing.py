@@ -3,16 +3,31 @@ from desc.batching import batch_map
 from desc.utils import errorif
 from desc.compute.geom_utils import xyz2rpz_vec
 
-def integrate_surface(
-    coords,
-    source_data,
-    source_grid,
-    kernel,
-    chunk_size=None):
+
+def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None):
     """
     Integrate kernel over a constant flux surface at a point strictly outside that surface.
+    For integration on the surface itself, see desc.singularities.singular_integral.
+
+    Parameters
+    ----------
+    source_data : dict
+        Dictionary of data at source points (corresponding to source_grid). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
+    source_grid : _Grid
+        Grid in (r,t,z) coordinates containing the flux surface over which
+        the kernel should be integrated.
+    kernel : callable
+        Kernel function to evaluate and integrate over the surface described by source_grid.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
     """
-    assert source_grid.num_rho == 1, f"""source_grid must be on a flux surface.
+    assert (
+        source_grid.num_rho == 1
+    ), f"""source_grid must be on a flux surface.
             Got source_grid.num_rho = {source_grid.num_rho}"""
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
@@ -20,7 +35,7 @@ def integrate_surface(
     source_phi = source_data["phi"]
 
     # Convert coords to the format expected by the kernel
-    eval_data = {"R": coords[:,0], "phi": coords[:,1], "Z": coords[:, 2]}
+    eval_data = {"R": coords[:, 0], "phi": coords[:, 1], "Z": coords[:, 2]}
 
     # Calculate weights for 2D surface integral
     ht = 2 * jnp.pi / source_grid.num_theta

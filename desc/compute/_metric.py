@@ -2154,7 +2154,7 @@ def _g_sub_rv_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_rz|PEST",
+    name="g_rp|PEST",
     label="g_{\\rho\\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2168,8 +2168,8 @@ def _g_sub_rv_PEST(params, transforms, profiles, data, **kwargs):
     data=["e_rho|v,p", "e_phi|r,v"],
     aliases=["g_zr|PEST"],
 )
-def _g_sub_rz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rz|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,v"])
+def _g_sub_rp_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rp|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,v"])
     return data
 
 
@@ -2193,7 +2193,7 @@ def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_vz|PEST",
+    name="g_vp|PEST",
     label="g_{\\theta_PEST \\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2207,13 +2207,13 @@ def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
     data=["e_theta_PEST", "e_phi|r,v"],
     aliases=["g_zv|PEST"],
 )
-def _g_sub_vz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_vz|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])
+def _g_sub_vp_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vp|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])
     return data
 
 
 @register_compute_fun(
-    name="g_zz|PEST",
+    name="g_pp|PEST",
     label="g_{\\phi \\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2226,8 +2226,8 @@ def _g_sub_vz_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_phi|r,v"],
 )
-def _g_sub_zz_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_zz|PEST"] = dot(data["e_phi|r,v"], data["e_phi|r,v"])
+def _g_sub_pp_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_pp|PEST"] = dot(data["e_phi|r,v"], data["e_phi|r,v"])
     return data
 
 
@@ -2306,7 +2306,7 @@ def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="J_cross_grad(rho)",
+    name="Jxgrad(rho)",
     label="\\mathbf{J} \\times (\\nabla \\rho)",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubed meter",
@@ -2322,7 +2322,7 @@ def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
-    data["J_cross_grad(rho)"] = cross(data["J"], data["e^rho"])
+    data["Jxgrad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 

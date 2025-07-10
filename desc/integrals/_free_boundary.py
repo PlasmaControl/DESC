@@ -48,13 +48,14 @@ def virtual_casing_biot_savart(
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points (eval_grid passed to interpolator).
-        Keys should be those required by kernel as kernel.keys. Vector data should be
-        in rpz basis.
+        Dictionary of data at evaluation points (``interpolator.eval_grid``).
+        Should store (R, ϕ, Z) coordinates to evaluate field and any keys
+        in ``kernel.eval_keys``.
+        Vector data should be in rpz basis.
     source_data : dict
-        Dictionary of data at source points (source_grid passed to interpolator). Keys
-        should be those required by kernel as kernel.keys. Vector data should be in
-        rpz basis.
+        Dictionary of data at source points (``interpolatr.source_grid``). Keys
+        should be those required by kernel as ``kernel.keys``.
+        Vector data should be in rpz basis.
     interpolator : _BIESTInterpolator
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or

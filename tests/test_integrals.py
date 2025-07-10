@@ -696,48 +696,6 @@ class TestSourceFreeField:
     """Test source free field."""
 
     @pytest.mark.unit
-    def test_harmonic_simple(self, chunk_size=1000):
-        """Test that Laplace solution recovers expected analytic result.
-
-        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
-        θ = 0 is outboard side and θ increases clockwise.
-        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧
-                         = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
-                         = sin(θ)
-        and test that ‖ Φ − Z ‖_∞ → 0.
-        """
-        resolution = 50
-        atol = 1e-4
-        a = 1
-        surface = FourierRZToroidalSurface()  # Choosing a = 1.
-        grid = LinearGrid(M=resolution, N=resolution, NFP=surface.NFP)
-        RpZ_grid = LinearGrid(M=5, N=5, NFP=surface.NFP)
-        theta = grid.nodes[:, 1]
-
-        field = SourceFreeField(surface, M=1, N=0)
-        data, RpZ_data = field.compute(
-            ["grad(Phi)", "Phi", "Z", "n_rho"],
-            grid,
-            data={"B0*n": np.sin(theta)},
-            RpZ_grid=RpZ_grid,
-            problem="interior Neumann",
-            on_boundary=True,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        assert "grad(Phi)" not in data
-
-        np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
-        np.testing.assert_allclose(data["n_rho"][:, 2], -data["B0*n"], atol=1e-12)
-        np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
-
-        RpZ_data = surface.compute("n_rho", grid=RpZ_grid, data=RpZ_data)
-        B0n = np.sin(RpZ_grid.nodes[:, 1])
-        np.testing.assert_allclose(
-            dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]), -B0n, atol=atol
-        )
-
-    @pytest.mark.unit
     def test_harmonic_interior(self, chunk_size=1000):
         """Test that Laplace solution recovers expected analytic result."""
         atol = 4e-5
@@ -768,6 +726,7 @@ class TestSourceFreeField:
             chunk_size=chunk_size,
             warn_fft=False,
         )
+        assert "grad(Phi)" not in data
         np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
             dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]),

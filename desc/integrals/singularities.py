@@ -513,14 +513,15 @@ class DFTInterpolator(_BIESTInterpolator):
 # TODO (reviewer): Do we need to cast to jax array?
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
     """Returns new dictionaries with only required data."""
-    keys = _dx.keys + ["theta", "zeta"]
+    x = rpz2xyz(jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]]))
+    # only need θ, ζ for change of variable with nonzero η
+    keys = ["phi", "theta", "zeta"]
     if hasattr(kernel, "eval_keys"):
         keys = keys + kernel.eval_keys
     # to skip batching stuff that is not needed
     eval_data = {key: jnp.asarray(eval_data[key]) for key in keys if key in eval_data}
-
+    eval_data["x"] = x
     if eval_grid is not None:
-        # only need these for change of variable with nonzero η
         if "theta" not in eval_data:
             eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
         if "zeta" not in eval_data:
@@ -712,13 +713,14 @@ def singular_integral(
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points (eval_grid passed to interpolator).
-        Should store (R, ϕ, Z) coordinates to evaluate field.
+        Dictionary of data at evaluation points (``interpolator.eval_grid``).
+        Should store (R, ϕ, Z) coordinates to evaluate field and any keys
+        in ``kernel.eval_keys``.
         Vector data should be in rpz basis.
     source_data : dict
-        Dictionary of data at source points (source_grid passed to interpolator). Keys
-        should be those required by kernel as kernel.keys. Vector data should be in
-        rpz basis.
+        Dictionary of data at source points (``interpolatr.source_grid``). Keys
+        should be those required by kernel as ``kernel.keys``.
+        Vector data should be in rpz basis.
     interpolator : _BIESTInterpolator
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -783,7 +785,7 @@ def singular_integral(
 
     eval_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
-    if kwargs.get("prune_data", True):
+    if kwargs.get("_prune_data", True):
         eval_data, source_data = _prune_data(
             eval_data,
             eval_grid,
@@ -820,6 +822,7 @@ def _dx(eval_data, source_data, diag=False):
     ----------
     eval_data : dict[str, jnp.ndarray]
         x data evaluated on eval grid.
+        ``eval_data["x"]`` should be in xyz basis.
     source_data : dict[str, jnp.ndarray]
         y data evaluated on source grid.
     diag : bool
@@ -836,9 +839,7 @@ def _dx(eval_data, source_data, diag=False):
     source_x = rpz2xyz(
         jnp.column_stack([source_data["R"], source_data["phi"], source_data["Z"]])
     )
-    eval_x = rpz2xyz(
-        jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]])
-    )
+    eval_x = eval_data["x"]
     if not diag:
         eval_x = eval_x[:, jnp.newaxis]
     return eval_x - source_x

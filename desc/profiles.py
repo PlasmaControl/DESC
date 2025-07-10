@@ -675,6 +675,7 @@ class PowerSeriesProfile(_Profile):
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
+    _static_attrs = ["_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", name=""):
         super().__init__(name)
@@ -1388,6 +1389,7 @@ class FourierZernikeProfile(_Profile):
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
+    _static_attrs = ["_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", NFP=1, name=""):
         super().__init__(name)

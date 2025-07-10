@@ -328,6 +328,34 @@ class _Basis(IOAble, ABC):
             )
         )
 
+    def __hash__(self):
+        """Get the hash of the object."""
+        return hash(
+            (
+                self.__class__.__name__,
+                self._L,
+                self._M,
+                self._N,
+                self._NFP,
+                self._sym,
+                self._spectral_indexing,
+            )
+        )
+
+    def __eq__(self, other):
+        """Check if two basis objects are equal."""
+        if not isinstance(other, _Basis):
+            return False
+        return (
+            self.__class__ == other.__class__
+            and self.L == other.L
+            and self.M == other.M
+            and self.N == other.N
+            and self.NFP == other.NFP
+            and self.sym == other.sym
+            and self.spectral_indexing == other.spectral_indexing
+        )
+
 
 class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.

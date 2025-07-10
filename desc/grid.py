@@ -1932,7 +1932,7 @@ class CylindricalGrid(_Grid):
         alpha = 1E-3
         if L is not None:
             self._L = check_nonnegint(L, "L", False)
-            R = (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2
+            R = (np.cos(np.arange(L, -1, -1) * np.pi / L) + 1) / 2
             R = np.sort(R, axis=None)
             if r_endpoint:
                 R[0] = 0
@@ -1952,7 +1952,7 @@ class CylindricalGrid(_Grid):
         # Z (Chebyshev extrema nodes)
         if N is not None:
             self._N = check_nonnegint(N, "N", False)
-            Z = (np.cos(np.arange(N // 2, -1, -1) * np.pi / (N // 2)) + 1) / 2
+            Z = (np.cos(np.arange(N, -1, -1) * np.pi / N) + 1) / 2
             Z = np.sort(Z, axis=None)
             if z_endpoint:
                 Z[0] = 0

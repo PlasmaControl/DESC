@@ -965,16 +965,13 @@ class Equilibrium(IOAble, Optimizable):
         # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
-        # we will use this to get remaining dependencies given already computed data
-        # Note: this will not include the values, but just the keys
-        dummy_data = data.copy()
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        for dep in dep0d:
-            dummy_data[dep] = "dummy_data_0d"
         deps_after_0d = set(
-            get_data_deps(names, obj=p, has_axis=grid.axis.size, data=dummy_data)
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d
+            )
             + names
         )
         dep1dr = {
@@ -982,10 +979,10 @@ class Equilibrium(IOAble, Optimizable):
             for dep in deps_after_0d
             if is_1dr_rad_grid(dep) and dep not in need_src_deps
         }
-        for dep in dep1dr:
-            dummy_data[dep] = "dummy_data_1dr"
         deps_after_0d_1dr = set(
-            get_data_deps(names, obj=p, has_axis=grid.axis.size, data=dummy_data)
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d | dep1dr
+            )
             + names
         )
         dep1dz = {

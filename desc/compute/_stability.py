@@ -674,7 +674,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     D_theta0 = fourier_diffmat(n_theta_max)
     D_zeta0 = fourier_diffmat(n_zeta_max)
 
-    w0 = scale_x1 * legendre_lobatto_weights(n_rho_max)
+    w0 = 1 / scale_x1 * legendre_lobatto_weights(n_rho_max)
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -694,6 +694,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     zeta_idx = slice(2 * n_total, 3 * n_total)
 
     all_idx = slice(0, 3 * n_total)
+
+    # assuming uniform spacing in and θ and ζ
+    dtheta = 2 * jnp.pi / n_theta_max
+    dzeta = 2 * jnp.pi / n_zeta_max
+
+    W = jnp.diag(jnp.kron(w0 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
     sqrt_g = data["sqrt(g)_PEST"][:, None]
 
@@ -720,58 +726,58 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     # Q_11
     A = A.at[rho_idx, rho_idx].add(
-        D_theta.T * iota**2 * w0 * g_rr_over_sqrtg * D_theta
-        + D_zeta.T * w0 * g_rr_over_sqrtg * D_zeta
-        + D_theta.T * iota**2 * w0 * g_rr_over_sqrtg * D_zeta
-        + D_zeta.T * iota**2 * w0 * g_rr_over_sqrtg * D_theta
+        D_theta.T @ ((iota**2 * W * iota**2 * g_rr_over_sqrtg) * D_theta)
+        + D_zeta.T @ ((W * g_rr_over_sqrtg) * D_zeta)
+        + D_theta.T @ ((iota**2 * W * g_rr_over_sqrtg) * D_zeta)
+        + D_zeta.T @ ((iota**2 * W * g_rr_over_sqrtg) * D_theta)
     )
 
     # Q_22
-    A = A.at[theta_idx, theta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
-    A = A.at[zeta_idx, zeta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
-    A = A.at[theta_idx, zeta_idx].add(D_zeta.T * w0 * g_vv_over_sqrtg * D_zeta)
+    A = A.at[theta_idx, theta_idx].add(D_zeta.T @ ((W * g_vv_over_sqrtg) * D_zeta))
+    A = A.at[zeta_idx, zeta_idx].add(D_zeta.T @ ((W * g_vv_over_sqrtg) * D_zeta))
+    A = A.at[theta_idx, zeta_idx].add(D_zeta.T @ ((W * g_vv_over_sqrtg) * D_zeta))
     A = A.at[rho_idx, rho_idx].add()
     A = A.at[rho_idx, theta_idx].add()
     A = A.at[rho_idx, zeta_idx].add()
 
     # Q_33
-    A = A.at[theta_idx, theta_idx].add(D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
-    A = A.at[zeta_idx, zeta_idx].add(D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
+    A = A.at[theta_idx, theta_idx].add(D_theta.T @ ((W * g_zz_over_sqrtg) * D_theta))
+    A = A.at[zeta_idx, zeta_idx].add(D_theta.T @ ((W * g_zz_over_sqrtg) * D_theta))
     A = A.at[rho_idx, rho_idx].add(
-        w0 * g_zz_over_sqrtg
-        + D_rho.T * w0 * g_zz_over_sqrtg * D_rho
-        + D_rho.T * w0 * g_zz_over_sqrtg
-        + w0 * g_zz_over_sqrtg * D_rho
+        W * g_zz_over_sqrtg
+        + D_rho.T @ ((W * g_zz_over_sqrtg) * D_rho)
+        + D_rho.T @ (W * g_zz_over_sqrtg)
+        + W * g_zz_over_sqrtg * D_rho
     )
-    A = A.at[theta_idx, zeta_idx].add(-D_theta.T * w0 * g_zz_over_sqrtg * D_theta)
+    A = A.at[theta_idx, zeta_idx].add(-D_theta.T @ ((W * g_zz_over_sqrtg) * D_theta))
 
     # Q_12
     # Q_23
     # Q_13
 
-    A = A.at[rho_idx, rho_idx].add(w0 * sqrt_g * J2)
+    A = A.at[rho_idx, rho_idx].add(W * sqrt_g * J2)
 
     A = A.at[rho_idx, rho_idx].add(
         -2
         * (
-            w0
+            W
             * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
             / g_sup_rr
             * (D_theta + iota * D_zeta)
-            + w0 * j_sup_theta * iota_r
-            + w0 * iota * D_rho
-            + w0 * j_sup_zeta * D_rho
+            + W * j_sup_theta * iota_r
+            + W * iota * D_rho
+            + W * j_sup_zeta * D_rho
         )
     )
 
     A = A.at[rho_idx, theta_idx].add(
-        w0 * j_sup_theta * D_zeta - w0 * j_sup_zeta * D_theta
+        W * j_sup_theta * D_zeta - W * j_sup_zeta * D_theta
     )
     A = A.at[rho_idx, zeta_idx].add(
-        -w0 * j_sup_theta * D_zeta + w0 * j_sup_zeta * iota * D_theta
+        -W * j_sup_theta * D_zeta + W * j_sup_zeta * iota * D_theta
     )
 
-    A = A.at[rho_idx, rho_idx].add(w0 * sqrt_g * F)
+    A = A.at[rho_idx, rho_idx].add(W * sqrt_g * F)
 
     # symmetrizing the matrix
     A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx])

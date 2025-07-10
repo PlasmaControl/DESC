@@ -1336,15 +1336,19 @@ class Equilibrium(Optimizable, _MagneticField):
         elif method == methods[1]:
             if source_grid is None:
                 source_grid = LinearGrid(
-                    rho=np.array([1.0]),
-                    M=self.M_grid,
-                    N=self.N_grid,
+                    rho=jnp.array([1.0]),
+                    M=256,
+                    N=256,
                     NFP=self.NFP if self.N > 0 else 64,
                     sym=False,
                 )
             kernel = _kernel_biot_savart
 
-            source_data = self.compute(kernel.keys, grid=source_grid)
+            source_data = self.compute(kernel.keys,
+                        grid=source_grid,
+                        params=params,
+                        transforms=transforms,
+                        override_grid=True)
             B = integrate_surface(
                 coords, source_data, source_grid, kernel, chunk_size=chunk_size
             )
@@ -2193,7 +2197,7 @@ class Equilibrium(Optimizable, _MagneticField):
     @property
     def Z_basis(self):
         """FourierZernikeBasis: Spectral basis for Z."""
-        return self._Z_basis
+        return self._Z_basisdef 
 
     @property
     def L_basis(self):

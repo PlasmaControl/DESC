@@ -1348,7 +1348,7 @@ class Equilibrium(Optimizable, _MagneticField):
                         grid=source_grid,
                         params=params,
                         transforms=transforms,
-                        #override_grid=True)
+                        override_grid=False
             )
             B = integrate_surface(
                 coords, source_data, source_grid, kernel, chunk_size=chunk_size

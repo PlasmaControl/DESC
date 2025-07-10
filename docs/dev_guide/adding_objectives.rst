@@ -10,7 +10,7 @@ Adding new objective functions
     or ` ``ObjectiveFromUser`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.ObjectiveFromUser.html#desc-objectives-objectivefromuser>`__
     (for quantities which are derived from things computable from the data index)
     classes. The benefit of making a full objective class like shown in this page is mainly when dealing
-    with multiple objects at once (see e.g ` ``PlasmaVesselObjective`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
+    with multiple objects at once (see e.g ` ``PlasmaVesselDistance`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.PlasmaVesselDistance.html#desc.objectives.PlasmaVesselDistance>`__),
     or more complicated objectives (like ` ``EffectiveRipple`` <https://desc-docs.readthedocs.io/en/latest/_api/objectives/desc.objectives.EffectiveRipple.html#desc.objectives.EffectiveRipple>`__)
     or having better control over default values and overriding some methods such as ``print_value``.
     Most objectives can trivially be made with ``GenericObjective`` and ``ObjectiveFromUser``:

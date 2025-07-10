@@ -407,7 +407,7 @@ See the example DESC input files on the github repository to see typical choices
             - DESC can only correctly handle the power series profile types in VMEC, it currently does not support reading in any of the other types such as splines or two-power profiles. If these are needed, it is recommended to convert them manually using DESC's own profile functions.
             - DESC assumes the input file is for a fixed-boundary equilibrium solve. DESC free-boundary cannot be run from an input file.
             - DESC does not handle non-standard ways of providing the boundary coefficients, such as ``RBC(0:4,2)= x,x,x,x``
-            - DESC enforces a right-handed coordinate system with a positive jacobian ``sqrt(g)>0``, which corresponds to a right-handed boundary where the poloidal angle increases in the CCW direction along the boundary when the cross-section is viewed in the positive toroidal angle direction. If the VMEC file has a left-handed boundary, this will be converted to a right-handed boundary.
+            - DESC enforces a right-handed coordinate system with a positive jacobian ``sqrt(g)>0``, which corresponds to a right-handed boundary where the poloidal angle increases in the CW direction along the boundary when the cross-section is viewed in the positive toroidal angle direction. If the VMEC file has a left-handed boundary, this will be converted to a right-handed boundary.
 
 
 

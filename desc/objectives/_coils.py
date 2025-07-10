@@ -1345,14 +1345,23 @@ class CoilArclengthVariance(_CoilObjective):
 
         coilset = self.things[0]
         # local import to avoid circular import
-        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+        from desc.coils import (
+            CoilSet,
+            FourierXYCoil,
+            FourierXYZCoil,
+            SplineXYZCoil,
+            _Coil,
+        )
 
         def _is_single_coil(c):
             return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
         coils = tree_leaves(coilset, is_leaf=_is_single_coil)
         self._constants["mask"] = np.array(
-            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+            [
+                int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil, FourierXYCoil)))
+                for coil in coils
+            ]
         )
 
         if self._normalize:

@@ -29,7 +29,7 @@ from desc.compute.utils import (
     get_transforms,
 )
 from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
-from desc.compute.extend_flux_coords import build_extended_coords, metric
+#from desc.compute.extend_flux_coords import build_extended_coords, metric
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -1233,11 +1233,11 @@ class Equilibrium(Optimizable, _MagneticField):
         self,
         coords,
         params=None,
-        method="virtual casing",
         basis="rpz",
         source_grid=None,
         transforms=None,
         chunk_size=50,
+        method="virtual casing",
         L=None,
         M=8,
         N=None,

@@ -529,8 +529,8 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     name="|F|_normalized",
     label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
     + "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
-    units="",
-    units_long="",
+    units="~",
+    units_long="None",
     description="Magnitude of force balance error normalized by volume averaged "
     + "magnetic pressure gradient",
     dim=1,

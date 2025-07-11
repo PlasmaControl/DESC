@@ -185,6 +185,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
             .. code-block:: sh
 
+                module load anaconda3/2024.10
                 conda create --name desc-env python=3.12 -y
                 conda activate desc-env
                 git clone https://github.com/PlasmaControl/DESC.git

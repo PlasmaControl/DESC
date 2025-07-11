@@ -2568,7 +2568,7 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
-    **kwargs,
+    **kwargs
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2669,6 +2669,7 @@ def field_line_integrate(
         saveat=saveat,
         max_steps=maxstep * len(phis),
         dt0=min_step_size,
+        throw=False,
         **kwargs,
     ).ys
 

@@ -4,7 +4,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import fixed_point, jit, jnp
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
     _kernel_dipole_plus_half,
@@ -26,17 +26,17 @@ _doc = {
         Recommend to verify computation with ``chunk_size`` set to a
         small number due to bugs in JAX or XLA.
         """,
+    "Phi_0": """jnp.ndarray :
+        Initial guess for iteration.
+        """,
+    "xtol": """float :
+        Stopping tolerance for fixed point method.""",
     "maxiter": """int :
         Maximum number of iterations for fixed point method.
         Default is zero, which means that matrix inversion will be used.
         """,
     "method": """{'del2', 'simple'} :
         Method of finding fixed-point. Default is ``simple``.
-        """,
-    "tol": """float :
-        Stopping tolerance for fixed point method.""",
-    "guess": """jnp.ndarray :
-        Initial guess for iteration.
         """,
 }
 
@@ -76,7 +76,6 @@ def _lsmr_compute_potential(
     source_data,
     interpolator,
     basis,
-    *,
     problem,
     same_grid,
     chunk_size=None,
@@ -123,6 +122,65 @@ def _lsmr_compute_potential(
         jnp.linalg.solve(D, boundary_condition)
         if (potential_grid.num_nodes == basis.num_modes)
         else jnp.linalg.lstsq(D, boundary_condition)[0]
+    )
+
+
+def _iteration_operator(
+    Phi, gamma, potential_data, source_data, interpolator, chunk_size
+):
+    # TODO: does this have to be pure?
+    potential_data["Phi(x)"] = Phi
+    source_data["Phi"] = Phi
+    return (
+        _D_plus_half(
+            potential_data,
+            source_data,
+            interpolator,
+            chunk_size=chunk_size,
+            _prune_data=False,
+        )
+        - gamma
+    )
+
+
+def _fixed_point_potential(
+    boundary_condition,
+    I,
+    Y,
+    potential_data,
+    source_data,
+    interpolator,
+    same_grid,
+    chunk_size=None,
+    Phi_0=None,
+    xtol=1e-6,
+    maxiter=20,
+    method="simple",
+    **kwargs,
+):
+    # TODO: Appendix B for secular part.
+    errorif(not same_grid, NotImplementedError)
+
+    potential_grid = interpolator.eval_grid
+    source_grid = interpolator.source_grid
+
+    potential_data, source_data = _prune_data(
+        potential_data,
+        potential_grid,
+        source_data,
+        source_grid,
+        _kernel_dipole_plus_half,
+    )
+    if Phi_0 is None:
+        Phi_0 = jnp.ones(potential_grid.num_nodes)
+    return fixed_point(
+        _iteration_operator,
+        Phi_0,
+        (boundary_condition, potential_data, source_data, interpolator, chunk_size),
+        xtol,
+        maxiter,
+        method,
+        scalar=True,
     )
 
 
@@ -176,14 +234,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     problem = kwargs["problem"]
-    maxiter = kwargs.get("maxiter", 0)
     chunk_size = kwargs.get("chunk_size", None)
-
-    # TODO: Fixed point method.
-    errorif(
-        ("interior" in problem) and (maxiter > 0),
-        msg="Fixed point method not possible for the interior Neumann.",
-    )
 
     boundary_condition = singular_integral(
         data,
@@ -193,18 +244,35 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
         chunk_size=chunk_size,
     ).squeeze(axis=-1)
 
-    data["Phi_mn"] = _lsmr_compute_potential(
-        boundary_condition,
-        params["I"],
-        params["Y"],
-        data,
-        data,
-        data["interpolator"],
-        transforms["Phi"].basis,
-        problem=problem,
-        same_grid=True,
-        chunk_size=chunk_size,
-    )
+    if kwargs.get("maxiter", -1) > 0:
+        errorif(
+            "interior" in problem,
+            msg="maxiter cannot be positive for interior Neumann problem.",
+        )
+        data["Phi"] = _fixed_point_potential(
+            boundary_condition,
+            params["I"],
+            params["Y"],
+            data,
+            data,
+            data["interpolator"],
+            same_grid=True,
+            **kwargs,
+        )
+        data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
+    else:
+        data["Phi_mn"] = _lsmr_compute_potential(
+            boundary_condition,
+            params["I"],
+            params["Y"],
+            data,
+            data,
+            data["interpolator"],
+            transforms["Phi"].basis,
+            problem,
+            same_grid=True,
+            chunk_size=chunk_size,
+        )
     return data
 
 
@@ -229,19 +297,31 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
 @partial(jit, static_argnames=["chunk_size"])
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    # TODO: Fixed point method.
-    data["Phi_mn"] = _lsmr_compute_potential(
-        data["Phi_coil"],
-        params["I"],
-        params["Y"],
-        data,
-        data,
-        data["interpolator"],
-        transforms["Phi"].basis,
-        problem="interior Dirichlet",
-        same_grid=True,
-        chunk_size=kwargs.get("chunk_size", None),
-    )
+    if kwargs.get("maxiter", -1) > 0:
+        data["Phi"] = _fixed_point_potential(
+            data["Phi_coil"],
+            params["I"],
+            params["Y"],
+            data,
+            data,
+            data["interpolator"],
+            same_grid=True,
+            **kwargs,
+        )
+        data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
+    else:
+        data["Phi_mn"] = _lsmr_compute_potential(
+            data["Phi_coil"],
+            params["I"],
+            params["Y"],
+            data,
+            data,
+            data["interpolator"],
+            transforms["Phi"].basis,
+            problem="interior Dirichlet",
+            same_grid=True,
+            chunk_size=kwargs.get("chunk_size", None),
+        )
     return data
 
 

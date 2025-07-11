@@ -139,14 +139,14 @@ def test_data_index_deps():
             # assert correct dependencies are queried
             if not queried_deps[p][name]["ignore"]:
                 rpz = {"R", "phi", "Z"}
-                # R, phi, Z can never be a dependency for RpZ data,
-                # so if it was requested check to make sure it was used by
-                # regular data dictionary.
-                assert (rpz & data) == (rpz & queried_deps[p][name]["data"])
-                # RpZ data besides R, phi, and Z
+                assert (rpz & data) == (
+                    rpz & queried_deps[p][name]["data"]
+                ), "R, phi, Z for RpZ_data sbould never be a dependency."
+
                 besides_rpz = queried_deps[p][name]["RpZ_data"] - rpz
                 assert (queried_deps[p][name]["data"] | besides_rpz) == (
                     data | axis_limit_data
                 ), err_msg
+
             assert queried_deps[p][name]["profiles"] == profiles, err_msg
             assert queried_deps[p][name]["params"] == params, err_msg

@@ -713,7 +713,7 @@ class TestLaplaceField:
             return Z_hat
 
     @pytest.mark.unit
-    def test_interior_Dirichlet_boundary_condition(self):
+    def test_interior_Dirichlet(self):
         """Test Free surface outer field boundary condition."""
         surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],

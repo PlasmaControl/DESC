@@ -1415,6 +1415,96 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
 
 
 @pytest.mark.unit
+def test_grad_grad_rho_tensor(DummyStellarator):
+    """Test grad(grad(rho)) tensor.
+
+    By taking its components along covariant directions
+    in native DESC basis.
+    """
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+
+    keys = [
+        "e^rho",
+        "grad(grad(rho))",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "phi",
+    ]
+
+    N = 2000
+
+    # spacing grids in each native direction
+    grids = {
+        "r": LinearGrid(rho=np.linspace(0.01, 1, N), theta=0, zeta=0, NFP=eq.NFP),
+        "t": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
+        "z": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
+    }
+
+    # comparing
+    for key in grids.keys():
+
+        eq_data = eq.compute(keys, grid=grids[key])
+        e_rho = eq_data["e_rho"]
+        e_theta = eq_data["e_theta"]
+        e_zeta = eq_data["e_zeta"]
+
+        if key == "r":
+            base = rpz2xyz_vec(eq_data["e^rho"], phi=eq_data["phi"]).reshape(
+                grids[key].num_rho, 1, 1, 3
+            )
+            spacing = grids[key].spacing[1, 0]
+
+            # Finite difference gradients in r, t, z of cartesian components of e^rho
+            fd = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing
+            fd = fd[4:-4, 0, 0, :]
+
+            # Component of grad(grad(rho)) along different covariant directions
+            data = rpz2xyz_vec(
+                dot(e_rho[:, None, :], eq_data["grad(grad(rho))"], axis=1),
+                phi=eq_data["phi"],
+            )
+            data = data[4:-4, :]
+
+        elif key == "t":
+            base = rpz2xyz_vec(eq_data["e^rho"], phi=eq_data["phi"]).reshape(
+                1, grids[key].num_theta, 1, 3
+            )
+            spacing = grids[key].spacing[0, 1]
+
+            fd = np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4) / spacing
+            fd = fd[0, 4:-4, 0, :]
+
+            data = rpz2xyz_vec(
+                dot(e_theta[:, :, None], eq_data["grad(grad(rho))"], axis=1),
+                phi=eq_data["phi"],
+            )
+            data = data[4:-4, :]
+        else:
+            base = rpz2xyz_vec(eq_data["e^rho"], phi=eq_data["phi"]).reshape(
+                1, 1, grids[key].num_zeta, 3
+            )
+            spacing = grids[key].spacing[0, 2]
+
+            fd = np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4) / spacing
+            fd = fd[0, 0, 4:-4, :]
+
+            data = rpz2xyz_vec(
+                dot(e_zeta[:, None, :], eq_data["grad(grad(rho))"], axis=1),
+                phi=eq_data["phi"],
+            )
+            data = data[4:-4, :]
+
+        np.testing.assert_allclose(
+            data,
+            fd,
+            rtol=5e-5,
+            atol=6e-4,
+            err_msg=key,
+        )
+
+
+@pytest.mark.unit
 def test_contravariant_basis_vectors():
     """Test calculation of contravariant basis vectors by comparing to finite diff."""
     eq = get("HELIOTRON")

@@ -2286,43 +2286,22 @@ def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_r"][:, jnp.newaxis]
         / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis]
+    )[:, :, jnp.newaxis] * data["e^rho"][:, jnp.newaxis, :]
     +(
         cross(data["e_theta_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
         / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis]
+    )[:, :, jnp.newaxis] * data["e^theta"][:, jnp.newaxis, :]
     +(
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
         / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis]
+    )[:, :, jnp.newaxis] * data["e^zeta"][:, jnp.newaxis, :]
 
-    return data
-
-
-@register_compute_fun(
-    name="Jxgrad(rho)",
-    label="\\mathbf{J} \\times (\\nabla \\rho)",
-    units="A \\cdot m^{-3}",
-    units_long="Amperes / cubed meter",
-    description="Plasma current density cross with grad(rho)",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "J",
-        "e^rho",
-    ],
-)
-def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
-    data["Jxgrad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 
@@ -2338,12 +2317,12 @@ def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["J_cross_grad(rho)", "B", "grad(grad(rho))", "g^rr"],
+    data=["Jxgrad(rho)", "B", "grad(grad(rho))", "g^rr"],
 )
 def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     data["finite-n instability drive"] = -2 * (
         dot(
-            data["J_cross_grad(rho)"],
+            data["Jxgrad(rho)"],
             dot(data["B"][:, :, jnp.newaxis], data["grad(grad(rho))"], axis=2),
         )
         / data["g^rr"]

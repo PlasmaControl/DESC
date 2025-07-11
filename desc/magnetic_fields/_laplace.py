@@ -170,7 +170,6 @@ class SourceFreeField(FourierRZToroidalSurface):
         if kwargs.get("on_boundary", False) and "eval_interpolator" not in kwargs:
             if RpZ_grid is None:
                 errorif(RpZ_data is not None, msg="Please supply RpZ_grid.")
-                # grad(Phi) computation will proceed assuming RpZ_grid is grid.
             else:
                 warn_fft = kwargs.pop("warn_fft", True)
                 kwargs["eval_interpolator"] = get_interpolator(
@@ -193,6 +192,9 @@ class SourceFreeField(FourierRZToroidalSurface):
             if RpZ_grid is None:
                 RpZ_grid = grid
                 RpZ_data = data
+                same_grid = True
+            else:
+                same_grid = False
             RpZ_data = super().compute(
                 ["R", "phi", "Z"],
                 RpZ_grid,
@@ -202,6 +204,8 @@ class SourceFreeField(FourierRZToroidalSurface):
                 override_grid=override_grid,
                 **kwargs,
             )
+            if same_grid:
+                data = RpZ_data
 
         return super().compute(
             names,

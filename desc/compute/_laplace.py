@@ -5,13 +5,14 @@ from functools import partial
 import numpy as np
 
 from desc.backend import jit, jnp
-from desc.integrals import get_interpolator, singular_integral
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
     _kernel_dipole_plus_half,
     _kernel_monopole,
     _nonsingular_part,
     _prune_data,
+    get_interpolator,
+    singular_integral,
 )
 from desc.utils import cross, dot, errorif
 
@@ -469,7 +470,7 @@ def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=["R", "phi", "Z"],
+    data=[],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     chunk_size=_doc["chunk_size"],
     B0="_MagneticField : Field object to compute with.",

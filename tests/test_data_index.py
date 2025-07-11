@@ -69,6 +69,8 @@ def test_data_index_deps():
     pattern_name = re.compile(r"(?<!_)name=\"(.*?)\"")
     pattern_computed = re.compile(r"(?<!_)data\[(.*?)] = ")
     pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
+    pattern_RpZ_computed = re.compile(r"(?<!_)RpZ_data\[(.*?)] = ")
+    pattern_RpZ_data = re.compile(r"(?<!_)RpZ_data\[(.*?)]")
     pattern_profiles = re.compile(r"profiles\[(.*?)]")
     pattern_params = re.compile(r"params\[(.*?)]")
     pattern_dep_ignore = re.compile("noqa: unused dependency")
@@ -87,6 +89,8 @@ def test_data_index_deps():
                 deps = {
                     "data": _get_matches(fun, pattern_data)
                     - _get_matches(fun, pattern_computed),
+                    "RpZ_data": _get_matches(fun, pattern_RpZ_data)
+                    - _get_matches(fun, pattern_RpZ_computed),
                     "profiles": _get_matches(fun, pattern_profiles),
                     "params": _get_matches(fun, pattern_params),
                     "ignore": bool(
@@ -134,6 +138,15 @@ def test_data_index_deps():
             )
             # assert correct dependencies are queried
             if not queried_deps[p][name]["ignore"]:
-                assert queried_deps[p][name]["data"] == data | axis_limit_data, err_msg
+                rpz = {"R", "phi", "Z"}
+                # R, phi, Z can never be a dependency for RpZ data,
+                # so if it was requested check to make sure it was used by
+                # regular data dictionary.
+                assert (rpz & data) == (rpz & queried_deps[p][name]["data"])
+                # RpZ data besides R, phi, and Z
+                besides_rpz = queried_deps[p][name]["RpZ_data"] - rpz
+                assert (queried_deps[p][name]["data"] | besides_rpz) == (
+                    data | axis_limit_data
+                ), err_msg
             assert queried_deps[p][name]["profiles"] == profiles, err_msg
             assert queried_deps[p][name]["params"] == params, err_msg

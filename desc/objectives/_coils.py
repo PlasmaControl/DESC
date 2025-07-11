@@ -6,12 +6,20 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    Timer,
+    broadcast_tree,
+    copy_rpz_periods,
+    errorif,
+    rpz2xyz,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs

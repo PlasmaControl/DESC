@@ -3,13 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.compute.geom_utils import (
-    rotation_matrix,
-    rpz2xyz,
-    rpz2xyz_vec,
-    xyz2rpz,
-    xyz2rpz_vec,
-)
+from desc.utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 
 @pytest.mark.unit

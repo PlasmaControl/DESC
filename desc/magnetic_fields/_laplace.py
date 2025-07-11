@@ -231,22 +231,22 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     """
 
-    _immediate_attributes_ = ["_B_coil", "_Y_coil"]
+    _immediate_attributes_ = ["_Y_coil", "_B_coil"]
 
     def __init__(
         self,
         surface,
-        B_coil,
         M=None,
         N=None,
         sym=False,
         I=0,  # noqa: E741
         Y=0,
         Y_coil=None,
+        B_coil=None,
     ):
         super().__init__(surface, M, N, sym, I, Y)
-        self._B_coil
         self._Y_coil = Y_coil
+        self._B_coil = B_coil
 
     def __setattr__(self, name, value):
         if (

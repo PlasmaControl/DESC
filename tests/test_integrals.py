@@ -66,7 +66,11 @@ from desc.integrals.singularities import (
     _vanilla_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import SourceFreeField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    FreeSurfaceOuterField,
+    SourceFreeField,
+    ToroidalMagneticField,
+)
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
@@ -692,12 +696,45 @@ class TestSingularities:
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
 
-class TestSourceFreeField:
-    """Test source free field."""
+class TestLaplaceField:
+    """Test Laplace solvers."""
+
+    class _Z_hat:
+        """Field to test the Dirichlet solver."""
+
+        def __init__(self):
+            pass
+
+        @staticmethod
+        def compute_magnetic_field(coords, source_grid, chunk_size):
+            num_coords = coords.shape[0]
+            zero = jnp.zeros(num_coords)
+            Z_hat = jnp.column_stack([zero, zero, jnp.ones(num_coords)])
+            return Z_hat
 
     @pytest.mark.unit
-    def test_harmonic_interior(self, chunk_size=1000):
-        """Test that Laplace solution recovers expected analytic result."""
+    def test_interior_Dirichlet_boundary_condition(self):
+        """Test Free surface outer field boundary condition."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        grid = LinearGrid(M=surface.M, N=surface.N, NFP=surface.NFP)
+        field = FreeSurfaceOuterField(
+            surface,
+            surface.M,
+            surface.N,
+            "sin" if surface.sym else False,
+            B_coil=TestLaplaceField._Z_hat(),
+        )
+        data, _ = field.compute(["Phi_coil", "Z"], grid)
+        np.testing.assert_allclose(data["Phi_coil"], data["Z"])
+
+    @pytest.mark.unit
+    def test_interior_Neumann(self, chunk_size=1000):
+        """Test Laplacian solver in interior."""
         atol = 4e-5
         surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
@@ -713,8 +750,10 @@ class TestSourceFreeField:
         RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
         RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
 
-        # Φ = Z, so result must be exact for this M,N.
-        field = SourceFreeField(surface, M=surface.M, N=surface.N)
+        # Φ = Z so these resolutions must give exact reconstruction.
+        field = SourceFreeField(
+            surface, surface.M, surface.N, "sin" if surface.sym else False
+        )
         data, RpZ_data = field.compute(
             ["grad(Phi)", "Phi", "Z"],
             grid,
@@ -736,8 +775,8 @@ class TestSourceFreeField:
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_harmonic_exterior(self, maxiter=0, chunk_size=20):
-        """Test that Laplace solution recovers expected analytic result."""
+    def test_exterior_Neumann(self, maxiter=0, chunk_size=20):
+        """Test Laplacian solver in exterior."""
         atol = 2e-3
         R0 = 10
         surface = FourierRZToroidalSurface(
@@ -830,9 +869,9 @@ class TestSourceFreeField:
 
         grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         data = eq.compute(["G"], grid=grid)
-        Y = grid.compress(data["G"])[-1]
+        Y_sheet_plus_coil = grid.compress(data["G"])[-1]
         field = SourceFreeField(
-            eq.surface, M=8, N=8, B0=ToroidalMagneticField(B0=Y, R0=1)
+            eq.surface, M=8, N=8, B0=ToroidalMagneticField(B0=Y_sheet_plus_coil, R0=1)
         )
 
         RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
@@ -899,28 +938,28 @@ class TestSourceFreeField:
                         Z_lmn[(m, -n)] += C_z[(m, n)]
 
         grid = LinearGrid(rho=1, M=5, N=5)
-        R_bench = TestSourceFreeField._manual_transform(
+        R_bench = TestLaplaceField._manual_transform(
             np.array(list(R_lmn.values())),
             np.array([mn[0] for mn in R_lmn.keys()]),
             np.array([mn[1] for mn in R_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        R_merk = TestSourceFreeField._merkel_transform(
+        R_merk = TestLaplaceField._merkel_transform(
             np.array(list(C_r.values())),
             np.array([mn[0] for mn in C_r.keys()]),
             np.array([mn[1] for mn in C_r.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_bench = TestSourceFreeField._manual_transform(
+        Z_bench = TestLaplaceField._manual_transform(
             np.array(list(Z_lmn.values())),
             np.array([mn[0] for mn in Z_lmn.keys()]),
             np.array([mn[1] for mn in Z_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_merk = TestSourceFreeField._merkel_transform(
+        Z_merk = TestLaplaceField._merkel_transform(
             np.array(list(C_z.values())),
             np.array([mn[0] for mn in C_z.keys()]),
             np.array([mn[1] for mn in C_z.keys()]),

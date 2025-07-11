@@ -145,9 +145,9 @@ class SourceFreeField(FourierRZToroidalSurface):
             evaluation off of ``grid``.
             If not given, then default is ``grid``.
         override_grid : bool
-            If True, override ``self.grid`` if necessary and use a full
-            resolution grid to compute quantities and then downsample to ``self.grid``.
-            If False, uses only ``self.grid``, which may lead to
+            If True, override ``grid`` if necessary and use a full
+            resolution grid to compute quantities and then downsample to ``grid``.
+            If False, uses only ``grid``, which may lead to
             inaccurate values for surface or volume averages.
 
         Returns
@@ -181,11 +181,8 @@ class SourceFreeField(FourierRZToroidalSurface):
                         grid,
                         params,
                         transforms,
-                        # Do not pass in data since the expectation
-                        # is that quantities computed on self.grid.
-                        # whereas input data may have things on eval
-                        # grid as well.
-                        override_grid=override_grid,
+                        data,
+                        override_grid,
                         **kwargs,
                     ),
                     warn_fft=warn_fft,

@@ -1007,7 +1007,7 @@ def _kernel_dipole_plus_half(eval_data, source_data, ds, diag=False):
     if not diag:
         eval_Phi = eval_Phi[:, jnp.newaxis]
     out = ds * dot(
-        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
     if source_data["Phi"].ndim > 1:
@@ -1018,7 +1018,7 @@ def _kernel_dipole_plus_half(eval_data, source_data, ds, diag=False):
 
 
 _kernel_dipole_plus_half.ndim = 1
-_kernel_dipole_plus_half.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_dipole_plus_half.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
 _kernel_dipole_plus_half.eval_keys = ["Phi(x)"]
 
 kernels = {

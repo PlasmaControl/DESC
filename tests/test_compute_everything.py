@@ -190,7 +190,12 @@ def test_compute_everything():
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
     }
-    assert things.keys() == data_index.keys(), (
+    same_compute_fun_as_surface = {
+        # not testing these here
+        "desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+        "desc.magnetic_fields._laplace.SourceFreeField",
+    }
+    assert things.keys() == (data_index.keys() - same_compute_fun_as_surface), (
         f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
     )

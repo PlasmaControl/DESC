@@ -55,7 +55,9 @@ _bounce_doc = {
         Resolution for quadrature of bounce integrals.
         Default is 32. This parameter is ignored if given ``quad``.
         """,
-    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
+    "num_pitch": """int :
+        Resolution for quadrature over velocity coordinate.
+        """,
     "pitch_batch_size": """int :
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
@@ -78,7 +80,9 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
+    "spline": """bool :
+        Whether to use cubic splines to compute bounce points.
+        """,
 }
 
 

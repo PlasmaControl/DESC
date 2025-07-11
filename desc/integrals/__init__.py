@@ -1,13 +1,14 @@
 """Classes for function integration."""
 
-from ._free_boundary import (
-    FreeBoundarySolver,
+from .bounce_integral import Bounce1D, Bounce2D
+from .singularities import (
+    DFTInterpolator,
+    FFTInterpolator,
     compute_B_plasma,
+    get_interpolator,
+    singular_integral,
     virtual_casing_biot_savart,
 )
-from ._vacuum import VacuumSolver
-from .bounce_integral import Bounce1D, Bounce2D
-from .singularities import DFTInterpolator, FFTInterpolator, singular_integral
 from .surface_integral import (
     line_integrals,
     surface_averages,

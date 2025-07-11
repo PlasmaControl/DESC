@@ -16,7 +16,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
+from desc.compute.geom_utils import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -27,8 +27,6 @@ from desc.integrals import (
     Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
-    FreeBoundarySolver,
-    VacuumSolver,
     line_integrals,
     singular_integral,
     surface_averages,
@@ -60,14 +58,19 @@ from desc.integrals.quad_utils import (
 )
 from desc.integrals.singularities import (
     _1_over_G,
+    _best_params,
+    _best_ratio,
     _grad_G,
+    _kernel_biot_savart_coulomb,
     _kernel_nr_over_r3,
     _vanilla_params,
-    best_params,
-    best_ratio,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import ToroidalMagneticField
+from desc.magnetic_fields import (
+    FreeSurfaceOuterField,
+    SourceFreeField,
+    ToroidalMagneticField,
+)
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
@@ -645,7 +648,7 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        st, sz, q = best_params(grid, best_ratio(data))
+        st, sz, q = _best_params(grid, _best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(
@@ -676,7 +679,7 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            st, sz, q = best_params(grid, best_ratio(data))
+            st, sz, q = _best_params(grid, _best_ratio(data))
             atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
@@ -693,161 +696,119 @@ class TestSingularities:
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
 
-class TestVacuumSolver:
-    """Test vacuum field solver."""
+class TestLaplaceField:
+    """Test Laplace solvers."""
+
+    class _Z_hat:
+        """Field to test the Dirichlet solver."""
+
+        def __init__(self):
+            pass
+
+        @staticmethod
+        def compute_magnetic_field(coords, source_grid, chunk_size):
+            num_coords = coords.shape[0]
+            zero = jnp.zeros(num_coords)
+            Z_hat = jnp.column_stack([zero, zero, jnp.ones(num_coords)])
+            return Z_hat
 
     @pytest.mark.unit
-    def test_harmonic_simple(self):
-        """Test that Laplace solution recovers expected analytic result.
-
-        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
-        θ = 0 is outboard side and θ increases clockwise.
-        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧
-                         = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
-                         = sin(θ)
-        and test that ‖ Φ − Z ‖_∞ → 0.
-        """
-        chunk_size = 1000
-        resolution = 50
-        atol = 1e-4
-        a = 1
-        surf = FourierRZToroidalSurface()  # Choosing a = 1.
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
-
-        theta = src_grid.nodes[:, 1]
-        B0n = np.sin(theta)
-        vac = VacuumSolver(
-            surface=surf,
-            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
-            src_grid=src_grid,
-            Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
-            Phi_M=1,
-            Phi_N=0,
-            B0n=B0n,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
-        np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
-
-        data = vac.compute_Phi(chunk_size)
-        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
-        Z = data["evl"]["Z"]
-        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
-
-        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
-        data = surf.compute(["n_rho", "theta"], grid=vac.evl_grid, data=data)
-        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
-        B0n = np.sin(data["theta"])
-        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        ("use_dft", "chunk_size"),
-        [
-            (False, 1000),
-            pytest.param(
-                True,
-                1000,
-                marks=pytest.mark.xfail(
-                    strict=False,
-                    reason="See #1599. Decrease chunk size to pass test.",
-                ),
-            ),
-        ],
-    )
-    def test_harmonic_interior(self, use_dft, chunk_size):
-        """Test that Laplace solution recovers expected analytic result.
-
-        Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
-        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
-        """
-        atol = 4e-5
-        # elliptic cross-section with torsion
-        surf = FourierRZToroidalSurface(
+    def test_interior_Dirichlet(self):
+        """Test Free surface outer field boundary condition."""
+        surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
             Z_lmn=[-2, -0.2],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
+        grid = LinearGrid(M=surface.M, N=surface.N, NFP=surface.NFP)
+        field = FreeSurfaceOuterField(
+            surface,
+            surface.M,
+            surface.N,
+            "sin" if surface.sym else False,
+            B_coil=TestLaplaceField._Z_hat(),
+        )
+        data, _ = field.compute(["Phi_coil", "Z"], grid)
+        np.testing.assert_allclose(data["Phi_coil"], data["Z"])
 
-        vac = VacuumSolver(
-            surface=surf,
-            evl_grid=Phi_grid,
-            src_grid=src_grid,
-            Phi_grid=Phi_grid,
-            # Φ = Z, so this should be exact.
-            Phi_M=surf.M,
-            Phi_N=surf.N,
+    @pytest.mark.unit
+    def test_interior_Neumann(self, chunk_size=1000):
+        """Test Laplacian solver in interior."""
+        atol = 4e-5
+        surface = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
+        data = surface.compute("n_rho", grid=grid)
+        data["B0*n"] = -data["n_rho"][:, 2]
+
+        RpZ_grid = LinearGrid(M=15, N=15, NFP=surface.NFP)
+        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
+
+        # Φ = Z so these resolutions must give exact reconstruction.
+        field = SourceFreeField(
+            surface, surface.M, surface.N, "sin" if surface.sym else False
+        )
+        data, RpZ_data = field.compute(
+            ["grad(Phi)", "Phi", "Z"],
+            grid,
+            data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
+            problem="interior Neumann",
+            on_boundary=True,
             chunk_size=chunk_size,
-            B0n=-surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2],
-            use_dft=use_dft,
-            warn_dft=False,
             warn_fft=False,
         )
-
-        data = vac.compute_Phi(chunk_size)
-        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
-        Z = data["evl"]["Z"]
-        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
-
-        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
-        data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
-        B0n = -data["n_rho"][:, 2]
-        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
-        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+        assert "grad(Phi)" not in data
+        np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
+        np.testing.assert_allclose(
+            dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]),
+            -RpZ_data["B0*n"],
+            atol=atol,
+        )
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_harmonic_exterior(self, maxiter=0, chunk_size=20):
-        """Test that Laplace solution recovers expected analytic result.
-
-        Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
-        """
+    def test_exterior_Neumann(self, maxiter=0, chunk_size=20):
+        """Test Laplacian solver in exterior."""
         atol = 2e-3
-        # elliptic cross-section with torsion
         R0 = 10
-        surf = FourierRZToroidalSurface(
+        surface = FourierRZToroidalSurface(
             R_lmn=[R0, 1, 0.2],
             Z_lmn=[-2, -0.2],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        src_grid = LinearGrid(M=35, N=35, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=35, N=35, NFP=surf.NFP)
-
-        src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
-        # x0 is inside the torus so G is harmonic outside the torus
         x0 = rpz2xyz(np.array([R0, 0, 0]))
 
         def G(x):
             return np.reciprocal(_1_over_G(x - x0))
 
-        vac = VacuumSolver(
-            surface=surf,
-            evl_grid=Phi_grid,
-            src_grid=src_grid,
-            Phi_grid=Phi_grid,
-            exterior=True,
+        grid = LinearGrid(M=35, N=35, NFP=surface.NFP)
+        data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
+
+        field = SourceFreeField(surface, M=grid.M, N=grid.N)
+        data, RpZ_data = field.compute(
+            ["grad(Phi)", "Phi", "x", "n_rho"],
+            grid,
+            data=data,
+            problem="exterior Neumann",
+            on_boundary=True,
             chunk_size=chunk_size,
-            B0n=-dot(_grad_G(src_data["x"] - x0), src_data["n_rho"]),
-            warn_fft=False,
+            maxiter=maxiter,
+            basis="xyz",
         )
-
-        data = vac.compute_Phi(chunk_size=chunk_size, maxiter=maxiter, warn=False)
-        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
-        evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
-        np.testing.assert_allclose(np.ptp(G(evl_data["x"]) - Phi), 0, atol=atol)
-
-        data = vac.compute_vacuum_field(chunk_size)["evl"]
-        grad_Phi = rpz2xyz_vec(data["grad(Phi)"], phi=evl_data["phi"])
+        assert data is RpZ_data
+        np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
-            dot(_grad_G(evl_data["x"] - x0) - grad_Phi, evl_data["n_rho"]),
+            dot(data["grad(Phi)"] - _grad_G(data["x"] - x0), data["n_rho"]),
             0,
             atol=atol,
         )
@@ -906,34 +867,45 @@ class TestVacuumSolver:
         }
         eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
 
-        Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
-        src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
-        src_data = eq.compute(["G"], grid=src_grid)
-        R0 = 1
-        Y = src_grid.compress(src_data["G"])[-1]
-        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
-        vac = VacuumSolver(
-            surface=eq.surface,
-            evl_grid=Phi_grid,
-            src_grid=src_grid,
-            Phi_grid=Phi_grid,
-            Phi_M=8,
-            Phi_N=8,
-            B0=B0,
+        grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
+        data = eq.compute(["G"], grid=grid)
+        Y_sheet_plus_coil = grid.compress(data["G"])[-1]
+        field = SourceFreeField(
+            eq.surface, M=8, N=8, B0=ToroidalMagneticField(B0=Y_sheet_plus_coil, R0=1)
+        )
+
+        RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
+        RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
+            data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
+            problem="interior Neumann",
+            on_boundary=True,
             chunk_size=chunk_size,
             warn_fft=False,
         )
-        data = vac.compute_magnetic_field(chunk_size)["evl"].copy()
-        data = eq.compute("n_rho", grid=vac.evl_grid, data=data)
-        Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
-        np.testing.assert_allclose(Bn, 0, atol=4e-4)
+        np.testing.assert_allclose(dot(RpZ_data["B"], RpZ_data["n_rho"]), 0, atol=5e-4)
 
         # test off surface evaluation
-        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP, sym=eq.sym)
-        coords = eq.compute(["R", "phi", "Z"], grid=mid_grid)
-        coords = jnp.column_stack([coords["R"], coords["phi"], coords["Z"]])
-        data = vac.compute_magnetic_field(chunk_size, coords)
-        assert np.isfinite(data["evl"]["B0+grad(Phi)"]).all()
+        data = {
+            key: val
+            for key, val in data.items()
+            # dependencies of grad(Phi)
+            if key in _kernel_biot_savart_coulomb.keys
+        }
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
+            data=data,
+            RpZ_grid=LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP),
+            on_boundary=False,
+            chunk_size=chunk_size,
+        )
+        assert np.isfinite(RpZ_data["B"]).all()
 
     @staticmethod
     def _merkel_surf(C_r, C_z):
@@ -966,28 +938,28 @@ class TestVacuumSolver:
                         Z_lmn[(m, -n)] += C_z[(m, n)]
 
         grid = LinearGrid(rho=1, M=5, N=5)
-        R_bench = TestVacuumSolver._manual_transform(
+        R_bench = TestLaplaceField._manual_transform(
             np.array(list(R_lmn.values())),
             np.array([mn[0] for mn in R_lmn.keys()]),
             np.array([mn[1] for mn in R_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        R_merk = TestVacuumSolver._merkel_transform(
+        R_merk = TestLaplaceField._merkel_transform(
             np.array(list(C_r.values())),
             np.array([mn[0] for mn in C_r.keys()]),
             np.array([mn[1] for mn in C_r.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_bench = TestVacuumSolver._manual_transform(
+        Z_bench = TestLaplaceField._manual_transform(
             np.array(list(Z_lmn.values())),
             np.array([mn[0] for mn in Z_lmn.keys()]),
             np.array([mn[1] for mn in Z_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_merk = TestVacuumSolver._merkel_transform(
+        Z_merk = TestLaplaceField._merkel_transform(
             np.array(list(C_z.values())),
             np.array([mn[0] for mn in C_z.keys()]),
             np.array([mn[1] for mn in C_z.keys()]),
@@ -1043,36 +1015,6 @@ class TestVacuumSolver:
             * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
             axis=0,
         )
-
-
-class TestFreeBoundarySolver:
-    """Test free boundary solver (standard Neumann and potential mapping)."""
-
-    @pytest.mark.unit
-    def test_potential_map_free_boundary(self):
-        """Test potential map formulation of free boundary solver."""
-        chunk_size = 1000
-        resolution = 5
-        surf = FourierRZToroidalSurface()
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
-
-        free = FreeBoundarySolver(
-            surface=surf,
-            B_coil=ToroidalMagneticField(B0=1, R0=1),
-            G_coil=None,
-            G_plasma=1,
-            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
-            src_grid=src_grid,
-            Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),
-            Phi_M=2,
-            Phi_N=1,
-            Y_coil=1,
-            Y_plasma=1,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        data = free.compute_B2()
-        assert np.isfinite(data["evl"]["|B_out|^2"]).all()
 
 
 class TestBouncePoints:
@@ -1485,30 +1427,28 @@ class TestBounce:
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        # 3. Compute input data.
         eq = get("HELIOTRON")
-
-        # 3. Convert above coordinates to DESC computational coordinates.
-        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-        # 4. Compute input data.
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, check=True)
+        # 4. Make the bounce integration operator.
+        bounce = Bounce1D(grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 6. Compute bounce points.
+        # 5. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 7. Optionally check for correctness of bounce points.
+        # 6. Optionally check for correctness of bounce points.
         bounce.check_points(points, pitch_inv, plot=False)
-        # 8. Integrate.
+        # 7. Integrate.
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
+            data={"g_zz": Bounce1D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1528,7 +1468,7 @@ class TestBounce:
             "to see if this is expected.",
         )
 
-        # 9. Example manipulation of the output
+        # 8. Example manipulation of the output
         # Sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
@@ -1537,7 +1477,7 @@ class TestBounce:
         # corresponds to the 1/λ value
         print("1/λ(ρ, λ):", pitch_inv[l, p])
         # for the Clebsch field line coordinates
-        nodes = bounce.reshape(grid.source_grid, grid.source_grid.nodes[:, :2])
+        nodes = bounce.reshape(grid, grid.nodes[:, :2])
         print("(ρ, α):", nodes[l, m, 0])
 
         # 10. Plotting

@@ -35,7 +35,14 @@ def _parse_parameterization(p):
 
 
 def compute(  # noqa: C901
-    parameterization, names, params, transforms, profiles, data=None, **kwargs
+    parameterization,
+    names,
+    params,
+    transforms,
+    profiles,
+    data=None,
+    RpZ_data=None,
+    **kwargs,
 ):
     """Compute the quantity given by name on grid.
 
@@ -49,7 +56,7 @@ def compute(  # noqa: C901
         Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
         Defaults to attributes of self.
     transforms : dict of Transform
-        Transforms for R, Z, lambda, etc. Default is to build from grid
+        Transforms for R, Z, lambda, etc. Default is to build from grid.
     profiles : dict of Profile
         Profile objects for pressure, iota, current, etc. Defaults to attributes
         of self
@@ -58,13 +65,24 @@ def compute(  # noqa: C901
         Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
         v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
         of the cylindrical coordinates R, ϕ, Z.
+    RpZ_data : dict[str, jnp.ndarray]
+        Data evaluated so far on the (R, ϕ, Z) coordinates in this dictionary.
+        Should store the three entries ``"R"``, ``"phi"``, and ``"Z"``
+        if the intention is to compute something at these coordinates.
 
     Returns
     -------
     data : dict[str, jnp.ndarray]
-        Computed quantity and intermediate variables.
+        Quantities and intermediate variables computed on the
+        grid attached to the transforms.
+    RpZ_data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        (R, ϕ, Z) coordinates in ``RpZ_data``. If ``RpZ_data``
+        was not given then this dictionary will not be returned.
 
     """
+    return_RpZ_data = RpZ_data is not None
+
     basis = kwargs.pop("basis", "rpz").lower()
     errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
@@ -134,6 +152,9 @@ def compute(  # noqa: C901
     if data is None:
         data = {}
 
+    # Need to query this before JIT barriers detach them from each other.
+    same_grid = data is RpZ_data
+
     data = _compute(
         p,
         names,
@@ -141,9 +162,36 @@ def compute(  # noqa: C901
         transforms=transforms,
         profiles=profiles,
         data=data,
+        RpZ_data=RpZ_data,
         **kwargs,
     )
+    if return_RpZ_data:
+        if same_grid:
+            RpZ_data = data
+        RpZ_data = _compute_RpZ_data(
+            p,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            RpZ_data=RpZ_data,
+            **kwargs,
+        )
+        if same_grid:
+            data = RpZ_data
 
+    data = _convert_basis(p, data, basis)
+
+    if return_RpZ_data:
+        if data is not RpZ_data:
+            RpZ_data = _convert_basis(p, RpZ_data, basis)
+        return data, RpZ_data
+    else:
+        return data
+
+
+def _convert_basis(p, data, basis):
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
         from .geom_utils import rpz2xyz, rpz2xyz_vec
@@ -159,7 +207,6 @@ def compute(  # noqa: C901
                     data[name] = rpz2xyz(data[name])
                 else:
                     data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-
     return data
 
 
@@ -181,7 +228,8 @@ def _compute(
     Returns
     -------
     data : dict[str, jnp.ndarray]
-        Computed quantity and intermediate variables.
+        Quantities and intermediate variables computed on the
+        grid attached to the transforms.
 
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
@@ -195,6 +243,7 @@ def _compute(
         if name in data:
             # don't compute something that's already been computed
             continue
+
         if not has_data_dependencies(
             parameterization, name, data, transforms["grid"].axis.size
         ):
@@ -221,10 +270,80 @@ def _compute(
                     **kwargs,
                 )
         # now compute the quantity
-        data = data_index[parameterization][name]["fun"](
-            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
-        )
+        if data_index[parameterization][name]["coordinates"] != "RpZ":
+            data = data_index[parameterization][name]["fun"](
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                **kwargs,
+            )
     return data
+
+
+def _compute_RpZ_data(
+    parameterization,
+    names,
+    params,
+    transforms,
+    profiles,
+    data,
+    RpZ_data,
+    **kwargs,
+):
+    """Same as above but without checking inputs for faster recursion.
+
+    Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+    v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+    of the cylindrical coordinates R, ϕ, Z.
+
+    We need to directly call this function in objectives, since the checks in above
+    function are not compatible with JIT. This function computes given names while
+    using recursion to compute dependencies. If you want to call this function, you
+    cannot give the argument basis='xyz' since that will break the recursion. In that
+    case, either call above function or manually convert the output to xyz basis.
+
+    Returns
+    -------
+    RpZ_data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        (R, ϕ, Z) coordinates in ``RpZ_data``.
+
+    """
+    assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
+    parameterization = _parse_parameterization(parameterization)
+    if isinstance(names, str):
+        names = [names]
+
+    for name in names:
+        if (
+            data_index[parameterization][name]["coordinates"] != "RpZ"
+            or name in RpZ_data
+        ):
+            continue
+
+        if not has_RpZ_data_dependencies(parameterization, name, data, RpZ_data):
+            # then compute the missing dependencies
+            RpZ_data = _compute_RpZ_data(
+                parameterization,
+                data_index[parameterization][name]["dependencies"]["data"],
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                RpZ_data=RpZ_data,
+                **kwargs,
+            )
+        # now compute the quantity
+        RpZ_data = data_index[parameterization][name]["fun"](
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            RpZ_data=RpZ_data,
+            **kwargs,
+        )
+    return RpZ_data
 
 
 @execute_on_cpu
@@ -660,6 +779,13 @@ def has_data_dependencies(parameterization, qty, data, axis=False):
     return _has_data(qty, data, parameterization) and (
         not axis or _has_axis_limit_data(qty, data, parameterization)
     )
+
+
+def has_RpZ_data_dependencies(parameterization, qty, data, RpZ_data):
+    """Determine if we have the data needed to compute qty."""
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["data"]
+    return all(d in data or d in RpZ_data for d in deps)
 
 
 def has_dependencies(parameterization, qty, params, transforms, profiles, data):

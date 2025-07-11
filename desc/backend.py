@@ -90,8 +90,9 @@ def _fixed_point(func, x0, tol, maxiter, method, is_converged):
         p = func(p0)
         if method == "del2":
             p2 = func(p)
-            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 + p2)
-        return p, is_converged(p - p0, tol), i + 1
+            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 - p2)
+        rel_err = safediv(p - p0, p0, p)
+        return p, is_converged(rel_err, tol), i + 1
 
     return jax.lax.while_loop(cond_fun, body_fun, (x0, False, 0))
 
@@ -566,7 +567,7 @@ if use_jax:  # noqa: C901
         func,
         x0,
         args=(),
-        tol=1e-6,
+        xtol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -582,7 +583,7 @@ if use_jax:  # noqa: C901
             Initial guesses for fixed points.
         args : tuple
             Extra arguments to ``func``.
-        tol : float
+        xtol : float
             Pointwise convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
@@ -609,7 +610,7 @@ if use_jax:  # noqa: C901
             p, converged, i = _fixed_point(
                 _to_fp(f),
                 x0,
-                tol,
+                xtol,
                 maxiter,
                 method,
                 _is_converged_pointwise if scalar else _is_converged,
@@ -1048,7 +1049,7 @@ else:  # pragma: no cover
         func,
         x0,
         args=(),
-        tol=1e-6,
+        xtol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -1064,7 +1065,7 @@ else:  # pragma: no cover
             Initial guess for fixed point.
         args : tuple
             Extra arguments to ``func``.
-        tol : float
+        xtol : float
             Convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
@@ -1091,11 +1092,10 @@ else:  # pragma: no cover
         if method == "simple":
             method = "iteration"
         return scipy.optimize.fixed_point(
-            # Scipy interprets tol as relative tolerance..
             func,
             x0,
             args=args,
-            xtol=tol,
+            xtol=xtol,
             maxiter=maxiter,
             method=method,
         )

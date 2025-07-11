@@ -1175,7 +1175,7 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            match = re.search(r"\bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
+            match = re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE)
             if match:
                 if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
                     warnings.warn(colored("Pressure is not a power series!", "yellow"))

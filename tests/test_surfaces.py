@@ -425,15 +425,19 @@ class TestZernikeRZToroidalSection:
         """Test getting/setting surface attributes."""
         c = ZernikeRZToroidalSection()
 
-        R, Z = c.get_coeffs(0, 0)
+        R, Z, L = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
-        c.set_coeffs(0, 0, 5, None)
-        c.set_coeffs(1, -1, None, 2)
+        np.testing.assert_allclose(L, 0)
+        c.set_coeffs(0, 0, R=5)
+        c.set_coeffs(1, -1, Z=2)
+        c.set_coeffs(1, -1, L=1)
         np.testing.assert_allclose(c.R_lmn, [5, 1])
         np.testing.assert_allclose(c.Z_lmn, [2])
+        np.testing.assert_allclose(c.L_lmn, [1])
         with pytest.raises(ValueError):
-            c.set_coeffs(0, 0, None, 2)
+            c.set_coeffs(0, 0, Z=2)
+            c.set_coeffs(0, 0, L=1)
         s = c.copy()
         assert s.equiv(c)
 
@@ -442,6 +446,8 @@ class TestZernikeRZToroidalSection:
             c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
             c.Z_lmn = s.Z_lmn
+        with pytest.raises(ValueError):
+            c.L_lmn = s.L_lmn
 
         assert c.sym
 

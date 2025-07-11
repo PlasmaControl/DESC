@@ -1,4 +1,4 @@
-"""Functions for flux surface averages and vector algebra operations."""
+"""Utilities for computing dependencies and transforms."""
 
 import copy
 import inspect
@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..utils import errorif
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec, warnif
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
@@ -94,20 +94,18 @@ def compute(  # noqa: C901
     with warnings.catch_warnings():
         warnings.simplefilter("always", DeprecationWarning)
         for name in names:
-            if name not in data_index[p]:
-                raise ValueError(
-                    f"Unrecognized value '{name}' for parameterization {p}."
-                )
-            if name in list(deprecated_names.keys()):
-                warnings.warn(
-                    f"Variable name {name} is deprecated and will be removed in a "
-                    f"future DESC version, use name {deprecated_names[name]} "
-                    "instead.",
-                    DeprecationWarning,
-                )
+            errorif(
+                name not in data_index[p],
+                msg=f"Unrecognized value '{name}' for parameterization {p}.",
+            )
+            warnif(
+                name in list(deprecated_names.keys()),
+                DeprecationWarning,
+                f"Variable name {name} is deprecated and will be removed in a future "
+                f"DESC version, use name {deprecated_names.get(name, None)} instead.",
+            )
     bad_kwargs = kwargs.keys() - allowed_kwargs
-    if len(bad_kwargs) > 0:
-        raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
+    errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:
         assert _has_params(name, params, p), f"Don't have params to compute {name}"
@@ -194,7 +192,6 @@ def compute(  # noqa: C901
 def _convert_basis(p, data, basis):
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-        from .geom_utils import rpz2xyz, rpz2xyz_vec
 
         for name in data.keys():
             errorif(

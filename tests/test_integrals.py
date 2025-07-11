@@ -16,7 +16,6 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
-from desc.compute.geom_utils import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -72,7 +71,7 @@ from desc.magnetic_fields import (
     ToroidalMagneticField,
 )
 from desc.transform import Transform
-from desc.utils import dot, errorif, safediv
+from desc.utils import dot, errorif, rpz2xyz, safediv
 
 
 class TestSurfaceIntegral:

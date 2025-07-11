@@ -21,8 +21,7 @@ from desc.backend import (
     tree_unstack,
     vmap,
 )
-from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import reflection_matrix
+from desc.compute import get_params
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
@@ -38,7 +37,20 @@ from desc.magnetic_fields._core import (
     biot_savart_general_vector_potential,
 )
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import (
+    cross,
+    dot,
+    equals,
+    errorif,
+    flatten_list,
+    reflection_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safenorm,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 
 @partial(jit, static_argnames=["chunk_size"])

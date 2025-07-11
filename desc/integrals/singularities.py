@@ -7,7 +7,6 @@ from scipy.constants import mu_0
 
 from desc.backend import jit, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid  # noqa: F401
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.integrals.quad_utils import _get_polar_quadrature, chi, eta, nfp_loop
@@ -16,10 +15,13 @@ from desc.utils import (
     check_posint,
     dot,
     parse_argname_change,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     safenorm,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._interpax_mod import fft_interp2d

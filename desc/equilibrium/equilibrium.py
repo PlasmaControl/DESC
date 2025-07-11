@@ -824,7 +824,7 @@ class Equilibrium(IOAble, Optimizable):
             Name(s) of the quantity(s) to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
-        params : dict of ndarray
+        params : dict[str, jnp.ndarray]
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to attributes of self.
         transforms : dict of Transform

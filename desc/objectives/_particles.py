@@ -1,6 +1,5 @@
-"""Objectives for optimizing the equilibrium from tracing particles using Diffrax solver"""
+"""Objectives for optimizing for particle trajectories."""
 
-import warnings
 from functools import partial
 
 from jax import jit, vmap
@@ -42,11 +41,12 @@ class ParticleTracer(_Objective):
         Initial conditions (psi, theta, zeta, vpar) to solve the system of equations.
         Starting state of the system.
     initial_parameters : tuple, array
-        Parameters needed in the system, such as the magnetic momentum, mu, and the mass-charge ratio, m_q.
+        Parameters needed in the system, such as the magnetic momentum, mu, and the
+        mass-charge ratio, m_q.
     compute_option: str
-        Select the compute() output. Can be "optimization" for the optimization metric; "tracer" for the full
-        solution of the system; "average psi/theta/zeta/vpar" for the mean value of psi/theta/zeta/vpar in the
-        computed time.
+        Select the compute() output. Can be "optimization" for the optimization metric;
+        "tracer" for the full solution of the system; "average psi/theta/zeta/vpar" for
+        the mean value of psi/theta/zeta/vpar in the computed time.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -100,7 +100,16 @@ class ParticleTracer(_Objective):
         self._print_value_fmt = "System solution for initial conditions"
 
     def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
 
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
         self._data_keys = ["psidot", "thetadot", "zetadot", "vpardot"]
         self._args = get_params(
             self._data_keys,
@@ -123,8 +132,24 @@ class ParticleTracer(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
+        """Compute.
 
-        constants = constants or self.constants
+        Parameters
+        ----------
+        params : dict
+            params dictionary containing the parameters needed for the computation.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : jnp.ndarray
+            Computed values of the objective function.
+
+        """
+        if constants is None:
+            constants = self.constants
 
         @jit
         def system(

@@ -29,14 +29,9 @@ _doc = {
     "Phi_0": """jnp.ndarray :
         Initial guess for iteration.
         """,
-    "xtol": """float :
-        Stopping tolerance for fixed point method.""",
     "maxiter": """int :
         Maximum number of iterations for fixed point method.
         Default is zero, which means that matrix inversion will be used.
-        """,
-    "method": """{'del2', 'simple'} :
-        Method of finding fixed-point. Default is ``simple``.
         """,
 }
 
@@ -230,7 +225,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
-@partial(jit, static_argnames=["problem", "chunk_size"])
+@partial(jit, static_argnames=["problem", "chunk_size", "maxiter"])
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     problem = kwargs["problem"]
@@ -294,7 +289,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
     **_doc,
 )
-@partial(jit, static_argnames=["chunk_size"])
+@partial(jit, static_argnames=["chunk_size", "maxiter"])
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     if kwargs.get("maxiter", -1) > 0:

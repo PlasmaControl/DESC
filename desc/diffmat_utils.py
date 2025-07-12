@@ -5,10 +5,10 @@ Differentiation‑matrix utilities for spectral methods in **DESC**.
 Adds various functions to create differentiation matrices.
 """
 
-from desc.backend import jnp, partial, jit, lax
+from desc.backend import jit, jnp, lax, partial
 
 ########################################################################
-# ---------------------- CHEBYSHEV MATRICES --------------------------- #
+# ---------------------- CHEBYSHEV MATRICES -------------------------- #
 ########################################################################
 
 
@@ -285,9 +285,10 @@ def legendre_lobatto_weights(N: int) -> jnp.ndarray:
 @jit
 def _barycentric_weights(x: jnp.ndarray) -> jnp.ndarray:
     """λᵢ = 1 / ∏_{j≠i}(xᵢ − xⱼ) — used for differentiation only."""
-    diff     = x[:, None] - x[None, :]
-    diff_eye = diff + jnp.eye(x.size)        # mask diagonal → 1 so prod unaffected
+    diff = x[:, None] - x[None, :]
+    diff_eye = diff + jnp.eye(x.size)  # mask diagonal → 1 so prod unaffected
     return 1.0 / jnp.prod(diff_eye, axis=1)
+
 
 @partial(jit, static_argnums=0)
 def legendre_D1(N: int) -> jnp.ndarray:

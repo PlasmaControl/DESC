@@ -732,16 +732,26 @@ class TestLaplaceField:
         np.testing.assert_allclose(data["Phi_coil"], data["Z"])
 
     @pytest.mark.unit
-    def test_interior_Neumann(self, chunk_size=1000):
+    def test_interior_Neumann(
+        self,
+        surface=None,
+        M=50,
+        N=50,
+        chunk_size=1000,
+        just_err=False,
+        _midpoint_quad=False,
+        _D_quad=False,
+    ):
         """Test Laplacian solver in interior."""
         atol = 4e-5
-        surface = FourierRZToroidalSurface(
-            R_lmn=[10, 1, 0.2],
-            Z_lmn=[-2, -0.2],
-            modes_R=[[0, 0], [1, 0], [0, 1]],
-            modes_Z=[[-1, 0], [0, -1]],
-        )
-        grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
+        if surface is None:
+            surface = FourierRZToroidalSurface(
+                R_lmn=[10, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
         data = surface.compute("n_rho", grid=grid)
         data["B0*n"] = -data["n_rho"][:, 2]
 
@@ -754,7 +764,7 @@ class TestLaplaceField:
             surface, surface.M, surface.N, "sin" if surface.sym else False
         )
         data, RpZ_data = field.compute(
-            ["grad(Phi)", "Phi", "Z"],
+            ["Phi", "Z"] if just_err else ["grad(Phi)", "Phi", "Z"],
             grid,
             data=data,
             RpZ_data=RpZ_data,
@@ -763,14 +773,108 @@ class TestLaplaceField:
             on_boundary=True,
             chunk_size=chunk_size,
             warn_fft=False,
+            _midpoint_quad=_midpoint_quad,
+            _D_quad=_D_quad,
         )
-        assert "grad(Phi)" not in data
-        np.testing.assert_allclose(np.ptp(data["Z"] - data["Phi"]), 0, atol=atol)
+        err = np.ptp(data["Z"] - data["Phi"])
+        if just_err:
+            return err
+        np.testing.assert_allclose(err, 0, atol=atol)
         np.testing.assert_allclose(
             dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]),
             -RpZ_data["B0*n"],
             atol=atol,
         )
+
+    @pytest.mark.unit
+    def test_convergence_run(
+        self,
+        surface=None,
+        rs=np.array([10]),
+        name="convergence",
+        chunk_size=500,
+    ):
+        """Stores errors for potential in name.pkl for plotting analysis.
+
+        Parameters
+        ----------
+        rs : ndarray
+            Grid resolutions (rs=M=N) to compute potential.
+
+        """
+        import pickle
+
+        bools = np.array([True, False])
+        settings = np.array(np.meshgrid(bools, bools)).T.reshape(-1, 2)
+
+        data = {"resolution": rs, "Phi error": {}}
+
+        for mid_quad, D_quad in settings:
+            err = []
+            print()
+            for r in rs:
+                err.append(
+                    self.test_interior_Neumann(
+                        surface, r, r, chunk_size, True, mid_quad, D_quad
+                    )
+                )
+                print(f"Resolution {r} is done.")
+            data["Phi error"][(mid_quad, D_quad)] = np.array(err)
+
+        with open(f"{name}.pkl", "wb") as file:
+            pickle.dump(data, file)
+
+    @pytest.mark.unit
+    def test_convergence_plot(self, name="convergence"):
+        """Imports name.pkl and saves plot in name.pdf.
+
+        The remainder of name after first underscore will be
+        appendend to plot title.
+        """
+        import pickle
+
+        with open(f"{name}.pkl", "rb") as file:
+            data = pickle.load(file)
+
+        plt.rcParams.update(
+            {
+                "axes.labelsize": 9,
+                "axes.titlesize": 12,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+                "legend.fontsize": 7,
+                "lines.linewidth": 1,
+                "lines.markersize": 4,
+                "figure.figsize": (6, 4),
+                "figure.dpi": 300,
+                "axes.grid": True,
+                "grid.linestyle": "--",
+                "grid.alpha": 0.6,
+            }
+        )
+        fig, ax = plt.subplots()
+
+        errs = data["Phi error"]
+        for key, val in errs.items():
+            ax.semilogy(
+                2 * data["resolution"] + 1,
+                val,
+                marker="o",
+                linestyle="-",
+                label=f"midpoint rule={key[0]}, has singularity={key[1]}",
+            )
+
+        ax.set_xlabel(
+            r"Resolution $n$ per field period ($n=2M+1$, $M=N$). "
+            r"Quadrature cost is $O(n^4 \log(n))$"
+        )
+        ax.set_ylabel(r"Absolute error")
+        ax.set_title(
+            r"Error in $\Phi$ vs. grid resolution for " + name.split("_", 1)[1]
+        )
+        ax.legend(loc="upper right", frameon=True)
+        fig.tight_layout()
+        plt.savefig(f"{name}.pdf")
 
     @pytest.mark.unit
     @pytest.mark.slow

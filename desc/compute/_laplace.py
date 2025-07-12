@@ -1,12 +1,14 @@
 """Compute functions for Laplace solver."""
 
+import warnings
 from functools import partial
 
 import numpy as np
 
-from desc.backend import fixed_point, jit, jnp
+from desc.backend import fixed_point, jnp
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
+    _kernel_dipole,
     _kernel_dipole_plus_half,
     _kernel_monopole,
     _nonsingular_part,
@@ -33,34 +35,94 @@ _doc = {
         Maximum number of iterations for fixed point method.
         Default is zero, which means that matrix inversion will be used.
         """,
+    "_midpoint_quad": """bool :
+        Set to ``True`` to perform double layer potential quadrature
+        with midpoint rule. Default is ``False``.
+        """,
+    "_D_quad": """bool
+        Set to ``True`` to perform double layer potential quadrature
+        without removing singularities. Default is ``False``.
+        """,
 }
 
 
 def _D_plus_half(
-    eval_data, source_data, interpolator, basis=None, chunk_size=None, _prune_data=True
+    eval_data,
+    source_data,
+    interpolator,
+    basis=None,
+    chunk_size=None,
+    prune_data=True,
+    _midpoint_quad=False,
+    _D_quad=False,
 ):
     """Compute (D[Φ] + Φ/2)(x).
 
     D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y),ds(y)〉.
-    If ``basis`` is not supplied, then computes (D[Φ] + Φ/2)(x).
-    If ``basis`` is supplied, then constructs the operator which
-    acts on the spectral coefficients of Φ in the supplied + secular basis.
+
+    Parameters
+    ----------
+    basis : DoubleFourierSeries
+        If not supplied, then computes (D[Φ] + Φ/2)(x).
+        If supplied, then constructs the operator which
+        acts on the spectral coefficients of Φ in the supplied + secular basis.
+    prune_data : bool
+        Whether the data should be pruned. Default is True.
+    _midpoint_quad : bool
+        Set to ``True`` to perform double layer potential quadrature
+        with midpoint rule. Default is ``False``.
+    _D_quad : bool
+        Set to ``True`` to perform double layer potential quadrature
+        without removing singularities. Default is ``False``.
 
     """
-    kwargs = {}
-    if basis is not None:
-        kwargs["known_map"] = ("Phi", partial(basis.evaluate, secular=True))
-        kwargs["ndim"] = basis.num_modes + 2
-    # TODO: This integral is not singular. See prescription in shared paper.
-    return singular_integral(
-        eval_data,
-        source_data,
-        interpolator,
-        _kernel_dipole_plus_half,
-        chunk_size=chunk_size,
-        _prune_data=_prune_data,
-        **kwargs,
-    )
+    if basis is None:
+        ndim = 1
+        known_map = None
+    else:
+        ndim = basis.num_modes + 2
+        known_map = ("Phi", partial(basis.evaluate, secular=True))
+
+    kernel = _kernel_dipole if _D_quad else _kernel_dipole_plus_half
+
+    if _midpoint_quad:
+        if prune_data:
+            eval_data, source_data = prune_data(
+                eval_data,
+                interpolator.eval_grid,
+                source_data,
+                interpolator.source_grid,
+                _kernel_dipole_plus_half,
+            )
+        result = _nonsingular_part(
+            eval_data,
+            None,
+            source_data,
+            interpolator.source_grid,
+            st=jnp.nan,
+            sz=jnp.nan,
+            kernel=kernel,
+            ndim=ndim,
+            chunk_size=chunk_size,
+        )
+    else:
+        result = singular_integral(
+            eval_data,
+            source_data,
+            interpolator,
+            kernel,
+            known_map=known_map,
+            ndim=ndim,
+            chunk_size=chunk_size,
+            _prune_data=prune_data,
+        )
+    if ndim == 1:
+        result = result.squeeze(axis=-1)
+
+    if _D_quad:
+        result += eval_data["Phi(x)"] / 2
+
+    return result
 
 
 def _lsmr_compute_potential(
@@ -74,6 +136,9 @@ def _lsmr_compute_potential(
     problem,
     same_grid,
     chunk_size=None,
+    _midpoint_quad=False,
+    _D_quad=False,
+    **kwargs,
 ):
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
@@ -95,7 +160,14 @@ def _lsmr_compute_potential(
     source_data["Phi"] = Phi if same_grid else basis.evaluate(source_grid, secular=True)
 
     D = _D_plus_half(
-        potential_data, source_data, interpolator, basis, chunk_size, _prune_data=False
+        potential_data,
+        source_data,
+        interpolator,
+        basis,
+        chunk_size,
+        prune_data=False,
+        _midpoint_quad=_midpoint_quad,
+        _D_quad=_D_quad,
     )
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
@@ -123,7 +195,6 @@ def _lsmr_compute_potential(
 def _iteration_operator(
     Phi, gamma, potential_data, source_data, interpolator, chunk_size
 ):
-    # TODO: does this have to be pure?
     potential_data["Phi(x)"] = Phi
     source_data["Phi"] = Phi
     return (
@@ -132,7 +203,7 @@ def _iteration_operator(
             source_data,
             interpolator,
             chunk_size=chunk_size,
-            _prune_data=False,
+            prune_data=False,
         )
         - gamma
     )
@@ -153,8 +224,10 @@ def _fixed_point_potential(
     method="simple",
     **kwargs,
 ):
-    # TODO: Appendix B for secular part.
     errorif(not same_grid, NotImplementedError)
+    warnings.warn("This setting does not pass correctness tests.", UserWarning)
+    # No point in genearlizing this for Phi with logic in Appendix B for
+    # nonzero secular parts if test_interior_Dirichlet_iter does not pass.
 
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
@@ -191,7 +264,6 @@ def _fixed_point_potential(
     transforms={"grid": []},
     profiles=[],
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-    grid_requirement={"can_fft2": True},
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     public=False,
 )
@@ -225,23 +297,20 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
-@partial(jit, static_argnames=["problem", "chunk_size", "maxiter"])
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    problem = kwargs["problem"]
-    chunk_size = kwargs.get("chunk_size", None)
 
     boundary_condition = singular_integral(
         data,
         data,
         data["interpolator"],
         _kernel_monopole,
-        chunk_size=chunk_size,
+        chunk_size=kwargs.get("chunk_size", None),
     ).squeeze(axis=-1)
 
     if kwargs.get("maxiter", -1) > 0:
         errorif(
-            "interior" in problem,
+            "interior" in kwargs["problem"],
             msg="maxiter cannot be positive for interior Neumann problem.",
         )
         data["Phi"] = _fixed_point_potential(
@@ -254,6 +323,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             same_grid=True,
             **kwargs,
         )
+        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -264,9 +334,8 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data,
             data["interpolator"],
             transforms["Phi"].basis,
-            problem,
             same_grid=True,
-            chunk_size=chunk_size,
+            **kwargs,
         )
     return data
 
@@ -289,7 +358,6 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
     **_doc,
 )
-@partial(jit, static_argnames=["chunk_size", "maxiter"])
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     if kwargs.get("maxiter", -1) > 0:
@@ -303,6 +371,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             same_grid=True,
             **kwargs,
         )
+        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -315,7 +384,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             transforms["Phi"].basis,
             problem="interior Dirichlet",
             same_grid=True,
-            chunk_size=kwargs.get("chunk_size", None),
+            **kwargs,
         )
     return data
 
@@ -459,12 +528,13 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    chunk_size=_doc["chunk_size"],
     eval_interpolator="""_BIESTInterpolator :
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    on_boundary="bool : Whether coords are on boundary surface.",
+    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    on_boundary="bool : Whether RpZcoords are on boundary surface.",
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
@@ -472,7 +542,6 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     interpolator = kwargs.get("eval_interpolator", data.get("interpolator", None))
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
-    # TODO: avoid near singular integral by removing singularity
     if kwargs["on_boundary"]:
         RpZ_data["grad(Phi)"] = (
             sign
@@ -740,4 +809,39 @@ def _Phi_coil_secular(params, transforms, profiles, data, **kwargs):
 )
 def _Phi_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil"] = data["Phi_coil (periodic)"] + data["Phi_coil (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="gamma potential",
+    label="\\gamma",
+    units="T m",
+    units_long="Tesla meter",
+    description="Double layer potential with density Phi",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=_kernel_dipole_plus_half.keys + ["interpolator"],
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+    chunk_size=_doc["chunk_size"],
+    public=False,
+)
+def _gamma_potential(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    data["Phi(x)"] = data["Phi"]
+    # This quantity should recover Phi_coil and offers means to
+    # test correctness of the computation of Phi.
+    data["gamma potential"] = (
+        _D_plus_half(
+            data,
+            data,
+            data["interpolator"],
+            chunk_size=kwargs.get("chunk_size", None),
+        )
+        - data["Phi"]
+    )
     return data

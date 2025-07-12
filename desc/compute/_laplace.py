@@ -117,11 +117,7 @@ def _D_plus_half(
         )
 
     if _D_quad:
-        result += (
-            eval_data["Phi(x)"]
-            if basis is None
-            else basis.evaluate(interpolator.eval_grid, secular=True)
-        ) / 2
+        result += eval_data["Phi(x)"] / 2
 
     return result
 
@@ -196,7 +192,6 @@ def _lsmr_compute_potential(
 def _iteration_operator(
     Phi, gamma, potential_data, source_data, interpolator, chunk_size
 ):
-    # TODO: does this have to be pure?
     potential_data["Phi(x)"] = Phi
     source_data["Phi"] = Phi
     return (

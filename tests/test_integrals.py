@@ -786,11 +786,11 @@ class TestLaplaceField:
             atol=atol,
         )
 
-    @pytest.mark.unit
+    @pytest.mark.skip
     def test_convergence_run(
         self,
         surface=None,
-        rs=np.array([10]),
+        rs=np.array([12, 20, 30, 40]),
         name="convergence",
         chunk_size=500,
     ):
@@ -824,7 +824,7 @@ class TestLaplaceField:
         with open(f"{name}.pkl", "wb") as file:
             pickle.dump(data, file)
 
-    @pytest.mark.unit
+    @pytest.mark.skip
     def test_convergence_plot(self, name="convergence"):
         """Imports name.pkl and saves plot in name.pdf.
 

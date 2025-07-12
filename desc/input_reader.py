@@ -987,10 +987,24 @@ class InputReader:
             Dictionary of inputs formatted for DESC.
 
         """
-        # FIXME: this will currently fail if the input file has multiple
-        # end statements (i.e if it has / and then next line is &END)
-        # and some VMEC input files do have this...
-        vmec_indata = f90nml.read(vmec_fname)["indata"]
+        # f90nml fails if the input file has multiple
+        # end statements (specifically if it has / and then next line is &END)
+        # and some VMEC input files do have this, so it is safer to
+        # read the whole file as one string, replace all &END with /
+        # and then use f90nml.reads
+        if not isinstance(vmec_fname, io.IOBase):
+            vmec_file = open(vmec_fname)
+        else:
+            vmec_file = vmec_fname
+        vmec_file.seek(0)
+        vmec_fullstring = vmec_file.read()
+        # https://stackoverflow.com/questions/919056/case-insensitive-replace
+        vmec_fullstring_no_END = re.sub(
+            "(?i)" + re.escape("&end"), lambda m: "/", vmec_fullstring
+        )
+        vmec_file.seek(0)
+
+        vmec_indata = f90nml.reads(vmec_fullstring_no_END)["indata"]
 
         # default values
         inputs = {
@@ -1190,11 +1204,7 @@ class InputReader:
         # if one m modenumber goes up to n=2 but another only
         # up to n=1)
         # find start of namelist (&INDATA)
-        if not isinstance(vmec_fname, io.IOBase):
-            vmec_file = open(vmec_fname)
-        else:
-            vmec_file = vmec_fname
-        vmec_file.seek(0)
+
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
         vmeclines = vmec_file.readlines()
         for i, line in enumerate(vmeclines):

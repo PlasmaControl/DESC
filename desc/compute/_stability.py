@@ -595,10 +595,10 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     data=[
         "g_rr|PEST",
         "g_rv|PEST",
-        "g_rz|PEST",
+        "g_rp|PEST",
         "g_vv|PEST",
-        "g_vz|PEST",
-        "g_zz|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
         "g^rr",
         "g^rv",
         "g^rz",
@@ -606,7 +606,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         "J^zeta",
         "|J|",
         "sqrt(g)_PEST",
-        "finite-n instability drive" "iota",
+        "finite-n instability drive",
+        "iota",
         "iota_r",
         "psi_r",
         "p",
@@ -674,7 +675,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     # Get differentiation matrices
     # RG: setting the gradient to 0 to save some memory?
-    D_rho0 = legendre_D1(n_rho_max) * scale_x1
+    D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
     D_theta0 = fourier_diffmat(n_theta_max)
     D_zeta0 = fourier_diffmat(n_zeta_max)
 
@@ -720,13 +721,14 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     g_sup_rr = data["g^rr"][:, None] * a_N**2
     g_sup_rv = data["g^rv"][:, None] * a_N**2
-    g_sup_rp = data["g^rp"][:, None] * a_N**2
+    g_sup_rp = data["g^rz"][:, None] * a_N**2
 
     J2 = (data["|J|"] ** 2)[:, None] * (a_N / B_N) ** 2
     j_sup_theta = data["J^theta_PEST"][:, None] * a_N**2 / B_N
     j_sup_zeta = data["J^zeta"][:, None] * a_N**2 / B_N
 
-    F = data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
+    # manually set the instability drive to 0
+    F = 0.0 * data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
 
     # Q_11
     A = A.at[rho_idx, rho_idx].add(
@@ -743,7 +745,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, rho_idx].add(
         jnp.diag((iota_r**2 * W * g_vv_over_sqrtg).flatten())
         + D_rho.T @ ((iota**2 * W * g_vv_over_sqrtg) * D_rho)
-        + D_rho.T @ (iota * iota_r * W * g_vv_over_sqrtg)
+        + D_rho.T * (iota * iota_r * W * g_vv_over_sqrtg)
         + (iota * iota_r * W * g_vv_over_sqrtg) * D_rho
     )
     A = A.at[rho_idx, theta_idx].add(
@@ -767,8 +769,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, rho_idx].add(
         jnp.diag((W * g_pp_over_sqrtg).flatten())
         + D_rho.T @ ((W * g_pp_over_sqrtg) * D_rho)
-        + D_rho.T @ (W * g_pp_over_sqrtg)
-        + W * g_pp_over_sqrtg * D_rho
+        + D_rho.T * (W * g_pp_over_sqrtg)
+        + (W * g_pp_over_sqrtg) * D_rho
     )
     A = A.at[theta_idx, zeta_idx].add(-D_theta.T @ ((W * g_pp_over_sqrtg) * D_theta))
     A = A.at[rho_idx, theta_idx].add(D_rho.T @ ((W * g_pp_over_sqrtg) * D_theta))
@@ -778,8 +780,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, rho_idx].add(
         -1
         * (
-            D_theta.T @ (iota * iota_r * W * g_rv_over_sqrtg)
-            + D_zeta.T @ (iota_r * W * g_rv_over_sqrtg)
+            D_theta.T * (iota * iota_r * W * g_rv_over_sqrtg)
+            + D_zeta.T * (iota_r * W * g_rv_over_sqrtg)
             + D_theta.T @ ((iota**2 * W * g_rv_over_sqrtg) * D_rho)
             + D_zeta.T @ ((iota * W * g_rv_over_sqrtg) * D_rho)
         )

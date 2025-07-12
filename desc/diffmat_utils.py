@@ -5,7 +5,9 @@ Differentiation‑matrix utilities for spectral methods in **DESC**.
 Adds various functions to create differentiation matrices.
 """
 
-from desc.backend import jit, jnp, lax, partial
+from functools import partial
+
+from desc.backend import jax, jit, jnp
 
 ########################################################################
 # ---------------------- CHEBYSHEV MATRICES -------------------------- #
@@ -232,7 +234,7 @@ def fourier_diffmat(n: int):
 
 @partial(jit, static_argnums=0)
 def legendre_lobatto_nodes(N: int) -> jnp.ndarray:
-    """Return *N* Legendre–Gauss–Lobatto abscissae in ascending order.
+    """Return *N+1* Legendre–Gauss–Lobatto abscissae in ascending order.
 
     Interior points are the zeros of **P_{N-1}'(x)**.  These can be obtained
     as the eigenvalues of a symmetric tridiagonal matrix with off‑diagonal
@@ -252,7 +254,7 @@ def legendre_lobatto_nodes(N: int) -> jnp.ndarray:
 
 @partial(jit, static_argnums=0)
 def legendre_lobatto_weights(N: int) -> jnp.ndarray:
-    """Return the *N* Legendre–Gauss–Lobatto **quadrature** weights."""
+    """Return the *N+1* Legendre–Gauss–Lobatto **quadrature** weights."""
     if N < 2:
         raise ValueError("N must be ≥ 2 for LGL weights")
 
@@ -272,7 +274,7 @@ def legendre_lobatto_weights(N: int) -> jnp.ndarray:
             Pkp1 = ((2 * k + 1) * x * Pk - k * Pkm1) / (k + 1)
             return (Pk, Pkp1)
 
-        _, Pk = lax.fori_loop(1, n, body, (Pkm1, Pk))
+        _, Pk = jax.lax.fori_loop(1, n, body, (Pkm1, Pk))
         return Pk
 
     Pn = P_n(x)
@@ -292,7 +294,7 @@ def _barycentric_weights(x: jnp.ndarray) -> jnp.ndarray:
 
 @partial(jit, static_argnums=0)
 def legendre_D1(N: int) -> jnp.ndarray:
-    """Return the N×N first‑order differentiation matrix on LGL nodes."""
+    """Return the N+1×N+1 first‑order differentiation matrix on LGL nodes."""
     x = legendre_lobatto_nodes(N)
     n = x.size
     lam = _barycentric_weights(x)

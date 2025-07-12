@@ -1,5 +1,6 @@
 """Test integration algorithms."""
 
+import warnings
 from functools import partial
 
 import numpy as np
@@ -712,8 +713,8 @@ class TestLaplaceField:
             return Z_hat
 
     @pytest.mark.unit
-    def test_interior_Dirichlet(self):
-        """Test Free surface outer field boundary condition."""
+    def test_interior_Dirichlet(self, maxiter=-1):
+        """Test interior Dirichlet Laplace solver."""
         surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
             Z_lmn=[-2, -0.2],
@@ -728,8 +729,20 @@ class TestLaplaceField:
             "sin" if surface.sym else False,
             B_coil=TestLaplaceField._Z_hat(),
         )
-        data, _ = field.compute(["Phi_coil", "Z"], grid)
+        data, _ = field.compute(
+            ["Phi_coil", "Z", "gamma potential"], grid, maxiter=maxiter
+        )
         np.testing.assert_allclose(data["Phi_coil"], data["Z"])
+        np.testing.assert_allclose(data["gamma potential"], data["Z"], atol=1e-12)
+
+    @pytest.mark.unit
+    @pytest.mark.xfail(reason="Unknown")
+    def test_interior_Dirichlet_iter(self):
+        """Test fixed point convergence."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("always", UserWarning)
+            # diverges as maxiter increases
+            self.test_interior_Dirichlet(maxiter=5)
 
     @pytest.mark.unit
     def test_interior_Neumann(

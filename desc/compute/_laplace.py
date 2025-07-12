@@ -1,5 +1,6 @@
 """Compute functions for Laplace solver."""
 
+import warnings
 from functools import partial
 
 import numpy as np
@@ -115,6 +116,8 @@ def _D_plus_half(
             chunk_size=chunk_size,
             _prune_data=prune_data,
         )
+    if ndim == 1:
+        result = result.squeeze(axis=-1)
 
     if _D_quad:
         result += eval_data["Phi(x)"] / 2
@@ -221,8 +224,10 @@ def _fixed_point_potential(
     method="simple",
     **kwargs,
 ):
-    # TODO: Appendix B for secular part.
     errorif(not same_grid, NotImplementedError)
+    warnings.warn("This setting does not pass correctness tests.", UserWarning)
+    # No point in genearlizing this for Phi with logic in Appendix B for
+    # nonzero secular parts if test_interior_Dirichlet_iter does not pass.
 
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
@@ -259,7 +264,6 @@ def _fixed_point_potential(
     transforms={"grid": []},
     profiles=[],
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-    grid_requirement={"can_fft2": True},
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     public=False,
 )
@@ -319,6 +323,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             same_grid=True,
             **kwargs,
         )
+        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -366,6 +371,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             same_grid=True,
             **kwargs,
         )
+        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -522,12 +528,13 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    chunk_size=_doc["chunk_size"],
     eval_interpolator="""_BIESTInterpolator :
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    on_boundary="bool : Whether coords are on boundary surface.",
+    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    on_boundary="bool : Whether RpZcoords are on boundary surface.",
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
@@ -535,7 +542,6 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     interpolator = kwargs.get("eval_interpolator", data.get("interpolator", None))
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
-    # TODO: avoid near singular integral by removing singularity
     if kwargs["on_boundary"]:
         RpZ_data["grad(Phi)"] = (
             sign
@@ -803,4 +809,39 @@ def _Phi_coil_secular(params, transforms, profiles, data, **kwargs):
 )
 def _Phi_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil"] = data["Phi_coil (periodic)"] + data["Phi_coil (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="gamma potential",
+    label="\\gamma",
+    units="T m",
+    units_long="Tesla meter",
+    description="Double layer potential with density Phi",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=_kernel_dipole_plus_half.keys + ["interpolator"],
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+    chunk_size=_doc["chunk_size"],
+    public=False,
+)
+def _gamma_potential(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    data["Phi(x)"] = data["Phi"]
+    # This quantity should recover Phi_coil and offers means to
+    # test correctness of the computation of Phi.
+    data["gamma potential"] = (
+        _D_plus_half(
+            data,
+            data,
+            data["interpolator"],
+            chunk_size=kwargs.get("chunk_size", None),
+        )
+        - data["Phi"]
+    )
     return data

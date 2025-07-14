@@ -49,7 +49,7 @@ from desc.plotting import (
     plot_surfaces,
     poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
 tol_1d = 4.5
 tol_2d = 10

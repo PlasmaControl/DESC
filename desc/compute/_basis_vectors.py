@@ -45,6 +45,7 @@ def _b(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta/sqrt(g)", "e_zeta"],
+    aliases=["grad(rho)"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
@@ -2688,7 +2689,7 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _secular_grad_alpha(params, transforms, profiles, data, **kwargs):
     data["grad(alpha) (secular)"] = (
-        data["alpha_r (secular)"][:, jnp.newaxis] * data["e^rho"]
+        data["alpha_r (secular)"][..., jnp.newaxis] * data["e^rho"]
     )
     return data
 

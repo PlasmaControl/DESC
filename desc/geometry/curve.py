@@ -13,7 +13,18 @@ from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warnif
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Curve
 

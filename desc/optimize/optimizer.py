@@ -289,28 +289,20 @@ class Optimizer(IOAble):
         print("optimization completed!")
 
         if isinstance(objective, LinearConstraintProjection):
-            print("is linear proj")
             # remove wrapper to get at underlying objective
             result["allx"] = [objective.recover(x) for x in result["allx"]]
-            print("results recovered")
             objective = objective._objective
-            print("objective changed")
 
         if isinstance(objective, ProximalProjection):
-            print("is proximal projection")
             # reset eq params to initial
             if eq is not None:
                 eq.params_dict = eq_params_init
             result["history"] = objective.history
-            print("history changed")
             objective = objective._objective
-            print("objective changed")
         else:
-            print("unpacking history")
             result["history"] = [
                 objective.unpack_state(xi, False) for xi in result["allx"]
             ]
-            print("history unpacked")
 
         print("projection completed!")
 

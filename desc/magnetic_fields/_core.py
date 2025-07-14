@@ -24,7 +24,7 @@ from desc.basis import (
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.batching import batch_map
+from desc.batching import batch_map, batched_vectorize
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
@@ -2565,6 +2565,7 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    ode_chunk_size=None,
     **kwargs,
 ):
     """Trace field lines by integration, using diffrax package.
@@ -2603,6 +2604,9 @@ def field_line_integrate(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    ode_chunk_size : int or None
+        Size to split the ode vectorization (as in, across the r0, z0
+        initial conditions) into chunks.
     kwargs: dict
         keyword arguments to be passed into the ``diffrax.diffeqsolve``
 
@@ -2675,7 +2679,9 @@ def field_line_integrate(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
-        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+        x = batched_vectorize(
+            intfun, signature="(k)->(n,k)", chunk_size=ode_chunk_size
+        )(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))

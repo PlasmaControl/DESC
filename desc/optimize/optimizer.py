@@ -1,14 +1,12 @@
 """Class for wrapping a number of common optimization methods."""
 
 import contextlib
-import gc
 import io
 import warnings
 
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jax
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -289,11 +287,6 @@ class Optimizer(IOAble):
         )
 
         print("optimization completed!")
-
-        jax.clear_caches()
-        gc.collect()
-
-        print("clearing out cache")
 
         if isinstance(objective, LinearConstraintProjection):
             print("is linear proj")

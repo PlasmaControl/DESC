@@ -641,7 +641,6 @@ class ObjectiveFunction(IOAble):
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
-        print("completed unpacking params")
         if per_objective:
             # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
@@ -651,7 +650,6 @@ class ObjectiveFunction(IOAble):
                 [param[i] for i in idx]
                 for param, idx in zip(params, self._things_per_objective_idx)
             ]
-            print("completed per objective")
         return params
 
     def x(self, *things):

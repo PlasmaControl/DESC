@@ -286,8 +286,6 @@ class Optimizer(IOAble):
             options,
         )
 
-        print("optimization completed!")
-
         if isinstance(objective, LinearConstraintProjection):
             # remove wrapper to get at underlying objective
             result["allx"] = [objective.recover(x) for x in result["allx"]]
@@ -304,11 +302,7 @@ class Optimizer(IOAble):
                 objective.unpack_state(xi, False) for xi in result["allx"]
             ]
 
-        print("projection completed!")
-
         timer.stop("Solution time")
-
-        print("timer stopped!")
 
         if verbose > 1:
             timer.disp("Solution time")
@@ -316,9 +310,6 @@ class Optimizer(IOAble):
                 "Avg time per step",
                 timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
             )
-
-        print("time printed!")
-
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
@@ -338,8 +329,6 @@ class Optimizer(IOAble):
         if verbose > 0:
             print(text_out)
 
-        print("output printed!")
-
         if copy:
             # need to swap things and things0, since things should be unchanged
             for t, t0 in zip(things, things0):
@@ -348,8 +337,6 @@ class Optimizer(IOAble):
                 t.params_dict = init_params
                 t0.params_dict = final_params
             return things0, result
-
-        print("things copied!")
 
         return things, result
 

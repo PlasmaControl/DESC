@@ -42,7 +42,9 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     """Abstract base class for particle trajectory models.
 
     Subclasses should implement the ``vf`` method to compute the RHS of the ODE,
-    as well as the properties `frame`, `vcoords`, `args`
+    as well as the properties `frame`, `vcoords`, `args`. ``vf`` method corresponds to
+    the ``vf`` method in diffrax.AbstractTerm class and must have the same name and
+    signature.
     """
 
     @property
@@ -132,6 +134,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
+
+        ``vf`` method corresponds to the ``vf`` method in diffrax.AbstractTerm class
+        and must have the same name and signature.
 
         Parameters
         ----------
@@ -261,6 +266,9 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
+
+        ``vf`` method corresponds to the ``vf`` method in diffrax.AbstractTerm class
+        and must have the same name and signature.
 
         Parameters
         ----------

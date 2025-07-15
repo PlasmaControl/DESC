@@ -1888,7 +1888,7 @@ class CylindricalGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._coordinates = "rpz"
-        self._is_meshgrid = False
+        self._is_meshgrid = True
         self._period = (np.inf, 2 * np.pi/self._NFP, np.inf)
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, R=R, phi=phi, Z=Z,
@@ -1938,8 +1938,11 @@ class CylindricalGrid(_Grid):
         
         # R (Chebyshev extrema nodes)
         alpha = 1E-3
-        if r_endpoint and z_endpoint and (L*M*N)>0:
-            self._can_fft_dct = True
+        if r_endpoint and z_endpoint and None not in [L,M,N]:
+            if L*M*N>0:
+                self._can_fft_dct = True
+            else:
+                self._can_fft_dct = False
         else:
             self._can_fft_dct = False
         if L is not None:
@@ -1953,10 +1956,14 @@ class CylindricalGrid(_Grid):
         # phi (linear spacing unless explicitly specified)
         if phi is not None:
             self._can_fft_dct = False
+            self._fft_poloidal = False
         phi_grid = LinearGrid(rho=1,theta=0,N=M,zeta=phi,NFP=NFP)
         self._M = phi_grid.N
         phi = phi_grid.nodes[:,2]
         dphi = phi_grid.spacing[:,2]
+        # Note that phi is actually the toroidal angle,
+        # but here "poloidal" just refers to the second dimension
+        self._fft_poloidal = phi_grid.fft_toroidal
 
         # Z (Chebyshev extrema nodes)
         if N is not None:

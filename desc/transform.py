@@ -366,21 +366,21 @@ class Transform(IOAble):
             r = self.grid.nodes[self.grid.unique_r_idx, 0]
             z = self.grid.nodes[self.grid.unique_z_idx, 2]
 
-            unique_L_modes = self.basis.modes[self.basis.unique_L_idx, 0]
-            unique_N_modes = self.basis.modes[self.basis.unique_N_idx, 2]
+            self.unique_L_modes = self.basis.modes[self.basis.unique_L_idx, 0]
+            self.unique_N_modes = self.basis.modes[self.basis.unique_N_idx, 2]
 
             for dr in np.unique(self.derivatives[:, 0]):
                 if dr > 0:
                     self.matrices["rpz"][dr][0] = chebyshev(
                         r[:, np.newaxis],
-                        unique_L_modes,
+                        self.unique_L_modes,
                         dr=dr,
                     )
             for dz in np.unique(self.derivatives[:, 2]):
                 if dz > 0:
                     self.matrices["rpz"][0][dz] = chebyshev(
                         z[:, np.newaxis],
-                        unique_N_modes,
+                        self.unique_N_modes,
                         dr=dz,
                     )
 
@@ -515,13 +515,14 @@ class Transform(IOAble):
                 self.basis.unique_N_idx.shape[0],
                 self.basis.unique_L_idx.shape[0],
                 self.basis.unique_M_idx.shape[0],
+                -1
             )
 
             # differentiate with respect to phi
             dphi = dt
             y = (
                 c_3d[:, :, :: (-1) ** dphi]
-                * self.dk.reshape((1, 1, -1)) ** dphi
+                * self.dk.reshape((-1,1)) ** dphi
                 * (-1) ** (dphi > 1)
             )
             y = ifftfit(y, axis=2)
@@ -530,7 +531,7 @@ class Transform(IOAble):
             if dr == 0:
                 y = ichebfit(y,axis=1)
             else:
-                y = self.matrices["rpz"][dr][0] @ y
+                y = (self.matrices["rpz"][dr][0] @ y.swapaxes(1,-2)).swapaxes(1,-2)
 
             # differentiate with respect to z
             if dz ==0:
@@ -538,10 +539,10 @@ class Transform(IOAble):
             else:
                 y = (
                     self.matrices["rpz"][0][dz]
-                    @ y.swapaxes(1,0)
-                ).swapaxes(1,0)
+                    @ y.swapaxes(0,-2)
+                ).swapaxes(0,-2)
 
-            return y.flatten()
+            return y.reshape(c.shape)
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -583,8 +584,9 @@ class Transform(IOAble):
         elif self.method == "rpz":
             from desc.basis import fftfit, chebfit
 
-            x_3d = x.reshape(self.grid.num_z, self.grid.num_r, self.grid.num_phi)
-            c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2).flatten()
+            x_3d = x.reshape(self.grid.num_z, self.grid.num_r, self.grid.num_phi, -1)
+            c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2)
+            c = c.reshape(x.shape)
 
         return c
 

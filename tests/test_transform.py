@@ -530,7 +530,7 @@ class TestTransform:
     def test_diff_rpz(self):
         """Test fitting and differentiation with RPZ method"""
         # Build grid, basis, and transform
-        grid = CylindricalGrid(10,4,6,NFP=2,r_endpoint=True,z_endpoint=True)
+        grid = CylindricalGrid(L=10,N=5,M=5,NFP=2,r_endpoint=True,z_endpoint=True)
         r = grid.nodes[:,0]
         phi = grid.nodes[:,1]
         z = grid.nodes[:,2]
@@ -538,12 +538,13 @@ class TestTransform:
 
         basis = DoubleChebyshevFourierBasis(grid.L,grid.M,grid.N,NFP=grid.NFP)
         transform = Transform(grid,basis,build=True,build_pinv=True,derivs=2,method="rpz")
-        y = (np.cos(r)) * np.cos(6*phi) * (1-z)**3
+        y = np.stack([(np.cos(r)) * np.cos(6*phi) * (1-z)**3,r**2*np.sin(2*phi)*np.exp(z)]).T
         y_c = transform.fit(y)
 
-        numerical = transform.transform(y_c,dr=1,dt=2,dz=2)
+        numerical = transform.transform(y_c[:,0],dr=1,dt=2,dz=2)
         analytic = 216*np.sin(r)*np.cos(6*phi)*(1-z)
 
+        np.testing.assert_allclose(y[:,0],transform.transform(y_c[:,0]),atol=1E-7)
         np.testing.assert_allclose(numerical,analytic,atol=1E-7)
 
     @pytest.mark.unit

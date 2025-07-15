@@ -7,6 +7,7 @@ import numpy as np
 from diffrax import (
     AbstractSolver,
     AbstractTerm,
+    DiscreteTerminatingEvent,
     PIDController,
     RecursiveCheckpointAdjoint,
     SaveAt,
@@ -778,7 +779,8 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
 def trace_particles(
     field: Union[Equilibrium, _MagneticField],
-    initializer: AbstractParticleInitializer,
+    y0: ArrayLike,
+    args: tuple,
     ts: ArrayLike,
     model: AbstractTrajectoryModel,
     rtol: float = 1e-8,
@@ -788,6 +790,8 @@ def trace_particles(
     solver: AbstractSolver = Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
     source_grid: Grid = None,
+    bounds_R=(0, np.inf),
+    bounds_Z=(-np.inf, np.inf),
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -795,6 +799,13 @@ def trace_particles(
     ----------
     field : MagneticField or Equilibrium
         Source of magnetic field to integrate
+    y0 : array-like
+        Initial particle positions and velocities, stacked in horizontally [x0, v0].
+        The first output of `AbstractParticleInitializer.init_particles`.
+    args : tuple
+        Additional arguments needed by the model, such as mass, charge, and
+        magnetic moment of each particle. The second output of
+        `AbstractParticleInitializer.init_particles`.
     initializer : AbstractParticleInitializer
         Object to initialize particle distribution.
     ts : array-like
@@ -816,6 +827,14 @@ def trace_particles(
         use ``diffrax.ForwardMode()``.
     source_grid : Grid, optional
         Grid to use to discretize field
+    bounds_R : tuple of (float,float), optional
+        R bounds for particle tracing bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (0,np.inf)
+    bounds_Z : tuple of (float,float), optional
+        Z bounds for particle tracing bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (-np.inf,np.inf)
 
     Returns
     -------
@@ -834,7 +853,6 @@ def trace_particles(
     else:
         raise NotImplementedError
 
-    y0, args = initializer.init_particles(model, field)
     kwargs = {}
     if source_grid:
         kwargs["source_grid"] = source_grid
@@ -842,6 +860,13 @@ def trace_particles(
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
     saveat = SaveAt(ts=ts)
+
+    def default_terminating_event_fxn(state, **kwargs):
+        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
+
+    discrete_terminating_event = DiscreteTerminatingEvent(default_terminating_event_fxn)
 
     intfun = lambda x, args: diffeqsolve(
         model,
@@ -855,6 +880,7 @@ def trace_particles(
         args=(field, *args, kwargs),
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
+        event=discrete_terminating_event,
     ).ys
 
     yt = jit(vmap(intfun))(y0, args)

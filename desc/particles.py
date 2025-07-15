@@ -863,7 +863,7 @@ def trace_particles(
         Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
-    discrete_terminating_event = DiscreteTerminatingEvent(default_terminating_event_fxn)
+    event = DiscreteTerminatingEvent(default_terminating_event_fxn)
 
     intfun = lambda x, args: diffeqsolve(
         model,
@@ -877,7 +877,7 @@ def trace_particles(
         args=(field, *args, kwargs),
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
-        event=discrete_terminating_event,
+        event=event,
     ).ys
 
     yt = jit(vmap(intfun))(y0, args)

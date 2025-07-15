@@ -451,10 +451,10 @@ class ChebyshevSeries(_Basis):
 
     """
 
-    def __init__(self, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = 0
-        self.N = N
+    def __init__(self, N, M=0, L=0, NFP=1, sym=False):
+        self._L = 0
+        self._M = 0
+        self._N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -546,8 +546,8 @@ class ChebyshevSeries(_Basis):
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if N != self.N:
-            self.N = N
+        if N != self._N:
+            self._N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
@@ -851,10 +851,10 @@ class ChebyshevFourierSeries(_Basis):
 
     """
 
-    def __init__(self, M, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = M
-        self.N = N
+    def __init__(self, M, N, L=0, NFP=1, sym=False):
+        self._L = L
+        self._M = M
+        self._N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -970,11 +970,11 @@ class ChebyshevFourierSeries(_Basis):
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N or sym != self.sym:
-            self.M = M
-            self.N = N
+        if M != self._M or N != self._N or sym != self.sym:
+            self._M = M
+            self._N = N
             self._sym = sym if sym is not None else self.sym
-            self._modes = self._get_modes(self.M, self.N)
+            self._modes = self._get_modes(self._M, self._N)
             self._set_up()
 
 
@@ -1768,15 +1768,15 @@ class ChebyshevZernikeBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = N
+        self._L = L
+        self._M = M
+        self._N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
         self._modes = self._get_modes(
-            L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
+            L=self._L, M=self._M, N=self._N, spectral_indexing=self.spectral_indexing
         )
 
         super().__init__()
@@ -1823,7 +1823,7 @@ class ChebyshevZernikeBasis(_Basis):
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
+        self._L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1861,9 +1861,7 @@ class ChebyshevZernikeBasis(_Basis):
         ).T
         return np.unique(np.hstack([pol, tor]), axis=0)
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None, unique=False):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -1890,7 +1888,7 @@ class ChebyshevZernikeBasis(_Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         # TODO: avoid duplicate calculations when mixing derivatives
-        r, t, z = nodes.T
+        r, t, z = grid.nodes.T
         l, m, n = modes.T
         lm = modes[:, :2]
 
@@ -1922,7 +1920,7 @@ class ChebyshevZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
         if unique:

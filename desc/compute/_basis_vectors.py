@@ -1953,7 +1953,6 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-
 )
 def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     data["e_theta"] = jnp.array([data["R_t"], data["omega_t"], data["Z_t"]]).T
@@ -2204,7 +2203,6 @@ def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-
 )
 def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
     data["e_theta_t"] = jnp.array(
@@ -2265,7 +2263,6 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-
 )
 def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
     data["e_theta_z"] = jnp.array(
@@ -2320,13 +2317,12 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R_z", "Z_z", "omega_z"],
+    data=["R", "R_z", "Z_z", "omega_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-
 )
 def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     data["e_zeta"] = jnp.array(
@@ -2565,7 +2561,6 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-
 )
 def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
     data["e_zeta_z"] = jnp.array(
@@ -2605,6 +2600,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     ).T
     return data
 
+
 @register_compute_fun(
     name="grad(phi)",
     label="\\nabla \\phi",
@@ -2625,6 +2621,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
 def _grad_phi(params, transforms, profiles, data, **kwargs):
     data["grad(phi)"] = jnp.column_stack([data["0"], 1 / data["R"], data["0"]])
     return data
+
 
 @register_compute_fun(
     name="grad(alpha)",

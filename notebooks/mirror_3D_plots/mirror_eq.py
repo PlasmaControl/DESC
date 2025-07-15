@@ -1,27 +1,28 @@
-from desc.transform import Transform
-from desc.equilibrium import Equilibrium
+import numpy as np
+from scipy.constants import mu_0
+
 from desc.basis import ChebyshevZernikeBasis, chebyshev_z
 from desc.compute import compute
-from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid, Grid
 from desc.compute.utils import get_transforms
+from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.objectives import (
+    CurrentDensity,
+    FixBoundaryR,
+    FixBoundaryZ,
     FixEndCapLambda,
     FixEndCapR,
     FixEndCapZ,
-    FixBoundaryR,
-    FixBoundaryZ,
-    FixPsi,
-    FixPressure,
     FixIota,
+    FixPressure,
+    FixPsi,
     ForceBalance,
     ObjectiveFunction,
-    CurrentDensity,
 )
-import numpy as np
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
-from desc.geometry import FourierRZToroidalSurface
-from scipy.constants import mu_0
+from desc.transform import Transform
 
 
 def chebygrid(N_grid):
@@ -42,22 +43,79 @@ def grid_gen(L_grid, M_grid, N_grid, node_pattern="jacobi"):
     lm = np.tile(LMnodes, (Nnodes.size, 1))
     n = np.tile(Nnodes.reshape(-1, 1), (1, LMnodes.shape[0])).reshape(-1, 1)
     nodes = np.concatenate((lm, n), axis=1)
-    return Grid(nodes)
+
+    # RG: weights and spacing defined here
+    # just for the sake of compilation. Must be checked
+    weights = np.ones(nodes.shape[0])
+    spacing = np.ones_like(nodes)
+
+    spacing[1:, 1] = np.diff(nodes[:, 1])
+    spacing[1:, 2] = np.diff(nodes[:, 2])
+
+    return Grid(nodes, weights=weights, spacing=spacing)
+
 
 def get_lm_mode(basis, coeff, zeta, L, M, func_zeta=chebyshev_z):
     modes = basis.modes
     lm = 0
     for i, (l, m, n) in enumerate(modes):
         if l == L and m == M:
-            lm += func_zeta(zeta, n)*coeff[i]
+            lm += func_zeta(zeta, n) * coeff[i]
     return lm
 
-#0.05,0.15
+
+# 0.05,0.15
 surf = FourierRZToroidalSurface(
-    R_lmn=[10, 0.35, -0.114 * 1.5, 0.002* 1.5, 0.02* 1.5, -0.0024* 1.5, 0.005* 1.5, 0.0012* 1.5, 0.011* 1.5, 0.03, 0.0],
-    modes_R=[[0, 0], [1, 0], [1, 2], [1,4], [1,6], [1,8], [1,10], [1,12], [1,14], [2, 1],[0,2]],
-    Z_lmn=[0, -0.35, 0.114* 1.5, -0.002* 1.5, -0.02* 1.5, 0.0024* 1.5, -0.005* 1.5, -0.0012* 1.5, -0.011* 1.5,  -0.0],
-    modes_Z=[[0, 0], [-1, 0], [-1, 2], [-1,4], [-1,6], [-1,8], [-1,10], [-1,12], [-1,14],[0, 2]],
+    R_lmn=[
+        10,
+        0.35,
+        -0.114 * 1.5,
+        0.002 * 1.5,
+        0.02 * 1.5,
+        -0.0024 * 1.5,
+        0.005 * 1.5,
+        0.0012 * 1.5,
+        0.011 * 1.5,
+        0.03,
+        0.0,
+    ],
+    modes_R=[
+        [0, 0],
+        [1, 0],
+        [1, 2],
+        [1, 4],
+        [1, 6],
+        [1, 8],
+        [1, 10],
+        [1, 12],
+        [1, 14],
+        [2, 1],
+        [0, 2],
+    ],
+    Z_lmn=[
+        0,
+        -0.35,
+        0.114 * 1.5,
+        -0.002 * 1.5,
+        -0.02 * 1.5,
+        0.0024 * 1.5,
+        -0.005 * 1.5,
+        -0.0012 * 1.5,
+        -0.011 * 1.5,
+        -0.0,
+    ],
+    modes_Z=[
+        [0, 0],
+        [-1, 0],
+        [-1, 2],
+        [-1, 4],
+        [-1, 6],
+        [-1, 8],
+        [-1, 10],
+        [-1, 12],
+        [-1, 14],
+        [0, 2],
+    ],
     NFP=1,
     sym=False,
     mirror=True,

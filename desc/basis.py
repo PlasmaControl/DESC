@@ -7,11 +7,12 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
-from desc.grid import Grid, _Grid
+from desc.backend import custom_jvp, fori_loop, jit, jnp, sign, rfft, irfft
+from desc.grid import Grid, _Grid, lobatto
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list, safediv
 from scipy.special import binom, factorial
+from scipy.fft import dct, idct
 
 __all__ = [
     "PowerSeries",
@@ -21,7 +22,7 @@ __all__ = [
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
-    "ChebyshevDoubleFourierBasis"
+    "ChebyshevDoubleFourierBasis",
 ]
 
 
@@ -1092,6 +1093,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
+
 class DoubleChebyshevFourierBasis(_Basis):
     """3D basis: tensor product of two Chebyshev polynomials and Fourier series.
 
@@ -1113,6 +1115,7 @@ class DoubleChebyshevFourierBasis(_Basis):
         * ``False`` for no symmetry (Default)
 
     """
+
     # phi is actually the toroidal coordinate, but I am assuming here this referring to the
     # second coordinate, which in our case is phi
     _fft_poloidal = False
@@ -1201,13 +1204,13 @@ class DoubleChebyshevFourierBasis(_Basis):
             nidx = noutidx = np.arange(len(modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
-        
+
         # Get the nodes of the grid
         r, p, z = grid.nodes.T
         l, m, n = modes.T
 
         # The coordinates in the grid are hardcoded to be called rho, theta, zeta,
-        # but these variables are just the unique values for the first, second, and third coordinates 
+        # but these variables are just the unique values for the first, second, and third coordinates
         try:
             ridx = grid.unique_rho_idx
             routidx = grid.inverse_rho_idx
@@ -1232,7 +1235,7 @@ class DoubleChebyshevFourierBasis(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial 
+        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial
         # and the toroidal (phi) derivative as a Fourier series with N field periods
         # up to the l/m/n order
         radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
@@ -1281,6 +1284,7 @@ class DoubleChebyshevFourierBasis(_Basis):
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
+
 
 class PowerDoubleFourierBasis(_Basis):
     """3D basis: tensor product of power series and two Fourier series.
@@ -1460,6 +1464,7 @@ class PowerDoubleFourierBasis(_Basis):
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
+
 class TripleChebyshevBasis(_Basis):
     """3D basis: tensor product of three Chebyshev polynomials.
 
@@ -1481,6 +1486,7 @@ class TripleChebyshevBasis(_Basis):
         * ``False`` for no symmetry (Default)
 
     """
+
     _fft_poloidal = False
     _fft_toroidal = False
 
@@ -1562,13 +1568,13 @@ class TripleChebyshevBasis(_Basis):
             nidx = noutidx = np.arange(len(modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
-        
+
         # Get the nodes of the grid
         x, y, z = grid.nodes.T
         l, m, n = modes.T
 
         # The coordinates in the grid are hardcoded to be called rho, theta, zeta,
-        # but these variables are just the unique values for the first, second, and third coordinates 
+        # but these variables are just the unique values for the first, second, and third coordinates
         try:
             xidx = grid.unique_rho_idx
             xoutidx = grid.inverse_rho_idx
@@ -1593,7 +1599,7 @@ class TripleChebyshevBasis(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial 
+        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial
         # and the toroidal (phi) derivative as a Fourier series with N field periods
         # up to the l/m/n order
         dx = chebyshev(x[:, np.newaxis], l, dr=derivatives[0])
@@ -1640,7 +1646,8 @@ class TripleChebyshevBasis(_Basis):
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
-    
+
+
 class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
@@ -2375,10 +2382,11 @@ def chebyshev(r, l, dr=0):
         return jnp.cos(l * jnp.arccos(x))
     else:
         # Calculate derivative recursively using the chebyshev_second_kind function
-        dydx = l * chebyshev_second_kind(r, l-1, dr= (dr-1))
+        dydx = l * chebyshev_second_kind(r, l - 1, dr=(dr - 1))
         dydr = 2 * dydx
 
         return dydr
+
 
 def chebyshev_second_kind(r, l, dr=0):
     """Shifted Chebyshev polynomial of the second kind.
@@ -2400,15 +2408,17 @@ def chebyshev_second_kind(r, l, dr=0):
     r, l = map(jnp.asarray, (r, l))
     x = 2 * r - 1  # shift
     if dr == 0:
-        return jnp.where(jnp.abs(x)==1,
-                        l+1,
-                        safediv(jnp.sin((l+1)*jnp.arccos(x)),jnp.sqrt(1-x**2)))
+        return jnp.where(
+            jnp.abs(x) == 1,
+            (l + 1)*(x ** (l)),
+            safediv(jnp.sin((l + 1) * jnp.arccos(x)), jnp.sqrt(1 - x**2)),
+        )
     elif dr == 1:
-        a = (l+1)*chebyshev(r, l+1, dr = 0) - x * chebyshev_second_kind(r, l, dr = 0)
+        a = (l + 1) * chebyshev(r, l + 1, dr=0) - x * chebyshev_second_kind(r, l, dr=0)
         b = x**2 - 1
-        dydx = jnp.where(jnp.abs(x)==1,
-                        x**(l+1)/3*((l+1)**3-(l+1)),
-                        safediv(a,b))
+        dydx = jnp.where(
+            jnp.abs(x) == 1, x ** (l + 1) / 3 * ((l + 1) ** 3 - (l + 1)), safediv(a, b)
+        )
         dydr = 2 * dydx
         return dydr
     else:
@@ -2416,6 +2426,141 @@ def chebyshev_second_kind(r, l, dr=0):
             "Analytic third-degree derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
+
+
+def chebfit(y, axis):
+    """
+    Fast method for calculating Chebyshev coefficients.
+    Assumes basis and grid resolution are equal and
+    y is evaluated on the Chebyshev-Gauss-Lobatto nodes.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+    N = y.shape[axis]
+    f = ((-1) ** np.arange(N)).astype(float)
+    f[[0, -1]] = 0.5
+    f = f / (N - 1)
+    f_shape = [1 if i != axis else -1 for i in range(y.ndim)]
+    return dct(y, axis=axis, type=1, norm=None) * f.reshape(f_shape)
+
+
+def ichebfit(y_c, axis):
+    """
+    Fast method for converting from Chebyshev coefficients to real space.
+    Assumes basis and grid resolution are equal and evaluates on the
+    Chebyshev-Gauss-Lobatto nodes.
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+
+    N = y_c.shape[axis]
+    f = ((-1) ** np.arange(N)).astype(float)
+    f[[0, N - 1]] = 0.5
+    f = f / (N - 1)
+    f_shape = [1 if i != axis else -1 for i in range(y_c.ndim)]
+    return idct(y_c / f.reshape(f_shape), axis=axis, type=1, norm=None)
+
+
+def fftfit(y, axis):
+    """
+    Real fast fourier transform along axis, designed to convert coefficients
+    into the form expected by the fourier functions. Assumes grid and basis
+    resolutions are equal and nodes are spaced linearly.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to Fourier transform.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y_c : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+    # Real fourier transform
+    c_cplx = rfft(y, axis=axis, norm="forward")
+
+    # Get all terms except for the constant
+    unpad_slice = tuple(
+        slice(1, None) if i == axis else slice(None) for i in range(y.ndim)
+    )
+
+    c_unpad = 2 * c_cplx[unpad_slice]
+    # Get the constant term
+    c0_slice = tuple(
+        slice(None, 1) if i == axis else slice(None) for i in range(y.ndim)
+    )
+    c0 = c_cplx[c0_slice].real
+
+    # Separate sine (imaginary) frequencies and cosine frequencies (real)
+    c2 = c_unpad.real
+    c1 = -np.flip(c_unpad.imag, axis=axis)
+
+    # Recombine
+    c_diff = jnp.concatenate([c1, c0, c2], axis=axis)
+
+    return c_diff
+
+
+def ifftfit(y_c, axis):
+    """
+    Fast method for converting from Fourier coefficients to real space.
+    Assumes basis and grid resolution are equal and evaluates on the
+    equally spaced nodes.
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+    N = int((y_c.shape[axis] - 1) / 2)
+
+    # Reconstruct c_cplx in a form jnp expects
+    c1_slice = tuple(
+        slice(N - 1, None, -1) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c1 = y_c[c1_slice]
+    
+    c0_slice = tuple(
+        slice(N, N + 1) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c0 = y_c[c0_slice]
+    c2_slice = tuple(
+        slice(N + 1, None) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c2 = y_c[c2_slice]
+    c_cplx = np.concatenate([c0, (c2 - 1j * c1) / 2], axis=axis)
+
+    # Inverse fourier transform
+    return irfft(c_cplx, axis=axis, norm="forward", n=y_c.shape[axis])
+
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

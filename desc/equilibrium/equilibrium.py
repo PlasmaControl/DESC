@@ -1360,7 +1360,7 @@ class Equilibrium(Optimizable, _MagneticField):
             scales = np.array([R_bounds[1] - R_bounds[0], 1, Z_bounds[1] - Z_bounds[0]])
             if A_grid is None:
                 if phi_bounds is None:
-                    A_grid = CylindricalGrid(L=128, M=32, N=128, NFP=self.NFP)
+                    A_grid = CylindricalGrid(L=128, M=128, N=128, NFP=self.NFP)
                 else:
                     phi = np.linspace(phi_bounds[0], phi_bounds[1], 64)
                     A_grid = CylindricalGrid(L=128, phi=phi, N=128, NFP=self.NFP)
@@ -1386,13 +1386,15 @@ class Equilibrium(Optimizable, _MagneticField):
 
             # Default spectral resolution parameters
             if L is None:
-                L = M
+                L = A_grid.L
+            if M is None:
+                M = A_grid.M
             if N is None:
-                N = M
+                N = A_grid.N
 
             # Build spectral transforms
-            basis_obj = DoubleChebyshevFourierBasis(L, M, N)
-            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False)
+            basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
+            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False, method="rpz")
             out_grid = Grid((coords - shifts) / scales)
             out_transform = Transform(
                 out_grid, basis_obj, build_pinv=False, build=True, derivs=1

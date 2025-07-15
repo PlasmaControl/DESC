@@ -200,8 +200,7 @@ class _Grid(IOAble, ABC):
         # span the surface.
         return weights
 
-
-
+        
     @property
     def L(self):
         """int: Radial grid resolution."""
@@ -521,6 +520,15 @@ class _Grid(IOAble, ABC):
         if not hasattr(self, "_fft_toroidal"):
             self._fft_toroidal = False
         return self._fft_toroidal
+
+    @property
+    def can_fft_dct(self):
+        """bool: whether this grid can DCT in the first and third dimensions, and FFT
+        in the second dimension."""
+        if not hasattr(self, "_can_fft_dct"):
+            self._can_fft_dct = False
+        return self._can_fft_dct
+
 
     @property
     def spacing(self):
@@ -1930,20 +1938,21 @@ class CylindricalGrid(_Grid):
         
         # R (Chebyshev extrema nodes)
         alpha = 1E-3
+        if r_endpoint and z_endpoint and (L*M*N)>0:
+            self._can_fft_dct = True
+        else:
+            self._can_fft_dct = False
         if L is not None:
             self._L = check_nonnegint(L, "L", False)
-            R = (np.cos(np.arange(L, -1, -1) * np.pi / L) + 1) / 2
-            R = np.sort(R, axis=None)
-            if r_endpoint:
-                R[0] = 0
-                R[-1] = 1
-            else:
-                R[0] = R[1] * alpha
-                R[-1] = 1-(1-R[-2]) * alpha
-
+            R = lobatto(L,r_endpoint,alpha)
+        else:
+            self._can_fft_dct = False
+        
         dR = _midpoint_spacing(R, jnp=np)
 
         # phi (linear spacing unless explicitly specified)
+        if phi is not None:
+            self._can_fft_dct = False
         phi_grid = LinearGrid(rho=1,theta=0,N=M,zeta=phi,NFP=NFP)
         self._M = phi_grid.N
         phi = phi_grid.nodes[:,2]
@@ -1952,14 +1961,9 @@ class CylindricalGrid(_Grid):
         # Z (Chebyshev extrema nodes)
         if N is not None:
             self._N = check_nonnegint(N, "N", False)
-            Z = (np.cos(np.arange(N, -1, -1) * np.pi / N) + 1) / 2
-            Z = np.sort(Z, axis=None)
-            if z_endpoint:
-                Z[0] = 0
-                Z[-1] = 1
-            else:
-                Z[0] = Z[1] * alpha
-                Z[-1] = 1-(1-Z[-2]) * alpha
+            Z = lobatto(N,z_endpoint,alpha)
+        else:
+            self._can_fft_dct = False
 
         dZ = _midpoint_spacing(Z, jnp=np)
 
@@ -2372,3 +2376,11 @@ def _midpoint_spacing(x, jnp=jnp):
     else:
         dx = jnp.array([1.0])
     return dx
+
+def lobatto(res,endpoint,alpha=1e-3):
+    x = (np.cos(np.arange(res, -1, -1) * np.pi / res) + 1) / 2
+    x = np.sort(x, axis=None)
+    if not endpoint:
+        x[0] = x[1] * alpha
+        x[-1] = 1-(1-x[-2]) * alpha
+    return x

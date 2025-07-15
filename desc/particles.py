@@ -191,7 +191,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         )
 
         # derivative of the guiding center position in R, phi, Z coordinates
-        Rdot = vpar / data["b"] + (
+        Rdot = vpar * data["b"] + (
             (m / q / data["|B|"] ** 2)
             * ((mu * data["|B|"]) + vpar**2)
             * cross(data["b"], data["grad(|B|)"])
@@ -324,7 +324,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         vc = slowing_down_critical_velocity(data["Te"])
 
         # derivative of the guiding center position in R, phi, Z coordinates
-        Rdot = vpar / data["b"] + (
+        Rdot = vpar * data["b"] + (
             (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
         )
         # TODO: not sure why we use psi, and where the factors come from

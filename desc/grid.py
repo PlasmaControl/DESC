@@ -1878,7 +1878,7 @@ class CylindricalGrid(_Grid):
     _fft_poloidal = False
     _fft_toroidal = False
 
-    def __init__(self, L=None, M=None, N=None, NFP=1, R=None, phi=None, Z=None, r_endpoint=False, z_endpoint=False):
+    def __init__(self, L=None, M=None, N=None, NFP=1, R=None, phi=None, Z=None, r_endpoint=True, z_endpoint=True):
         assert (L is None) or (R is None), "cannot specify both L and R"
         assert (M is None) or (phi is None), "cannot specify both M and phi"
         assert (N is None) or (Z is None), "cannot specify both N and Z"

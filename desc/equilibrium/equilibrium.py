@@ -1231,7 +1231,8 @@ class Equilibrium(Optimizable, _MagneticField):
 
     def compute_magnetic_field(
         self,
-        coords,
+        coords=None,
+        out_grid=None,
         params=None,
         basis="rpz",
         source_grid=None,
@@ -1395,7 +1396,10 @@ class Equilibrium(Optimizable, _MagneticField):
             # Build spectral transforms
             basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
             in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False, method="rpz")
-            out_grid = Grid((coords - shifts) / scales)
+            if out_grid is None:
+                out_grid = Grid((coords - shifts) / scales)
+            if coords is None:
+                coords = out_grid.nodes * scales + shifts
             out_transform = Transform(
                 out_grid, basis_obj, build_pinv=False, build=True, derivs=1
             )

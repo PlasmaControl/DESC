@@ -144,7 +144,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         t : float
             Time to evaluate RHS at.
         x : jax.Array, shape(4,)
-            Position of particle in phase space (psi_n, theta, zeta, vpar).
+            Position of particle in phase space [psi_n, theta, zeta, vpar] or
+            [R, phi, Z, vpar].
         args : tuple
             Additional arguments needed by model, (eq_or_field, m, q, mu, field_kwargs).
 
@@ -162,6 +163,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             return self._compute_lab_coordinates(x, eq_or_field, m, q, mu, **kwargs)
 
     def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
+        """Compute the RHS of the ODE using Equilibrium."""
         assert eq.iota is not None
         # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
         # implemented in the past, so keeping it for now.
@@ -190,53 +192,52 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar / data["b"] + (
-            (m / q / data["|B|"] ** 3)
+            (m / q / data["|B|"] ** 2)
             * ((mu * data["|B|"]) + vpar**2)
-            * cross(data["B"], data["grad(|B|)"])
+            * cross(data["b"], data["grad(|B|)"])
         )
         # TODO: not sure why we use psi, and where the factors come from
         psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
-        dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
-        return dx
+        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
+        return dxdt
 
-    def _compute_lab_coordinates(self, y, field, m, q, mu, **kwargs):
+    def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
+        """Compute the RHS of the ODE using MagneticField."""
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
-        m_over_q = m / q
-        vpar = y[-1]
-        x = y[:-1]
-        field_compute = lambda y: field.compute_magnetic_field(y, **kwargs)
+        vpar = x[-1]
+        coords = x[:-1]
+        field_compute = lambda y: jnp.linalg.norm(
+            field.compute_magnetic_field(y, **kwargs), axis=-1
+        )
 
-        B = field_compute(x)
-        dB = jnp.vectorize(
+        # magnetic field vector in R, phi, Z coordinates
+        B = field.compute_magnetic_field(coords, **kwargs)
+        grad_B = jnp.vectorize(
             Derivative(
                 field_compute,
                 mode="fwd",
             ),
             signature="(n)->(n,n)",
-        )(x).squeeze()
+        )(coords).squeeze()
 
         modB = jnp.linalg.norm(B, axis=-1)
         b = B / modB
-        grad_B = jnp.sum(b[:, None] * dB, axis=0)
-        g1, g2, g3 = grad_B
         # factor of R from grad in cylindrical coordinates
-        g2 /= x[0]
-        grad_B = jnp.array([g1, g2, g3])
+        grad_B = grad_B.at[:, 1].divide(coords[0])
 
-        dRdt = vpar * b + (m_over_q / modB**2 * (mu * modB + vpar**2)) * cross(
-            b, grad_B
-        )
-        d1, d2, d3 = dRdt
-        d2 /= x[0]
-        dRdt = jnp.array([d1, d2, d3])
+        Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
+        # TODO: I don't think this is correct
+        # d1, d2, d3 = Rdot               # noqa: E800
+        # d2 /= coords[0]                 # noqa: E800
+        # Rdot = jnp.array([d1, d2, d3])  # noqa: E800
 
-        dvdt = -mu * dot(b, grad_B)
-        dxdt = jnp.append(dRdt, dvdt)
-        return dxdt.reshape(y.shape)
+        vpardot = -mu * dot(b, grad_B)
+        dxdt = jnp.concatenate([Rdot, vpardot]).reshape(x.shape)
+        return dxdt
 
 
 class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
@@ -322,22 +323,20 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         tau_s = slowing_down_time(data["Te"], data["ne"])
         vc = slowing_down_critical_velocity(data["Te"])
 
-        psidot = (
-            dot(cross(data["B"], data["grad(|B|)"]), data["grad(psi)"])
-            * ((m / q / data["|B|"] ** 3) * (v**2))
-        ) * (2 * jnp.pi / eq.Psi)
-        thetadot = vpar / data["|B|"] * dot(data["B"], data["e^theta"]) + (
-            m / q / data["|B|"] ** 3
-        ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^theta"])
-        zetadot = vpar / data["|B|"] * dot(data["B"], data["e^zeta"]) + (
-            m / q / data["|B|"] ** 3
-        ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^zeta"])
+        # derivative of the guiding center position in R, phi, Z coordinates
+        Rdot = vpar / data["b"] + (
+            (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
+        )
+        # TODO: not sure why we use psi, and where the factors come from
+        psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+        thetadot = dot(Rdot, data["e^theta"])
+        zetadot = dot(Rdot, data["e^zeta"])
         vpardot = (
             -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
         )
         vdot = -v / tau_s * (1 + vc**3 / v**3)
-        dx = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
-        return dx
+        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
+        return dxdt
 
 
 class AbstractParticleInitializer(IOAble, ABC):

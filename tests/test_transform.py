@@ -12,9 +12,10 @@ from desc.basis import (
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    DoubleChebyshevFourierBasis
 )
 from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, CylindricalGrid
 from desc.transform import Transform
 
 
@@ -524,6 +525,26 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+    
+    @pytest.mark.unit
+    def test_diff_rpz(self):
+        """Test fitting and differentiation with RPZ method"""
+        # Build grid, basis, and transform
+        grid = CylindricalGrid(10,4,6,NFP=2,r_endpoint=True,z_endpoint=True)
+        r = grid.nodes[:,0]
+        phi = grid.nodes[:,1]
+        z = grid.nodes[:,2]
+
+
+        basis = DoubleChebyshevFourierBasis(grid.L,grid.M,grid.N,NFP=grid.NFP)
+        transform = Transform(grid,basis,build=True,build_pinv=True,derivs=2,method="rpz")
+        y = (np.cos(r)) * np.cos(6*phi) * (1-z)**3
+        y_c = transform.fit(y)
+
+        numerical = transform.transform(y_c,dr=1,dt=2,dz=2)
+        analytic = 216*np.sin(r)*np.cos(6*phi)*(1-z)
+
+        np.testing.assert_allclose(numerical,analytic,atol=1E-7)
 
     @pytest.mark.unit
     def test_empty_grid(self):

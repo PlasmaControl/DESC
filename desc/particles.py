@@ -163,6 +163,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
         assert eq.iota is not None
+        # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
+        # implemented in the past, so keeping it for now.
         psi, theta, zeta, vpar = x.T
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
@@ -186,20 +188,16 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             eq, data_keys, eq.params_dict, transforms, profiles, **kwargs
         )
 
-        psidot = (
-            dot(cross(data["B"], data["grad(|B|)"]), data["grad(psi)"])
-            * ((m / q / data["|B|"] ** 3) * (mu * data["|B|"]) + vpar**2)
-        ) * (2 * jnp.pi / eq.Psi)
-        thetadot = vpar / data["|B|"] * dot(data["B"], data["e^theta"]) + (
-            m / q / data["|B|"] ** 3
-        ) * ((mu * data["|B|"]) + vpar**2) * dot(
-            cross(data["B"], data["grad(|B|)"]), data["e^theta"]
+        # derivative of the guiding center position in R, phi, Z coordinates
+        Rdot = vpar / data["b"] + (
+            (m / q / data["|B|"] ** 3)
+            * ((mu * data["|B|"]) + vpar**2)
+            * cross(data["B"], data["grad(|B|)"])
         )
-        zetadot = vpar / data["|B|"] * dot(data["B"], data["e^zeta"]) + (
-            m / q / data["|B|"] ** 3
-        ) * ((mu * data["|B|"].T).T + vpar**2) * dot(
-            cross(data["B"], data["grad(|B|)"]), data["e^zeta"]
-        )
+        # TODO: not sure why we use psi, and where the factors come from
+        psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+        thetadot = dot(Rdot, data["e^theta"])
+        zetadot = dot(Rdot, data["e^zeta"])
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
         dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
         return dx

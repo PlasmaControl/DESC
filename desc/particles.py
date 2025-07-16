@@ -5,9 +5,9 @@ from typing import Optional, Union
 
 import numpy as np
 from diffrax import (
-    AbstractSolver,
     AbstractTerm,
     DiscreteTerminatingEvent,
+    ODETerm,
     PIDController,
     RecursiveCheckpointAdjoint,
     SaveAt,
@@ -779,16 +779,16 @@ def trace_particles(
     y0: ArrayLike,
     args: tuple,
     ts: ArrayLike,
-    model: AbstractTrajectoryModel,
+    mode: str,
     rtol: float = 1e-8,
     atol: float = 1e-8,
     maxstep: int = 1000,
     min_step_size: float = 1e-8,
-    solver: AbstractSolver = Tsit5(),
+    solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
-    source_grid: Grid = None,
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    **kwargs: dict,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -798,17 +798,16 @@ def trace_particles(
         Source of magnetic field to integrate
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of `AbstractParticleInitializer.init_particles`.
+        The first output of `ParticleInitializer.init_particles`.
     args : tuple
-        Additional arguments needed by the model, such as mass, charge, and
-        magnetic moment of each particle. The second output of
-        `AbstractParticleInitializer.init_particles`.
+        Additional arguments needed, [mass, charge, magnetic moment] in order
+        of each particle. The second output of `ParticleInitializer.init_particles`.
     initializer : AbstractParticleInitializer
         Object to initialize particle distribution.
     ts : array-like
         Strictly increasing array of times where output is desired.
-    model : AbstractTrajectoryModel
-        Trajectory model to integrate.
+    mode : str
+        Trajectory model to integrate with. Available options are
     rtol, atol : float
         relative and absolute tolerances for ode integration
     maxstep : int
@@ -822,8 +821,6 @@ def trace_particles(
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
-    source_grid : Grid, optional
-        Grid to use to discretize field
     bounds_R : tuple of (float,float), optional
         R bounds for particle tracing bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
@@ -832,6 +829,10 @@ def trace_particles(
         Z bounds for particle tracing bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf,np.inf)
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the field computation, such as
+            - source_grid: Grid
+                Source grid to use for field computation.
 
     Returns
     -------
@@ -843,16 +844,15 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    if isinstance(field, Equilibrium):
-        assert model.frame == "flux"
-    elif isinstance(field, _MagneticField):
-        assert model.frame == "lab"
-    else:
-        raise NotImplementedError
-
-    kwargs = {}
-    if source_grid:
-        kwargs["source_grid"] = source_grid
+    if mode == "eq_flux_vac_gc":
+        assert isinstance(field, Equilibrium)
+        term = ODETerm(ode_eq_flux_vac_gc)
+    elif mode == "field_lab_vac_gc":
+        assert isinstance(field, _MagneticField)
+        term = ODETerm(ode_field_lab_vac_gc)
+    elif mode == "eq_flux_slowdown_gc":
+        assert isinstance(field, Equilibrium)
+        term = ODETerm(ode_eq_flux_slowdown_gc)
 
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
@@ -864,20 +864,19 @@ def trace_particles(
         return jnp.logical_or(R_out, Z_out)
 
     event = DiscreteTerminatingEvent(default_terminating_event_fxn)
-
     intfun = lambda x, args: diffeqsolve(
-        model,
+        term,
         solver,
         y0=x,
+        args=tuple(*args, field),
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
         max_steps=maxstep * len(ts),
         dt0=min_step_size,
-        args=(field, *args, kwargs),
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
-        event=event,
+        discrete_terminating_event=event,
     ).ys
 
     yt = jit(vmap(intfun))(y0, args)
@@ -888,6 +887,141 @@ def trace_particles(
     v = yt[:, :, 3:]
 
     return x, v
+
+
+def ode_eq_flux_vac_gc(s, x, args):
+    """ODE equation for vacuum guiding center in flux coordinates."""
+    # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
+    # implemented in the past, so keeping it for now.
+    psi, theta, zeta, vpar = x.T
+    m, q, mu, eq = args[:4]
+    # assert eq.iota is not None
+    grid = Grid(
+        jnp.array([jnp.sqrt(psi), theta, zeta]).T,
+        spacing=jnp.zeros((3,)).T,
+        jitable=True,
+        sort=False,
+    )
+    data_keys = [
+        "B",
+        "|B|",
+        "grad(|B|)",
+        "grad(psi)",
+        "e^theta",
+        "e^zeta",
+        "b",
+    ]
+
+    transforms = get_transforms(data_keys, eq, grid, jitable=True)
+    profiles = get_profiles(data_keys, eq, grid)
+    data = compute_fun(eq, data_keys, eq.params_dict, transforms, profiles)
+
+    # derivative of the guiding center position in R, phi, Z coordinates
+    Rdot = vpar * data["b"] + (
+        (m / q / data["|B|"] ** 2)
+        * ((mu * data["|B|"]) + vpar**2)
+        * cross(data["b"], data["grad(|B|)"])
+    )
+    # TODO: not sure why we use psi, and where the factors come from
+    psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+    thetadot = dot(Rdot, data["e^theta"])
+    zetadot = dot(Rdot, data["e^zeta"])
+    vpardot = -mu * dot(data["b"], data["grad(|B|)"])
+    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
+    return dxdt
+
+
+def ode_field_lab_vac_gc(s, x, args):
+    """Compute the RHS of the ODE using MagneticField."""
+    # this is the one implemented in simsopt for method="gc_vac"
+    # should be equivalent to full lagrangian from Cary & Brizard in vacuum
+    vpar = x[-1]
+    coords = x[:-1]
+    m, q, mu, field = args[:4]
+    kwargs = args[4] if len(args) > 4 else {}
+
+    field_compute = lambda y: jnp.linalg.norm(
+        field.compute_magnetic_field(y, **kwargs), axis=-1
+    )
+
+    # magnetic field vector in R, phi, Z coordinates
+    B = field.compute_magnetic_field(coords, **kwargs)
+    grad_B = jnp.vectorize(
+        Derivative(
+            field_compute,
+            mode="fwd",
+        ),
+        signature="(n)->(n,n)",
+    )(coords).squeeze()
+
+    modB = jnp.linalg.norm(B, axis=-1)
+    b = B / modB
+    # factor of R from grad in cylindrical coordinates
+    grad_B = grad_B.at[:, 1].divide(coords[0])
+
+    Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
+    # TODO: I don't think this is correct
+    # d1, d2, d3 = Rdot               # noqa: E800
+    # d2 /= coords[0]                 # noqa: E800
+    # Rdot = jnp.array([d1, d2, d3])  # noqa: E800
+
+    vpardot = -mu * dot(b, grad_B)
+    dxdt = jnp.concatenate([Rdot, vpardot]).reshape(x.shape)
+    return dxdt
+
+
+def ode_eq_flux_slowdown_gc(s, x, args):
+    """ODE equation for guiding center in flux coordinates with slowing down."""
+    eq, m, q, eq = args[:4]
+    kwargs = args[4] if len(args) > 4 else {}
+
+    psi, theta, zeta, vpar, v = x.T
+    grid = Grid(
+        jnp.array([jnp.sqrt(psi), theta, zeta]).T,
+        spacing=jnp.zeros((3,)).T,
+        jitable=True,
+        sort=False,
+    )
+    data_keys = [
+        "B",
+        "|B|",
+        "grad(|B|)",
+        "grad(psi)",
+        "e^theta",
+        "e^zeta",
+        "b",
+        "Te",
+        "ne",
+    ]
+
+    transforms = get_transforms(data_keys, eq, grid, jitable=True)
+    profiles = get_profiles(data_keys, eq, grid)
+    data = compute_fun(
+        eq,
+        data_keys,
+        eq.params_dict,
+        transforms,
+        profiles,
+        **kwargs,
+    )
+
+    # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
+    # neutral beam injection model." Plasma Physics and Controlled Fusion (2014)
+    tau_s = slowing_down_time(data["Te"], data["ne"])
+    vc = slowing_down_critical_velocity(data["Te"])
+
+    # derivative of the guiding center position in R, phi, Z coordinates
+    Rdot = vpar * data["b"] + (
+        (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
+    )
+    # TODO: not sure why we use psi, and where the factors come from
+    psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+    thetadot = dot(Rdot, data["e^theta"])
+    zetadot = dot(Rdot, data["e^zeta"])
+    vpardot = -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
+    vdot = -v / tau_s * (1 + vc**3 / v**3)
+    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
+    return dxdt
 
 
 def gc_radius(vperp, modB, m, q):

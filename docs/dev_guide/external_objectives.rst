@@ -235,10 +235,9 @@ or takes too long to run, a large unstable growth rate is returned.
 
 Finally, the ``TERPSICHORE`` objective function simply inherits from
 ``ExternalObjective`` and passes ``fun=terpsichore`` as the external function.
-``dim_f=1`` because TERPSICHORE is returning a scalar growth rate in this example, and
-``vectorized=True`` because the function ``terpsichore`` expects a list of Equilibria
-as its only positional argument. (Parts of the full class definition have been omitted
-here for simplicity.)
+``dim_f=1`` because TERPSICHORE returns a scalar growth rate, and ``vectorized=True``
+because the function ``terpsichore`` expects a list of Equilibria as its only positional
+argument. (Parts of the full class definition have been omitted here for simplicity.)
 
 ::
 

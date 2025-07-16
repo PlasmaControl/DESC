@@ -26,7 +26,6 @@ def terpsichore(
     processes=1,
     path="",
     exec="",
-    scalar=True,
     mode_family=-1,
     surfs=101,
     lssl=1000,
@@ -98,7 +97,6 @@ def terpsichore(
                 0,
                 path=tmp_path,
                 exec=exec,
-                scalar=scalar,
                 surfs=surfs,
                 al0=al0,
                 sleep_time=sleep_time,
@@ -112,7 +110,6 @@ def terpsichore(
                     _pool_fun,
                     path=tmp_path,
                     exec=exec,
-                    scalar=scalar,
                     surfs=surfs,
                     al0=al0,
                     sleep_time=sleep_time,
@@ -525,7 +522,7 @@ def _write_terps_input(  # noqa: C901
     f.close()
 
 
-def _pool_fun(k, path, exec, scalar, surfs, al0, sleep_time, stop_time):
+def _pool_fun(k, path, exec, surfs, al0, sleep_time, stop_time):
     """Run TERPSICHORE and read output for equilibrium with index k."""
     idx_path = os.path.join(path, str(k))
     exec_path = os.path.join(idx_path, exec)
@@ -542,13 +539,12 @@ def _pool_fun(k, path, exec, scalar, surfs, al0, sleep_time, stop_time):
             sleep_time=sleep_time,
             stop_time=stop_time,
         )
-        output = _read_terps_output(path=fort16_path, scalar=scalar, surfs=surfs)
+        output = _read_terps_output(path=fort16_path, surfs=surfs)
     except RuntimeError:
         warnif(
             True, UserWarning, "TERPSICHORE growth rate not found, using default value."
         )
-        # default values if it was unable to find a growth rate
-        output = abs(al0) if scalar else -np.ones(surfs - 1) * al0**2
+        output = abs(al0)  # default value if a growth rate was not found
 
     return np.atleast_1d(output)
 
@@ -603,7 +599,7 @@ def _is_terps_complete(path, run_time, stop_time, terps_subprocess):
         return False
 
 
-def _read_terps_output(path, scalar, surfs):
+def _read_terps_output(path, surfs):
     """Read TERPSICHORE output file and return the growth rate / dW values."""
     errorif(
         not os.path.exists(path),
@@ -612,25 +608,12 @@ def _read_terps_output(path, scalar, surfs):
     )
 
     file = open(path)
-    line_num = 0
     growth_rate = []
-    delta_W = []
-    for k, line in enumerate(file):
+    for line in file:
         index = line.find("GROWTH RATE")
         if index != -1:
             growth_rate.append(float(line.strip().split("=")[1]))
             continue
-        index = line.find("DELTAW")
-        if index != -1:
-            line_num = k + 4  # table values start 4 lines below heading
-            continue
-        if line_num > 0 and k == line_num:
-            row = line.strip().split()
-            delta_W.append(float(row[2]))
-            surf_idx = int(row[0])
-            line_num = line_num + 1
-            if surf_idx >= surfs - 1:
-                break  # NOTE: not including vacuum surfaces
     file.close()
 
     errorif(len(growth_rate) == 0, RuntimeError, "Growth rate not found!")
@@ -639,9 +622,8 @@ def _read_terps_output(path, scalar, surfs):
         NotImplementedError,
         "Not capable of handling multiple growth rates.",
     )
-    errorif(len(delta_W) != surfs - 1, RuntimeError, "Incorrect number of dW values!")
 
-    return growth_rate[0] if scalar else delta_W
+    return growth_rate[0]
 
 
 class TERPSICHORE(ExternalObjective):
@@ -667,9 +649,6 @@ class TERPSICHORE(ExternalObjective):
     exec : str, optional
         File name of the TERPSICHORE executable. Must be located in the directory
         specified by ``path``.
-    scalar : bool, optional
-        If True, returns the growth rate of the fastest growing instability (default).
-        If False, returns the ΔW values at each flux surface.
     mode_family : int, optional
         The mode family of the instabilities to consider. Only implemented for NFP =
         2 or 3, which only have two mode families: N=0 and N=1. If ``mode_family < 0``,
@@ -730,14 +709,13 @@ class TERPSICHORE(ExternalObjective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``bounds=(-np.inf, 0)`` if ``scalar=True`` "
-        + "else ``bounds=(0, np.inf)``.",
-        bounds_default="``bounds=(-np.inf, 0)`` if ``scalar=True`` "
-        + "else ``bounds=(0, np.inf)``.",
+        target_default="``bounds=(-np.inf, 0)``",
+        bounds_default="``bounds=(-np.inf, 0)``",
     )
 
+    _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "TERPSICHORE "
+    _print_value_fmt = "TERPSICHORE growth rate: "
 
     def __init__(
         self,
@@ -754,7 +732,6 @@ class TERPSICHORE(ExternalObjective):
         processes=1,
         path="",
         exec="",
-        scalar=True,
         mode_family=-1,
         surfs=101,
         lssl=1000,
@@ -774,16 +751,15 @@ class TERPSICHORE(ExternalObjective):
         name="terpsichore",
     ):
         if target is None and bounds is None:
-            bounds = (-np.inf, 0) if scalar else (0, np.inf)
+            bounds = (-np.inf, 0)
         super().__init__(
             eq=eq,
             fun=terpsichore,
-            dim_f=1 if scalar else surfs - 1,
+            dim_f=1,
             fun_kwargs={
                 "processes": processes,
                 "path": path,
                 "exec": exec,
-                "scalar": scalar,
                 "mode_family": mode_family,
                 "surfs": surfs,
                 "lssl": lssl,
@@ -812,8 +788,6 @@ class TERPSICHORE(ExternalObjective):
             loss_function=loss_function,
             name=name,
         )
-        self._scalar = scalar
-        self._print_value_fmt += "growth rate: " if scalar else "delta W: "
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.

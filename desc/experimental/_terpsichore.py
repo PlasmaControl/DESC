@@ -28,6 +28,8 @@ def terpsichore(
     exec="",
     mode_family=-1,
     surfs=101,
+    M_nyq=None,
+    N_nyq=None,
     lssl=1000,
     lssd=1000,
     M_max=8,
@@ -68,6 +70,8 @@ def terpsichore(
             eq=eq[k],
             path=wout_path,
             surfs=surfs,
+            M_nyq=M_nyq,
+            N_nyq=N_nyq,
             data_transforms=data_transforms,
             fit_transform=fit_transform,
         )
@@ -127,7 +131,9 @@ def terpsichore(
     return result
 
 
-def _write_wout(eq, path, surfs, data_transforms, fit_transform):  # noqa: C901
+def _write_wout(
+    eq, path, surfs, M_nyq, N_nyq, data_transforms, fit_transform
+):  # noqa: C901
     """Write the wout NetCDF file from the equilibrium."""
     # this is a lightweight version of VMECIO.save
     file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
@@ -136,8 +142,11 @@ def _write_wout(eq, path, surfs, data_transforms, fit_transform):  # noqa: C901
     NFP = eq.NFP
     M = eq.M
     N = eq.N
-    M_nyq = M + 4
-    N_nyq = N + 2 if N > 0 else 0
+    M_nyq = M + 4 if M_nyq is None else M_nyq
+    N_nyq = N + 2 if N_nyq is None else N_nyq
+    N_nyq = 0 if int(N) == 0 else N_nyq
+    M_grid = eq.M_grid
+    N_grid = eq.N_grid
 
     # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
     s_full = np.linspace(0, 1, surfs)
@@ -160,7 +169,7 @@ def _write_wout(eq, path, surfs, data_transforms, fit_transform):  # noqa: C901
     file.createDimension("dim_00100", 100)
     file.createDimension("dim_00200", 200)
 
-    grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
+    grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
     data_half = eq.compute(
         [
             "B_rho",
@@ -656,6 +665,9 @@ class TERPSICHORE(ExternalObjective):
     surfs : int, optional
         Number of surfaces to include in the equilibrium input. More surfaces provides
         more accuracy at the cost of longer compute times. Default = 101.
+    M_nyq, N_nyq: int
+        The max poloidal and toroidal mode numbers to use in the Nyquist spectrum of the
+        equilibrium input. Defaults to ``eq.M + 4`` and ``eq.N + 2``.
     lssl : int, optional
         Minimum number of possible permutations of Boozer mode combinations
         (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,
@@ -734,6 +746,8 @@ class TERPSICHORE(ExternalObjective):
         exec="",
         mode_family=-1,
         surfs=101,
+        M_nyq=None,
+        N_nyq=None,
         lssl=1000,
         lssd=1000,
         M_max=8,
@@ -762,6 +776,8 @@ class TERPSICHORE(ExternalObjective):
                 "exec": exec,
                 "mode_family": mode_family,
                 "surfs": surfs,
+                "M_nyq": M_nyq,
+                "N_nyq": N_nyq,
                 "lssl": lssl,
                 "lssd": lssd,
                 "M_max": M_max,
@@ -812,13 +828,18 @@ class TERPSICHORE(ExternalObjective):
         NFP = self._eq.NFP
         M = self._eq.M
         N = self._eq.N
-        M_nyq = M + 4
-        N_nyq = N + 2 if N > 0 else 0
+        M_nyq = self._fun_kwargs.get("M_nyq")
+        N_nyq = self._fun_kwargs.get("N_nyq")
+        M_nyq = M + 4 if M_nyq is None else M_nyq
+        N_nyq = N + 2 if N_nyq is None else N_nyq
+        N_nyq = 0 if int(N) == 0 else N_nyq
+        M_grid = self._eq.M_grid
+        N_grid = self._eq.N_grid
         s_full = np.linspace(0, 1, surfs)
         s_half = s_full[0:-1] + 0.5 / (surfs - 1)
         r_half = np.sqrt(s_half)
-        grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
-        grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
+        grid_lcfs = LinearGrid(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
         self._fun_kwargs["data_transforms"] = get_transforms(
             keys=[
                 "B_rho",

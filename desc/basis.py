@@ -1882,6 +1882,9 @@ class ChebyshevZernikeBasis(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+            
         if modes is None:
             modes = self.modes
         if not len(modes):

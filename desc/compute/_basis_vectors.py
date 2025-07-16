@@ -2317,7 +2317,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_z", "Z_z", "omega_z"],
+    data=["R_z", "Z_z", "omega_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
@@ -2325,9 +2325,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
-    data["e_zeta"] = jnp.array(
-        [data["R_z"], data["R"] * (1 + data["omega_z"]), data["Z_z"]]
-    ).T
+    data["e_zeta"] = jnp.array([data["R_z"], (1 + data["omega_z"]), data["Z_z"]]).T
 
     return data
 

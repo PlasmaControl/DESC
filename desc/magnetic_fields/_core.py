@@ -2215,7 +2215,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)
             AZ = AZ.reshape(shp)
-        except NotImplementedError:
+        except (ValueError, NotImplementedError):
             AR = AP = AZ = None
         return cls(
             R,

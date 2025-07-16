@@ -250,6 +250,7 @@ class GenericObjective(_Objective):
         name="Generic",
         jac_chunk_size=None,
         compute_kwargs=None,
+        device_id=0,
         **kwargs,
     ):
         errorif(
@@ -274,6 +275,7 @@ class GenericObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
         self._print_value_fmt = f"{name} objective value: "
         self._p = _parse_parameterization(thing)
@@ -401,6 +403,7 @@ class LinearObjectiveFromUser(_FixedObjective):
         normalize_target=False,
         name="custom linear",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -414,6 +417,7 @@ class LinearObjectiveFromUser(_FixedObjective):
             normalize_target=normalize_target,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -538,6 +542,7 @@ class ObjectiveFromUser(_Objective):
         name="Custom",
         jac_chunk_size=None,
         compute_kwargs=None,
+        device_id=0,
         **kwargs,
     ):
         errorif(
@@ -564,6 +569,7 @@ class ObjectiveFromUser(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
         self._p = _parse_parameterization(thing)
 

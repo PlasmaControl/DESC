@@ -638,8 +638,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     psi_r = data["psi_r"][:, None]
     psi_rr = data["psi_rr"][:, None]
 
+    psi_r2 = psi_r**2
+    psi_r3 = psi_r**3
+
     iota_psi_r = iota * psi_r
-    iota_psi_r2 = iota * psi_r**2
+    iota_psi_r2 = iota * psi_r2
 
     dpsi_r2_drho = 2 * psi_r * psi_rr
     diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
@@ -705,8 +708,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     theta_idx = slice(n_total, 2 * n_total)
     zeta_idx = slice(2 * n_total, 3 * n_total)
 
-    # --no-verify all_idx = slice(0, 3 * n_total)
-
     # assuming uniform spacing in and θ and ζ
     dtheta = 2 * jnp.pi / n_theta_max
     dzeta = 2 * jnp.pi / n_zeta_max
@@ -716,9 +717,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     sqrtg = data["sqrt(g)_PEST"][:, None]
 
     psi_r_over_sqrtg = psi_r / sqrtg
-
-    psi_r2 = psi_r**2
-    psi_r3 = psi_r**3
 
     g_rr = data["g_rr|PEST"][:, None] * a_N
     g_vv = data["g_vv|PEST"][:, None] * a_N
@@ -920,7 +918,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     ########################
     #####-----Q_23-----#####
-    #######################
+    ########################
     A = A.at[theta_idx, theta_idx].add(
         -1 * (D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta))
     )

@@ -49,6 +49,7 @@ not_finite_limits = {
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
+    "e^vartheta",
     "g^rt",
     "g^rt_r",
     "g^rt_t",
@@ -63,6 +64,7 @@ not_finite_limits = {
     "g^tz_z",
     "g^aa",
     "g^ra",
+    "g^rv|PEST",
     "gbdrift",
     "grad(alpha)",
     "grad(alpha) (periodic)",
@@ -72,6 +74,7 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
+    "grad(grad(rho))",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically

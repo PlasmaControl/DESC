@@ -506,6 +506,29 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^vartheta",
+    label="\\mathbf{e}^{\\vartheta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant PEST poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^theta", "e^rho", "e^zeta", "theta_PEST_r", "theta_PEST_t", "theta_PEST_z"],
+    aliases=["e^theta_PEST"],
+)
+def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta"] = (
+        data["theta_PEST_r"][:, jnp.newaxis] * data["e^rho"]
+        + (1 + data["theta_PEST_t"])[:, jnp.newaxis] * data["e^theta"]
+        + data["theta_PEST_z"][:, jnp.newaxis] * data["e^zeta"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
     units="m^{2}",
@@ -2444,7 +2467,13 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
-    aliases=["e_vartheta"],
+    aliases=[
+        "e_vartheta",
+        "e_vartheta|r,p",
+        "e_theta_PEST|r,p",
+        "e_vartheta|p,r",
+        "e_theta_PEST|p,r",
+    ],
 )
 def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϕ
@@ -2469,6 +2498,7 @@ def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+    aliases=["e_phi|v,r"],
 )
 def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϑ
@@ -2495,13 +2525,14 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+    data=["e_rho", "e_vartheta|r,p", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+    aliases=["e_rho|p,v"],
 )
 def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
     # constant ϑ and ϕ
     data["e_rho|v,p"] = (
         data["e_rho"]
-        - data["e_vartheta"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_vartheta|r,p"] * data["theta_PEST_r"][:, jnp.newaxis]
         - data["e_phi|r,v"] * data["phi_r"][:, jnp.newaxis]
     )
     return data

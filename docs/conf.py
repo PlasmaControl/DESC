@@ -37,6 +37,7 @@ release = version
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "sphinx_design",
     "sphinx.ext.autodoc",
     "sphinx.ext.doctest",
     "sphinx.ext.coverage",
@@ -117,7 +118,6 @@ html_theme_options = {
     #    'canonical_url': '',
     #    'analytics_id': 'UA-XXXXXXX-1',  #  Provided by Google in your dashboard
     "logo_only": True,
-    "display_version": True,
     "prev_next_buttons_location": "both",
     "style_external_links": False,
     "style_nav_header_background": "#3c4142",
@@ -134,6 +134,7 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_extra_path = ["_static/images/plotting"]
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.

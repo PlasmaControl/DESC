@@ -6,13 +6,21 @@ import warnings
 import numpy as np
 import pytest
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
+from desc.compute import data_index
+from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierXYCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -22,7 +30,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning, errorif
+from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
 
 
 def _compare_against_master(
@@ -31,12 +39,16 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if np.isnan(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10,
-                    rtol=1e-10,
+                    atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
+                    rtol=1e-8,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
             except AssertionError as e:
@@ -115,6 +127,9 @@ def test_compute_everything():
         "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
             center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
         ),
+        "desc.geometry.curve.FourierXYCurve": FourierXYCurve(
+            center=[10, 1, 3], normal=[1, 2, 3], X_n=[0, 2], Y_n=[-3, 1], modes=[-1, 1]
+        ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
@@ -163,6 +178,14 @@ def test_compute_everything():
             r_n=[1, 2, 3],
             modes=[0, 1, 2],
         ),
+        "desc.coils.FourierXYCoil": FourierXYCoil(
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            X_n=[0, 2],
+            Y_n=[-3, 1],
+            modes=[-1, 1],
+        ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
@@ -195,6 +218,7 @@ def test_compute_everything():
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
@@ -209,16 +233,22 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     with warnings.catch_warnings():
-        # Max resolution of master_compute_data.pkl limited by GitHub file
+        # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
+        warnings.filterwarnings("ignore", category=UserWarning, message="Redl")
+
         for p in things:
-            names = {
-                name
-                for name in data_index[p]
-                # Skip these quantities as they should be covered in other tests.
-                if not data_index[p][name]["source_grid_requirement"]
-            }
+
+            names = set(data_index[p].keys())
+
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
+                )
+
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
+
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"
             )
@@ -240,7 +270,8 @@ def test_compute_everything():
             if p in no_xyz_things:
                 continue
             # remove quantities that are not implemented in the XYZ basis
-            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            # TODO (#1110): generalize this instead of hard-coding for
+            #  the quantities "grad(B)" & dependencies
             names_xyz = (
                 names - {"grad(B)", "|grad(B)|", "L_grad(B)"}
                 if "grad(B)" in names
@@ -262,4 +293,5 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz

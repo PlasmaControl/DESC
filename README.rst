@@ -111,12 +111,12 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml
     :alt: UnitTests
 
-.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml
     :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z

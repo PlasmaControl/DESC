@@ -14,9 +14,9 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
-from ..integrals import surface_averages
+from ..integrals.surface_integral import surface_averages
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -658,12 +658,12 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["|B|", "sqrt(g)"],
+    data=["|B|^2", "sqrt(g)"],
     resolution_requirement="rtz",
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
+        data["|B|^2"] * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -824,12 +824,12 @@ def _beta_voltor(params, transforms, profiles, data, **kwargs):
 def _P_ISS04(params, transforms, profiles, data, **kwargs):
     rho = transforms["grid"].compress(data["rho"], surface_label="rho")
     iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+    method = kwargs.get("method", "cubic")
     fx = {}
-    if "iota_r" in data:
-        fx["fx"] = transforms["grid"].compress(
-            data["iota_r"]
-        )  # noqa: unused dependency
-    iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+    if "iota_r" in data and method == "cubic":
+        # noqa: unused dependency
+        fx["fx"] = transforms["grid"].compress(data["iota_r"])
+    iota_23 = interp1d(2 / 3, rho, iota, method=method, **fx)
     data["P_ISS04"] = 1e6 * (  # MW -> W
         jnp.abs(data["W_p"] / 1e6)  # J -> MJ
         / (
@@ -838,7 +838,7 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             * data["R0"] ** 0.64  # m
             * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
             * data["<|B|>_axis"] ** 0.84  # T
-            * iota_23**0.41
+            * jnp.abs(iota_23) ** 0.41
             * kwargs.get("H_ISS04", 1)
         )
     ) ** (1 / 0.39)
@@ -865,7 +865,7 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     fuel = kwargs.get("fuel", "DT")
     energy = energies.get(fuel)
 
-    reaction_rate = jnp.sum(
+    reaction_rate = 0.25 * jnp.sum(
         data["ni"] ** 2
         * data["<sigma*nu>"]
         * data["sqrt(g)"]

@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
@@ -25,7 +26,6 @@ from desc.basis import (
 )
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -34,7 +34,19 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, warnif
+from desc.utils import (
+    copy_coeffs,
+    dot,
+    errorif,
+    flatten_list,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safediv,
+    setdefault,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -326,6 +338,7 @@ class _MagneticField(IOAble, ABC):
         params=None,
         basis="rpz",
         chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -357,13 +370,17 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
+            Size to split Biot-Savart computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
-        Bnorm : ndarray
+        Bnormal : ndarray
             The normal magnetic field to the surface given, as an array of
             size ``grid.num_nodes``.
         coords: ndarray
@@ -379,13 +396,10 @@ class _MagneticField(IOAble, ABC):
             eq = surface
             surface = eq.surface
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
-            )
+            eval_grid = LinearGrid(M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP)
 
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
-        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
             coords,
             basis="rpz",
@@ -393,16 +407,21 @@ class _MagneticField(IOAble, ABC):
             params=params,
             chunk_size=chunk_size,
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnormal = dot(B, data["n_rho"])
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-            Bnorm += Bplasma
+            Bnormal += compute_B_plasma(
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=setdefault(B_plasma_chunk_size, chunk_size),
+            )
 
         if basis.lower() == "xyz":
             coords = rpz2xyz(coords)
 
-        return Bnorm, coords
+        return Bnormal, coords
 
     def save_BNORM_file(
         self,
@@ -415,6 +434,8 @@ class _MagneticField(IOAble, ABC):
         params=None,
         sym="sin",
         scale_by_curpol=True,
+        chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
 
@@ -450,9 +471,17 @@ class _MagneticField(IOAble, ABC):
             non-symmetric Bnormal distribution, as only the sin-symmetric modes
             will be saved.
         scale_by_curpol : bool, optional
-            Whether or not to scale the Bnormal coefficients by curpol
+            Whether to scale the Bnormal coefficients by curpol
             which is expected by most other codes that accept BNORM files,
             by default True
+        chunk_size : int or None
+            Size to split Biot-Savart computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
@@ -477,16 +506,19 @@ class _MagneticField(IOAble, ABC):
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
-            )
-
+            eval_grid = LinearGrid(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
+        fname = os.path.expanduser(fname)
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
         # compute Bnormal on the grid
         Bnorm, _ = self.compute_Bnormal(
-            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
 
         # fit Bnorm with Fourier Series
@@ -535,6 +567,7 @@ class _MagneticField(IOAble, ABC):
         nphi=90,
         save_vector_potential=True,
         chunk_size=None,
+        source_grid=None,
     ):
         """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
@@ -563,12 +596,19 @@ class _MagneticField(IOAble, ABC):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid
+            What grid to use to discretize the source magnetic field. Will be passed
+            into the ``source_grid`` argument of ``compute_magnetic_field`` and
+            ``compute_magnetic_vector_potential``. If None,
+            defaults to whatever the default is for the given magnetic field,
+            specified in the docstring for that magnetic field.
 
         Returns
         -------
         None
 
         """
+        path = os.path.expanduser(path)
         # cylindrical coordinates grid
         NFP = self.NFP if hasattr(self, "_NFP") else 1
         R = np.linspace(Rmin, Rmax, nR)
@@ -578,7 +618,9 @@ class _MagneticField(IOAble, ABC):
         grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         # evaluate magnetic field on grid
-        field = self.compute_magnetic_field(grid, basis="rpz", chunk_size=chunk_size)
+        field = self.compute_magnetic_field(
+            grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+        )
         B_R = field[:, 0].reshape(nphi, nZ, nR)
         B_phi = field[:, 1].reshape(nphi, nZ, nR)
         B_Z = field[:, 2].reshape(nphi, nZ, nR)
@@ -586,7 +628,7 @@ class _MagneticField(IOAble, ABC):
         # evaluate magnetic vector potential on grid
         if save_vector_potential:
             field = self.compute_magnetic_vector_potential(
-                grid, basis="rpz", chunk_size=chunk_size
+                grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
             )
             A_R = field[:, 0].reshape(nphi, nZ, nR)
             A_phi = field[:, 1].reshape(nphi, nZ, nR)
@@ -2125,6 +2167,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap=False,
         NFP=None,
         chunk_size=None,
+        source_grid=None,
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -2148,6 +2191,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid, optional
+            Grid used to discretize field. Defaults to the default grid for given field.
+
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2155,17 +2201,21 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(
-            coords, params, basis="rpz", chunk_size=chunk_size
+            coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
         NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
-                coords, params, basis="rpz", chunk_size=chunk_size
+                coords,
+                params,
+                basis="rpz",
+                chunk_size=chunk_size,
+                source_grid=source_grid,
             ).T
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)
             AZ = AZ.reshape(shp)
-        except NotImplementedError:
+        except (ValueError, NotImplementedError):
             AR = AP = AZ = None
         return cls(
             R,
@@ -2524,9 +2574,8 @@ def field_line_integrate(
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal angle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        geometric toroidal angle values to output r,z at. Can be strictly increasing
+        or decreasing, but must be monotonic.
     field : MagneticField
         source of magnetic field to integrate
     params: dict, optional
@@ -2560,8 +2609,8 @@ def field_line_integrate(
     Returns
     -------
     r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
-
+        arrays of r and z coordinates of the field line, corresponding to the
+        input phis
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
@@ -2570,13 +2619,22 @@ def field_line_integrate(
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
+    # scale to make toroidal field (bp) positive
+    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
+
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(
-            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-        ).T
+        br, bp, bz = (
+            scale
+            * field.compute_magnetic_field(
+                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
+            ).T
+        )
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
@@ -2584,9 +2642,9 @@ def field_line_integrate(
     # diffrax parameters
 
     def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.any(jnp.array([state.y[0] < bounds_R[0], state.y[0] > bounds_R[1]]))
-        Z_out = jnp.any(jnp.array([state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1]]))
-        return jnp.any(jnp.array([R_out, Z_out]))
+        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
 
     kwargs.setdefault(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
@@ -2620,8 +2678,8 @@ def field_line_integrate(
         x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
-    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+    r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
     return r, z
 

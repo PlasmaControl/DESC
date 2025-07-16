@@ -12,7 +12,7 @@ from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
@@ -117,7 +117,7 @@ def test_map_coordinates_derivative():
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
+        np.testing.assert_allclose(j1, j2, atol=1e-12)
 
     # Check map_coordinates with full_output is still runs without errors
     # this time _map_clebsch_coordinates is called inside map_coordinates
@@ -458,3 +458,17 @@ def test_assigning_profile_iota_current():
     with pytest.warns(UserWarning, match="existing toroidal"):
         eq.iota = PowerSeriesProfile()
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_eq_optimize_default_constraints_warning(DummyStellarator):
+    """Tests default constraints warning for eq.optimize."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

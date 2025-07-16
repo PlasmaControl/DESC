@@ -26,6 +26,7 @@ data : dict of ndarray
 # just need to import all the submodules here to register everything in the
 # data_index
 
+from ..utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from . import (
     _basis_vectors,
     _bootstrap,
@@ -43,7 +44,6 @@ from . import (
     _surface,
 )
 from .data_index import all_kwargs, allowed_kwargs, data_index
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import (
     compute,
     get_data_deps,
@@ -69,7 +69,6 @@ def _build_data_index():
                 "profiles": get_profiles(key, p, has_axis=False, basis="rpz"),
             }
             data_index[p][key]["full_dependencies"] = full
-
             full_with_axis_data = get_data_deps(key, p, has_axis=True)
             if len(full["data"]) >= len(full_with_axis_data):
                 # Then this quantity and all its dependencies do not need anything

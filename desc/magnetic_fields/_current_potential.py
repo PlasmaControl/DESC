@@ -1,5 +1,6 @@
 """Magnetic field due to sheet current on a winding surface."""
 
+import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -9,7 +10,6 @@ from scipy.constants import mu_0
 
 from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -22,9 +22,12 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._core import (
@@ -194,6 +197,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             mode for save file. Only used if file_name is a file path
 
         """
+        file_name = os.path.expanduser(file_name)
         raise OSError(
             "Saving CurrentPotentialField is not supported,"
             " as the potential function cannot be serialized."
@@ -1112,6 +1116,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     external_field_grid=None,
     verbose=1,
     chunk_size=None,
+    B_plasma_chunk_size=None,
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1218,11 +1223,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         level of verbosity, if 0 will print nothing.
         1 will display Bn max,min,average and chi^2 values for each
         lambda_regularization.
-        2 will display jacobian timing info
+        2 will display Jacobian timing info
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
+        Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``chunk_size``.
 
     Returns
     -------
@@ -1270,6 +1279,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
       of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
+    B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
     errorif(
         len(current_helicity) != 2,
         ValueError,
@@ -1391,6 +1401,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             source_grid=source_grid,
             params=params,
             chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         return Bn
 
@@ -1472,12 +1483,22 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         * ne_mag
         * eval_grid.weights
     )
-    if not vacuum:  # get Bn from plasma contribution
-        Bn_plasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-        Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
-
-    else:
-        Bn_plasma = jnp.zeros_like(Bn_GI)  # from plasma current, currently assume is 0
+    # get Bn from plasma current contribution
+    Bn_plasma = (
+        jnp.zeros_like(Bn_GI)
+        if vacuum
+        else (
+            compute_B_plasma(
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=B_plasma_chunk_size,
+            )
+            * ne_mag
+            * eval_grid.weights
+        )
+    )
     # find external field's Bnormal contribution
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(
@@ -1485,6 +1506,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             eval_grid=eval_grid,
             source_grid=external_field_grid,
             chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         Bn_ext = Bn_ext * ne_mag * eval_grid.weights
 
@@ -1609,7 +1631,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
 
 
 # TODO: replace contour finding with optimizing Winding surface curves
-# once that is implemented
+#  once that is implemented
 def _find_current_potential_contours(
     surface_current_field,
     num_coils,

@@ -149,7 +149,7 @@ def test_objective_compile_dshape_current(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
 
     def run(objective):
         jax.clear_caches()
@@ -169,7 +169,7 @@ def test_objective_compile_atf(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
 
     def run(objective):
         jax.clear_caches()
@@ -189,7 +189,7 @@ def test_objective_compute_dshape_current(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -210,7 +210,7 @@ def test_objective_compute_atf(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -231,7 +231,7 @@ def test_objective_jac_dshape_current(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -252,7 +252,7 @@ def test_objective_jac_atf(benchmark):
             maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
         ),
     )
-    objective.build(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -530,12 +530,13 @@ def _test_objective_ripple(benchmark, spline, method):
                 num_well=10 * num_transit,
                 num_quad=16,
                 spline=spline,
+                jac_chunk_size=1,
             )
         ]
     )
     constraint = ObjectiveFunction([ForceBalance(eq)])
     prox = ProximalProjection(objective, constraint, eq)
-    prox.build(eq)
+    prox.build()
     x = prox.x(eq)
     _ = getattr(prox, method)(x, prox.constants).block_until_ready()
 

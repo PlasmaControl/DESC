@@ -13,7 +13,6 @@ from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
-from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
@@ -24,7 +23,14 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
-from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
+from desc.utils import (
+    check_posint,
+    errorif,
+    islinspaced,
+    only1,
+    parse_argname_change,
+    setdefault,
+)
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -45,6 +51,7 @@ __all__ = [
     "plot_qs_error",
     "plot_section",
     "plot_surfaces",
+    "plot_field_lines",
     "poincare_plot",
 ]
 
@@ -190,15 +197,12 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         return plt.gcf(), ax
     else:
         ax = np.atleast_1d(ax)
-        if isinstance(ax.flatten()[0], matplotlib.axes.Axes):
-            return plt.gcf(), ax
-        else:
-            raise TypeError(
-                colored(
-                    "ax argument must be None or an axis instance or array of axes",
-                    "red",
-                )
-            )
+        errorif(
+            not isinstance(ax.flatten()[0], matplotlib.axes.Axes),
+            TypeError,
+            "ax argument must be None or an axis instance or array of axes",
+        )
+        return plt.gcf(), ax
 
 
 def _get_grid(**kwargs):
@@ -280,11 +284,10 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     """
     parameterization = _parse_parameterization(eq)
-    if name not in data_index[parameterization]:
-        raise ValueError(
-            f"Unrecognized value '{name}' for "
-            + f"parameterization {parameterization}."
-        )
+    errorif(
+        name not in data_index[parameterization],
+        msg=f"Unrecognized value '{name}' for parameterization {parameterization}.",
+    )
     assert component in [
         None,
         "R",
@@ -296,9 +299,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     label = data_index[parameterization][name]["label"]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute(name, grid=grid)[name]
+    data = eq.compute(name, grid=grid)[name]
 
     if data_index[parameterization][name]["dim"] > 1:
         if component is None:
@@ -320,7 +321,9 @@ def _compute(eq, name, grid, component=None, reshape=True):
     return data, label
 
 
-def _compute_Bn(eq, field, plot_grid, field_grid):
+def _compute_Bn(
+    eq, field, plot_grid, field_grid, chunk_size=None, B_plasma_chunk_size=None
+):
     """Compute normal field from virtual casing + coils, using correct grids."""
     errorif(
         field is None,
@@ -372,7 +375,12 @@ def _compute_Bn(eq, field, plot_grid, field_grid):
         warnings.simplefilter("ignore")
 
         data, _ = field.compute_Bnormal(
-            eq, eval_grid=eval_grid, source_grid=field_grid, vc_source_grid=source_grid
+            eq,
+            eval_grid=eval_grid,
+            source_grid=field_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
     data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
     if theta_endpoint:
@@ -589,47 +597,50 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 1:
-        return ValueError(colored("Grid must be 1D", "red"))
 
-    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
-    label = kwargs.pop("label", None)
-
-    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    data, ylabel = _compute(
+        eq, name, grid, kwargs.pop("component", None), reshape=False
+    )
 
     # reshape data to 1D
-    data = data.flatten()
+    if len(plot_axes) != 1:
+        surface_label = {"r": "rho", "t": "theta", "z": "zeta"}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        axis = {"r": 0, "t": 1, "z": 2}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        errorif(
+            surface_label is None or axis is None,
+            NotImplementedError,
+            msg="Grid must be 1D",
+        )
+        data = grid.compress(data, surface_label=surface_label)
+        nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
+    else:
+        axis = plot_axes[0]
+        data = data.ravel()
+        nodes = grid.nodes[:, axis]
+
+    label = kwargs.pop("label", None)
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        ax.semilogy(nodes, data, label=label, color=linecolor, ls=ls, lw=lw)
     else:
-        ax.plot(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        ax.plot(nodes, data, label=label, color=linecolor, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
-    xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
+    xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
-    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+    plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
@@ -710,8 +721,7 @@ def plot_2d(
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 2:
-        return ValueError(colored("Grid must be 2D", "red"))
+    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(
@@ -722,7 +732,12 @@ def plot_2d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -936,7 +951,10 @@ def plot_3d(
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -979,13 +997,17 @@ def plot_3d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     errorif(
         len(kwargs) != 0,
-        ValueError,
-        f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+        msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -1405,7 +1427,7 @@ def plot_section(
     nphi = len(phi)
     if grid is None:
         grid_kwargs = {
-            "L": 25,
+            "L": max(25, eq.L_grid),
             "NFP": 1,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
@@ -1849,6 +1871,32 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -1891,13 +1939,6 @@ def poincare_plot(
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
-
-    signBT = np.sign(
-        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
-    ).flat[0]
-    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
-        rs, zs = rs[:, ::-1], zs[:, ::-1]
-        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
 
     data = {
         "R": rs,
@@ -2476,6 +2517,8 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
           True by default.
         * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
           True by default.
+        * ``check_intersection``: Bool, whether or not to check the intersection of
+          the coils before plotting. False by default.
 
     Returns
     -------
@@ -2483,6 +2526,20 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         Figure being plotted to
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)
@@ -2494,10 +2551,10 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
     errorif(
         len(kwargs) != 0,
-        ValueError,
-        f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+        msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
     )
     errorif(
         not isinstance(coils, _Coil),
@@ -2514,13 +2571,16 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if grid is None:
         grid = LinearGrid(N=400, endpoint=True)
 
-    def flatten_coils(coilset):
+    def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
             if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
                 if not unique and (coilset.NFP > 1 or coilset.sym):
                     # plot all coils for symmetric coil sets
                     coilset = CoilSet.from_symmetry(
-                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                        coilset,
+                        NFP=coilset.NFP,
+                        sym=coilset.sym,
+                        check_intersection=check_intersection,
                     )
             return [a for i in coilset for a in flatten_coils(i)]
         else:
@@ -2924,7 +2984,7 @@ def plot_boozer_surface(
         iota = grid_compute.compress(data["iota"])
     else:  # OmnigenousField
         iota = kwargs.pop("iota", None)
-        errorif(iota is None, ValueError, "iota must be supplied for OmnigenousField")
+        errorif(iota is None, msg="iota must be supplied for OmnigenousField")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
@@ -3551,6 +3611,227 @@ def plot_basis(basis, return_data=False, **kwargs):
             return fig, ax, plot_data
 
         return fig, ax
+
+
+def plot_field_lines(
+    field,
+    R0,
+    Z0,
+    phi0=0,
+    ntransit=1,
+    nphi_per_transit=50,
+    endpoint=True,
+    fig=None,
+    return_data=False,
+    **kwargs,
+):
+    """Field line plot from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points for field line tracing.
+    phi0 : float
+        Starting value of phi for field line tracing in radians. Defaults to 0.
+    ntransit : int, float
+        Number of transits to trace field lines for. Defaults to 1. To trace the field
+        in negative toroidal direction, use a negative value.
+    nphi_per_transit : int
+        Number of equidistant toroidal points to plot for each field line per
+        transit. Must be positive integer. Defaults to 50.
+    endpoint : bool
+        If True, the point phi0+2*pi*ntransit is included, else the last point
+        is phi0 + 2*np.pi*(ntransit - 1/nphi_per_transit). Defaults to True.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``color``: color to use for field lines, default is black.
+        * ``figsize``: tuple of length 2, the size of the figure in inches
+        * ``lw``: float, linewidth of plotted field lines
+        * ``ls``: str, linestyle of plotted field lines
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+        Contains keys ``["X","Y","Z","R","phi"]``, each entry in the dict is a list
+        of length `R0.size` corresponding to the number of field lines, and each
+        element of that list is an array of size `phis.size` corresponding to the
+        coordinate values along that field line.
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_field_lines.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        import desc
+        from desc.plotting import plot_field_lines
+
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        eq = desc.examples.get("precise_QA")
+        grid_trace = desc.grid.LinearGrid(rho=[1])
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+        fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", "black")
+    figsize = kwargs.pop("figsize", (10, 10))
+    title = kwargs.pop("title", "")
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_field_lines got unexpected keyword argument: {kwargs.keys()}"
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    nphi_per_transit = check_posint(nphi_per_transit, "nphi_per_transit", False)
+    npts = int(np.abs(nphi_per_transit * ntransit))
+    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + phi0
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((npts, -1))
+    rs = fieldR.reshape((npts, -1))
+
+    if fig is None:
+        fig = go.Figure()
+
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+    plot_data["R"] = []
+    plot_data["phi"] = phis
+    for i in range(rs.shape[1]):  # iterate over each field line
+        x = rs[:, i] * np.cos(phis)
+        y = rs[:, i] * np.sin(phis)
+        z = zs[:, i]
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["R"].append(rs[:, i])
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+                line=dict(
+                    color=color[i % len(color)],
+                    width=lw[i % len(lw)],
+                    dash=ls[i % len(ls)],
+                ),
+                marker=dict(size=0),
+                name=f"FieldLine[{i}]",
+                hovertext=f"FieldLine[{i}]",
+                showlegend=False,
+            )
+        )
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    if return_data:
+        return fig, plot_data
+    return fig
 
 
 def plot_logo(save_path=None, **kwargs):

@@ -1,6 +1,7 @@
 """Classes for magnetic field coils."""
 
 import numbers
+import os
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
@@ -13,17 +14,19 @@ from desc.backend import (
     jit,
     jnp,
     scan,
+    tree_flatten,
     tree_leaves,
     tree_stack,
+    tree_unflatten,
     tree_unstack,
     vmap,
 )
-from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import reflection_matrix
+from desc.compute import get_params
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
@@ -34,7 +37,20 @@ from desc.magnetic_fields._core import (
     biot_savart_general_vector_potential,
 )
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import (
+    cross,
+    dot,
+    equals,
+    errorif,
+    flatten_list,
+    reflection_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safenorm,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 
 @partial(jit, static_argnames=["chunk_size"])
@@ -384,10 +400,19 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        NFP = getattr(self, "NFP", 1)
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) not in [1, NFP],
+                ValueError,
+                f"source_grid for coils must have NFP=1 or NFP={NFP}",
+            )
 
         if not params or not transforms:
             data = self.compute(
@@ -669,6 +694,46 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, basis=basis, name=name
         )
 
+    def to_FourierXY(self, N=10, grid=None, s=None, basis="xyz", name="", **kwargs):
+        """Convert Coil to FourierXYCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierXYCoil
+            New representation of the coil parameterized by Fourier series for the X and
+            Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+            grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierXYCoil.from_values(
+            self.current, coords, N=N, s=s, basis=basis, name=name
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -782,7 +847,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
-    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
+    """Coil parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
 
     Parameters
     ----------
@@ -886,7 +951,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
-    and a fourier series defining the radius from the center as a function of a polar
+    and a Fourier series defining the radius from the center as a function of the polar
     angle theta.
 
     Parameters
@@ -986,6 +1051,91 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             normal=curve.normal,
             r_n=curve.r_n,
             modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
+
+class FourierXYCoil(_Coil, FourierXYCurve):
+    """Coil that lies in a plane.
+
+    Parameterized by a point (the center of the coil), a vector (normal to the plane),
+    and Fourier series defining the X and Y coordinates in the plane as a function of
+    an arbitrary angle s.
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    X_n : array-like
+        Fourier coefficients of the X coordinate in the plane.
+    Y_n : array-like
+        Fourier coefficients of the Y coordinate in the plane.
+    modes : array-like
+        Mode numbers associated with X_n and Y_n. The n=0 mode will be ignored.
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierXYCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        X_n=[0, 2],
+        Y_n=[2, 0],
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(current, center, normal, X_n, Y_n, modes, basis, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierXYCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new X & Y representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierXYCoil
+            New representation of the coil parameterized by a Fourier series for X & Y.
+
+        """
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
+        return FourierXYCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            modes=curve.X_basis.modes[:, 2],
             basis="xyz",
             name=name,
         )
@@ -1092,6 +1242,19 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             current = self.current
         else:
             current = params.pop("current", self.current)
+
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # using more points than knots.size (self.N) to better sample coil
+            source_grid = LinearGrid(N=self.N * 2 + 5)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) != 1,
+                ValueError,
+                "source_grid for coils must have NFP=1",
+            )
 
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
@@ -1284,9 +1447,10 @@ def _check_type(coil0, coil):
         ),
     )
     attrs = {
-        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
-        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
+        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
+        FourierXYCoil: ["X_basis", "Y_basis"],
+        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
 
@@ -1378,8 +1542,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        new = jnp.atleast_1d(new)
-        new = jnp.broadcast_to(new, (len(self),))
+        # new must be a 1D iterable regardless of the tree structure of the CoilSet
+        old, tree = tree_flatten(self.current)
+        new = jnp.atleast_1d(new).flatten()
+        new = jnp.broadcast_to(new, (len(old),))
+        new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
@@ -1608,6 +1775,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             compute_A_or_B not in ["A", "B"],
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        # NFP symmetry applies to coilset as a whole, not individual coils, so the grid
+        # should have NFP=1.
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for CoilSet must have NFP=1",
         )
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
@@ -1940,7 +2114,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # always start at the 3rd line after periods
         coilnames = []  # the coilgroup each coil belongs to
         # corresponds to each coil in the coilinds list
-
+        coil_file = os.path.expanduser(coil_file)
         # read in the coils file
         headind = -1
         with open(coil_file) as f:
@@ -2045,6 +2219,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # TODO(#1376): have CoilGroup be automatically assigned based off of
         # CoilSet if current coilset is a collection of coilsets?
 
+        coilsFilename = os.path.expanduser(coilsFilename)
+
         NFP = 1 if NFP is None else NFP
 
         def flatten_coils(coilset):
@@ -2066,7 +2242,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             else:
                 return [coilset]
 
-        coils = flatten_coils(self.coils)
+        coils = flatten_coils(self)
         # after flatten, should have as many elements in list as self.num_coils, if
         # flatten worked correctly.
         assert len(coils) == self.num_coils
@@ -2184,6 +2360,50 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
+    def to_FourierXY(
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierXY(N=N, grid=grid, s=s, basis=basis) for coil in self]
         return self.__class__(
             *coils,
             NFP=self.NFP,
@@ -2762,6 +2982,49 @@ class MixedCoilSet(CoilSet):
         coils = [
             coil.to_FourierPlanar(
                 N=N, grid=grid, basis=basis, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierXY(
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [
+            coil.to_FourierXY(
+                N=N, grid=grid, s=s, basis=basis, check_intersection=check_intersection
             )
             for coil in self
         ]

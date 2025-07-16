@@ -1232,7 +1232,6 @@ class Equilibrium(Optimizable, _MagneticField):
     def compute_magnetic_field(
         self,
         coords=None,
-        out_grid=None,
         params=None,
         basis="rpz",
         source_grid=None,
@@ -1242,6 +1241,7 @@ class Equilibrium(Optimizable, _MagneticField):
         L=None,
         M=8,
         N=None,
+        out_grid=None,
         A_grid=None,
         R_bounds=[5, 11],
         phi_bounds=None,

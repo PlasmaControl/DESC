@@ -316,7 +316,7 @@ def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
 
 
 def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    """Is name constant over toroidal sections and needs full section to compute?."""
     return (
         data_index[p][name]["coordinates"] == "z"
         and data_index[p][name]["resolution_requirement"] == "rt"

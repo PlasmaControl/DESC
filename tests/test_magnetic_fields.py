@@ -1066,6 +1066,9 @@ class TestMagneticFields:
         field2 = SplineMagneticField.from_field(
             field1, R, p, Z, source_grid=LinearGrid(N=1)
         )
+        # this is just to test the logic when
+        # compute_vector_potential returns a ValueError
+        _ = SplineMagneticField.from_field(field2, R, p, Z, source_grid=LinearGrid(N=1))
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2

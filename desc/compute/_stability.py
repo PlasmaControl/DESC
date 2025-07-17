@@ -720,14 +720,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     g_rr = data["g_rr|PEST"][:, None] * a_N
     g_vv = data["g_vv|PEST"][:, None] * a_N
-    g_pp = data["g_pp|PEST"][:, None] * a_N  # becomes singular
+    g_pp = data["g_pp|PEST"][:, None] * a_N  # finite on-axis
     g_rv = data["g_rv|PEST"][:, None] * a_N
-    # --no-verify g_vr_over_sqrtg = g_rv_over_sqrtg
 
     g_rp = data["g_rp|PEST"][:, None] * a_N
 
     g_vp = data["g_vp|PEST"][:, None] * a_N
-    # --no-verify g_pv_over_sqrtg = g_vz_over_sqrtg
 
     g_sup_rr = data["g^rr"][:, None] * a_N**2
     g_sup_rv = data["g^rv"][:, None] * a_N**2
@@ -740,15 +738,19 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # manually set the instability drive to 0
     F = mu_0 * data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
 
-    # Q_11
+    ####################
+    ####----Q_11----####
+    ####################
     A = A.at[rho_idx, rho_idx].add(
-        D_theta.T @ ((psi_r_over_sqrtg * iota**2 * psi_r2 * W * g_rr) * D_theta)
-        + D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r2 * g_rr) * D_zeta)
-        + D_theta.T @ ((psi_r_over_sqrtg * iota * psi_r2 * W * g_rr) * D_zeta)
-        + D_zeta.T @ ((psi_r_over_sqrtg * iota * psi_r2 * W * g_rr) * D_theta)
+        D_theta.T @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+        + D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+        + D_theta.T @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+        + D_zeta.T @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_theta)
     )
 
-    # Q_22
+    ####################
+    ####----Q_22----####
+    ####################
     # enforcing symmetry exactly
     A = A.at[theta_idx, theta_idx].add(
         0.5
@@ -796,7 +798,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         + D_rho.T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
     )
 
-    ### Q_33
+    ####################
+    ####----Q_33----####
+    ####################
     A = A.at[theta_idx, theta_idx].add(
         0.5
         * (

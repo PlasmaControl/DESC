@@ -503,11 +503,18 @@ def _write_terps_input(  # noqa: C901
         + "0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5  N\n"
     )
 
+    if mode_family < 0:
+        n_modes = np.arange(N_min, N_max + 1)
+    else:
+        n_modes = np.arange(N_min, N_max + 1) * nfp
+        n_modes = np.concatenate((n_modes - mode_family, n_modes + mode_family))
+        n_modes = np.sort(np.unique(n_modes))
+
     for n in range(N_min, N_max + 1):
         mode_str = "     "
         for m in range(56):
-            if mode_family < 0 or n % 2 == mode_family:  # FIXME: modify for nfp != 2,3
-                if (m <= M_max) and (n >= N_min) and (n <= N_max):
+            if n in n_modes:
+                if m <= M_max:
                     if m == 0:
                         if n > 0:
                             mode_str += " 1"
@@ -638,8 +645,11 @@ def _read_terps_output(path, surfs):
 class TERPSICHORE(ExternalObjective):
     """Computes ideal MHD linear stability from calls to the code TERPSICHORE.
 
-    Returns the linear growth rate of the fastest growing instability, or the ΔW values
-    at each flux surface. A positive growth rate or negative ΔW denotes instability.
+    Returns the linear growth rate of the fastest growing instability, where a negative
+    growth rate denotes stability and a positive growth rate denotes instability.
+
+    Documentation about the TERPSICHORE code can be found here:
+    https://princetonuniversity.github.io/STELLOPT/TERPSICHORE.html
 
     Parameters
     ----------
@@ -816,6 +826,12 @@ class TERPSICHORE(ExternalObjective):
             Level of output.
 
         """
+        errorif(
+            self._fun_kwargs["mode_family"] > self._eq.NFP // 2,
+            ValueError,
+            "Invalid mode family, must be <= eq.NFP // 2.",
+        )
+
         # check if theta needs to be flipped so that theta=0 is on the outboard midplane
         grid0 = LinearGrid(rho=0.0, M=0, N=0)
         grid1 = LinearGrid(rho=1.0, M=0, N=0)

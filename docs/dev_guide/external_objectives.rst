@@ -1,5 +1,6 @@
+====================
 Using external codes
---------------------
+====================
 
 The ``ExternalObjective`` class allows external codes to be used within a DESC
 optimization. This takes a user-supplied function that does not need to be JAX

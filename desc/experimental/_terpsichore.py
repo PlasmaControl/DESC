@@ -648,7 +648,9 @@ class TERPSICHORE(ExternalObjective):
     Returns the linear growth rate of the fastest growing instability, where a negative
     growth rate denotes stability and a positive growth rate denotes instability.
 
-    Documentation about the TERPSICHORE code can be found here:
+    TERPSICHORE reference: https://doi.org/10.1007/978-1-4613-0659-7_8
+
+    TERPSICHORE documentation:
     https://princetonuniversity.github.io/STELLOPT/TERPSICHORE.html
 
     Parameters
@@ -669,9 +671,9 @@ class TERPSICHORE(ExternalObjective):
         File name of the TERPSICHORE executable. Must be located in the directory
         specified by ``path``.
     mode_family : int, optional
-        The mode family of the instabilities to consider. Only implemented for NFP =
-        2 or 3, which only have two mode families: N=0 and N=1. If ``mode_family < 0``,
-        both mode families are considered. Default = -1.
+        The mode family of the instabilities to consider. Possible mode families are in
+        the range ``[0, eq.NFP // 2]``. If ``mode_family < 0``, all mode families are
+        considered. Default = -1.
     surfs : int, optional
         Number of surfaces to include in the equilibrium input. More surfaces provides
         more accuracy at the cost of longer compute times. Default = 101.

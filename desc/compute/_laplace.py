@@ -571,7 +571,6 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: use phi periodic for kvc
 @register_compute_fun(
     name="grad(Phi (periodic))",
     label="\\nabla \\Phi",

@@ -12,6 +12,7 @@ New Features
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Adds ``desc.experimental.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 
 Bug Fixes
 

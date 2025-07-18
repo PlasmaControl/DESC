@@ -61,7 +61,7 @@ from desc.integrals.singularities import (
     _best_params,
     _best_ratio,
     _grad_G,
-    _kernel_biot_savart_coulomb,
+    _kernel_BS_plus_grad_S,
     _kernel_nr_over_r3,
     _vanilla_params,
 )
@@ -1011,7 +1011,7 @@ class TestLaplaceField:
             key: val
             for key, val in data.items()
             # dependencies of grad(Phi)
-            if key in _kernel_biot_savart_coulomb.keys
+            if key in _kernel_BS_plus_grad_S.keys
         }
         data, RpZ_data = field.compute(
             "B",

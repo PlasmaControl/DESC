@@ -755,8 +755,8 @@ def singular_integral(
         then it is more efficient to provide a callable to compute it
         rather than interpolating and evaluating a Fourier series.
         First index should store the name of the map used in the kernel
-        e.g. "Phi", and the second index should store the Python callable
-        that accepts a grid argument.
+        e.g. "Phi (periodic)", and the second index should store the Python
+        callable that accepts a grid argument.
         Should broadcast with shapes (..., source_grid.num_nodes, ndim).
     ndim : int
         Default is kernel.ndim.
@@ -945,11 +945,11 @@ _kernel_biot_savart_A.ndim = 3
 _kernel_biot_savart_A.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
-def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
+def _kernel_BS_plus_grad_S(eval_data, source_data, ds, diag=False):
     """Returns K(y) (Tesla) x ∇_x G(x−y) da(y) + ∇_x G(x−y) Bₙ(y) da(y)."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    K = rpz2xyz_vec(source_data["K_vc (periodic)"], phi=source_data["phi"])
     a = source_data["|e_theta x e_zeta|"]
     grad_G = _grad_G(_dx(eval_data, source_data, diag))
     return ds * (
@@ -958,8 +958,12 @@ def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
     )
 
 
-_kernel_biot_savart_coulomb.ndim = 3
-_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "B0*n", "|e_theta x e_zeta|"]
+_kernel_BS_plus_grad_S.ndim = 3
+_kernel_BS_plus_grad_S.keys = _dx.keys + [
+    "K_vc (periodic)",
+    "B0*n",
+    "|e_theta x e_zeta|",
+]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
@@ -992,43 +996,43 @@ def _kernel_dipole(eval_data, source_data, ds, diag=False):
         rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
-    if source_data["Phi"].ndim > 1:
+    if source_data["Phi (periodic)"].ndim > 1:
         out = out[..., jnp.newaxis]
     # Do operation with Φ at the end, so that the following
     # outer product plus reduction is more likely to be fused.
-    return source_data["Phi"] * out
+    return source_data["Phi (periodic)"] * out
 
 
 _kernel_dipole.ndim = 1
-_kernel_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi (periodic)"]
 
 
 def _kernel_dipole_plus_half(eval_data, source_data, ds, diag=False):
     """Kernel of operator (D[Φ] + Φ/2)(x)."""
-    eval_Phi = eval_data["Phi(x)"]
+    eval_Phi = eval_data["Phi(x) (periodic)"]
     if not diag:
         eval_Phi = eval_Phi[:, jnp.newaxis]
     out = ds * dot(
         rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
         _grad_G(_dx(eval_data, source_data, diag)),
     )
-    if source_data["Phi"].ndim > 1:
+    if source_data["Phi (periodic)"].ndim > 1:
         out = out[..., jnp.newaxis]
     # Do operation with Φ at the end, so that the following
     # outer product plus reduction is more likely to be fused.
-    return (source_data["Phi"] - eval_Phi) * out
+    return (source_data["Phi (periodic)"] - eval_Phi) * out
 
 
 _kernel_dipole_plus_half.ndim = 1
-_kernel_dipole_plus_half.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
-_kernel_dipole_plus_half.eval_keys = ["Phi(x)"]
+_kernel_dipole_plus_half.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi (periodic)"]
+_kernel_dipole_plus_half.eval_keys = ["Phi(x) (periodic)"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
-    "biot_savart_coulomb": _kernel_biot_savart_coulomb,
+    "biot_savart_grad_S": _kernel_BS_plus_grad_S,
     "Bn_over_r": _kernel_Bn_over_r,
     "monopole": _kernel_monopole,
     "dipole": _kernel_dipole,

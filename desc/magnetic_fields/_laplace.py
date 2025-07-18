@@ -38,19 +38,20 @@ class SourceFreeField(FourierRZToroidalSurface):
     sym : str
         Symmetry for Fourier basis interpolating the periodic part of the potential.
         Default assumes no symmetry.
-    I : float
+    B0 : _MagneticField
+        Magnetic field due to currents in 𝒳 and net currents outside 𝒳.
+    _I : float
         Net toroidal current parameter.
         Default is zero.
-    Y : float
+        Not intended for public use.
+    _Y : float
         Net poloidal current parameter.
         Default is zero.
-    B0 : _MagneticField
-        Magnetic field due to currents in 𝒳 and net currents outside 𝒳
-        which are not accounted for ``I`` and ``Y``.
+        Not intended for public use.
 
     """
 
-    _immediate_attributes_ = ["_surface", "_Phi_basis", "I", "Y", "_B0"]
+    _immediate_attributes_ = ["_surface", "_Phi_basis", "_B0", "I", "Y"]
 
     def __init__(
         self,
@@ -58,15 +59,17 @@ class SourceFreeField(FourierRZToroidalSurface):
         M,
         N,
         sym=False,
-        I=0,  # noqa: E741
-        Y=0,
         B0=ToroidalMagneticField(0, 1),
+        _I=0,  # noqa: E741
+        _Y=0,
     ):
         self._surface = surface
         self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
-        self.I = I
-        self.Y = Y
-        self._B0 = B0
+        self.I = _I
+        self.Y = _Y
+        errorif(_I != 0, NotImplementedError)
+        # TODO: I ∇θ field
+        self._B0 = B0 + ToroidalMagneticField(_Y, 1)
 
     def __getattr__(self, attr):
         return getattr(self._surface, attr)
@@ -245,7 +248,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         Y_coil=None,
         B_coil=None,
     ):
-        super().__init__(surface, M, N, sym, I, Y)
+        super().__init__(surface, M, N, sym, _I=I, _Y=Y)
         self._Y_coil = Y_coil
         self._B_coil = B_coil
 

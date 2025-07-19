@@ -1,7 +1,5 @@
 """Compute functions for Laplace solver."""
 
-import warnings
-
 import numpy as np
 
 from desc.backend import fixed_point, jnp
@@ -213,8 +211,6 @@ def _fixed_point_potential(
     method="simple",
     **kwargs,
 ):
-    warnings.warn("This setting does not pass correctness tests.", UserWarning)
-
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 

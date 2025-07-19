@@ -4,6 +4,7 @@ References
 ----------
     [1] Unalmis et al. New high-order accurate free surface stellarator
         equilibria optimization and boundary integral methods in DESC.
+
 """
 
 from desc.basis import DoubleFourierSeries
@@ -16,14 +17,17 @@ from desc.utils import errorif
 class SourceFreeField(FourierRZToroidalSurface):
     """Compute source free magnetic fields.
 
-    Let 𝒳 be an open set with smooth closed boundary ∂𝒳.
-    Computes the magnetic field B in units of Tesla such that
+    Let 𝒳 be an open set with continuously differenitable
+    closed boundary ∂𝒳. This class solves the following
+    partial differential equation for
+    varphi = φ = Φ (periodic) = ``Phi (periodic)``.
 
-    -                   ∆Φ(x) = 0    x ∈ 𝒳
-    -        (B - ∇Φ - B₀)(x) = 0    x ∈ 𝒳
-    - <n,B>(x) = <n,∇Φ+B₀>(x) = 0    x ∈ ∂𝒳
-    -         ∇ × (B - B₀)(x) = 0    x ∉ ∂𝒳
-    -                <∇,B>(x) = 0    ∀x
+    -                  ∆φ(x) = 0   x ∈ 𝒳
+    -       (B - ∇φ - B₀)(x) = 0   x ∈ 𝒳
+    -     n dot (∇φ + B₀)(x) = 0   x ∈ ∂𝒳
+    -             n dot B(x) = 0   x ∈ ∂𝒳
+    -       curl (B - B₀)(x) = 0   x ∉ ∂𝒳
+    -               div B(x) = 0   ∀x
 
     Parameters
     ----------
@@ -39,15 +43,14 @@ class SourceFreeField(FourierRZToroidalSurface):
         Symmetry for Fourier basis interpolating the periodic part of the potential.
         Default assumes no symmetry.
     B0 : _MagneticField
-        Magnetic field due to currents in 𝒳 and net currents outside 𝒳.
-    _I : float
-        Net toroidal current parameter.
+        Magnetic field due to currents in 𝒳 and net currents outside 𝒳
+        which are not accounted for ``I`` and ``Y``.
+    I : float
+        Net toroidal current determining a circulation of Φ.
         Default is zero.
-        Not intended for public use.
-    _Y : float
-        Net poloidal current parameter.
+    Y : float
+        Net poloidal current determining a circulation of Φ.
         Default is zero.
-        Not intended for public use.
 
     """
 
@@ -60,16 +63,15 @@ class SourceFreeField(FourierRZToroidalSurface):
         N,
         sym=False,
         B0=ToroidalMagneticField(0, 1),
-        _I=0,  # noqa: E741
-        _Y=0,
+        I=0.0,  # noqa: E741
+        Y=0.0,
     ):
         self._surface = surface
         self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
-        self.I = _I
-        self.Y = _Y
-        errorif(_I != 0, NotImplementedError)
-        # TODO: I ∇θ field
-        self._B0 = B0 + ToroidalMagneticField(_Y, 1)
+        self.I = I
+        self.Y = Y
+        errorif(I != 0, NotImplementedError, msg="TODO: I ∇θ field")
+        self._B0 = B0 + ToroidalMagneticField(Y, 1)
 
     def __getattr__(self, attr):
         return getattr(self._surface, attr)
@@ -169,7 +171,7 @@ class SourceFreeField(FourierRZToroidalSurface):
         kwargs.setdefault("B0", self._B0)
         kwargs.setdefault("surface", self._surface)
 
-        # to simplify computation of a singular integral for grad(Phi)
+        # to simplify computation of a singular integral for ∇φ
         if kwargs.get("on_boundary", False) and "eval_interpolator" not in kwargs:
             if RpZ_grid is None:
                 errorif(RpZ_data is not None, msg="Please supply RpZ_grid.")
@@ -225,17 +227,26 @@ class SourceFreeField(FourierRZToroidalSurface):
 class FreeSurfaceOuterField(SourceFreeField):
     """Compute field on outer plasma for free surface.
 
-    Implements the interior Dirichlet formulation described in [1].
+    Implements the interior Dirichlet formulation in multiply connected
+    geometry described in [1].
 
     Parameters
     ----------
+    B_coil : _MagneticField
+        Magnetic field from coil current sources.
     Y_coil : float
-        Net poloidal current in coils parameter.
-        Default is None.
+        Net poloidal current determining circulation of coil field.
+        Default is to compute from B_coil.
+    I_plasma : float
+        Net toroidal plasma current determining a circulation of Φ.
+        Default is zero.
+    I_sheet : float
+        Net toroidal sheet current determining a circulation of Φ.
+        Default is zero.
 
     """
 
-    _immediate_attributes_ = ["_Y_coil", "_B_coil"]
+    _immediate_attributes_ = ["_B_coil", "_Y_coil"]
 
     def __init__(
         self,
@@ -243,14 +254,14 @@ class FreeSurfaceOuterField(SourceFreeField):
         M=None,
         N=None,
         sym=False,
-        I=0,  # noqa: E741
-        Y=0,
-        Y_coil=None,
         B_coil=None,
+        Y_coil=None,
+        I_plasma=0.0,  # noqa: E741
+        I_sheet=0.0,
     ):
-        super().__init__(surface, M, N, sym, _I=I, _Y=Y)
-        self._Y_coil = Y_coil
+        super().__init__(surface, M, N, sym, I=I_plasma + I_sheet, Y=0)
         self._B_coil = B_coil
+        self._Y_coil = Y_coil
 
     def __setattr__(self, name, value):
         if (

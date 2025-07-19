@@ -134,7 +134,7 @@ def _lsmr_compute_potential(
     interpolator,
     basis,
     problem,
-    same_grid,
+    same_grid=True,
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
@@ -169,9 +169,9 @@ def _lsmr_compute_potential(
         _midpoint_quad=_midpoint_quad,
         _D_quad=_D_quad,
     )
+    assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
-    assert D.shape == (potential_grid.num_nodes, basis.num_modes)
 
     # Solving overdetermined system useful to reduce size of D while
     # retaining FFT interpolation accuracy in the singular integrals.
@@ -205,7 +205,7 @@ def _fixed_point_potential(
     potential_data,
     source_data,
     interpolator,
-    same_grid,
+    transform,
     chunk_size=None,
     Phi_0=None,
     xtol=1e-6,
@@ -213,7 +213,6 @@ def _fixed_point_potential(
     method="simple",
     **kwargs,
 ):
-    errorif(not same_grid, NotImplementedError)
     warnings.warn("This setting does not pass correctness tests.", UserWarning)
 
     potential_grid = interpolator.eval_grid
@@ -227,9 +226,7 @@ def _fixed_point_potential(
         _kernel_dipole_plus_half,
     )
     if Phi_0 is None:
-        Phi_0 = jnp.cos(potential_grid.nodes[:, 1]) * jnp.cos(
-            potential_grid.nodes[:, 2]
-        )
+        Phi_0 = transform.transform(jnp.ones(transform.basis.num_modes))
     return fixed_point(
         _iteration_operator,
         Phi_0,
@@ -266,62 +263,32 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="Phi_mn",
-    label="\\Phi_{m n}",
+    name="S[B0*n]",
+    label="S[B_0 \\cdot n_{\\rho}]",
     units="T m",
     units_long="Tesla meter",
-    description="Fourier coefficients of periodic part of potential",
+    description="Single layer potential of monopole density B0*n",
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0, 0, 0]]},
+    transforms={},
     profiles=[],
-    data=list(
-        set(_kernel_dipole_plus_half.keys + _kernel_monopole.keys + ["interpolator"])
-        - {"Phi (periodic)"}
-    ),
+    data=_kernel_monopole.keys + ["interpolator"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
-    **_doc,
+    chunk_size=_doc["chunk_size"],
+    public=False,
 )
-def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
+def _S_B0_n(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-
-    boundary_condition = singular_integral(
+    data["S[B0*n]"] = singular_integral(
         data,
         data,
         data["interpolator"],
         _kernel_monopole,
         chunk_size=kwargs.get("chunk_size", None),
     ).squeeze(axis=-1)
-
-    if kwargs.get("maxiter", -1) > 0:
-        errorif(
-            "interior" in kwargs["problem"],
-            msg="maxiter cannot be positive for interior Neumann problem.",
-        )
-        data["Phi (periodic)"] = _fixed_point_potential(
-            boundary_condition,
-            data,
-            data,
-            data["interpolator"],
-            same_grid=True,
-            **kwargs,
-        )
-        transforms["Phi"].build_pinv()
-        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
-    else:
-        data["Phi_mn"] = _lsmr_compute_potential(
-            boundary_condition,
-            data,
-            data,
-            data["interpolator"],
-            transforms["Phi"].basis,
-            same_grid=True,
-            **kwargs,
-        )
     return data
 
 
@@ -336,47 +303,39 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"Phi": [[0, 0, 0]]},
     profiles=[],
-    data=list(
-        set(_kernel_dipole_plus_half.keys + _kernel_monopole.keys) - {"Phi (periodic)"}
-    )
-    + ["interpolator", "Phi_coil (periodic)"],
+    data=list(set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
+    + ["S[B0*n]", "interpolator"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
-def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
+def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
 
-    S = singular_integral(
-        data,
-        data,
-        data["interpolator"],
-        _kernel_monopole,
-        chunk_size=kwargs.get("chunk_size", None),
-    ).squeeze(axis=-1)
-    boundary_condition = S - data["Phi_coil (periodic)"]
-
     if kwargs.get("maxiter", -1) > 0:
+        errorif(
+            "interior" in kwargs["problem"],
+            msg="maxiter cannot be positive for interior Neumann problem.",
+        )
         data["Phi (periodic)"] = _fixed_point_potential(
-            boundary_condition,
+            data["S[B0*n]"],
             data,
             data,
             data["interpolator"],
-            same_grid=True,
+            transforms["Phi"],
             **kwargs,
         )
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
-            boundary_condition,
+            data["S[B0*n]"],
             data,
             data,
             data["interpolator"],
             transforms["Phi"].basis,
-            problem="interior Dirichlet",
-            same_grid=True,
             **kwargs,
         )
     return data
@@ -572,11 +531,12 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="grad(Phi (periodic))",
-    label="\\nabla \\Phi",
+    name="∇φ",
+    label="\\nabla \\varphi",
     units="T",
     units_long="Tesla",
-    description="Magnetic field due to potential",
+    description="Magnetic field due to potential which solves the"
+    " boundary value problem.",
     dim=3,
     coordinates="RpZ",
     params=[],
@@ -593,7 +553,6 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
         """,
     problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     on_boundary="bool : Whether RpZcoords are on boundary surface.",
-    aliases="grad(Phi)",
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
@@ -602,7 +561,7 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
     if kwargs["on_boundary"]:
-        RpZ_data["grad(Phi (periodic))"] = (
+        RpZ_data["∇φ"] = (
             sign
             * 2
             * singular_integral(
@@ -618,7 +577,7 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
         eval_data, source_data = _prune_data(
             RpZ_data, None, data, grid, _kernel_BS_plus_grad_S
         )
-        RpZ_data["grad(Phi (periodic))"] = sign * _nonsingular_part(
+        RpZ_data["∇φ"] = sign * _nonsingular_part(
             eval_data,
             None,
             source_data,
@@ -632,13 +591,30 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
 
 
 @register_compute_fun(
+    name="B",
+    label="B",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field",
+    dim=3,
+    coordinates="RpZ",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["∇φ", "B0"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+)
+def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
+    RpZ_data["B"] = RpZ_data["∇φ"] + RpZ_data["B0"]
+    return RpZ_data
+
+
+@register_compute_fun(
     name="B0*n",
     label="B_0 \\cdot n_{\\rho}",
     units="T",
     units_long="Tesla",
-    description="Magnetic field due to volume current "
-    "where the potential is defined and due to net currents elsewhere, "
-    "dotted into flux surface normal",
+    description="Auxillary field dotted into flux surface normal",
     dim=1,
     coordinates="tz",
     params=[],
@@ -667,7 +643,7 @@ def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     label="B0",
     units="T",
     units_long="Tesla",
-    description="Auxillary field.",
+    description="Auxillary field",
     dim=3,
     coordinates="RpZ",
     params=[],
@@ -686,25 +662,6 @@ def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
         source_grid=transforms["grid"],
         chunk_size=kwargs.get("chunk_size", None),
     )
-    return RpZ_data
-
-
-@register_compute_fun(
-    name="B",
-    label="B",
-    units="T",
-    units_long="Tesla",
-    description="Magnetic field",
-    dim=3,
-    coordinates="RpZ",
-    params=[],
-    transforms={},
-    profiles=[],
-    data=["grad(Phi (periodic))", "B0"],
-    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-)
-def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
-    RpZ_data["B"] = RpZ_data["grad(Phi (periodic))"] + RpZ_data["B0"]
     return RpZ_data
 
 
@@ -806,7 +763,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
         + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
     ).reshape(grid.num_nodes * 3, basis.num_modes)
 
-    # TODO: compute this vector or scalar potential
+    # TODO: compute this from vector or scalar potential
     data["Phi_coil_mn"] = jnp.linalg.lstsq(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
@@ -872,7 +829,54 @@ def _Phi_coil(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="gamma potential",
+    name="Phi_mn",
+    label="\\Phi_{m n}",
+    units="T m",
+    units_long="Tesla meter",
+    description="Fourier coefficients of periodic part of potential",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    data=list(set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
+    + ["Phi_coil (periodic)", "S[B0*n]", "interpolator"],
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+    **_doc,
+)
+def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+
+    boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
+
+    if kwargs.get("maxiter", -1) > 0:
+        data["Phi (periodic)"] = _fixed_point_potential(
+            boundary_condition,
+            data,
+            data,
+            data["interpolator"],
+            transforms["Phi"],
+            **kwargs,
+        )
+        transforms["Phi"].build_pinv()
+        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
+    else:
+        data["Phi_mn"] = _lsmr_compute_potential(
+            boundary_condition,
+            data,
+            data,
+            data["interpolator"],
+            transforms["Phi"].basis,
+            problem="interior Dirichlet",
+            **kwargs,
+        )
+    return data
+
+
+@register_compute_fun(
+    name="γ potential",
     label="\\gamma",
     units="T m",
     units_long="Tesla meter",
@@ -892,10 +896,10 @@ def _Phi_coil(params, transforms, profiles, data, **kwargs):
 def _gamma_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["Phi(x) (periodic)"] = data["Phi (periodic)"]
-    # This quantity should recover Phi_coil (periodic),
-    # offering means to test correctness of the computation of
-    # Phi (periodic).
-    data["gamma potential"] = data["Phi (periodic)"] - _D_plus_half(
+    # This quantity recovers the left hand side of equation
+    # 5.15, offering means to test correctness of the
+    # computation of Phi (periodic).
+    data["γ potential"] = data["Phi (periodic)"] - _D_plus_half(
         data,
         data,
         data["interpolator"],

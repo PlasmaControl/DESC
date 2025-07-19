@@ -1,6 +1,5 @@
 """Test integration algorithms."""
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -711,7 +710,8 @@ class TestLaplaceField:
             return B
 
     @pytest.mark.unit
-    def test_interior_Dirichlet(self, maxiter=-1, chunk_size=1000):
+    @pytest.mark.parametrize("maxiter", [-1, 40])
+    def test_interior_Dirichlet(self, maxiter):
         """Test multiply connected interior Dirichlet Laplace solver."""
         surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
@@ -731,19 +731,12 @@ class TestLaplaceField:
             ["Phi_coil", "Y_coil", "Z", "S[B0*n]", "γ potential"],
             grid,
             maxiter=maxiter,
-            chunk_size=chunk_size,
+            chunk_size=1000,
         )
         np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-10)
         np.testing.assert_allclose(data["Phi_coil"], data["Z"], atol=1e-8)
         np.testing.assert_allclose(data["S[B0*n]"], 0)
         np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
-
-    @pytest.mark.unit
-    def test_interior_Dirichlet_iter(self):
-        """Test fixed point convergence."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("always", UserWarning)
-            self.test_interior_Dirichlet(maxiter=40)
 
     @pytest.mark.unit
     def test_interior_Neumann(

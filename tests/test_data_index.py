@@ -141,7 +141,7 @@ def test_data_index_deps():
                 rpz = {"R", "phi", "Z"}
                 assert (rpz & data) == (
                     rpz & queried_deps[p][name]["data"]
-                ), "R, phi, Z for RpZ_data sbould never be a dependency."
+                ), f"{err_msg}.\n R, phi, Z for RpZ_data sbould never be a dependency."
 
                 besides_rpz = queried_deps[p][name]["RpZ_data"] - rpz
                 assert (queried_deps[p][name]["data"] | besides_rpz) == (

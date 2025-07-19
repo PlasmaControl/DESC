@@ -66,11 +66,7 @@ from desc.integrals.singularities import (
     _vanilla_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import (
-    FreeSurfaceOuterField,
-    SourceFreeField,
-    ToroidalMagneticField,
-)
+from desc.magnetic_fields import FreeSurfaceOuterField, SourceFreeField
 from desc.transform import Transform
 from desc.utils import dot, errorif, rpz2xyz, safediv
 
@@ -697,52 +693,57 @@ class TestSingularities:
 
 
 class TestLaplaceField:
-    """Test Laplace solvers."""
+    """Test multiply connected Laplace solvers."""
 
-    class _Z_hat:
+    class _HarmonicInterior:
         """Field to test the Dirichlet solver."""
 
-        def __init__(self):
-            pass
+        def __init__(self, Y):
+            self.Y = Y
 
-        @staticmethod
-        def compute_magnetic_field(coords, source_grid, chunk_size):
+        def compute_magnetic_field(self, coords, source_grid, chunk_size):
+            """Returns ∇(Z + Yϕ)."""
             num_coords = coords.shape[0]
-            zero = jnp.zeros(num_coords)
-            Z_hat = jnp.column_stack([zero, zero, jnp.ones(num_coords)])
-            return Z_hat
+            R = coords[:, 0]
+            B = jnp.column_stack(
+                [jnp.zeros(num_coords), self.Y / R, jnp.ones(num_coords)]
+            )
+            return B
 
     @pytest.mark.unit
-    def test_interior_Dirichlet(self, maxiter=-1):
-        """Test interior Dirichlet Laplace solver."""
+    def test_interior_Dirichlet(self, maxiter=-1, chunk_size=1000):
+        """Test multiply connected interior Dirichlet Laplace solver."""
         surface = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
             Z_lmn=[-2, -0.2],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        grid = LinearGrid(M=surface.M, N=surface.N, NFP=surface.NFP)
+        grid = LinearGrid(M=16, N=16, NFP=surface.NFP)
         field = FreeSurfaceOuterField(
             surface,
-            surface.M,
-            surface.N,
-            "sin" if surface.sym else False,
-            B_coil=TestLaplaceField._Z_hat(),
+            grid.M - 1,
+            grid.N - 1,
+            B_coil=TestLaplaceField._HarmonicInterior(0),
         )
+        assert field.M != grid.M and field.N != grid.N
         data, _ = field.compute(
-            ["Phi_coil", "Z", "gamma potential"], grid, maxiter=maxiter
+            ["Phi_coil", "Y_coil", "Z", "S[B0*n]", "γ potential"],
+            grid,
+            maxiter=maxiter,
+            chunk_size=chunk_size,
         )
-        np.testing.assert_allclose(data["Phi_coil"], data["Z"])
-        np.testing.assert_allclose(data["gamma potential"], data["Z"], atol=1e-12)
+        np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-10)
+        np.testing.assert_allclose(data["Phi_coil"], data["Z"], atol=1e-8)
+        np.testing.assert_allclose(data["S[B0*n]"], 0)
+        np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
 
     @pytest.mark.unit
-    @pytest.mark.xfail(reason="Unknown")
     def test_interior_Dirichlet_iter(self):
         """Test fixed point convergence."""
         with warnings.catch_warnings():
             warnings.simplefilter("always", UserWarning)
-            # diverges as maxiter increases
-            self.test_interior_Dirichlet(maxiter=5)
+            self.test_interior_Dirichlet(maxiter=40)
 
     @pytest.mark.unit
     def test_interior_Neumann(
@@ -777,7 +778,7 @@ class TestLaplaceField:
             surface, surface.M, surface.N, "sin" if surface.sym else False
         )
         data, RpZ_data = field.compute(
-            ["Phi", "Z"] if just_err else ["grad(Phi)", "Phi", "Z"],
+            ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
             grid,
             data=data,
             RpZ_data=RpZ_data,
@@ -794,7 +795,7 @@ class TestLaplaceField:
             return err
         np.testing.assert_allclose(err, 0, atol=atol)
         np.testing.assert_allclose(
-            dot(RpZ_data["grad(Phi)"], RpZ_data["n_rho"]),
+            dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
             -RpZ_data["B0*n"],
             atol=atol,
         )
@@ -912,7 +913,7 @@ class TestLaplaceField:
 
         field = SourceFreeField(surface, M=grid.M, N=grid.N)
         data, RpZ_data = field.compute(
-            ["grad(Phi)", "Phi", "x", "n_rho"],
+            ["∇φ", "Phi", "x", "n_rho"],
             grid,
             data=data,
             problem="exterior Neumann",
@@ -924,7 +925,7 @@ class TestLaplaceField:
         assert data is RpZ_data
         np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=atol)
         np.testing.assert_allclose(
-            dot(data["grad(Phi)"] - _grad_G(data["x"] - x0), data["n_rho"]),
+            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
             0,
             atol=atol,
         )
@@ -932,11 +933,7 @@ class TestLaplaceField:
     @pytest.mark.unit
     @pytest.mark.slow
     def test_dommaschk_vacuum(self, chunk_size=50):
-        """Test computed vacuum field matches Dommaschk potential.
-
-        The chosen boundary condition has a unique solution 𝐁 = ∇ϕ for the
-        Dommaschk potential ϕ. Hence, it suffices to check that 𝐁⋅𝐧 is satisfied.
-        """
+        """Test vacuum field for Dommaschk potential."""
         C_r = {
             (0, -2): 0.000056,
             (0, -1): -0.000921,
@@ -986,9 +983,7 @@ class TestLaplaceField:
         grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         data = eq.compute(["G"], grid=grid)
         Y_sheet_plus_coil = grid.compress(data["G"])[-1]
-        field = SourceFreeField(
-            eq.surface, M=8, N=8, B0=ToroidalMagneticField(B0=Y_sheet_plus_coil, R0=1)
-        )
+        field = SourceFreeField(eq.surface, M=8, N=8, Y=Y_sheet_plus_coil)
 
         RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
         RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
@@ -1010,7 +1005,7 @@ class TestLaplaceField:
         data = {
             key: val
             for key, val in data.items()
-            # dependencies of grad(Phi)
+            # dependencies of ∇φ
             if key in _kernel_BS_plus_grad_S.keys
         }
         data, RpZ_data = field.compute(

@@ -15,7 +15,12 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..diffmat_utils import fourier_diffmat, legendre_D1, legendre_lobatto_weights
+from ..diffmat_utils import (
+    fourier_diffmat,
+    legendre_D1,
+    legendre_lobatto_nodes,
+    legendre_lobatto_weights,
+)
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -388,8 +393,10 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
+    spectral="bool: option to use a spectral solver based on differentiation matrices"
+    "Default is False",
 )
-@partial(jit, static_argnames=["Neigvals"])
+@partial(jit, static_argnames=["Neigvals", "spectral"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
@@ -411,10 +418,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
+    spectral = kwargs.get("spectral", False)
     grid = transforms["grid"].source_grid
-    # toroidal step size between points along field lines is assumed uniform
-    dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
-    dz = dz[1] - dz[0]
+
     num_zeta0 = data["c ballooning"].shape[0]
 
     def reshape(f):
@@ -427,15 +433,138 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    # Approximate derivative along field line with second order finite differencing.
-    # Use g on the half grid for numerical stability.
-    g_half = (g[..., 1:] + g[..., :-1]) / (2 * dz**2)
-    b_inv = jnp.reciprocal(f[..., 1:-1])
-    diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
-    diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
+    if spectral:
 
-    # TODO: Issue #1750
-    w, v = eigh_tridiagonal(diag_inner, diag_outer)
+        def _eval_1D(f, x, scale, shift):
+            return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
+
+        # --no-verify  maps (-ntor*pi, ntor*pi) to [-1, 1]
+        ## the LGL nodes
+        #def _f(x, scale, shift):
+        #    y = x
+        #    m_1 = 2.0
+        #    m_2 = 2.0
+        #    lower = -jnp.exp(-m_1 * (y + 1)) + 0.5 * (y + 1) * jnp.exp(-2 * m_1)
+        #    upper = jnp.exp(m_2 * (y - 1)) + 0.5 * (y - 1) * jnp.exp(-2 * m_2)
+        #    return lower + upper
+
+        #def _f(x, scale, shift):
+        #    x_0 = 0.15
+        #    m_1 = 6.0
+        #    m_2 = 7.0
+
+        #    # left side (x ≤ x0)
+        #    left = (1 + x_0) * (
+        #        1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1)
+        #    )
+
+        #    # right side (x ≥ x0)
+        #    right = (1 - x_0) * (
+        #        jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2)
+        #    )
+
+        #    return left + right - 1
+
+        def _f(x, scale, shift):
+            x0 = 0.0
+            x1 = 0.4
+            m1 = 1.0
+            m2 = 1.0
+            m3 = 20
+            m4 = 20
+
+            wL = 0.5 * (1.0 + x0)  # left-side weigh
+            wR = 0.5 * (1.0 - x0)  # right-side weight
+
+            lower = wL * (
+                1.0 - jnp.exp(-m1 * (x + 1.0)) + 0.5 * (x + 1.0) * jnp.exp(-2.0 * m1)
+            )
+            upper = wR * (
+                jnp.exp(m2 * (x - 1.0)) + 0.5 * (x - 1.0) * jnp.exp(-2.0 * m2)
+            )
+
+            # Rescale to span [0,1] and shift to [-1,1]
+            g_cluster = 2.0 * (lower + upper) - 1.0
+
+            # Left logistic function
+            s_axis = 1.0 / (1.0 + jnp.exp(-m3 * (x + 1.0)))
+            s_axis0 = 1.0 / (1.0 + jnp.exp(-m3 * 0.0))
+            s_axis1 = 1.0 / (1.0 + jnp.exp(-m3 * 2.0))
+            axis = wL * (s_axis - s_axis0) / (s_axis1 - s_axis0)
+
+            # Right logistic fn, also increasing after the flip
+            s_edge_raw = 1.0 / (1.0 + jnp.exp(m4 * (x - 1.0)))
+            s_edge = 1.0 - s_edge_raw
+            s_edge0 = 1.0 - 1.0 / (1.0 + jnp.exp(m4 * -2.0))
+            s_edge1 = 1.0 - 1.0 / (1.0 + jnp.exp(0.0))
+            edge = wR * (s_edge - s_edge0) / (s_edge1 - s_edge0)
+
+            g_axisedge = 2.0 * (axis + edge) - 1.0
+
+            # Identity map contributes (1-x1) · x
+            return (1.0 - x1) * x + x1 * (g_cluster + g_axisedge - x)
+
+        # --no-verify def _f(x, scale, shift):
+        # --no-verify     return x
+
+        dx_f = jax.grad(_f, argnums=0)
+
+        num_alpha = grid.num_alpha
+        num_rho = grid.num_rho
+        num_zeta = grid.num_zeta
+
+        ## The points in the supplied grid must be consistent with how
+        ## the kronecker product is created
+        x0 = grid.nodes[:: num_alpha * num_rho, 2]
+
+        # The factor of two because we are mapping from (-1, 1) -> (-ntor pi, ntor pi)
+        scale = (x0[-1] - x0[0]) / 2
+        shift = 1 - x0[0] / scale
+
+        x = legendre_lobatto_nodes(num_zeta - 1)
+
+        scale_vector1 = (_eval_1D(dx_f, x, scale, shift)) ** -1 * 1 / scale
+
+        scale_x1 = scale_vector1[:, None]
+
+        # Get differentiation matrices
+        # RG: setting the gradient to 0 to save some memory?
+        D_rho = jax.lax.stop_gradient(legendre_D1(num_zeta - 1) * scale_x1)
+
+        # 2D matrices stacked in rho, alpha and zeta_0 dimensions
+        w = (1 / scale_vector1) * (legendre_lobatto_weights(num_zeta - 1))
+        wg = -1 * w * g
+
+        # Row scaling D_rho by wg
+        A = D_rho.T @ (wg[..., :, None] * D_rho)
+
+        # the scale due to the derivative
+        wc = w * c
+        idx = jnp.arange(num_zeta)
+
+        A = A.at[..., idx, idx].add(wc)
+
+        b_inv = jnp.sqrt(jnp.reciprocal(w * f))
+
+        A = (b_inv[..., :, None] * A) * b_inv[..., None, :]
+
+        # apply dirichlet BC to X
+        w, v = jnp.linalg.eigh(A[..., 1:-1, 1:-1])
+
+    else:
+        # toroidal step size between points along field lines is assumed uniform
+        dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
+        dz = dz[1] - dz[0]
+
+        # Approximate derivative along field line with second order finite differencing.
+        # Use g on the half grid for numerical stability.
+        g_half = (g[..., 1:] + g[..., :-1]) / (2 * dz**2)
+        b_inv = jnp.reciprocal(f[..., 1:-1])
+        diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
+        diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
+
+        # TODO: Issue #1750
+        w, v = eigh_tridiagonal(diag_inner, diag_outer)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
@@ -445,6 +574,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # stop_gradient prevents that.
     v = jax.lax.stop_gradient(v)
     v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
+
     assert v.shape == (
         grid.num_rho,
         grid.num_alpha,
@@ -670,15 +800,20 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         m_2 = 2.1
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-2
+        eps = 1.0e-3
         return eps + (1 - eps) * (lower + upper)
 
     dx_f = jax.grad(_f)
 
-    # The points in the supplied grid must be consistent with how
-    # the kronecker product is created
-    x = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+    ## The points in the supplied grid must be consistent with how
+    ## the kronecker product is created
+    x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
 
+    x = legendre_lobatto_nodes(len(x0) - 1)
+    ## Why are we doing this?
+    ## This is tantamount to rescaling the already rescaled rho
+    ## which means these double rescaled rho points are not the same as the
+    ## single scaled rho points in the grid.
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
 
     scale_x1 = scale_vector1[:, None]
@@ -731,12 +866,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     g_sup_rv = data["g^rv"][:, None] * a_N**2
     g_sup_rp = data["g^rz"][:, None] * a_N**2
 
-    J2 = mu_0**2 * (data["|J|"] ** 2)[:, None] * (a_N / B_N) ** 2
+    J2 = mu_0 * (data["|J|"] ** 2)[:, None] * (a_N / B_N) ** 2
     j_sup_theta = mu_0 * data["J^theta_PEST"][:, None] * a_N**2 / B_N
     j_sup_zeta = mu_0 * data["J^zeta"][:, None] * a_N**2 / B_N
 
     # manually set the instability drive to 0
-    F = mu_0 * data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
+    F = 0.0 * mu_0 * data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
 
     ####################
     ####----Q_11----####
@@ -1073,5 +1208,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     w, v = jnp.linalg.eigh(A[jnp.ix_(keep, keep)])
 
     data["finite-n lambda"] = w
+    data["finite-n eigenfunction"] = v
 
     return data

@@ -13,7 +13,7 @@ from desc.coils import (
     FourierXYZCoil,
     SplineXYZCoil,
 )
-from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.compute import data_index
 from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
@@ -30,7 +30,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning, errorif
+from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
 
 
 def _compare_against_master(

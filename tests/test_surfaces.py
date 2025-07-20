@@ -4,11 +4,11 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
+from desc.utils import rpz2xyz
 
 
 class TestFourierRZToroidalSurface:

@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..utils import errorif
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
@@ -146,7 +146,6 @@ def compute(  # noqa: C901
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-        from .geom_utils import rpz2xyz, rpz2xyz_vec
 
         for name in data.keys():
             errorif(

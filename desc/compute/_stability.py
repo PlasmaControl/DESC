@@ -440,7 +440,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
         # --no-verify  maps (-ntor*pi, ntor*pi) to [-1, 1]
         ## the LGL nodes
-        #def _f(x, scale, shift):
+        # def _f(x, scale, shift):
         #    y = x
         #    m_1 = 2.0
         #    m_2 = 2.0
@@ -448,7 +448,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         #    upper = jnp.exp(m_2 * (y - 1)) + 0.5 * (y - 1) * jnp.exp(-2 * m_2)
         #    return lower + upper
 
-        #def _f(x, scale, shift):
+        # def _f(x, scale, shift):
         #    x_0 = 0.15
         #    m_1 = 6.0
         #    m_2 = 7.0

@@ -1,8 +1,10 @@
 """Compute functions for Laplace solver."""
 
+from functools import partial
+
 import numpy as np
 
-from desc.backend import fixed_point, jnp
+from desc.backend import fixed_point, jit, jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -18,22 +20,22 @@ from desc.utils import cross, dot, errorif
 from .data_index import register_compute_fun
 
 _doc = {
+    "Phi_0": """jnp.ndarray :
+        Initial guess for iteration.
+        Initial guess must be periodic to converge to true solution.
+        """,
+    "maxiter": """int :
+        Maximum number of iterations for fixed point method.
+        Default is zero, which means that matrix inversion will be used.
+        If nonzero, then performs fixed point iterations until maximum
+        iterations or error tolerance of ``1e-6`` is reached.
+        """,
     "chunk_size": """int or None :
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.  Default is ``None``.
         Recommend to verify computation with ``chunk_size`` set to a
         small number due to bugs in JAX or XLA.
-        """,
-    "Phi_0": """jnp.ndarray :
-        Initial guess for iteration.
-        Must be periodic and non-constant to converge
-        because the initial guess must in the orthogonal complement
-        of the kernel of the adjoint of the operator to invert.
-        """,
-    "maxiter": """int :
-        Maximum number of iterations for fixed point method.
-        Default is zero, which means that matrix inversion will be used.
         """,
     "_midpoint_quad": """bool :
         Set to ``True`` to perform double layer potential quadrature
@@ -198,18 +200,17 @@ def _iteration_operator(
     )
 
 
+@partial(jit, static_argnames=["xtol", "maxiter", "chunk_size"])
 def _fixed_point_potential(
     boundary_condition,
     potential_data,
     source_data,
     interpolator,
-    transform,
-    chunk_size=None,
     Phi_0=None,
+    *,
     xtol=1e-6,
     maxiter=20,
-    method="simple",
-    **kwargs,
+    chunk_size=None,
 ):
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
@@ -222,14 +223,14 @@ def _fixed_point_potential(
         _kernel_dipole_plus_half,
     )
     if Phi_0 is None:
-        Phi_0 = transform.transform(jnp.ones(transform.basis.num_modes))
+        Phi_0 = jnp.ones(potential_grid.num_nodes)
     return fixed_point(
         _iteration_operator,
         Phi_0,
         (boundary_condition, potential_data, source_data, interpolator, chunk_size),
         xtol,
         maxiter,
-        method,
+        method="simple",
         scalar=True,
     )
 
@@ -320,8 +321,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data,
             data,
             data["interpolator"],
-            transforms["Phi"],
-            **kwargs,
+            **{key: kwargs[key] for key in _doc if key in kwargs},
         )
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
@@ -853,8 +853,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data,
             data,
             data["interpolator"],
-            transforms["Phi"],
-            **kwargs,
+            **{key: kwargs[key] for key in _doc if key in kwargs},
         )
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])

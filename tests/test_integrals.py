@@ -789,11 +789,11 @@ class TestLaplaceField:
 
         plt.rcParams.update(
             {
-                "axes.labelsize": 9,
+                "axes.labelsize": 10,
                 "axes.titlesize": 12,
                 "xtick.labelsize": 10,
                 "ytick.labelsize": 10,
-                "legend.fontsize": 7,
+                "legend.fontsize": 10,
                 "lines.linewidth": 1,
                 "lines.markersize": 4,
                 "figure.figsize": (6, 4),

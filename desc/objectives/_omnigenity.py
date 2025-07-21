@@ -1209,8 +1209,12 @@ class PiecewiseOmnigenity(_Objective):
         Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)
 
         # temporarily commenting the Q_pwO calculation
-        # --no-verify constants["overlap_penalty"] * Q_pwO
-        pwO_error = B_eq - B_pwO
+        # --no-verify overlap_penalty = constants["overlap_penalty"] * Q_pwO
+        overlap = constants["overlap_penalty"] * Q_pwO
+
+        # Dividing by Ntheta so objective doesn't change too much
+        # upon changing grid resolution
+        pwO_error = (jnp.abs(B_eq - B_pwO) + jnp.abs(overlap)) / Ntheta
 
         return pwO_error.ravel()
 

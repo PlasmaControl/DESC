@@ -710,33 +710,110 @@ class TestLaplaceField:
             return B
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("maxiter", [-1, 40])
-    def test_interior_Dirichlet(self, maxiter):
+    @pytest.mark.parametrize(
+        "surface, M, N, maxiter, chunk_size, just_err",
+        [(None, 16, 16, -1, 1000, False), (None, 16, 16, 40, 1000, False)],
+    )
+    def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
         """Test multiply connected interior Dirichlet Laplace solver."""
-        surface = FourierRZToroidalSurface(
-            R_lmn=[10, 1, 0.2],
-            Z_lmn=[-2, -0.2],
-            modes_R=[[0, 0], [1, 0], [0, 1]],
-            modes_Z=[[-1, 0], [0, -1]],
-        )
-        grid = LinearGrid(M=16, N=16, NFP=surface.NFP)
+        if surface is None:
+            surface = FourierRZToroidalSurface(
+                R_lmn=[10, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
         field = FreeSurfaceOuterField(
             surface,
             grid.M - 1,
             grid.N - 1,
+            M_coil=surface.M,
+            N_coil=surface.N,
+            sym_coil="sin" if surface.sym else False,
             B_coil=TestLaplaceField._HarmonicInterior(0),
         )
         assert field.M != grid.M and field.N != grid.N
         data, _ = field.compute(
-            ["Phi_coil", "Y_coil", "Z", "S[B0*n]", "γ potential"],
+            "Phi (periodic)" if just_err else "γ potential",
             grid,
             maxiter=maxiter,
-            chunk_size=1000,
+            chunk_size=chunk_size,
+            _full_output=True,
         )
-        np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-10)
-        np.testing.assert_allclose(data["Phi_coil"], data["Z"], atol=1e-8)
-        np.testing.assert_allclose(data["S[B0*n]"], 0)
+        if just_err:
+            return data["num iter"], data["Phi error"]
+        np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
+        np.testing.assert_allclose(data["Phi_coil (periodic)"], data["Z"])
         np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
+
+    @pytest.mark.skip
+    def test_convergence_run_fixed_point(
+        self,
+        surface=get("W7-X").surface,
+        M=30,
+        N=30,
+        maxiter=np.array([5, 10, 20, 30, 40]),
+        chunk_size=1000,
+        name="convergence-fp_W7-X",
+    ):
+        """Stores errors for potential in name.pkl for plotting analysis."""
+        import pickle
+
+        num_iter = []
+        Phi_err = []
+        print()
+        for i in maxiter:
+            n, e = self.test_interior_Dirichlet(
+                surface, M, N, i, chunk_size, just_err=True
+            )
+            num_iter.append(n)
+            Phi_err.append(e)
+            print(f"Resolution num iter={n} is done with error={e}.")
+        data = {"num iter": np.asarray(num_iter), "Phi error": np.asarray(Phi_err)}
+
+        with open(f"{name}.pkl", "wb") as file:
+            pickle.dump(data, file)
+
+    @pytest.mark.skip
+    def test_convergence_plot_fixed_point(self, name="convergence-fp_W7-X"):
+        """Imports name.pkl and saves plot in name.pdf.
+
+        The remainder of name after first underscore will be
+        appendend to plot title.
+        """
+        import pickle
+
+        with open(f"{name}.pkl", "rb") as file:
+            data = pickle.load(file)
+
+        plt.rcParams.update(
+            {
+                "axes.labelsize": 9,
+                "axes.titlesize": 12,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+                "legend.fontsize": 7,
+                "lines.linewidth": 1,
+                "lines.markersize": 4,
+                "figure.figsize": (6, 4),
+                "figure.dpi": 300,
+                "axes.grid": True,
+                "grid.linestyle": "--",
+                "grid.alpha": 0.6,
+            }
+        )
+        fig, ax = plt.subplots()
+        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=r"$\xi=2/3$")
+        ax.axhline(1e-7, color="black", label="Stop tolerance")
+        ax.set_xlabel(r"Number of fixed point iterations in inversion for $\Phi$")
+        ax.set_ylabel("Absolute error")
+        ax.set_title(
+            r"$\Phi$ error vs. fixed point iterations " + name.split("_", 1)[1]
+        )
+        ax.legend(loc="upper right", frameon=True)
+        fig.tight_layout()
+        plt.savefig(f"{name}.pdf")
 
     @pytest.mark.unit
     def test_interior_Neumann(
@@ -796,9 +873,9 @@ class TestLaplaceField:
     @pytest.mark.skip
     def test_convergence_run(
         self,
-        surface=None,
+        surface=get("W7-X").surface,
         rs=np.array([12, 20, 30, 40]),
-        name="convergence",
+        name="convergence_W7-X",
         chunk_size=500,
     ):
         """Stores errors for potential in name.pkl for plotting analysis.
@@ -832,7 +909,7 @@ class TestLaplaceField:
             pickle.dump(data, file)
 
     @pytest.mark.skip
-    def test_convergence_plot(self, name="convergence"):
+    def test_convergence_plot(self, name="convergence_W7-X"):
         """Imports name.pkl and saves plot in name.pdf.
 
         The remainder of name after first underscore will be

@@ -1,4 +1,11 @@
-"""Compute functions for Laplace solver."""
+"""Compute functions for multiply connected geometry Laplace solver.
+
+References
+----------
+    [1] Unalmis et al. New high-order accurate free surface stellarator
+        equilibria optimization and boundary integral methods in DESC.
+
+"""
 
 from functools import partial
 
@@ -28,7 +35,7 @@ _doc = {
         Maximum number of iterations for fixed point method.
         Default is zero, which means that matrix inversion will be used.
         If nonzero, then performs fixed point iterations until maximum
-        iterations or error tolerance of ``1e-6`` is reached.
+        iterations or error tolerance of ``1e-7`` is reached.
         """,
     "chunk_size": """int or None :
         Size to split integral computation into chunks.
@@ -44,6 +51,10 @@ _doc = {
     "_D_quad": """bool
         Set to ``True`` to perform double layer potential quadrature
         without removing singularities. Default is ``False``.
+        """,
+    "_full_output": """bool
+        Whether to return the maximum relative error and
+        number of iterations for the fixed point method.
         """,
 }
 
@@ -173,8 +184,6 @@ def _lsmr_compute_potential(
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
 
-    # Solving overdetermined system useful to reduce size of D while
-    # retaining FFT interpolation accuracy in the singular integrals.
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return (
         jnp.linalg.solve(D, boundary_condition)
@@ -184,8 +193,15 @@ def _lsmr_compute_potential(
 
 
 def _iteration_operator(
-    Phi, gamma, potential_data, source_data, interpolator, chunk_size
+    Phi,
+    gamma,
+    potential_data,
+    source_data,
+    interpolator,
+    chunk_size,
+    xi=2 / 3,
 ):
+    """Equation 3.16 in [1]."""
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi
     return (
@@ -196,11 +212,12 @@ def _iteration_operator(
             chunk_size=chunk_size,
             prune_data=False,
         )
+        + (xi - 1) * Phi
         - gamma
-    )
+    ) / xi
 
 
-@partial(jit, static_argnames=["xtol", "maxiter", "chunk_size"])
+@partial(jit, static_argnames=["xtol", "maxiter", "chunk_size", "_full_output"])
 def _fixed_point_potential(
     boundary_condition,
     potential_data,
@@ -208,9 +225,10 @@ def _fixed_point_potential(
     interpolator,
     Phi_0=None,
     *,
-    xtol=1e-6,
+    xtol=1e-7,
     maxiter=20,
     chunk_size=None,
+    _full_output=False,
 ):
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
@@ -232,6 +250,7 @@ def _fixed_point_potential(
         maxiter,
         method="simple",
         scalar=True,
+        full_output=_full_output,
     )
 
 
@@ -323,6 +342,11 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data["interpolator"],
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
+        if kwargs.get("_full_output", False):
+            data["Phi (periodic)"], (err, num_iter) = data["Phi (periodic)"]
+            data["Phi error"] = jnp.abs(err).max()
+            data["num iter"] = num_iter
+
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
@@ -704,9 +728,7 @@ def _B_coil_field(params, transforms, profiles, data, **kwargs):
 def _Y_coil(params, transforms, profiles, data, **kwargs):
     assert transforms["grid"].num_rho == 1
     assert np.isclose(transforms["grid"].nodes[0, 0], 1)
-    # Equation B.2 averaged over all χ_θ for increased accuracy
-    # since we only have discrete interpolation to true B_coil.
-    # (L2 error of Fourier series better than max pointwise).
+    # Equation B.2 in [1].
     data["Y_coil"] = dot(data["B_coil"], data["e_zeta"]).mean()
     return data
 
@@ -730,36 +752,36 @@ def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: compute this from vector or scalar potential
 @register_compute_fun(
     name="Phi_coil_mn",
-    label="(n \\times \\nabla)^{-1} (n \\times B_{\\text{coil}})",
+    label="\\Phi_{\\text{coil}, mn}",
     units="T m",
     units_long="Tesla meter",
     description="Fourier coefficients of periodic part of coil scalar potential",
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0, 0, 0]]},
+    transforms={"Phi_coil": [[0, 0, 0]]},
     profiles=[],
     data=["n_rho x B_coil", "n_rho x grad(theta)", "n_rho x grad(zeta)", "Y_coil"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
-    assert transforms["grid"].num_rho == 1
-    assert np.isclose(transforms["grid"].nodes[0, 0], 1)
+    grid = transforms["grid"]
+    assert grid.num_rho == 1
+    assert np.isclose(grid.nodes[0, 0], 1)
 
-    basis = transforms["Phi"].basis
-    grid = transforms["Phi"].grid
-
+    basis = transforms["Phi_coil"].basis
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
-    # n × ∇ in Fourier basis
+
     mat = (
         _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
         + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
     ).reshape(grid.num_nodes * 3, basis.num_modes)
 
-    # TODO: compute this from vector or scalar potential
+    # Equation 5.16 in [1].
     data["Phi_coil_mn"] = jnp.linalg.lstsq(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
@@ -776,13 +798,13 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0, 0, 0]]},
+    transforms={"Phi_coil": [[0, 0, 0]]},
     profiles=[],
     data=["Phi_coil_mn"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Phi_coil_periodic(params, transforms, profiles, data, **kwargs):
-    data["Phi_coil (periodic)"] = transforms["Phi"].transform(data["Phi_coil_mn"])
+    data["Phi_coil (periodic)"] = transforms["Phi_coil"].transform(data["Phi_coil_mn"])
     return data
 
 
@@ -855,6 +877,11 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data["interpolator"],
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
+        if kwargs.get("_full_output", False):
+            data["Phi (periodic)"], (err, num_iter) = data["Phi (periodic)"]
+            data["Phi error"] = jnp.abs(err).max()
+            data["num iter"] = num_iter
+
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
@@ -875,7 +902,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
     label="\\gamma",
     units="T m",
     units_long="Tesla meter",
-    description="Double layer potential with density -Phi",
+    description="Double layer potential with dipole density -Φ",
     dim=1,
     coordinates="tz",
     params=[],
@@ -891,9 +918,8 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
 def _gamma_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["Phi(x) (periodic)"] = data["Phi (periodic)"]
-    # This quantity recovers the left hand side of equation
-    # 5.15, offering means to test correctness of the
-    # computation of Phi (periodic).
+    # Left hand side of equation 5.15 in [1] computed by evaluating
+    # the right hand side. This is used for testing.
     data["γ potential"] = data["Phi (periodic)"] - _D_plus_half(
         data,
         data,

@@ -1,4 +1,4 @@
-"""High order accurate source free field solver.
+"""High order accurate multiply connected geometry Laplace solver.
 
 References
 ----------
@@ -11,7 +11,7 @@ from desc.basis import DoubleFourierSeries
 from desc.geometry import FourierRZToroidalSurface
 from desc.integrals.singularities import get_interpolator
 from desc.magnetic_fields import ToroidalMagneticField
-from desc.utils import errorif
+from desc.utils import errorif, setdefault
 
 
 class SourceFreeField(FourierRZToroidalSurface):
@@ -35,13 +35,11 @@ class SourceFreeField(FourierRZToroidalSurface):
         Geometry defining ∂𝒳.
     M : int
         Poloidal Fourier resolution to interpolate potential on ∂𝒳.
-        Default is ``grid.M``.
     N : int
         Toroidal Fourier resolution to interpolate potential on ∂𝒳.
-        Default is ``grid.N``.
     sym : str
-        Symmetry for Fourier basis interpolating the periodic part of the potential.
-        Default assumes no symmetry.
+        Symmetry for Fourier basis interpolating the periodic part of the
+        potential. Default assumes no symmetry.
     B0 : _MagneticField
         Magnetic field due to currents in 𝒳 and net currents outside 𝒳
         which are not accounted for ``I`` and ``Y``.
@@ -232,11 +230,29 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     Parameters
     ----------
+    surface : Surface
+        Geometry defining ∂𝒳.
+    M : int
+        Poloidal Fourier resolution to interpolate potential on ∂𝒳.
+    N : int
+        Toroidal Fourier resolution to interpolate potential on ∂𝒳.
+    sym : str
+        Symmetry for Fourier basis interpolating the periodic part of the
+        potential. Default assumes no symmetry.
+    M_coil : int
+        Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
+        Default is ``M``.
+    N_coil : int
+        Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
+        Default is ``N``.
+    sym_coil : str
+        Symmetry for Fourier basis interpolating the periodic part of the
+        coil potential. Default is ``sym``.
     B_coil : _MagneticField
         Magnetic field from coil current sources.
     Y_coil : float
         Net poloidal current determining circulation of coil field.
-        Default is to compute from B_coil.
+        Default is to compute from ``B_coil``.
     I_plasma : float
         Net toroidal plasma current determining a circulation of Φ.
         Default is zero.
@@ -246,20 +262,32 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     """
 
-    _immediate_attributes_ = ["_B_coil", "_Y_coil"]
+    _immediate_attributes_ = ["_Phi_coil_basis", "_B_coil", "_Y_coil"]
 
     def __init__(
         self,
         surface,
-        M=None,
-        N=None,
+        M,
+        N,
         sym=False,
+        M_coil=None,
+        N_coil=None,
+        sym_coil=None,
         B_coil=None,
         Y_coil=None,
         I_plasma=0.0,  # noqa: E741
         I_sheet=0.0,
     ):
         super().__init__(surface, M, N, sym, I=I_plasma + I_sheet, Y=0)
+        if M_coil is None and N_coil is None and sym_coil is None:
+            self._Phi_coil_basis = self._Phi_basis
+        else:
+            self._Phi_coil_basis = DoubleFourierSeries(
+                M=setdefault(M_coil, M),
+                N=setdefault(N_coil, N),
+                NFP=surface.NFP,
+                sym=setdefault(sym_coil, sym),
+            )
         self._B_coil = B_coil
         self._Y_coil = Y_coil
 
@@ -271,6 +299,26 @@ class FreeSurfaceOuterField(SourceFreeField):
             object.__setattr__(self, name, value)
         else:
             setattr(object.__getattribute__(self, "_surface"), name, value)
+
+    @property
+    def Phi_coil_basis(self):
+        """DoubleFourierSeries: Basis for periodic part of coil potential."""
+        return self._Phi_coil_basis
+
+    @property
+    def sym_Phi_coil(self):
+        """str: Symmetry of periodic part of Phi_coil (no symmetry if False)."""
+        return self._Phi_coil_basis.sym
+
+    @property
+    def M_Phi_coil(self):
+        """int: Poloidal resolution of periodic part of Phi_coil."""
+        return self._Phi_coil_basis.M
+
+    @property
+    def N_Phi_coil(self):
+        """int: Toroidal resolution of periodic part of Phi_coil."""
+        return self._Phi_coil_basis.N
 
     def compute(
         self,
@@ -285,6 +333,14 @@ class FreeSurfaceOuterField(SourceFreeField):
         **kwargs,
     ):
         """Compute the quantity given by name on grid."""
+        errorif(
+            self.M_Phi_coil > grid.M,
+            msg=f"Got M_Phi_coil={self.M_Phi_coil} > {grid.M}=grid.M.",
+        )
+        errorif(
+            self.N_Phi_coil > grid.N,
+            msg=f"Got N_Phi_coil={self.N_Phi_coil} > {grid.N}=grid.N.",
+        )
         if self._Y_coil is not None and "Y_coil" not in data:
             data["Y_coil"] = self._Y_coil
         kwargs.setdefault("B_coil", self._B_coil)

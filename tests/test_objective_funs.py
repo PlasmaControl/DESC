@@ -36,6 +36,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    PiecewiseOmnigenousField,
     PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
@@ -75,6 +76,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
+    PiecewiseOmnigenity,
     PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
@@ -3167,6 +3169,7 @@ class TestComputeScalarResolution:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        PiecewiseOmnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3553,6 +3556,54 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=1e-3)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_piecewiseomnigenity(self):
+        """Omnigenity."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        eq, _ = eq.solve(objective="force", verbose=3)
+
+        rho = np.array([0.5])
+
+        grid0 = LinearGrid(rho=rho, M=10, N=10, NFP=eq.NFP)
+        modB = np.reshape(eq.compute("|B|", grid=grid0)["|B|"], (1, -1))
+        field = PiecewiseOmnigenousField(
+            B_min=np.max(modB, axis=1),
+            B_max=np.max(modB, axis=1),
+            zeta_C=[np.pi / 10],
+            theta_C=[np.pi],
+            t_1=[0.05],
+            t_2=[1.1],
+            NFP=eq.NFP,
+        )
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array + 1.0):  # omnigenity needs higher res
+            grid = LinearGrid(
+                M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=False
+            )
+            obj = ObjectiveFunction(
+                PiecewiseOmnigenity(
+                    eq=eq,
+                    field=field,
+                    eq_grid=grid,
+                    weight=1e1,
+                    overlap_penalty=4,
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+    @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
     )
@@ -3656,6 +3707,7 @@ class TestObjectiveNaNGrad:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        PiecewiseOmnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3958,6 +4010,45 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_piecewiseomnigenity(self):
+        """PiecewiseOmnigenity."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+
+        rho = np.array([0.5])
+        grid = LinearGrid(rho=rho, M=int(eq.M), N=int(eq.N), NFP=eq.NFP, sym=False)
+        modB = np.reshape(eq.compute("|B|", grid=grid)["|B|"], (1, -1))
+        field = PiecewiseOmnigenousField(
+            B_min=np.max(modB, axis=1),
+            B_max=np.max(modB, axis=1),
+            zeta_C=[np.pi / 10],
+            theta_C=[np.pi],
+            t_1=[0.05],
+            t_2=[1.1],
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            PiecewiseOmnigenity(
+                eq=eq,
+                field=field,
+                eq_grid=grid,
+                weight=1e1,
+                overlap_penalty=4,
+            )
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_effective_ripple(self):

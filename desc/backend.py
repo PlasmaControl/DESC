@@ -1086,7 +1086,7 @@ else:  # pragma: no cover
         -------
         p : jnp.ndarray
             The fixed points, if convergence is achieved.
-            If full output is true, returns the tuple (p, (rel_err, iter_count)).
+            If full output is true, returns the tuple (p, (err, iter_count)).
 
         """
         if full_output:

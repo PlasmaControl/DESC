@@ -2480,7 +2480,7 @@ def ichebfit(y_c, axis):
     return idct(y_c / f.reshape(f_shape), axis=axis, type=1, norm=None)
 
 
-def fftfit(y, axis):
+def fftfit(y, axis, n=None):
     """
     Real fast fourier transform along axis, designed to convert coefficients
     into the form expected by the fourier functions. Assumes grid and basis
@@ -2492,12 +2492,19 @@ def fftfit(y, axis):
         Function to Fourier transform.
     axis : int
         Axis along which to transform y.
+    n: int
+        Desired number of output modes along axis. Defaults
+        to the number of input nodes.
 
     Returns
     -------
     y_c : ndarray, shape(...,N,...)
         Transform of y along axis.
     """
+    N = int((y.shape[axis] - 1) / 2)
+    if n is None:
+        n = N
+    
     # Real fourier transform
     c_cplx = rfft(y, axis=axis, norm="forward")
 
@@ -2518,12 +2525,25 @@ def fftfit(y, axis):
     c1 = -np.flip(c_unpad.imag, axis=axis)
 
     # Recombine
-    c_diff = jnp.concatenate([c1, c0, c2], axis=axis)
+    y_c = jnp.concatenate([c1, c0, c2], axis=axis)
 
-    return c_diff
+    if n>N:
+        pad_shape = tuple(
+            n-N if i==axis else y_c.shape[i] for i in range(y_c.ndim)
+        )
+        padding = np.zeros(pad_shape)
+        y_c = np.concatenate([padding,y_c,padding],axis=axis)
+    elif n<N:
+        cutoff_slice = tuple(
+            slice(N-n,n-N) if i==axis else slice(None) for i in range(y_c.ndim)
+        )
+        y_c = y_c[cutoff_slice]
+
+    return y_c
 
 
-def ifftfit(y_c, axis):
+
+def ifftfit(y_c, axis, n=None):
     """
     Fast method for converting from Fourier coefficients to real space.
     Assumes basis and grid resolution are equal and evaluates on the
@@ -2534,26 +2554,41 @@ def ifftfit(y_c, axis):
         Function to decompose into basis of Chebyshev functions.
     axis : int
         Axis along which to transform y.
-
+    n : int
+        Desired number of output nodes along axis. Defaults to
+        the number of input modes. 
     Returns
     -------
     y : ndarray, shape(...,N,...)
         Transform of y along axis.
     """
     N = int((y_c.shape[axis] - 1) / 2)
+    if n is None:
+        n = N
+    if n>N:
+        pad_shape = tuple(
+            n-N if i==axis else y_c.shape[i] for i in range(y_c.ndim)
+        )
+        padding = np.zeros(pad_shape)
+        y_c = np.concatenate([padding,y_c,padding],axis=axis)
+    elif n<N:
+        cutoff_slice = tuple(
+            slice(N-n,n-N) if i==axis else slice(None) for i in range(y_c.ndim)
+        )
+        y_c = y_c[cutoff_slice]
 
     # Reconstruct c_cplx in a form jnp expects
     c1_slice = tuple(
-        slice(N - 1, None, -1) if i == axis else slice(None) for i in range(y_c.ndim)
+        slice(n - 1, None, -1) if i == axis else slice(None) for i in range(y_c.ndim)
     )
     c1 = y_c[c1_slice]
     
     c0_slice = tuple(
-        slice(N, N + 1) if i == axis else slice(None) for i in range(y_c.ndim)
+        slice(n, n + 1) if i == axis else slice(None) for i in range(y_c.ndim)
     )
     c0 = y_c[c0_slice]
     c2_slice = tuple(
-        slice(N + 1, None) if i == axis else slice(None) for i in range(y_c.ndim)
+        slice(n + 1, None) if i == axis else slice(None) for i in range(y_c.ndim)
     )
     c2 = y_c[c2_slice]
     c_cplx = np.concatenate([c0, (c2 - 1j * c1) / 2], axis=axis)

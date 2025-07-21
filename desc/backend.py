@@ -82,8 +82,8 @@ def _fixed_point(func, x0, tol, maxiter, method, is_converged):
     from desc.utils import safediv
 
     def cond_fun(state):
-        _, converged, i = state
-        return (i < maxiter) & (~converged)
+        _, err, i = state
+        return (i < maxiter) & (~is_converged(err, tol))
 
     def body_fun(state):
         p0, _, i = state
@@ -91,10 +91,12 @@ def _fixed_point(func, x0, tol, maxiter, method, is_converged):
         if method == "del2":
             p2 = func(p)
             p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 - p2)
-        rel_err = safediv(p - p0, p0, p)
-        return p, is_converged(rel_err, tol), i + 1
+        err = p - p0
+        return p, err, i + 1
 
-    return jax.lax.while_loop(cond_fun, body_fun, (x0, False, 0))
+    return jax.lax.while_loop(
+        cond_fun, body_fun, (x0, jnp.full_like(jax.eval_shape(func, x0), jnp.inf), 0)
+    )
 
 
 def _lstsq(A, y):
@@ -596,18 +598,18 @@ if use_jax:  # noqa: C901
         scalar : bool
             Whether ``func`` is a single-variable map.
         full_output : bool
-            Whether to return the iteration count and whether the result converged.
+            Whether to return the error and iteration count.
 
         Returns
         -------
         p : jnp.ndarray
             The fixed points, if convergence is achieved.
-            If full output is true, returns the tuple (p, (is_converged, iterations)).
+            If full output is true, returns the tuple (p, (err, iter_count)).
 
         """
 
         def solve(f, x0):
-            p, converged, i = _fixed_point(
+            p, err, i = _fixed_point(
                 _to_fp(f),
                 x0,
                 xtol,
@@ -615,7 +617,7 @@ if use_jax:  # noqa: C901
                 method,
                 _is_converged_pointwise if scalar else _is_converged,
             )
-            return (p, (converged, i)) if full_output else p
+            return (p, (err, i)) if full_output else p
 
         def f(x):
             return func(x, *args) - x
@@ -1078,16 +1080,16 @@ else:  # pragma: no cover
         scalar : bool
             Whether ``func`` is a single-variable map.
         full_output : bool
-            Whether to return the iteration count and whether the result converged.
+            Whether to return the error and iteration count.
 
         Returns
         -------
         p : jnp.ndarray
-            The fixed point, if convergence is achieved.
-            If full output is true, returns the tuple (p, (converged, iterations)).
+            The fixed points, if convergence is achieved.
+            If full output is true, returns the tuple (p, (err, iter_count)).
 
         """
-        if scalar or full_output:
+        if full_output:
             raise NotImplementedError
         if method == "simple":
             method = "iteration"

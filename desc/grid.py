@@ -322,16 +322,6 @@ class _Grid(IOAble, ABC):
         return self._unique_rho_idx
 
     @property
-    def unique_rho(self):
-        """ndarray: Unique rho coordinates."""
-        return self.compress(self.nodes[:, 0], "rho")
-
-    @property
-    def unique_poloidal(self):
-        """ndarray: Unique poloidal coordinates."""
-        return self.compress(self.nodes[:, 1], "poloidal")
-
-    @property
     def unique_theta(self):
         """ndarray: Unique poloidal coordinates."""
         return self.compress(self.nodes[:, 1], "theta")

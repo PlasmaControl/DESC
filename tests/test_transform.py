@@ -538,7 +538,9 @@ class TestTransform:
 
         basis = DoubleChebyshevFourierBasis(grid.L,6,grid.N,NFP=grid.NFP)
         transform = Transform(grid,basis,build=True,build_pinv=True,derivs=2,method="rpz")
-        y = np.stack([(np.cos(r)) * np.cos(6*phi) * (1-z)**3,r**2*np.sin(2*phi)*np.exp(z)]).T
+        def f(r,phi,z):
+            return np.stack([(np.cos(r)) * np.cos(6*phi) * (1-z)**3,r**2*np.sin(2*phi)*np.exp(z)]).T
+        y = f(r,phi,z)
         y_c = transform.fit(y)
 
         numerical = transform.transform(y_c[:,0],dr=1,dt=2,dz=2)
@@ -546,6 +548,24 @@ class TestTransform:
 
         np.testing.assert_allclose(y[:,0],transform.transform(y_c[:,0]),atol=1E-7)
         np.testing.assert_allclose(numerical,analytic,atol=1E-7)
+
+        # Try directRPZ method
+        R = np.arange(0,1,0.1)
+        Z = np.arange(0,1,0.1)
+        out_grid = CylindricalGrid(R=R,M=5,Z=Z,NFP=basis.NFP)
+        out_transform = Transform(out_grid,basis,derivs=2,build=True,method="directrpz")
+
+        r = out_grid.nodes[:,0]
+        phi = out_grid.nodes[:,1]
+        z = out_grid.nodes[:,2]
+
+        numerical = out_transform.transform(y_c[:,0],dr=1,dt=2,dz=2)
+        analytic = 216*np.sin(r)*np.cos(6*phi)*(1-z)
+
+        np.testing.assert_allclose(f(r,phi,z)[:,0],out_transform.transform(y_c[:,0]),atol=1E-7)
+        np.testing.assert_allclose(numerical,analytic,atol=1E-7)
+
+
 
     @pytest.mark.unit
     def test_empty_grid(self):

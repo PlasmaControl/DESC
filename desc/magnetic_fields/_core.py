@@ -26,7 +26,6 @@ from desc.basis import (
 )
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -40,9 +39,13 @@ from desc.utils import (
     dot,
     errorif,
     flatten_list,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
 )
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
@@ -2212,7 +2215,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)
             AZ = AZ.reshape(shp)
-        except NotImplementedError:
+        except (ValueError, NotImplementedError):
             AR = AP = AZ = None
         return cls(
             R,
@@ -2571,9 +2574,8 @@ def field_line_integrate(
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal agitngle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        geometric toroidal angle values to output r,z at. Can be strictly increasing
+        or decreasing, but must be monotonic.
     field : MagneticField
         source of magnetic field to integrate
     params: dict, optional
@@ -2607,8 +2609,8 @@ def field_line_integrate(
     Returns
     -------
     r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
-
+        arrays of r and z coordinates of the field line, corresponding to the
+        input phis
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
@@ -2617,13 +2619,22 @@ def field_line_integrate(
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
+    # scale to make toroidal field (bp) positive
+    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
+
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(
-            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-        ).T
+        br, bp, bz = (
+            scale
+            * field.compute_magnetic_field(
+                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
+            ).T
+        )
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
@@ -2631,9 +2642,9 @@ def field_line_integrate(
     # diffrax parameters
 
     def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.any(jnp.array([state.y[0] < bounds_R[0], state.y[0] > bounds_R[1]]))
-        Z_out = jnp.any(jnp.array([state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1]]))
-        return jnp.any(jnp.array([R_out, Z_out]))
+        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
 
     kwargs.setdefault(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
@@ -2667,8 +2678,8 @@ def field_line_integrate(
         x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
-    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+    r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
     return r, z
 

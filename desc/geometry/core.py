@@ -8,7 +8,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import reflection_matrix, rotation_matrix
 from desc.compute.utils import (
     _parse_parameterization,
     get_data_deps,
@@ -18,7 +17,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif
+from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -353,6 +352,47 @@ class Curve(IOAble, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
+
+    def to_FourierXY(self, N=10, grid=None, s=None, basis="xyz", name=""):
+        """Convert Curve to FourierXYCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar curve that best represents the curve.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCurve representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCurve.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYCurve
+            New representation of the curve parameterized by Fourier series for the
+            X and Y coordinates in a plane specified by a center position and normal
+            vector.
+
+        """
+        from .curve import FourierXYCurve
+
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+            grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierXYCurve.from_values(coords, N=N, s=s, basis=basis, name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):

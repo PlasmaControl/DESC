@@ -392,6 +392,15 @@ class BallooningStability(_Objective):
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_iota_keys",
+        "_len_keys",
+        "_Neigvals",
+        "_nturns",
+        "_nzetaperturn",
+        "_add_lcfs",
+    ]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Ideal ballooning lambda: "

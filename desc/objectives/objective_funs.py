@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
     jnp,
     tree_flatten,
@@ -231,7 +232,23 @@ class ObjectiveFunction(IOAble):
 
     """
 
-    _io_attrs_ = ["_objectives"]
+    _io_attrs_ = [
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_objectives",
+        "_use_jit",
+    ]
+    _static_attrs = [
+        "_built",
+        "_compile_mode",
+        "_compiled",
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_things_per_objective_idx",
+        "_use_jit",
+    ]
 
     def __init__(
         self,
@@ -292,6 +309,8 @@ class ObjectiveFunction(IOAble):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -1059,14 +1078,31 @@ class _Objective(IOAble, ABC):
     _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [
-        "_target",
         "_bounds",
-        "_weight",
+        "_deriv_mode",
         "_name",
         "_normalize",
         "_normalize_target",
         "_normalization",
+        "_target",
+        "_weight",
+    ]
+    _static_attrs = [
+        "_built",
+        "_coordinates",
+        "_data_keys",
         "_deriv_mode",
+        "_dim_f",
+        "_equilibrium",
+        "_jac_chunk_size",
+        "_linear",
+        "_loss_function",
+        "_name",
+        "_normalize",
+        "_normalize_target",
+        "_print_value_fmt",
+        "_scalar",
+        "_units",
     ]
 
     def __init__(
@@ -1148,6 +1184,8 @@ class _Objective(IOAble, ABC):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -1205,6 +1243,10 @@ class _Objective(IOAble, ABC):
             self._use_jit = use_jit
         if not self._use_jit:
             self._unjit()
+
+        # put the constants to device as jax arrays
+        if desc_config["kind"] == "gpu":
+            self._constants = jax.device_put(self.constants, jax.devices()[0])
 
         self._built = True
 

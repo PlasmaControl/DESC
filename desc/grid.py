@@ -48,6 +48,21 @@ class _Grid(IOAble, ABC):
         "_fft_toroidal",
     ]
 
+    _static_attrs = [
+        "_endpoint",
+        "_can_fft2",
+        "_coordinates",
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_is_meshgrid",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_node_pattern",
+        "_sym",
+    ]
+
     @abstractmethod
     def _create_nodes(self, *args, **kwargs):
         """Allow for custom node creation."""
@@ -1576,6 +1591,8 @@ class ConcentricGrid(_Grid):
 
     _fft_poloidal = False
     _fft_toroidal = True
+
+    _static_attrs = _Grid._static_attrs + ["_node_pattern"]
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)

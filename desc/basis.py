@@ -36,6 +36,17 @@ class _Basis(IOAble, ABC):
         "_spectral_indexing",
     ]
 
+    _static_attrs = [
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_sym",
+        "_spectral_indexing",
+    ]
+
     def __init__(self):
         self._enforce_symmetry()
         self._sort_modes()
@@ -315,6 +326,34 @@ class _Basis(IOAble, ABC):
             + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
                 self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
             )
+        )
+
+    def __hash__(self):
+        """Get the hash of the object."""
+        return hash(
+            (
+                self.__class__.__name__,
+                self._L,
+                self._M,
+                self._N,
+                self._NFP,
+                self._sym,
+                self._spectral_indexing,
+            )
+        )
+
+    def __eq__(self, other):
+        """Check if two basis objects are equal."""
+        if not isinstance(other, _Basis):
+            return False
+        return (
+            self.__class__ == other.__class__
+            and self.L == other.L
+            and self.M == other.M
+            and self.N == other.N
+            and self.NFP == other.NFP
+            and self.sym == other.sym
+            and self.spectral_indexing == other.spectral_indexing
         )
 
 

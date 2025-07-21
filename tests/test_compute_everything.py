@@ -29,6 +29,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    PiecewiseOmnigenousField,
 )
 from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
 
@@ -164,6 +165,15 @@ def test_compute_everything():
             B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
             x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
         ),
+        "desc.magnetic_fields._core.PiecewiseOmnigenousField": PiecewiseOmnigenousField(
+            B_min=[0.8],
+            B_max=[1.2],
+            zeta_C=[np.pi / 10],
+            theta_C=[np.pi],
+            t_1=[0.05],
+            t_2=[1.1],
+            NFP=2,
+        ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
             R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
@@ -230,7 +240,10 @@ def test_compute_everything():
     error_rpz = False
 
     # some things can't compute "phi" and therefore can't convert to XYZ basis
-    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
+    no_xyz_things = [
+        "desc.magnetic_fields._core.OmnigenousField",
+        "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+    ]
 
     with warnings.catch_warnings():
         # Max resolution of master_compute_data_rpz.pkl limited by GitHub file

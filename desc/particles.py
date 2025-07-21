@@ -112,8 +112,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         in a CoilSet or MagneticField, choose "lab".
     """
 
-    _frame: str
-
     def __init__(self, frame):
         assert frame in ["lab", "flux"]
         self._frame = frame

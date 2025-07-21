@@ -1382,7 +1382,6 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
-    _static_attrs = ["_B0"]
 
     def __init__(self, B0):
         self.B0 = B0

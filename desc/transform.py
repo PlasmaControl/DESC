@@ -289,11 +289,10 @@ class Transform(IOAble):
             )
             self.method = "direct1"
             return
-        if grid.M != basis.M or grid.NFP != basis.NFP:
+        if grid.NFP != basis.NFP:
             warnings.warn(
                 colored(
-                    "Partial sum RPZ method requires the basis and grid to have the same resolution"
-                    + "in the second dimension (assumed phi) and the same NFP."
+                    "Partial sum RPZ method requires the basis and grid to have the same NFP."
                     + "got {} grid resolution".format(grid.M)
                     + " and basis resolution {}".format(basis.M)
                     + "falling back to direct1 method",
@@ -332,12 +331,12 @@ class Transform(IOAble):
             )
             self.method = "direct1"
             return
-        if (grid.L, grid.M, grid.N) != (basis.L, basis.M, basis.N):
+        if (grid.L, grid.N) != (basis.L, basis.N):
             warnings.warn(
                 colored(
-                    "RPZ method requires the basis and grid to have the same resolutions"
-                    + "got {} grid resolution".format((grid.L, grid.M, grid.N))
-                    + " and basis resolution {}".format((basis.L, basis.M, basis.N))
+                    "RPZ method requires the basis and grid to have the same resolutions in R and Z"
+                    + "got {} grid resolution".format((grid.L, grid.N))
+                    + " and basis resolution {}".format((basis.L, basis.N))
                     + "falling back to direct1 method",
                     "yellow",
                 )
@@ -562,7 +561,7 @@ class Transform(IOAble):
                 * self.dk.reshape((-1, 1)) ** dphi
                 * (-1) ** (dphi > 1)
             )
-            y = ifftfit(y, axis=2)
+            y = ifftfit(y, axis=2, n=self.grid.M)
 
             # differentiate with respect to r
             if dr == 0 and self.method == "rpz":
@@ -622,9 +621,9 @@ class Transform(IOAble):
             from desc.basis import fftfit, chebfit
 
             x_3d = x.reshape(self.grid.num_z, self.grid.num_r, self.grid.num_phi, -1)
-            c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2)
-            c = c.reshape(x.shape)
-
+            c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2, n=self.basis.M)
+            c = c.reshape(self.basis.num_modes) if x.ndim == 1 else c.reshape(self.basis.num_modes,-1)
+ 
         return c
 
     def project(self, y):

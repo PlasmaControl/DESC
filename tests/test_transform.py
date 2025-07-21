@@ -536,7 +536,7 @@ class TestTransform:
         z = grid.nodes[:,2]
 
 
-        basis = DoubleChebyshevFourierBasis(grid.L,grid.M,grid.N,NFP=grid.NFP)
+        basis = DoubleChebyshevFourierBasis(grid.L,6,grid.N,NFP=grid.NFP)
         transform = Transform(grid,basis,build=True,build_pinv=True,derivs=2,method="rpz")
         y = np.stack([(np.cos(r)) * np.cos(6*phi) * (1-z)**3,r**2*np.sin(2*phi)*np.exp(z)]).T
         y_c = transform.fit(y)

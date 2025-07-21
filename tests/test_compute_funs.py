@@ -4,14 +4,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.utils import cross, dot
+from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1606,14 +1605,7 @@ def test_clebsch_sfl_funs():
 def test_parallel_grad_fd(DummyStellarator):
     """Test that the parallel gradients match with numerical gradients."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    grid = get_rtz_grid(
-        eq,
-        0.5,
-        0,
-        np.linspace(0, 2 * np.pi, 50),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
+    grid = get_rtz_grid(eq, 0.5, 0, np.linspace(0, 2 * np.pi, 50), coordinates="raz")
     data = eq.compute(
         [
             "|B|",

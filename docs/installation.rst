@@ -138,27 +138,18 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
         .. attention::
             Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
 
-        .. attention::
-            JAX version 0.6.1 may cause silent installation failures on GPU where the installation appears to succeed, but when running DESC, you will get an error like ``XlaRuntimeError: INTERNAL: cuSolver internal error``. To solve this problem, you need to run
-
-            .. code-block:: sh
-
-                pip install nvidia-cublas-cu12==12.9.0.13
-
-            in addition to below instructions.
-
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on December 17, 2024.
+            These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on July 3, 2025.
 
             Set up the correct cuda environment for jax installation
 
             .. code-block:: sh
 
                 module load cudatoolkit/12.4
-                module load cudnn/8.9.3_cuda12
-                module load python/3.11
+                module load cudnn/9.5.0
+                module load conda
 
             Check that you have loaded these modules
 
@@ -170,7 +161,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
             .. code-block:: sh
 
-                conda create -n desc-env python=3.11
+                conda create -n desc-env python=3.12
                 conda activate desc-env
                 pip install --upgrade "jax[cuda12]"
 
@@ -185,6 +176,8 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 # optionally install developer requirements (if you want to run tests)
                 pip install -r devtools/dev-requirements.txt
 
+            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initalization to work properly.
+
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
 
@@ -192,6 +185,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
             .. code-block:: sh
 
+                module load anaconda3/2024.10
                 conda create --name desc-env python=3.12 -y
                 conda activate desc-env
                 git clone https://github.com/PlasmaControl/DESC.git
@@ -311,3 +305,17 @@ If you encounter issues during installation, please `leave us an issue on Github
     This may be caused by a version of DESC already having been installed in your base conda environment.
 
     Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.
+
+.. tip::
+
+    **Problem**: I am getting errors when using JAX version 0.6.1 like ``XlaRuntimeError: INTERNAL: cuSolver internal error``
+
+    **Solution**:
+    JAX version 0.6.1 may cause silent installation failures on GPU where the installation appears to succeed, but when running DESC, you will get an error like ``XlaRuntimeError: INTERNAL: cuSolver internal error``.
+    To solve this problem, it is recommended to upgrade the JAX version to a newer version than 0.6.1. If you for some reason must use version 0.6.1, then to avoid these errors you need to run
+
+    .. code-block:: sh
+
+        pip install nvidia-cublas-cu12==12.9.0.13
+
+    in addition to the recommended install instructions.

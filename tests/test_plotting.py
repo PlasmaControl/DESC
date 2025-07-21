@@ -13,7 +13,7 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
-from desc.compute import data_index, xyz2rpz
+from desc.compute import data_index
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -46,7 +46,7 @@ from desc.plotting import (
     plot_surfaces,
     poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
 tol_1d = 4.5
 tol_2d = 10

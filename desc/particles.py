@@ -4,6 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
+import equinox as eqx
 import numpy as np
 from diffrax import (
     AbstractTerm,
@@ -48,6 +49,13 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     signature.
     """
 
+    # as opposed to other classes in DESC which inherit from IOAble, this class
+    # is a subclass of diffrax.AbstractTerm which is an Equinox.Module. The following
+    # attributes need to be defined as static fields for JAX transformation.
+    _frame: str = eqx.field(static=True)
+    vcoords: list[str] = eqx.field(static=True)
+    args: list[str] = eqx.field(static=True)
+
     @property
     @abstractmethod
     def frame(self):
@@ -61,7 +69,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
     @property
     @abstractmethod
-    def vcoords(self):
+    def vcoords(self):  # noqa : F811
         """Velocity coordinates used by the model, in order.
 
         Options are:
@@ -76,7 +84,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
     @property
     @abstractmethod
-    def args(self):
+    def args(self):  # noqa : F811
         """Additional arguments needed by the model.
 
         Eg, "m", "q", "mu", for mass, charge, magnetic moment.

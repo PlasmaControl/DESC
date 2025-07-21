@@ -1,5 +1,6 @@
 """Functions for tracing particles in magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
@@ -154,7 +155,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dx : jax.Array, shape(N,4)
             Velocity of particles in phase space.
         """
-        eq_or_field, m, q, mu, kwargs = args
+        m, q, mu, eq_or_field, kwargs = args
         if self.frame == "flux":
             assert isinstance(eq_or_field, Equilibrium)
             return self._compute_flux_coordinates(x, eq_or_field, m, q, mu, **kwargs)
@@ -208,35 +209,36 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Compute the RHS of the ODE using MagneticField."""
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
-        vpar = x[-1]
-        coords = x[:-1]
+        x = jnp.atleast_2d(x)
+        vpar = x[:, -1]
+        coords = x[:, :-1]
+        m, q, mu = map(jnp.atleast_1d, (m, q, mu))
+
         field_compute = lambda y: jnp.linalg.norm(
             field.compute_magnetic_field(y, **kwargs), axis=-1
-        )
+        ).squeeze()
 
         # magnetic field vector in R, phi, Z coordinates
-        B = field.compute_magnetic_field(coords, **kwargs)
-        grad_B = jnp.vectorize(
-            Derivative(
-                field_compute,
-                mode="fwd",
-            ),
-            signature="(n)->(n,n)",
-        )(coords).squeeze()
+        B = jnp.atleast_2d(field.compute_magnetic_field(coords, **kwargs))
+        grad_B = jnp.atleast_2d(
+            jnp.vectorize(
+                Derivative(
+                    field_compute,
+                    mode="grad",
+                ),
+            )(coords).squeeze()
+        )
 
         modB = jnp.linalg.norm(B, axis=-1)
-        b = B / modB
+        b = B / modB[:, None]
         # factor of R from grad in cylindrical coordinates
-        grad_B = grad_B.at[:, 1].divide(coords[0])
+        grad_B = grad_B.at[:, 1].divide(coords[:, 0])
+        Rdot = vpar[:, None] * b + (m / q / modB**2 * (mu * modB + vpar**2))[
+            :, None
+        ] * cross(b, grad_B)
 
-        Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
-        # TODO: I don't think this is correct
-        # d1, d2, d3 = Rdot               # noqa: E800
-        # d2 /= coords[0]                 # noqa: E800
-        # Rdot = jnp.array([d1, d2, d3])  # noqa: E800
-
-        vpardot = -mu * dot(b, grad_B)
-        dxdt = jnp.concatenate([Rdot, vpardot]).reshape(x.shape)
+        vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))
+        dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
         return dxdt
 
 
@@ -498,14 +500,14 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
 
     def __init__(
         self,
-        R0: ArrayLike,
-        phi0: ArrayLike,
-        Z0: ArrayLike,
-        xi0: ArrayLike,
-        E: ArrayLike = 3.5e6,
-        m: float = 4,
-        q: float = 2,
-        eq: Optional[Equilibrium] = None,
+        R0,
+        phi0,
+        Z0,
+        xi0,
+        E=3.5e6,
+        m=4,
+        q=2,
+        eq=None,
     ):
         m = m * proton_mass
         q = q * elementary_charge
@@ -527,18 +529,13 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         """Initialize N random particles for a given trajectory model."""
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         if model.frame == "flux":
-            x = x
-        elif model.frame == "lab":
             if self.eq is None:
                 raise ValueError(
-                    "Mapping lab coordinates to flux frame requires an Equilibrium"
+                    "Particle tracing in flux coordinates requires an Equilibrium"
                 )
-            x, _ = self.eq.map_coordinates(
-                x,
-                inbasis=["R", "phi", "Z"],
-                outbasis=["rho", "theta", "zeta"],
-                period=[np.inf, 2 * np.pi / self.eq.NFP, np.inf],
-            )
+            x = x
+        elif model.frame == "lab":
+            x = x
         else:
             raise NotImplementedError
 
@@ -604,9 +601,9 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         seed: int = 0,
     ):
         self.curve = curve
-        self.E = E * JOULE_PER_EV
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
+        self.E = jnp.full(N, E * JOULE_PER_EV)
+        self.m = jnp.full(N, m * proton_mass)
+        self.q = jnp.full(N, q * elementary_charge)
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
@@ -658,9 +655,9 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         args = []
         for arg in model.args:
             if arg == "m":
-                args += [jnp.full(x.shape[0], self.m)]
+                args += [self.m]
             elif arg == "q":
-                args += [jnp.full(x.shape[0], self.q)]
+                args += [self.q]
             elif arg == "mu":
                 vperp2 = v**2 - vpar**2
                 modB = _compute_modB(x, field)
@@ -707,9 +704,9 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         seed: int = 0,
     ):
         self.surface = surface
-        self.E = E * JOULE_PER_EV
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
+        self.E = jnp.full(N, E * JOULE_PER_EV)
+        self.m = jnp.full(N, m * proton_mass)
+        self.q = jnp.full(N, q * elementary_charge)
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
@@ -777,7 +774,9 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 def trace_particles(
     field: Union[Equilibrium, _MagneticField],
     y0: ArrayLike,
-    args: tuple,
+    ms,
+    qs,
+    mus,
     ts: ArrayLike,
     mode: str,
     rtol: float = 1e-8,
@@ -799,9 +798,13 @@ def trace_particles(
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
         The first output of `ParticleInitializer.init_particles`.
-    args : tuple
-        Additional arguments needed, [mass, charge, magnetic moment] in order
-        of each particle. The second output of `ParticleInitializer.init_particles`.
+    ms : array-like
+        Particle masses, must be broadcastable to the shape of y0.
+    qs : array-like
+        Particle charges, must be broadcastable to the shape of y0.
+    mus : array-like
+        Particle magnetic moments, must be broadcastable to the shape of y0. For the
+        slowndown model, it won't be used, but must be provided for consistency.
     initializer : AbstractParticleInitializer
         Object to initialize particle distribution.
     ts : array-like
@@ -864,11 +867,11 @@ def trace_particles(
         return jnp.logical_or(R_out, Z_out)
 
     event = DiscreteTerminatingEvent(default_terminating_event_fxn)
-    intfun = lambda x, args: diffeqsolve(
+    intfun = lambda x, m, q, mu: diffeqsolve(
         term,
         solver,
         y0=x,
-        args=tuple(*args, field),
+        args=[m, q, mu, field, kwargs],
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
@@ -879,7 +882,10 @@ def trace_particles(
         discrete_terminating_event=event,
     ).ys
 
-    yt = jit(vmap(intfun))(y0, args)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="unhashable type")
+        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
+        yt = vmap(intfun)(y0, ms, qs, mus)
 
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
 
@@ -889,11 +895,18 @@ def trace_particles(
     return x, v
 
 
+@jit
 def ode_eq_flux_vac_gc(s, x, args):
-    """ODE equation for vacuum guiding center in flux coordinates."""
+    """ODE equation for vacuum guiding center in flux coordinates.
+
+    This function is written for vmap, so it expects x to be a coordinate of a
+    single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
+    m, q and mu being scalars.
+    """
     # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
     # implemented in the past, so keeping it for now.
-    psi, theta, zeta, vpar = x.T
+    x = x.squeeze()
+    psi, theta, zeta, vpar = x
     m, q, mu, eq = args[:4]
     # assert eq.iota is not None
     grid = Grid(
@@ -928,54 +941,57 @@ def ode_eq_flux_vac_gc(s, x, args):
     zetadot = dot(Rdot, data["e^zeta"])
     vpardot = -mu * dot(data["b"], data["grad(|B|)"])
     dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
-    return dxdt
+    return dxdt.squeeze()
 
 
+@jit
 def ode_field_lab_vac_gc(s, x, args):
-    """Compute the RHS of the ODE using MagneticField."""
+    """Compute the RHS of the ODE using MagneticField.
+
+    This function is written for vmap, so it expects x to be a coordinate of a
+    single particle, and args to be a tuple of (m, q, mu, field, kwargs) with
+    m, q and mu being scalars.
+    """
     # this is the one implemented in simsopt for method="gc_vac"
     # should be equivalent to full lagrangian from Cary & Brizard in vacuum
+    x = x.squeeze()
     vpar = x[-1]
-    coords = x[:-1]
-    m, q, mu, field = args[:4]
-    kwargs = args[4] if len(args) > 4 else {}
+    coord = x[:-1]
+    m, q, mu, field, kwargs = args
+    kwargs = {} if kwargs is None else kwargs
 
     field_compute = lambda y: jnp.linalg.norm(
         field.compute_magnetic_field(y, **kwargs), axis=-1
-    )
+    ).squeeze()
 
     # magnetic field vector in R, phi, Z coordinates
-    B = field.compute_magnetic_field(coords, **kwargs)
-    grad_B = jnp.vectorize(
-        Derivative(
-            field_compute,
-            mode="fwd",
-        ),
-        signature="(n)->(n,n)",
-    )(coords).squeeze()
+    B = field.compute_magnetic_field(coord, **kwargs)
+    grad_B = Derivative(field_compute, mode="grad")(coord)
 
     modB = jnp.linalg.norm(B, axis=-1)
     b = B / modB
     # factor of R from grad in cylindrical coordinates
-    grad_B = grad_B.at[:, 1].divide(coords[0])
-
+    grad_B = grad_B.at[1].divide(coord[0])
     Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
-    # TODO: I don't think this is correct
-    # d1, d2, d3 = Rdot               # noqa: E800
-    # d2 /= coords[0]                 # noqa: E800
-    # Rdot = jnp.array([d1, d2, d3])  # noqa: E800
 
-    vpardot = -mu * dot(b, grad_B)
-    dxdt = jnp.concatenate([Rdot, vpardot]).reshape(x.shape)
-    return dxdt
+    vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))
+    dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
+    return dxdt.squeeze()
 
 
+@jit
 def ode_eq_flux_slowdown_gc(s, x, args):
-    """ODE equation for guiding center in flux coordinates with slowing down."""
-    eq, m, q, eq = args[:4]
-    kwargs = args[4] if len(args) > 4 else {}
+    """ODE equation for guiding center in flux coordinates with slowing down.
 
-    psi, theta, zeta, vpar, v = x.T
+    This function is written for vmap, so it expects x to be a coordinate of a
+    single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
+    m, q and mu being scalars. mu is not used in this model, but must be provided
+    for consistency with other models.
+    """
+    x = x.squeeze()
+    psi, theta, zeta, vpar, v = x
+    m, q, _, eq, kwargs = args
+
     grid = Grid(
         jnp.array([jnp.sqrt(psi), theta, zeta]).T,
         spacing=jnp.zeros((3,)).T,
@@ -1020,8 +1036,8 @@ def ode_eq_flux_slowdown_gc(s, x, args):
     zetadot = dot(Rdot, data["e^zeta"])
     vpardot = -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
     vdot = -v / tau_s * (1 + vc**3 / v**3)
-    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
-    return dxdt
+    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
+    return dxdt.squeeze()
 
 
 def gc_radius(vperp, modB, m, q):

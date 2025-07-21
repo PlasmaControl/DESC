@@ -8,7 +8,6 @@ import numpy as np
 from diffrax import (
     AbstractTerm,
     DiscreteTerminatingEvent,
-    ODETerm,
     PIDController,
     RecursiveCheckpointAdjoint,
     SaveAt,
@@ -25,7 +24,7 @@ from scipy.constants import (
     proton_mass,
 )
 
-from desc.backend import jit, jnp, tree_map, vmap
+from desc.backend import jnp, tree_map, vmap
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
@@ -51,7 +50,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
     @property
     @abstractmethod
-    def frame(self) -> str:
+    def frame(self):
         """One of "flux" or "lab", indicating which frame the model is defined in.
 
         "flux" traces particles in (rho, theta, zeta) magnetic coordinates
@@ -62,7 +61,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
     @property
     @abstractmethod
-    def vcoords(self) -> list[str]:
+    def vcoords(self):
         """Velocity coordinates used by the model, in order.
 
         Options are:
@@ -77,7 +76,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
     @property
     @abstractmethod
-    def args(self) -> list[str]:
+    def args(self):
         """Additional arguments needed by the model.
 
         Eg, "m", "q", "mu", for mass, charge, magnetic moment.
@@ -85,7 +84,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
         pass
 
     @abstractmethod
-    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t, x, args):
         """RHS of the particle trajectory ODE."""
         pass
 
@@ -115,26 +114,26 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     _frame: str
 
-    def __init__(self, frame: str):
+    def __init__(self, frame):
         assert frame in ["lab", "flux"]
         self._frame = frame
 
     @property
-    def frame(self) -> str:
+    def frame(self):
         """Which frame the model is defined in."""
         return self._frame
 
     @property
-    def vcoords(self) -> list[str]:
+    def vcoords(self):
         """Which velocity coordinates the model uses."""
         return ["vpar"]
 
     @property
-    def args(self) -> list[str]:
+    def args(self):
         """Which additional args are needed by the model."""
         return ["m", "q", "mu"]
 
-    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
         ``vf`` method corresponds to the ``vf`` method in diffrax.AbstractTerm class
@@ -155,6 +154,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dx : jax.Array, shape(N,4)
             Velocity of particles in phase space.
         """
+        x = x.squeeze()
         m, q, mu, eq_or_field, kwargs = args
         if self.frame == "flux":
             assert isinstance(eq_or_field, Equilibrium)
@@ -164,11 +164,16 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             return self._compute_lab_coordinates(x, eq_or_field, m, q, mu, **kwargs)
 
     def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
-        """Compute the RHS of the ODE using Equilibrium."""
-        assert eq.iota is not None
+        """ODE equation for vacuum guiding center in flux coordinates.
+
+        This function is written for vmap, so it expects x to be a coordinate of a
+        single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
+        m, q and mu being scalars.
+        """
         # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
         # implemented in the past, so keeping it for now.
-        psi, theta, zeta, vpar = x.T
+        psi, theta, zeta, vpar = x
+        assert eq.iota is not None
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
@@ -187,9 +192,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         transforms = get_transforms(data_keys, eq, grid, jitable=True)
         profiles = get_profiles(data_keys, eq, grid)
-        data = compute_fun(
-            eq, data_keys, eq.params_dict, transforms, profiles, **kwargs
-        )
+        data = compute_fun(eq, data_keys, eq.params_dict, transforms, profiles)
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar * data["b"] + (
@@ -203,43 +206,38 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         zetadot = dot(Rdot, data["e^zeta"])
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
         dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
-        return dxdt
+        return dxdt.squeeze()
 
     def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
-        """Compute the RHS of the ODE using MagneticField."""
+        """Compute the RHS of the ODE using MagneticField.
+
+        This function is written for vmap, so it expects x to be a coordinate of a
+        single particle, and args to be a tuple of (m, q, mu, field, kwargs) with
+        m, q and mu being scalars.
+        """
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
-        x = jnp.atleast_2d(x)
-        vpar = x[:, -1]
-        coords = x[:, :-1]
-        m, q, mu = map(jnp.atleast_1d, (m, q, mu))
+        assert isinstance(field, _MagneticField)
+        vpar = x[-1]
+        coord = x[:-1]
 
         field_compute = lambda y: jnp.linalg.norm(
             field.compute_magnetic_field(y, **kwargs), axis=-1
         ).squeeze()
 
         # magnetic field vector in R, phi, Z coordinates
-        B = jnp.atleast_2d(field.compute_magnetic_field(coords, **kwargs))
-        grad_B = jnp.atleast_2d(
-            jnp.vectorize(
-                Derivative(
-                    field_compute,
-                    mode="grad",
-                ),
-            )(coords).squeeze()
-        )
+        B = field.compute_magnetic_field(coord, **kwargs)
+        grad_B = Derivative(field_compute, mode="grad")(coord)
 
         modB = jnp.linalg.norm(B, axis=-1)
-        b = B / modB[:, None]
+        b = B / modB
         # factor of R from grad in cylindrical coordinates
-        grad_B = grad_B.at[:, 1].divide(coords[:, 0])
-        Rdot = vpar[:, None] * b + (m / q / modB**2 * (mu * modB + vpar**2))[
-            :, None
-        ] * cross(b, grad_B)
+        grad_B = grad_B.at[1].divide(coord[0])
+        Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
 
         vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))
         dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
-        return dxdt
+        return dxdt.squeeze()
 
 
 class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
@@ -248,25 +246,25 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     Works only in flux coordinates.
     """
 
-    def __init__(self, frame: str = "flux"):
+    def __init__(self, frame="flux"):
         assert frame == "flux"
 
     @property
-    def frame(self) -> "str":
+    def frame(self):
         """Which frame the model is defined in."""
         return "flux"
 
     @property
-    def vcoords(self) -> list[str]:
+    def vcoords(self):
         """Which velocity coordinates the model uses."""
         return ["vpar", "v"]
 
     @property
-    def args(self) -> list[str]:
+    def args(self):
         """Which additional args are needed by the model."""
         return ["m", "q"]
 
-    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
         ``vf`` method corresponds to the ``vf`` method in diffrax.AbstractTerm class
@@ -286,11 +284,9 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         dx : jax.Array, shape(N,5)
             Velocity of particles in phase space.
         """
-        eq, m, q, kwargs = args
-        assert eq.iota is not None
-        assert eq.electron_temperature is not None
+        psi, theta, zeta, vpar, v = x
+        m, q, _, eq, kwargs = args
 
-        psi, theta, zeta, vpar, v = x.T
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
@@ -337,8 +333,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
         )
         vdot = -v / tau_s * (1 + vc**3 / v**3)
-        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
-        return dxdt
+        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
+        return dxdt.squeeze()
 
 
 class AbstractParticleInitializer(IOAble, ABC):
@@ -772,22 +768,22 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
 
 def trace_particles(
-    field: Union[Equilibrium, _MagneticField],
-    y0: ArrayLike,
+    field,
+    y0,
     ms,
     qs,
     mus,
-    ts: ArrayLike,
-    mode: str,
-    rtol: float = 1e-8,
-    atol: float = 1e-8,
-    maxstep: int = 1000,
-    min_step_size: float = 1e-8,
+    ts,
+    model,
+    rtol=1e-8,
+    atol=1e-8,
+    maxstep=1000,
+    min_step_size=1e-8,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
-    **kwargs: dict,
+    **kwargs,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -847,16 +843,6 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    if mode == "eq_flux_vac_gc":
-        assert isinstance(field, Equilibrium)
-        term = ODETerm(ode_eq_flux_vac_gc)
-    elif mode == "field_lab_vac_gc":
-        assert isinstance(field, _MagneticField)
-        term = ODETerm(ode_field_lab_vac_gc)
-    elif mode == "eq_flux_slowdown_gc":
-        assert isinstance(field, Equilibrium)
-        term = ODETerm(ode_eq_flux_slowdown_gc)
-
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
     saveat = SaveAt(ts=ts)
@@ -868,7 +854,7 @@ def trace_particles(
 
     event = DiscreteTerminatingEvent(default_terminating_event_fxn)
     intfun = lambda x, m, q, mu: diffeqsolve(
-        term,
+        model,
         solver,
         y0=x,
         args=[m, q, mu, field, kwargs],
@@ -893,151 +879,6 @@ def trace_particles(
     v = yt[:, :, 3:]
 
     return x, v
-
-
-@jit
-def ode_eq_flux_vac_gc(s, x, args):
-    """ODE equation for vacuum guiding center in flux coordinates.
-
-    This function is written for vmap, so it expects x to be a coordinate of a
-    single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
-    m, q and mu being scalars.
-    """
-    # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
-    # implemented in the past, so keeping it for now.
-    x = x.squeeze()
-    psi, theta, zeta, vpar = x
-    m, q, mu, eq = args[:4]
-    # assert eq.iota is not None
-    grid = Grid(
-        jnp.array([jnp.sqrt(psi), theta, zeta]).T,
-        spacing=jnp.zeros((3,)).T,
-        jitable=True,
-        sort=False,
-    )
-    data_keys = [
-        "B",
-        "|B|",
-        "grad(|B|)",
-        "grad(psi)",
-        "e^theta",
-        "e^zeta",
-        "b",
-    ]
-
-    transforms = get_transforms(data_keys, eq, grid, jitable=True)
-    profiles = get_profiles(data_keys, eq, grid)
-    data = compute_fun(eq, data_keys, eq.params_dict, transforms, profiles)
-
-    # derivative of the guiding center position in R, phi, Z coordinates
-    Rdot = vpar * data["b"] + (
-        (m / q / data["|B|"] ** 2)
-        * ((mu * data["|B|"]) + vpar**2)
-        * cross(data["b"], data["grad(|B|)"])
-    )
-    # TODO: not sure why we use psi, and where the factors come from
-    psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
-    thetadot = dot(Rdot, data["e^theta"])
-    zetadot = dot(Rdot, data["e^zeta"])
-    vpardot = -mu * dot(data["b"], data["grad(|B|)"])
-    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
-    return dxdt.squeeze()
-
-
-@jit
-def ode_field_lab_vac_gc(s, x, args):
-    """Compute the RHS of the ODE using MagneticField.
-
-    This function is written for vmap, so it expects x to be a coordinate of a
-    single particle, and args to be a tuple of (m, q, mu, field, kwargs) with
-    m, q and mu being scalars.
-    """
-    # this is the one implemented in simsopt for method="gc_vac"
-    # should be equivalent to full lagrangian from Cary & Brizard in vacuum
-    x = x.squeeze()
-    vpar = x[-1]
-    coord = x[:-1]
-    m, q, mu, field, kwargs = args
-    kwargs = {} if kwargs is None else kwargs
-
-    field_compute = lambda y: jnp.linalg.norm(
-        field.compute_magnetic_field(y, **kwargs), axis=-1
-    ).squeeze()
-
-    # magnetic field vector in R, phi, Z coordinates
-    B = field.compute_magnetic_field(coord, **kwargs)
-    grad_B = Derivative(field_compute, mode="grad")(coord)
-
-    modB = jnp.linalg.norm(B, axis=-1)
-    b = B / modB
-    # factor of R from grad in cylindrical coordinates
-    grad_B = grad_B.at[1].divide(coord[0])
-    Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
-
-    vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))
-    dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
-    return dxdt.squeeze()
-
-
-@jit
-def ode_eq_flux_slowdown_gc(s, x, args):
-    """ODE equation for guiding center in flux coordinates with slowing down.
-
-    This function is written for vmap, so it expects x to be a coordinate of a
-    single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
-    m, q and mu being scalars. mu is not used in this model, but must be provided
-    for consistency with other models.
-    """
-    x = x.squeeze()
-    psi, theta, zeta, vpar, v = x
-    m, q, _, eq, kwargs = args
-
-    grid = Grid(
-        jnp.array([jnp.sqrt(psi), theta, zeta]).T,
-        spacing=jnp.zeros((3,)).T,
-        jitable=True,
-        sort=False,
-    )
-    data_keys = [
-        "B",
-        "|B|",
-        "grad(|B|)",
-        "grad(psi)",
-        "e^theta",
-        "e^zeta",
-        "b",
-        "Te",
-        "ne",
-    ]
-
-    transforms = get_transforms(data_keys, eq, grid, jitable=True)
-    profiles = get_profiles(data_keys, eq, grid)
-    data = compute_fun(
-        eq,
-        data_keys,
-        eq.params_dict,
-        transforms,
-        profiles,
-        **kwargs,
-    )
-
-    # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
-    # neutral beam injection model." Plasma Physics and Controlled Fusion (2014)
-    tau_s = slowing_down_time(data["Te"], data["ne"])
-    vc = slowing_down_critical_velocity(data["Te"])
-
-    # derivative of the guiding center position in R, phi, Z coordinates
-    Rdot = vpar * data["b"] + (
-        (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
-    )
-    # TODO: not sure why we use psi, and where the factors come from
-    psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
-    thetadot = dot(Rdot, data["e^theta"])
-    zetadot = dot(Rdot, data["e^zeta"])
-    vpardot = -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
-    vdot = -v / tau_s * (1 + vc**3 / v**3)
-    dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
-    return dxdt.squeeze()
 
 
 def gc_radius(vperp, modB, m, q):

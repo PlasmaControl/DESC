@@ -965,7 +965,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
         jnp.pi**2
         * (1 - t_1 * t_2)
         / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
-    )  # Formula of w_2 to ensure Delta = 0
+    )  # Formula of w_2 to ensure Delta = 0. Enforces 0 BS current
 
     B_min = params["B_min"][:, None]
     B_max = params["B_max"][:, None]

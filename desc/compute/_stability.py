@@ -20,6 +20,8 @@ from ..diffmat_utils import (
     legendre_D1,
     legendre_lobatto_nodes,
     legendre_lobatto_weights,
+    create_lele_D1_6_matrix,
+    apply_compact_derivative,
 )
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -393,10 +395,10 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
-    spectral="bool: option to use a spectral solver based on differentiation matrices"
-    "Default is False",
+    diffmat="str: option to use a differentiation matricex based solver"
+    "Default is None, other options are 'Legendre', 'Lele'",
 )
-@partial(jit, static_argnames=["Neigvals", "spectral"])
+@partial(jit, static_argnames=["Neigvals", "diffmat"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
@@ -418,7 +420,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
-    spectral = kwargs.get("spectral", False)
+    diffmat = kwargs.get("diffmat", None)
     grid = transforms["grid"].source_grid
 
     num_zeta0 = data["c ballooning"].shape[0]
@@ -433,7 +435,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    if spectral:
+    if diffmat == "Legendre":
 
         def _eval_1D(f, x, scale, shift):
             return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
@@ -529,18 +531,86 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
         # Get differentiation matrices
         # RG: setting the gradient to 0 to save some memory?
-        D_rho = jax.lax.stop_gradient(legendre_D1(num_zeta - 1) * scale_x1)
+        D_zeta = jax.lax.stop_gradient(legendre_D1(num_zeta - 1) * scale_x1)
 
         # 2D matrices stacked in rho, alpha and zeta_0 dimensions
         w = (1 / scale_vector1) * (legendre_lobatto_weights(num_zeta - 1))
         wg = -1 * w * g
 
         # Row scaling D_rho by wg
-        A = D_rho.T @ (wg[..., :, None] * D_rho)
+        A = D_zeta.T @ (wg[..., :, None] * D_zeta)
 
         # the scale due to the derivative
         wc = w * c
         idx = jnp.arange(num_zeta)
+
+        A = A.at[..., idx, idx].add(wc)
+
+        b_inv = jnp.sqrt(jnp.reciprocal(w * f))
+
+        A = (b_inv[..., :, None] * A) * b_inv[..., None, :]
+
+        # apply dirichlet BC to X
+        w, v = jnp.linalg.eigh(A[..., 1:-1, 1:-1])
+
+    elif diffmat == "Lele":
+
+        def _eval_1D(f, x, scale, shift):
+            return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
+
+        def _f(x, scale, shift):
+            y = x/scale
+            y = y - shift
+            return y
+            
+        dx_f = jax.grad(_f, argnums=0)
+
+        num_alpha = grid.num_alpha
+        num_rho = grid.num_rho
+        num_zeta = grid.num_zeta
+
+        ## The points in the supplied grid must be consistent with how
+        ## the kronecker product is created
+        x0 = grid.nodes[:: num_alpha * num_rho, 2]
+
+        # The factor of two because we are mapping from (-1, 1) -> (-ntor pi, ntor pi)
+        scale = (x0[-1] - x0[0])/2
+        shift = 1 + x0[0] / scale
+
+        x = _eval_1D(_f, x0, scale, shift)
+        #x = x0
+
+        scale_vector1 = (_eval_1D(dx_f, x, scale, shift)) ** -1
+
+        scale_x1 = scale_vector1[:, None]
+
+        h = x[1] - x[0]
+        
+        # Get differentiation matrices
+        # RG: setting the gradient to 0 to save some memory?
+        A, B = create_lele_D1_6_matrix(num_zeta, h)
+
+        D1_lele = jnp.linalg.solve(A, B)
+
+        D_zeta = jax.lax.stop_gradient(D1_lele * scale_x1)
+
+        idx = jnp.arange(num_zeta)             
+        ## Simpson's gives oscillatory eigenfunctions
+        #w0   = 2.0 + 2.0 * (idx & 1)          
+        #w0   = w0.at[jnp.array([0, num_zeta-1])].set(1.0)          
+        #w0   = (h / 3.0) * w0
+        # Uniform weights
+        w0   = h
+
+        w =  w0
+
+        wg = -1 * w * g
+
+        # Row scaling D_rho by wg
+        A = D_zeta.T @ (wg[..., :, None] * D_zeta)
+
+        # the scale due to the derivative
+        wc = w * c
 
         A = A.at[..., idx, idx].add(wc)
 
@@ -783,13 +853,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     n_rho_max = kwargs.get("n_rho_max", 8)
     n_theta_max = kwargs.get("n_theta_max", 8)
-    n_zeta_max = kwargs.get("n_zeta_max", 4)
-
-    if axisym:
-        D_zeta0 = n_zeta_max * jnp.array([[0, -1], [1, 0]])
-        n_zeta_max = 2
-    else:
-        D_zeta0 = fourier_diffmat(n_zeta_max)
 
     def _eval_1D(f, x):
         return jax.vmap(lambda x_val: f(x_val))(x)
@@ -822,7 +885,14 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # RG: setting the gradient to 0 to save some memory?
     D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
     D_theta0 = fourier_diffmat(n_theta_max)
-    D_zeta0 = fourier_diffmat(n_zeta_max)
+    if axisym:
+        # Each componenet of xi can be written as the Fourier sum of two modes in 
+        # the toroidal direction
+        D_zeta0 = 1j * n_zeta_max * jnp.array([[0, -1], [1, 0]])
+        n_zeta_max = 2
+    else:
+        D_zeta0 = fourier_diffmat(n_zeta_max)
+        n_zeta_max = kwargs.get("n_zeta_max", 4)
 
     w0 = 1 / scale_x1 * legendre_lobatto_weights(n_rho_max)
 
@@ -865,6 +935,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     g_sup_rr = data["g^rr"][:, None] * a_N**2
     g_sup_rv = data["g^rv"][:, None] * a_N**2
     g_sup_rp = data["g^rz"][:, None] * a_N**2
+
 
     J2 = mu_0 * (data["|J|"] ** 2)[:, None] * (a_N / B_N) ** 2
     j_sup_theta = mu_0 * data["J^theta_PEST"][:, None] * a_N**2 / B_N

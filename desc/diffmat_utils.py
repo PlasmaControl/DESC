@@ -305,3 +305,95 @@ def legendre_D1(N: int) -> jnp.ndarray:
     D = D.at[jnp.diag_indices(n)].set(-jnp.sum(D, axis=1))  # enforce row‑sum 0
 
     return D
+
+
+
+def create_lele_D1_6_matrix(n, h=1.0):
+    """
+    Create 6th-order Lele compact approximation matrix for first derivative.
+
+    Parameters
+    ----------
+    n : int
+        Size of the matrix (number of grid points)
+    h : float
+        Grid spacing
+
+    Returns
+    -------
+    A : jax.numpy.ndarray
+        LHS matrix (for coefficients of derivatives)
+    B : jax.numpy.ndarray
+        RHS matrix (for coefficients of function values)
+    """
+    # Create LHS matrix A (tridiagonal)
+    A = jnp.zeros((n, n))
+
+    # Diagonal elements
+    A = A.at[jnp.arange(n), jnp.arange(n)].set(jnp.ones(n))
+
+    # Boundary and near-boundary treatment
+    A = A.at[0, 1].set(2.0)
+    A = A.at[n - 1, n - 2].set(2.0)
+
+    # Second point from boundary
+    A = A.at[1, 0].set(0.25)
+    A = A.at[1, 2].set(0.25)
+    A = A.at[n - 2, n - 1].set(0.25)
+    A = A.at[n - 2, n - 3].set(0.25)
+
+    # Interior points
+    interior = jnp.arange(2, n - 2)
+    A = A.at[interior, interior - 1].set(jnp.ones(n - 4) * (1.0 / 3.0))
+    A = A.at[interior, interior + 1].set(jnp.ones(n - 4) * (1.0 / 3.0))
+
+    # Create RHS matrix B (maps function values to RHS vector)
+    B = jnp.zeros((n, n))
+
+    # Boundary points
+    B = B.at[0, 0].set(-5.0 / (2.0 * h))
+    B = B.at[0, 1].set(4.0 / (2.0 * h))
+    B = B.at[0, 2].set(1.0 / (2.0 * h))
+
+    B = B.at[n - 1, n - 1].set(5.0 / (2.0 * h))
+    B = B.at[n - 1, n - 2].set(-4.0 / (2.0 * h))
+    B = B.at[n - 1, n - 3].set(-1.0 / (2.0 * h))
+
+    # Second point from boundary
+    B = B.at[1, 0].set(-3.0 / (4.0 * h))
+    B = B.at[1, 2].set(3.0 / (4.0 * h))
+
+    B = B.at[n - 2, n - 3].set(-3.0 / (4.0 * h))
+    B = B.at[n - 2, n - 1].set(3.0 / (4.0 * h))
+
+    # Interior points
+    interior = jnp.arange(2, n - 2)
+    B = B.at[interior, interior + 1].set(14.0 / (18.0 * h))
+    B = B.at[interior, interior - 1].set(-14.0 / (18.0 * h))
+    B = B.at[interior, interior + 2].set(1.0 / (36.0 * h))
+    B = B.at[interior, interior - 2].set(-1.0 / (36.0 * h))
+
+    return A, B
+
+
+def apply_compact_derivative(A, B, f):
+    """
+    Apply compact finite difference approximation to function values.
+
+    Parameters
+    ----------
+    A : jax.numpy.ndarray
+        LHS matrix (for coefficients of derivatives)
+    B : jax.numpy.ndarray
+        RHS matrix (for coefficients of function values)
+    f : jax.numpy.ndarray
+        Function values at grid points
+
+    Returns
+    -------
+    df : jax.numpy.ndarray
+        Derivative approximation
+    """
+    b = B @ f
+    df = jnp.linalg.solve(A, b)
+    return df

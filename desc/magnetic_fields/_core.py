@@ -26,7 +26,6 @@ from desc.basis import (
 )
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -40,9 +39,13 @@ from desc.utils import (
     dot,
     errorif,
     flatten_list,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
 )
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
@@ -2226,7 +2229,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)
             AZ = AZ.reshape(shp)
-        except NotImplementedError:
+        except (ValueError, NotImplementedError):
             AR = AP = AZ = None
         return cls(
             R,

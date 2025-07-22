@@ -416,18 +416,12 @@ class AbstractParticleInitializer(IOAble, ABC):
 
 def _compute_modB(x, field, **kwargs):
     if isinstance(field, Equilibrium):
-        psi, theta, zeta = x.T
         grid = Grid(
-            jnp.array([jnp.sqrt(psi), theta, zeta]).T,
-            spacing=jnp.zeros(
-                (
-                    x.shape[0],
-                    3,
-                )
-            ).T,
+            x.T,
+            spacing=jnp.zeros_like(x),
             sort=False,
         )
-        return field.compute("|B|", grid=grid, **kwargs)["|B|"]
+        return field.compute("|B|", grid=grid)["|B|"]
     return jnp.linalg.norm(field.compute_magnetic_field(x, **kwargs), axis=-1)
 
 
@@ -501,8 +495,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         else:
             raise NotImplementedError
 
-        return super._return_particles(
-            self, x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+        print(x)
+        return super()._return_particles(
+            x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
         )
 
 
@@ -571,8 +566,8 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         else:
             raise NotImplementedError
 
-        return super._return_particles(
-            self, x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+        return super()._return_particles(
+            x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
         )
 
 
@@ -645,9 +640,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
-        return super._return_particles(
-            self, x=x, v=v, vpar=vpar, model=model, field=field
-        )
+        return super()._return_particles(x=x, v=v, vpar=vpar, model=model, field=field)
 
 
 class SurfaceParticleInitializer(AbstractParticleInitializer):
@@ -721,9 +714,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
-        return super._return_particles(
-            self, x=x, v=v, vpar=vpar, model=model, field=field
-        )
+        return super()._return_particles(x=x, v=v, vpar=vpar, model=model, field=field)
 
 
 def _find_random_indices(sqrtg, N, seed):

@@ -150,10 +150,11 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         t : float
             Time to evaluate RHS at.
         x : jax.Array, shape(4,)
-            Position of particle in phase space [psi_n, theta, zeta, vpar] or
+            Position of particle in phase space [rho, theta, zeta, vpar] or
             [R, phi, Z, vpar].
         args : tuple
-            Additional arguments needed by model, (eq_or_field, m, q, mu, field_kwargs).
+            Additional arguments needed by model, (m, q, mu, eq_or_field, kwargs).
+            kwargs will be passed to the field.compute_magnetic_field method.
 
         Returns
         -------
@@ -176,11 +177,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
         m, q and mu being scalars.
         """
-        # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
-        # implemented in the past, so keeping it for now.
-        psi, theta, zeta, vpar = x
+        rho, theta, zeta, vpar = x
         grid = Grid(
-            jnp.array([jnp.sqrt(psi), theta, zeta]).T,
+            jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
             jitable=True,
             sort=False,
@@ -189,7 +188,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             "B",
             "|B|",
             "grad(|B|)",
-            "grad(psi)",
+            "e^rho",
             "e^theta",
             "e^zeta",
             "b",
@@ -205,12 +204,11 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             * ((mu * data["|B|"]) + vpar**2)
             * cross(data["b"], data["grad(|B|)"])
         )
-        # TODO: not sure why we use psi, and where the factors come from
-        psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+        rhodot = dot(Rdot, data["e^rho"])
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
-        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
+        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
         return dxdt.squeeze()
 
     def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
@@ -280,20 +278,21 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         t : float
             Time to evaluate RHS at.
         x : jax.Array, shape(N,5)
-            Position of particle in phase space (psi_n, theta, zeta, vpar, v).
+            Position of particle in phase space (rho, theta, zeta, vpar, v).
         args : tuple
-            Additional arguments needed by model, (eq, m, q, kwargs).
+            Additional arguments needed by model, ( m, q, mu, eq, kwargs).
+            mu and kwargs are not used for this model.
 
         Returns
         -------
         dx : jax.Array, shape(N,5)
             Velocity of particles in phase space.
         """
-        psi, theta, zeta, vpar, v = x
-        m, q, _, eq, kwargs = args
+        rho, theta, zeta, vpar, v = x
+        m, q, _, eq, _ = args
 
         grid = Grid(
-            jnp.array([jnp.sqrt(psi), theta, zeta]).T,
+            jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
             jitable=True,
             sort=False,
@@ -302,7 +301,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             "B",
             "|B|",
             "grad(|B|)",
-            "grad(psi)",
+            "e^rho",
             "e^theta",
             "e^zeta",
             "b",
@@ -318,7 +317,6 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             eq.params_dict,
             transforms,
             profiles,
-            **kwargs,
         )
 
         # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
@@ -330,15 +328,14 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         Rdot = vpar * data["b"] + (
             (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
         )
-        # TODO: not sure why we use psi, and where the factors come from
-        psidot = dot(Rdot, data["grad(psi)"]) * (2 * jnp.pi / eq.Psi)
+        rhodot = dot(Rdot, data["e^rho"])
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
         vpardot = (
             -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
         )
         vdot = -v / tau_s * (1 + vc**3 / v**3)
-        dxdt = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
+        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
         return dxdt.squeeze()
 
 
@@ -364,7 +361,35 @@ class AbstractParticleInitializer(IOAble, ABC):
         pass
 
     def _return_particles(self, x, v, vpar, model, field):
-        """Return the particles in common a format."""
+        """Return the particles in common a format.
+
+        Parameters
+        ----------
+        x : jax.Array, shape(N,3)
+            Initial particle positions in either flux (rho, theta, zeta) coordinates or
+            cylindirical (lab) coordinates, shape (N, 3), where N is the number of
+            particles.
+        v : ArrayLike, shape(N,)
+            Initial particle speeds
+        vpar : ArrayLike, shape(N,)
+            Initial particle parallel velocities, in the direction of local magnetic
+            field.
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, which defines the frame and
+            velocity coordinates.
+        field : Equilibrium or _MagneticField
+            Source of magnetic field to use for tracing particles.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions and velocities, where D is the dimensionality of
+            the trajectory model, which includes 3D spatial dimensions and depending on
+            the model parallel velocity and total velocity.
+        args : tuple
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment of each particle.
+        """
         vs = []
         for vcoord in model.vcoords:
             if vcoord == "vpar":
@@ -462,7 +487,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
     ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize N random particles for a given trajectory model."""
+        """Initialize particles for a given trajectory model."""
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         if model.frame == "flux":
             x = x
@@ -533,7 +558,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
     ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize N random particles for a given trajectory model."""
+        """Initialize particles for a given trajectory model."""
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         if model.frame == "flux":
             if self.eq is None:
@@ -559,7 +584,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     curve : desc.geometry.Curve
         Curve object to initialize samples on.
     N : int
-        Number of samples to generate.
+        Number of particles to generate.
     E : float
         Initial particle kinetic energy, in eV
     m : float
@@ -601,22 +626,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
     ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize N random particles for a given trajectory model."""
+        """Initialize particles for a given trajectory model."""
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
-        sqrtg /= sqrtg.max()
-        nattempts = 10 * self.N  # 10x seems plenty in practice, but should fix
-        # rejection sampling according to pdf~sqrtg to get samples
-        # roughly equally distributed in real space
-        # TODO: use jax rng?
-        rng = np.random.default_rng(seed=self.seed)
-        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
-        accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[
-            0
-        ]
-        # TODO: figure out what to do if this fails, maybe iterate until enough samples?
-        assert len(accept) > self.N
-        idxs = np.sort(idxs[accept[: self.N]])
+        idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
+
         zeta = data["s"][idxs]
         theta = jnp.zeros_like(zeta)
         rho = jnp.zeros_like(zeta)
@@ -628,7 +642,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             grid = Grid(x)
             x = self.curve.compute("x", grid=grid)["x"]
 
-        v = jnp.sqrt(2 * self.E / self.m) * jnp.ones_like(zeta)
+        v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
         return super._return_particles(
@@ -644,7 +658,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     surface : desc.geometry.Surface
         Surface object to initialize samples on.
     N : int
-        Number of samples to generate.
+        Number of particles to generate.
     E : float
         Initial particle kinetic energy, in eV
     m : float
@@ -686,24 +700,13 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
     ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize N random particles for a given trajectory model."""
+        """Initialize particles for a given trajectory model."""
         data = self.surface.compute(
             ["|e_theta x e_zeta|", "theta", "zeta"], grid=self.grid
         )
         sqrtg = data["|e_theta x e_zeta|"]
-        sqrtg /= sqrtg.max()
-        nattempts = 10 * self.N  # 10x seems plenty in practice, but should fix
-        # rejection sampling according to pdf~sqrtg to get samples
-        # roughly equally distributed in real space
-        # TODO: use jax rng?
-        rng = np.random.default_rng(seed=self.seed)
-        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
-        accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[
-            0
-        ]
-        # TODO: figure out what to do if this fails, maybe iterate until enough samples?
-        assert len(accept) > self.N
-        idxs = np.sort(idxs[accept[: self.N]])
+        idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
+
         zeta = data["zeta"][idxs]
         theta = data["theta"][idxs]
         rho = self.surface.rho * jnp.ones_like(zeta)
@@ -715,12 +718,30 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             grid = Grid(x)
             x = self.surface.compute("x", grid=grid)["x"]
 
-        v = jnp.sqrt(2 * self.E / self.m) * jnp.ones_like(zeta)
+        v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
         return super._return_particles(
             self, x=x, v=v, vpar=vpar, model=model, field=field
         )
+
+
+def _find_random_indices(sqrtg, N, seed):
+    """Find random indices for sampling particles on a surface or curve."""
+    sqrtg /= sqrtg.max()
+    # 10x seems plenty in practice, but should fix
+    # rejection sampling according to pdf~sqrtg to get samples
+    # roughly equally distributed in real space
+    nattempts = 10 * N
+    # TODO: use jax rng?
+    rng = np.random.default_rng(seed=seed)
+    idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
+    accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[0]
+    # TODO: figure out what to do if this fails, maybe iterate until enough samples?
+    assert len(accept) > N
+    idxs = np.sort(idxs[accept[:N]])
+
+    return idxs
 
 
 def trace_particles(

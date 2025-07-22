@@ -50,7 +50,6 @@ class _Basis(IOAble, ABC):
     def __init__(self):
         self._enforce_symmetry()
         self._sort_modes()
-        self._create_idx()
         # ensure things that should be ints are ints
         self._L = int(self._L)
         self._M = int(self._M)
@@ -74,7 +73,6 @@ class _Basis(IOAble, ABC):
         # See IOAble class docstring for more info.
         self._enforce_symmetry()
         self._sort_modes()
-        self._create_idx()
         # ensure things that should be ints are ints
         self._L = int(self._L)
         self._M = int(self._M)
@@ -153,16 +151,6 @@ class _Basis(IOAble, ABC):
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 
-    def _create_idx(self):
-        """Create index for use with self.get_idx()."""
-        self._idx = {}
-        for idx, (L, M, N) in enumerate(self.modes):
-            if L not in self._idx:
-                self._idx[L] = {}
-            if M not in self._idx[L]:
-                self._idx[L][M] = {}
-            self._idx[L][M][N] = idx
-
     def get_idx(self, L=0, M=0, N=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
@@ -184,15 +172,13 @@ class _Basis(IOAble, ABC):
             Index of given mode numbers.
 
         """
-        try:
-            return self._idx[L][M][N]
-        except KeyError as e:
-            if error:
-                raise ValueError(
-                    "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
-                ) from e
-            else:
-                return np.array([], dtype=int)
+        mode = np.array([L, M, N])
+        idx = np.where((mode == self.modes).all(axis=-1))[0]
+        if error and not idx.size:
+            raise ValueError(
+                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+            )
+        return idx
 
     @abstractmethod
     def _get_modes(self):

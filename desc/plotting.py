@@ -4021,7 +4021,7 @@ def plot_particle_trajectories(
         Magnetic field to trace the particle trajectories in. Given field, trajectory
         model, and initializer must be compatible. Field can be a subclass of
         MagneticField, such as Coilset, CurrentPotential, or it can be Equilibrium.
-    model : AbstractParticleTrajectoryModel
+    model : AbstractTrajectoryModel
         Particle trajectory model to use for tracing the particle trajectories.
     initializer : AbstractParticleInitializer
         Particle initializer to use for initializing the particles.
@@ -4052,7 +4052,7 @@ def plot_particle_trajectories(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.particles.trace_particles``
 
     Returns
     -------
@@ -4067,11 +4067,6 @@ def plot_particle_trajectories(
 
     Examples
     --------
-    .. raw:: html
-
-        <iframe src="../../_static/images/plotting/plot_particle_trajectories.html"
-        width="100%" height="980" frameborder="0"></iframe>
-
     .. code-block:: python
 
         import desc
@@ -4100,9 +4095,10 @@ def plot_particle_trajectories(
         )
         field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
         model = VacuumGuidingCenterTrajectory(frame="lab")
+        ts=np.linspace(0, 1e-2, 1000)
 
         plot_particle_trajectories(
-            field, model, initializer, ts=np.linspace(0, 1e-2, 1000), fig=fig
+            field, model, initializer, ts=ts, fig=fig
         )
     """
     trace_kwargs = {}
@@ -4135,7 +4131,7 @@ def plot_particle_trajectories(
     x0, args = initializer.init_particles(model=model, field=field)
     ms, qs, mus = args[:3]
     rpz, _ = trace_particles(
-        field, x0, ms, qs, mus, model=model, ts=ts, min_step_size=1e-10
+        field=field, y0=x0, ms=ms, qs=qs, mus=mus, model=model, ts=ts, **trace_kwargs
     )
 
     rs = rpz[:, :, 0]

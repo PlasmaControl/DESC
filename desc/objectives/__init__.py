@@ -53,7 +53,6 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
-from ._particles import ParticleTracer
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import BallooningStability, MagneticWell, MercierStability

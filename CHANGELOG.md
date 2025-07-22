@@ -16,6 +16,7 @@ New Features
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Adds a new objective ``PiecewiseOmnigenity`` to optimize stellarators for piecewise omnigenous fields.
 
 Bug Fixes
 

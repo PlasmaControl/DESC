@@ -173,12 +173,14 @@ class _Basis(IOAble, ABC):
 
         """
         mode = np.array([L, M, N])
-        idx = np.where((mode == self.modes).all(axis=-1))[0]
-        if error and not idx.size:
-            raise ValueError(
-                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
-            )
-        return idx
+        idx = np.where((mode == self.modes).all(axis=-1))[0].squeeze()
+        if not idx.size:
+            if error:
+                raise ValueError(
+                    "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+                )
+            return idx
+        return int(idx)
 
     @abstractmethod
     def _get_modes(self):

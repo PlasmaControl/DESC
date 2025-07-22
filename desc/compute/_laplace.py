@@ -343,9 +343,8 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
         if kwargs.get("_full_output", False):
-            data["Phi (periodic)"], (err, num_iter) = data["Phi (periodic)"]
+            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
-            data["num iter"] = num_iter
 
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
@@ -878,9 +877,8 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
         if kwargs.get("_full_output", False):
-            data["Phi (periodic)"], (err, num_iter) = data["Phi (periodic)"]
+            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
-            data["num iter"] = num_iter
 
         transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])

@@ -192,10 +192,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
-    # Fourier series rather than transforming each component.
-    # Last term in K behaves as ∂log(|B|²/(B₀B^ϕ))/∂ρ |B| where B₀ is a constant.
-    # Smoothness determined by positive lower bound of log argument, and hence
-    # behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
+    # Fourier series rather than transforming each component. Last term in K
+    # behaves as ∂log(|B|²/(R₀B₀B^ϕ))/∂ρ |B| where R₀B₀ is a constant with
+    # units Tesla meters. Smoothness is determined by positive lower bound of
+    # log argument, and hence behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
     fun_data = {
         "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],

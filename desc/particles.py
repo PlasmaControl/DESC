@@ -363,6 +363,31 @@ class AbstractParticleInitializer(IOAble, ABC):
         """
         pass
 
+    def _return_particles(self, x, v, vpar, model, field):
+        """Return the particles in common a format."""
+        vs = []
+        for vcoord in model.vcoords:
+            if vcoord == "vpar":
+                vs.append(vpar)
+            elif vcoord == "v":
+                vs.append(v)
+            else:
+                raise NotImplementedError
+        v0 = jnp.array(vs).T
+
+        args = []
+        for arg in model.args:
+            if arg == "m":
+                args += [self.m]
+            elif arg == "q":
+                args += [self.q]
+            elif arg == "mu":
+                vperp2 = v**2 - vpar**2
+                modB = _compute_modB(x, field)
+                args += [vperp2 / modB]
+
+        return jnp.hstack([x, v0]), tuple(args)
+
 
 def _compute_modB(x, field, **kwargs):
     if isinstance(field, Equilibrium):
@@ -395,7 +420,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
     xi0 : array-like
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
-        Initial particle energy, in eV
+        Initial particle kinetic energy, in eV
     m : float
         Particle mass, in proton masses
     q : float
@@ -451,28 +476,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         else:
             raise NotImplementedError
 
-        vs = []
-        for vcoord in model.vcoords:
-            if vcoord == "vpar":
-                vs.append(self.vpar0)
-            elif vcoord == "v":
-                vs.append(self.v0)
-            else:
-                raise NotImplementedError
-        v = jnp.array(vs).T
-
-        args = []
-        for arg in model.args:
-            if arg == "m":
-                args += [self.m]
-            elif arg == "q":
-                args += [self.q]
-            elif arg == "mu":
-                vperp2 = self.v0**2 - self.vpar0**2
-                modB = _compute_modB(x, field)
-                args += [vperp2 / modB]
-
-        return jnp.hstack([x, v]), tuple(args)
+        return super._return_particles(
+            self, x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+        )
 
 
 class ManualParticleInitializerLab(AbstractParticleInitializer):
@@ -489,7 +495,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
     xi0 : array-like
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
-        Initial particle energy, in eV
+        Initial particle kinetic energy, in eV
     m : float
         Particle mass, in proton masses
     q : float
@@ -540,28 +546,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         else:
             raise NotImplementedError
 
-        vs = []
-        for vcoord in model.vcoords:
-            if vcoord == "vpar":
-                vs.append(self.vpar0)
-            elif vcoord == "v":
-                vs.append(self.v0)
-            else:
-                raise NotImplementedError
-        v = jnp.array(vs).T
-
-        args = []
-        for arg in model.args:
-            if arg == "m":
-                args += [self.m]
-            elif arg == "q":
-                args += [self.q]
-            elif arg == "mu":
-                vperp2 = self.v0**2 - self.vpar0**2
-                modB = _compute_modB(x, field)
-                args += [vperp2 / modB]
-
-        return jnp.hstack([x, v]), tuple(args)
+        return super._return_particles(
+            self, x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+        )
 
 
 class CurveParticleInitializer(AbstractParticleInitializer):
@@ -574,7 +561,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     N : int
         Number of samples to generate.
     E : float
-        Energy of particles, in eV.
+        Initial particle kinetic energy, in eV
     m : float
         Mass of particles, in proton masses.
     q : float
@@ -643,28 +630,10 @@ class CurveParticleInitializer(AbstractParticleInitializer):
 
         v = jnp.sqrt(2 * self.E / self.m) * jnp.ones_like(zeta)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
-        vs = []
-        for vcoord in model.vcoords:
-            if vcoord == "vpar":
-                vs.append(vpar)
-            elif vcoord == "v":
-                vs.append(v)
-            else:
-                raise NotImplementedError
-        v = jnp.array(vs).T
 
-        args = []
-        for arg in model.args:
-            if arg == "m":
-                args += [self.m]
-            elif arg == "q":
-                args += [self.q]
-            elif arg == "mu":
-                vperp2 = v**2 - vpar**2
-                modB = _compute_modB(x, field)
-                args += [vperp2 / modB]
-
-        return jnp.hstack([x, v]), tuple(args)
+        return super._return_particles(
+            self, x=x, v=v, vpar=vpar, model=model, field=field
+        )
 
 
 class SurfaceParticleInitializer(AbstractParticleInitializer):
@@ -677,7 +646,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     N : int
         Number of samples to generate.
     E : float
-        Energy of particles, in eV.
+        Initial particle kinetic energy, in eV
     m : float
         Mass of particles, in proton masses.
     q : float
@@ -748,28 +717,10 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
         v = jnp.sqrt(2 * self.E / self.m) * jnp.ones_like(zeta)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
-        vs = []
-        for vcoord in model.vcoords:
-            if vcoord == "vpar":
-                vs.append(vpar)
-            elif vcoord == "v":
-                vs.append(v)
-            else:
-                raise NotImplementedError
-        v = jnp.array(vs).T
 
-        args = []
-        for arg in model.args:
-            if arg == "m":
-                args += [jnp.full(x.shape[0], self.m)]
-            elif arg == "q":
-                args += [jnp.full(x.shape[0], self.q)]
-            elif arg == "mu":
-                vperp2 = v**2 - vpar**2
-                modB = _compute_modB(x, field)
-                args += [vperp2 / modB]
-
-        return jnp.hstack([x, v]), tuple(args)
+        return super._return_particles(
+            self, x=x, v=v, vpar=vpar, model=model, field=field
+        )
 
 
 def trace_particles(

@@ -179,7 +179,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         # TODO: (yigit) I prefer having rho instead of psi, but this is how it was
         # implemented in the past, so keeping it for now.
         psi, theta, zeta, vpar = x
-        assert eq.iota is not None
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,

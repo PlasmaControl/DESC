@@ -23,6 +23,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
+from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
     errorif,
@@ -52,6 +53,7 @@ __all__ = [
     "plot_section",
     "plot_surfaces",
     "plot_field_lines",
+    "plot_particle_trajectories",
     "poincare_plot",
 ]
 
@@ -3759,10 +3761,12 @@ def plot_field_lines(
         x = rs[:, i] * np.cos(phis)
         y = rs[:, i] * np.sin(phis)
         z = zs[:, i]
-        plot_data["X"].append(x)
-        plot_data["Y"].append(y)
-        plot_data["Z"].append(z)
-        plot_data["R"].append(rs[:, i])
+
+        if return_data:
+            plot_data["X"].append(x)
+            plot_data["Y"].append(y)
+            plot_data["Z"].append(z)
+            plot_data["R"].append(rs[:, i])
 
         fig.add_trace(
             go.Scatter3d(
@@ -3778,6 +3782,233 @@ def plot_field_lines(
                 marker=dict(size=0),
                 name=f"FieldLine[{i}]",
                 hovertext=f"FieldLine[{i}]",
+                showlegend=False,
+            )
+        )
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    if return_data:
+        return fig, plot_data
+    return fig
+
+
+def plot_particle_trajectories(
+    field,
+    model,
+    initializer,
+    ts,
+    return_data=False,
+    fig=None,
+    **kwargs,
+):
+    """Field line plot from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField or Equilibrium
+        Magnetic field to trace the particle trajectories in. Given field, trajectory
+        model, and initializer must be compatible. Field can be a subclass of
+        MagneticField, such as Coilset, CurrentPotential, or it can be Equilibrium.
+    model : AbstractParticleTrajectoryModel
+        Particle trajectory model to use for tracing the particle trajectories.
+    initializer : AbstractParticleInitializer
+        Particle initializer to use for initializing the particles.
+    ts : array-like
+        Time values to trace the particle trajectories for.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``color``: color to use for field lines, default is black.
+        * ``figsize``: tuple of length 2, the size of the figure in inches
+        * ``lw``: float, linewidth of plotted field lines
+        * ``ls``: str, linestyle of plotted field lines
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+        Contains keys ``["X","Y","Z","R","phi"]``, each entry in the dict is a list
+        of length `R0.size` corresponding to the number of field lines, and each
+        element of that list is an array of size `phis.size` corresponding to the
+        coordinate values along that field line.
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_particle_trajectories.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        import desc
+        from desc.plotting import plot_particle_trajectories
+        from desc.particles import (
+            ManualParticleInitializerLab,
+            VacuumGuidingCenterTrajectory,
+        )
+
+        # Equilibrium is not necessary but helps to find initial particle positions
+        eq = desc.examples.get("precise_QA")
+        grid_trace = desc.grid.LinearGrid(rho=[0.8])
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+        fig = plot_3d(eq, "|B|", alpha=0.5)
+        initializer = ManualParticleInitializerLab(
+            R0=r0,
+            phi0 = jnp.zeros_like(R0),
+            Z0=z0,
+            xi0=0.7*jnp.ones_like(R0),
+            E = 1e-1,
+            m = 4.0,
+            q = 1.0,
+            eq = eq,
+        )
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        model = VacuumGuidingCenterTrajectory(frame="lab")
+
+        plot_particle_trajectories(
+            field, model, initializer, ts=np.linspace(0, 1e-2, 1000), fig=fig
+        )
+    """
+    trace_kwargs = {}
+    for key in inspect.signature(trace_particles).parameters:
+        if key in kwargs:
+            trace_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", "black")
+    figsize = kwargs.pop("figsize", (10, 10))
+    title = kwargs.pop("title", "")
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_particle_trajectories got unexpected keyword argument: {kwargs.keys()}"
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    x0, args = initializer.init_particles(model=model, field=field)
+    ms, qs, mus = args[:3]
+    rpz, _ = trace_particles(
+        field, x0, ms, qs, mus, model=model, ts=ts, min_step_size=1e-10
+    )
+
+    rs = rpz[:, :, 0]
+    phis = rpz[:, :, 1]
+    zs = rpz[:, :, 2]
+
+    if fig is None:
+        fig = go.Figure()
+
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+    plot_data["R"] = []
+    for i in range(rs.shape[0]):  # iterate over each particle
+        x = rs[i, :] * np.cos(phis[i, :])
+        y = rs[i, :] * np.sin(phis[i, :])
+        z = zs[i, :]
+
+        if return_data:
+            plot_data["X"].append(x)
+            plot_data["Y"].append(y)
+            plot_data["Z"].append(z)
+            plot_data["R"].append(rs[:, i])
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+                line=dict(
+                    color=color[i % len(color)],
+                    width=lw[i % len(lw)],
+                    dash=ls[i % len(ls)],
+                ),
+                marker=dict(size=0),
+                name=f"Particle[{i}]",
+                hovertext=f"Particle[{i}]",
                 showlegend=False,
             )
         )

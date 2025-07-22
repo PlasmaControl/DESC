@@ -8,7 +8,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import reflection_matrix, rotation_matrix
 from desc.compute.utils import (
     _parse_parameterization,
     get_data_deps,
@@ -18,7 +17,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif
+from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, Optimizable, ABC):

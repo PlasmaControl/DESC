@@ -55,7 +55,7 @@ from desc.utils import (
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import parse_axis, parse_profile, parse_surface
+from .utils import parse_axis, parse_profile, parse_section, parse_surface
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -149,6 +149,7 @@ class Equilibrium(IOAble, Optimizable):
         "_L_basis",
         "_surface",
         "_axis",
+        "_xsection",
         "_pressure",
         "_iota",
         "_current",
@@ -158,7 +159,6 @@ class Equilibrium(IOAble, Optimizable):
         "_atomic_number",
         "_anisotropy",
         "_spectral_indexing",
-        "_bdry_mode",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -186,6 +186,7 @@ class Equilibrium(IOAble, Optimizable):
         anisotropy=None,
         surface=None,
         axis=None,
+        xsection=None,
         sym=None,
         spectral_indexing=None,
         check_orientation=True,
@@ -230,17 +231,32 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
+        errorif(
+            surface is not None and xsection is not None,
+            ValueError,
+            "Cannot specify both surface and xsection",
+        )
+        if surface is not None:
+            self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
+        elif xsection is not None:
+            self._sym = bool(setdefault(sym, getattr(xsection, "sym", False)))
+        else:
+            self._sym = bool(setdefault(sym, False))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
-
-        # surface
-        self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing
-        )
-
-        # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+        # Parse surface, magnetic axis and cross-section
+        if xsection is not None:
+            self._xsection = parse_section(xsection, self.sym)
+            self._surface = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+            self._axis = parse_axis(axis, self.NFP, self.sym, xsection=self.xsection)
+        else:
+            self._surface = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+            self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+            self._xsection = parse_section(surface=self.surface, sym=self.sym)
 
         # resolution
         L = check_nonnegint(L, "L")
@@ -251,12 +267,16 @@ class Equilibrium(IOAble, Optimizable):
         N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
-        self._M = int(setdefault(M, self.surface.M))
+        self._M = (
+            int(setdefault(M, self.surface.M))
+            if surface is not None
+            else int(setdefault(M, self.xsection.M))
+        )
         self._L = int(
             setdefault(
                 L,
                 max(
-                    self.surface.L,
+                    self.xsection.L,
                     self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
                 ),
             )
@@ -267,6 +287,7 @@ class Equilibrium(IOAble, Optimizable):
 
         self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
         self._axis.change_resolution(self.N, sym=self.sym)
+        self._xsection.change_resolution(self.L, self.M)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -379,6 +400,11 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             "Surface and Equilibrium must have the same symmetry",
         )
+        errorif(
+            self.sym != self.xsection.sym,
+            ValueError,
+            "Cross-section and Equilibrium must have the same symmetry",
+        )
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
@@ -389,7 +415,15 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
+            if xsection is None:
+                # For none Poincare BC problems, we need to set the xsection
+                # from the initial guess.
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=True)
+                self._xsection = self.get_surface_at(zeta=0)
+            else:
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=False)
+                self._surface = self.get_surface_at(rho=1.0)
+                self._axis = self.get_axis()
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -414,6 +448,11 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+        if self._xsection is None:
+            # eq.xsection property was added with Poincare BC support
+            self._xsection = self.get_surface_at(zeta=0)
+        if not hasattr(self.surface, "_rho"):
+            self.surface._rho = 1.0
 
         # ensure things that should be ints are ints
         self._L = int(self._L)
@@ -443,6 +482,9 @@ class Equilibrium(IOAble, Optimizable):
             "Ti_l",
             "Zeff_l",
             "a_lmn",
+            "Rp_lmn",
+            "Zp_lmn",
+            "Lp_lmn",
             "Ra_n",
             "Za_n",
             "Rb_lmn",
@@ -451,21 +493,24 @@ class Equilibrium(IOAble, Optimizable):
             "G",
             "Phi_mn",
         )
-        assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
 
     def __repr__(self):
         """String form of the object."""
+        if self.pressure is not None and hasattr(self.pressure, "params"):
+            vacuum = all(self.pressure.params == 0)
+        else:
+            vacuum = "no pressure profile"
+        profile = "iota" if self.iota is not None else "current"
         return (
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
-            )
+            + f" (L={self.L}, M={self.M}, N={self.N}, NFP={self.NFP}, sym={self.sym},"
+            + f" spectral_indexing={self.spectral_indexing}, {vacuum=}, {profile=})"
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True):
+    def set_initial_guess(self, *args, ensure_nested=True, lcfs_surface=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -487,6 +532,11 @@ class Equilibrium(IOAble, Optimizable):
             If True, and the default initial guess does not produce nested surfaces,
             run a small optimization problem to attempt to refine initial guess to
             improve coordinate mapping.
+        lcfs_surface : bool
+            If True, and the initial guess will be created by scaling down the LCFS
+            surface(rho=1.0), to form nested surfaces. If False, the initial guess
+            will be created by rotating the given Poincare section(zeta=0) resulting in
+            an axisymmetric equilibrium. Default is True.
 
         Examples
         --------
@@ -526,7 +576,9 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args, ensure_nested=ensure_nested)
+        set_initial_guess(
+            self, *args, ensure_nested=ensure_nested, lcfs_surface=lcfs_surface
+        )
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -617,6 +669,7 @@ class Equilibrium(IOAble, Optimizable):
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        self.xsection.change_resolution(L=self.L, M=self.M, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -699,12 +752,22 @@ class Equilibrium(IOAble, Optimizable):
             return surface
 
         if zeta is not None:
-            assert (zeta >= 0) and (zeta <= 2 * np.pi)
-            surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
+            errorif(
+                not ((zeta >= 0) and (zeta <= 2 * np.pi / self.NFP)),
+                ValueError,
+                "zeta must be between 0 and {2 * np.pi / self.NFP} (2pi/NFP), got "
+                + f"{zeta}. Did you forgot to divide by NFP?",
+            )
+            # only zeta=0 and zeta=pi/NFP have stellarator symmetry
+            surface_sym = self.sym if zeta == 0 or zeta == np.pi / self.NFP else False
+            surface = ZernikeRZToroidalSection(
+                sym=surface_sym, zeta=zeta % (2 * np.pi / self.NFP)
+            )
             surface.change_resolution(self.L, self.M)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AL = np.zeros((surface.L_basis.num_modes, self.L_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -723,10 +786,22 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = fourier(zeta, n, self.NFP)
-            Rb = AR @ self.R_lmn
-            Zb = AZ @ self.Z_lmn
-            surface.R_lmn = Rb
-            surface.Z_lmn = Zb
+
+            for i, (l, m, n) in enumerate(self.L_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.L_basis.modes[:, 0] == l,
+                        surface.L_basis.modes[:, 1] == m,
+                    )
+                )
+                AL[j, i] = fourier(zeta, n, self.NFP)
+
+            Rp = AR @ self.R_lmn
+            Zp = AZ @ self.Z_lmn
+            Lp = AL @ self.L_lmn
+            surface.R_lmn = Rp
+            surface.Z_lmn = Zp
+            surface.L_lmn = Lp
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
@@ -1481,6 +1556,25 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = new
 
     @property
+    def xsection(self):
+        """Poincare Section: Geometric surface defining toroidal cross-section."""
+        return self._xsection
+
+    @xsection.setter
+    def xsection(self, new):
+        assert isinstance(
+            new, ZernikeRZToroidalSection
+        ), f"surfaces should be of type ZernikeRZToroidalSection, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Surface and Equilibrium must have the same symmetry"
+        assert self.NFP == getattr(
+            new, "NFP", self.NFP
+        ), "Surface and Equilibrium must have the same NFP"
+        new.change_resolution(self.L, self.M, self.N)
+        self._xsection = new
+
+    @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
         return self._spectral_indexing
@@ -1489,11 +1583,6 @@ class Equilibrium(IOAble, Optimizable):
     def sym(self):
         """bool: Whether this equilibrium is stellarator symmetric."""
         return self._sym
-
-    @property
-    def bdry_mode(self):
-        """str: Method for specifying boundary condition."""
-        return self._bdry_mode
 
     @optimizable_parameter
     @property
@@ -1595,6 +1684,39 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
+    @property
+    def Rp_lmn(self):
+        """ndarray: Spectral coefficients of R at the cross-section."""
+        return self.xsection.R_lmn
+
+    @Rp_lmn.setter
+    def Rp_lmn(self, Rp_lmn):
+        self.xsection.R_lmn = Rp_lmn
+
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
+    @property
+    def Zp_lmn(self):
+        """ndarray: Spectral coefficients of Z at the cross-section."""
+        return self.xsection.Z_lmn
+
+    @Zp_lmn.setter
+    def Zp_lmn(self, Zp_lmn):
+        self.xsection.Z_lmn = Zp_lmn
+
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
+    @property
+    def Lp_lmn(self):
+        """ndarray: Spectral coefficients of Lambda at the cross-section."""
+        return self.xsection.L_lmn
+
+    @Lp_lmn.setter
+    def Lp_lmn(self, Lp_lmn):
+        self.xsection.L_lmn = Lp_lmn
 
     @optimizable_parameter
     @property
@@ -2038,6 +2160,7 @@ class Equilibrium(IOAble, Optimizable):
                     NFP=na_eq.nfp,
                 ),
                 "surface": None,
+                "xsection": None,
             }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
@@ -2102,6 +2225,7 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
+        eq.xsection = eq.get_surface_at(zeta=0)
 
         return eq
 
@@ -2147,7 +2271,6 @@ class Equilibrium(IOAble, Optimizable):
             "maxiter",
             "objective",
             "optimizer",
-            "bdry_mode",
             "output_path",
             "verbose",
         ]
@@ -2237,12 +2360,6 @@ class Equilibrium(IOAble, Optimizable):
             + "This is not recommended and may result in poor convergence. "
             + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
             + "to avoid this warning.",
-        )
-        errorif(
-            self.bdry_mode == "poincare",
-            NotImplementedError,
-            "Solving equilibrium with poincare XS as BC is not supported yet "
-            + "on master branch.",
         )
 
         things, result = optimizer.optimize(

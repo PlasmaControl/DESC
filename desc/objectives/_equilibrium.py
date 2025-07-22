@@ -586,6 +586,196 @@ class HelicalForceBalance(_Objective):
         return data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
 
+class ForceBalanceGalerkin(_Objective):
+    """Projection of MHD force balance onto the basis functions.
+
+    Given force densities:
+
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    Minimizes the projection of the forces onto the Fourier-Zernike basis.
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(-np.inf,0)``.",
+        bounds_default="``bounds=(-np.inf,0)``.",
+    )
+
+    _equilibrium = True
+    _coordinates = "rtz"
+    _units = "(N)"
+    _print_value_fmt = "Force error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        basis=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="force galerkin",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._basis = basis
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.basis import FourierZernikeBasis
+        from desc.transform import Transform
+
+        eq = self.things[0]
+        if self._grid is None:
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+        self._data_keys = [
+            "F_rho",
+            "|grad(rho)|",
+            "sqrt(g)",
+            "F_helical",
+            "|e^helical|",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        if self._basis is None:
+            transform_nyq_R = transforms["R"]
+            transform_nyq_Z = transforms["Z"]
+        else:
+            L = self._basis.L
+            M = self._basis.M
+            N = self._basis.N
+            Rsym = "cos" if eq.sym else False
+            Zsym = "sin" if eq.sym else False
+            transform_nyq_R = Transform(
+                grid, FourierZernikeBasis(L, M, N, eq.NFP, Rsym)
+            )
+            transform_nyq_Z = Transform(
+                grid, FourierZernikeBasis(L, M, N, eq.NFP, Zsym)
+            )
+            self._dim_f = (
+                transform_nyq_R.basis.num_modes + transform_nyq_Z.basis.num_modes
+            )
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "quad_weights": jnp.ones(self._dim_f),
+            "nyq_trans_R": transform_nyq_R,
+            "nyq_trans_Z": transform_nyq_Z,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["f"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N) projected onto the FourierZernike
+            basis.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        fr = data["F_rho"] * data["|grad(rho)|"]
+        fr = fr * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+
+        fb = data["F_helical"] * data["|e^helical|"]
+        fb = fb * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+
+        fr_proj = constants["nyq_trans_R"].project(fr)
+        fb_proj = constants["nyq_trans_Z"].project(fb)
+
+        return jnp.concatenate([fr_proj, fb_proj])
+
+
 class Energy(_Objective):
     """MHD energy.
 

@@ -3163,6 +3163,7 @@ class TestComputeScalarResolution:
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
+        FreeSurfaceError,
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
@@ -3328,6 +3329,36 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
             with pytest.warns(UserWarning):
                 obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_free_surface_error(self):
+        """FreeSurfaceError."""
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            field = FreeSurfaceOuterField(
+                eq.surface,
+                eq.M,
+                eq.N,
+                B_coil=ToroidalMagneticField(5, 1),
+            )
+            obj = ObjectiveFunction(FreeSurfaceError(eq, field))
+            obj.build()
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 

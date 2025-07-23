@@ -277,12 +277,6 @@ def test_compute_everything():
                 if "grad(B)" in names
                 else names
             )
-            # and do the same for grad(grad(rho))
-            names_xyz = (
-                names_xyz - {"grad(grad(rho))", "finite-n instability drive"}
-                if "grad(grad(rho))" in names_xyz
-                else names_xyz
-            )
             this_branch_data_xyz = things[p].compute(
                 list(names_xyz), **grid.get(p, {}), basis="xyz"
             )
@@ -294,7 +288,7 @@ def test_compute_everything():
                 p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz
             )
 
-    if True or (not error_rpz and update_master_data_rpz):
+    if not error_rpz and update_master_data_rpz:
         # then update the master compute data
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file

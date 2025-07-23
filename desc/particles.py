@@ -164,10 +164,21 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         x = x.squeeze()
         m, q, mu, eq_or_field, kwargs = args
         if self.frame == "flux":
-            assert isinstance(eq_or_field, Equilibrium)
+            eq_or_field = eqx.error_if(
+                eq_or_field,
+                not isinstance(eq_or_field, Equilibrium),
+                "Integration in flux coordinates requires a MagneticField.",
+            )
             return self._compute_flux_coordinates(x, eq_or_field, m, q, mu, **kwargs)
         elif self.frame == "lab":
-            assert isinstance(eq_or_field, _MagneticField)
+            eq_or_field = eqx.error_if(
+                eq_or_field,
+                not isinstance(eq_or_field, _MagneticField),
+                "Integration in lab coordinates requires a MagneticField. If using an "
+                "Equilibrium, we recommend setting frame='flux' and converting the "
+                "output to lab coordinates only at the end by the helper function "
+                "Equilibrium.map_coordinates.",
+            )
             return self._compute_lab_coordinates(x, eq_or_field, m, q, mu, **kwargs)
 
     def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
@@ -220,7 +231,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
-        assert isinstance(field, _MagneticField)
         vpar = x[-1]
         coord = x[:-1]
 

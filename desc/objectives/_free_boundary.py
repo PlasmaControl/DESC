@@ -993,13 +993,8 @@ class FreeSurfaceError(_Objective):
         """
         eq = self.things[0]
 
-        eval_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
-        eval_transforms = get_transforms(
-            "|K_vc|^2",
-            self._field,
-            grid=self._eval_grid,
-            transforms=eval_transforms,
-        )
+        eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
+        eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
         source_transforms = (
             eval_transforms
             if self._use_same_grid
@@ -1015,8 +1010,9 @@ class FreeSurfaceError(_Objective):
         self._field.Y = data["Y_coil"]
         self._constants = {
             "interpolator": data["interpolator"],
-            "source_transforms": source_transforms,
+            "eq_transforms": eq_transforms,
             "eval_transforms": eval_transforms,
+            "source_transforms": source_transforms,
             "profiles": get_profiles(self._inner_keys, eq, grid=self._eval_grid),
             "quad_weights": np.sqrt(eval_transforms["grid"].weights),
         }
@@ -1059,11 +1055,9 @@ class FreeSurfaceError(_Objective):
             eq,
             self._inner_keys,
             params,
-            constants["eval_transforms"],
+            constants["eq_transforms"],
             constants["profiles"],
         )
-        params["I"] = inner["I"][self._eval_grid.unique_rho_idx[-1]]
-        params["Y"] = self._field.Y
         outer = {
             key: inner[key]
             for key in (
@@ -1082,6 +1076,10 @@ class FreeSurfaceError(_Objective):
             )
         }
         outer["interpolator"] = constants["interpolator"]
+
+        params = params.copy()
+        params["I"] = inner["I"][self._eval_grid.unique_rho_idx[-1]]
+        params["Y"] = self._field.Y
         # TODO: Replace with extension
         outer["B0*n"] = dot(
             params["I"] * inner["grad(theta)"] + params["Y"] * inner["grad(zeta)"],

@@ -3767,33 +3767,22 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_free_surface_error(self):
         """FreeSurfaceError."""
-        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
-        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
-        surf = FourierRZToroidalSurface(
-            R_lmn=[4.0, 1.0],
-            modes_R=[[0, 0], [1, 0]],
-            Z_lmn=[-1.0],
-            modes_Z=[[-1, 0]],
-            NFP=1,
-        )
-        eq = Equilibrium(
-            M=surf.M, N=surf.N, Psi=1.0, surface=surf, pressure=pres, iota=iota
-        )
+        eq = get("W7-X")
         field = FreeSurfaceOuterField(
             eq.surface,
-            surf.M,
-            surf.N,
+            eq.M,
+            eq.N,
             B_coil=ToroidalMagneticField(5, 1),
         )
         obj = ObjectiveFunction(
             FreeSurfaceError(
                 eq,
                 field,
-                eval_grid=LinearGrid(M=5, N=4, NFP=eq.NFP),
-                grid=LinearGrid(M=6, N=5, NFP=eq.NFP),
+                eval_grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+                grid=LinearGrid(M=eq.M_grid - 1, N=eq.N_grid, NFP=eq.NFP),
             )
         )
-        obj.build()
+        obj.build(use_jit=False)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"
 

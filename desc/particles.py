@@ -495,7 +495,6 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         else:
             raise NotImplementedError
 
-        print(x)
         return super()._return_particles(
             x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
         )

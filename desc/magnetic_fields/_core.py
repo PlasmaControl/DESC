@@ -28,7 +28,6 @@ from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
-from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
@@ -57,13 +56,13 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     ----------
     re : ndarray
         Shape (n_eval_pts, 3).
-        Evaluation points to evaluate B at, in cartesian.
+        Evaluation points to evaluate B at, in Cartesian coordinates.
     rs : ndarray
         Shape (n_src_pts, 3).
-        Source points for current density J, in cartesian.
+        Source points for current density J, in Cartesian coordinates.
     J : ndarray
         Shape (n_src_pts, 3).
-        Current density vector at source points, in cartesian.
+        Current density vector at source points, in Cartesian components.
     dV : ndarray
         Shape (n_src_pts, ).
         Volume element at source points
@@ -76,7 +75,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     -------
     B : ndarray
         Shape(n_eval_pts, 3).
-        Magnetic field in cartesian components at specified points.
+        Magnetic field in Cartesian components at specified points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -102,13 +101,13 @@ def biot_savart_general_vector_potential(
     ----------
     re : ndarray
         Shape (n_eval_pts, 3).
-        Evaluation points to evaluate B at, in cartesian.
+        Evaluation points to evaluate B at, in Cartesian coordinates.
     rs : ndarray
         Shape (n_src_pts, 3).
-        Source points for current density J, in cartesian.
+        Source points for current density J, in Cartesian coordinates.
     J : ndarray
         Shape (n_src_pts, 3).
-        Current density vector at source points, in cartesian.
+        Current density vector at source points, in Cartesian components.
     dV : ndarray
         Shape (n_src_pts, ).
         Volume element at source points
@@ -121,7 +120,7 @@ def biot_savart_general_vector_potential(
     -------
     A : ndarray
         Shape(n_eval_pts, 3).
-        Magnetic vector potential in cartesian components at specified points.
+        Magnetic vector potential in Cartesian components at specified points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -164,6 +163,8 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         Bnormal distribution from the BNORM Fourier coefficients,
         evaluated on the given eval_grid
     """
+    from desc.equilibrium import EquilibriaFamily, Equilibrium
+
     if isinstance(surface, EquilibriaFamily):
         surface = surface[-1]
     if isinstance(surface, Equilibrium):
@@ -283,7 +284,7 @@ class _MagneticField(IOAble, ABC):
 
         Returns
         -------
-        field : ndarray, shape(N,3)
+        field : ndarray, shape(n,3)
             magnetic field at specified points
 
         """
@@ -324,7 +325,7 @@ class _MagneticField(IOAble, ABC):
 
         Returns
         -------
-        A : ndarray, shape(N,3)
+        A : ndarray, shape(n,3)
             magnetic vector potential at specified points
 
         """
@@ -388,6 +389,8 @@ class _MagneticField(IOAble, ABC):
             given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
+        from desc.equilibrium import EquilibriaFamily, Equilibrium
+
         calc_Bplasma = False
         if isinstance(surface, EquilibriaFamily):
             surface = surface[-1]
@@ -486,7 +489,10 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         None
+
         """
+        from desc.equilibrium import EquilibriaFamily, Equilibrium
+
         if sym != "sin":
             raise UserWarning(
                 "BNORM code assumes that |B| has sin symmetry,"

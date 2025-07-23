@@ -2236,15 +2236,12 @@ def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{-2}",
     units_long="inverse square meters",
     description="Gradient of gradient of rho tensor",
-    dim=(3, 3),
+    dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
-        "e^rho",
-        "e^theta",
-        "e^zeta",
         "e_theta",
         "e_zeta",
         "e_theta_t",
@@ -2264,14 +2261,14 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
         + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
-        / data["sqrt(g)"][:, jnp.newaxis] ** 2
+        / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
     ) * data["B_theta"][:, jnp.newaxis]
     +(
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
-        / data["sqrt(g)"][:, jnp.newaxis] ** 2
+        / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
     ) * data["B_zeta"][:, jnp.newaxis]
 
     return data
@@ -2294,7 +2291,7 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
 def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     data["finite-n instability drive"] = (
         -2
-        * (dot(data["Jxgrad(rho)"], data["B_dot_grad(grad(rho))"], axis=1),)
+        * dot(data["Jxgrad(rho)"], data["B_dot_grad(grad(rho))"], axis=1)
         / data["g^rr"]
     )
 

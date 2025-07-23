@@ -565,6 +565,26 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|F|_normalized",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
+    + "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Magnitude of force balance error normalized by volume averaged "
+    + "magnetic pressure gradient",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|F|", "<|grad(|B|^2)|/2mu0>_vol"],
+)
+def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
+    data["|F|_normalized"] = data["|F|"] / data["<|grad(|B|^2)|/2mu0>_vol"]
+    return data
+
+
+@register_compute_fun(
     name="<|F|>_vol",
     label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
     units="N \\cdot m^{-3}",

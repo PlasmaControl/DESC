@@ -4,14 +4,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import load
-from desc.utils import cross, dot
+from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]

@@ -896,7 +896,7 @@ class FreeSurfaceError(_Objective):
 
     _scalar = False
     _print_value_fmt = "Free surface Error: "
-    _units = "T^2"
+    _units = "T^2 m^2"
 
     _coordinates = "rtz"
 

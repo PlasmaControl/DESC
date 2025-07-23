@@ -292,7 +292,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         sym_coil=None,
         B_coil=None,
         Y_coil=None,
-        I_plasma=0.0,  # noqa: E741
+        I_plasma=0.0,
         I_sheet=0.0,
     ):
         I = I_plasma + I_sheet  # noqa: E741

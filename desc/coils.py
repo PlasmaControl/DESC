@@ -1499,7 +1499,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
-    _static_attrs = ["_NFP", "_sym", "_name"]
+    _static_attrs = (
+        OptimizableCollection._static_attrs
+        + _Coil._static_attrs
+        + ["_NFP", "_sym", "_name"]
+    )
 
     def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)

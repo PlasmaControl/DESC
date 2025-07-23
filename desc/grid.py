@@ -1592,8 +1592,6 @@ class ConcentricGrid(_Grid):
     _fft_poloidal = False
     _fft_toroidal = True
 
-    _static_attrs = _Grid._static_attrs + ["_node_pattern"]
-
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)

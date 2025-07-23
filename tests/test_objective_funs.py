@@ -3332,7 +3332,7 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
-    @pytest.mark.unit
+    @pytest.mark.regression
     def test_compute_scalar_resolution_free_surface_error(self):
         """FreeSurfaceError."""
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
@@ -3635,7 +3635,7 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
-    @pytest.mark.unit
+    @pytest.mark.regression
     def test_compute_scalar_resolution_linking_current(self):
         """LinkingCurrentConsistency."""
         coil = FourierPlanarCoil(center=[10, 1, 0])

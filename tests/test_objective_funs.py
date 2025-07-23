@@ -3785,7 +3785,14 @@ class TestObjectiveNaNGrad:
             surf.N,
             B_coil=ToroidalMagneticField(5, 1),
         )
-        obj = ObjectiveFunction(FreeSurfaceError(eq, field))
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                eval_grid=LinearGrid(M=5, N=4, NFP=eq.NFP),
+                grid=LinearGrid(M=6, N=5, NFP=eq.NFP),
+            )
+        )
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"

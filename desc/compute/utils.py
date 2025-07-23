@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..utils import errorif, rpz2xyz, rpz2xyz_vec, warnif
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec, setdefault, warnif
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
@@ -594,7 +594,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
-def get_params(keys, obj, has_axis=False, basis="rpz"):
+def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
     """Get parameters needed to compute a given quantity.
 
     Parameters
@@ -607,6 +607,8 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
+    params : dict[str, jnp.ndarray]
+        Params computed so far.
 
     Returns
     -------
@@ -619,24 +621,33 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    params = []
+    params_list = []
     for key in deps:
-        params += data_index[p][key]["dependencies"]["params"]
+        params_list += data_index[p][key]["dependencies"]["params"]
     if isinstance(obj, str) or inspect.isclass(obj):
-        return params
-    temp_params = {}
-    for name in params:
-        p = getattr(obj, name)
-        if isinstance(p, dict):
-            temp_params[name] = p.copy()
-        else:
-            temp_params[name] = jnp.atleast_1d(p)
-    return temp_params
+        return params_list
+
+    params = setdefault(params, {})
+    for name in params_list:
+        if name not in params:
+            p = getattr(obj, name)
+            if isinstance(p, dict):
+                params[name] = p.copy()
+            else:
+                params[name] = p if p is None else jnp.atleast_1d(p)
+    return params
 
 
 @execute_on_cpu
 def get_transforms(
-    keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
+    keys,
+    obj,
+    grid,
+    jitable=False,
+    has_axis=False,
+    basis="rpz",
+    transforms=None,
+    **kwargs,
 ):
     """Get transforms needed to compute a given quantity on a given grid.
 
@@ -654,10 +665,12 @@ def get_transforms(
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
+    transforms : dict[str, Transform]
+        Transforms that are already computed.
 
     Returns
     -------
-    transforms : dict of Transform
+    transforms : dict[str, Transform]
         Transforms needed to compute key.
         Keys for R, Z, L, etc
 
@@ -670,8 +683,13 @@ def get_transforms(
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
-    transforms = {"grid": grid}
+
+    transforms = setdefault(transforms, {})
+    transforms.setdefault("grid", grid)
+
     for c in derivs.keys():
+        if c in transforms:
+            continue
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis

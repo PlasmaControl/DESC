@@ -8,11 +8,13 @@ from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import get_interpolator, virtual_casing_biot_savart
+from desc.integrals._interp_utils import _upsample
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    dot,
     errorif,
     parse_argname_change,
     setdefault,
@@ -850,6 +852,277 @@ class BoundaryError(_Objective):
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
         return out
+
+
+class FreeSurfaceError(_Objective):
+    """Target for free boundary conditions on LCFS.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    field : FreeSurfaceOuterField
+        Laplace solver object.
+    eval_grid : Grid
+        Evaluation points to evaluate objective error.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
+        Default is ``grid``.
+    grid : Grid
+        Grid for the integral transforms.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
+        Default is ``LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP)``.
+    q : int
+        Order of integration on the local singular grid.
+    maxiter : int
+        Maximum number of iterations for fixed point method.
+        Default is zero, which means that matrix inversion will be used.
+        If nonzero, then performs fixed point iterations until maximum
+        iterations or error tolerance of ``1e-7`` is reached.
+    chunk_size : int or None
+        Size to split integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.  Default is ``None``.
+        Recommend to verify computation with ``chunk_size`` set to a
+        small number due to bugs in JAX or XLA.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _print_value_fmt = "Free surface Error: "
+    _units = "T^2"
+
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        *,
+        eval_grid=None,
+        grid=None,
+        q=None,
+        maxiter=-1,
+        chunk_size=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="Free surface error",
+        **kwargs,
+    ):
+        if target is None and bounds is None:
+            target = 0.0
+
+        if grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        assert grid.can_fft2
+        errorif(
+            field.M_Phi > grid.M, msg=f"Got M_Phi = {field.M_Phi} > {grid.M} = grid.M."
+        )
+        errorif(
+            field.N_Phi > grid.N, msg=f"Got N_Phi = {field.N_Phi} > {grid.N} = grid.N."
+        )
+        errorif(
+            field.M_Phi_coil > grid.M,
+            msg=f"Got M_Phi_coil = {field.M_Phi_coil} > {grid.M} = grid.M.",
+        )
+        errorif(
+            field.N_Phi_coil > grid.N,
+            msg=f"Got N_Phi_coil = {field.N_Phi_coil} > {grid.N} = grid.N.",
+        )
+        eval_grid = setdefault(eval_grid, grid)
+        assert eval_grid.can_fft2
+
+        self._field = field
+        self._grid = grid
+        self._eval_grid = eval_grid
+        self._use_same_grid = grid.equiv(eval_grid)
+        self._q = q
+        self._maxiter = maxiter
+        self._chunk_size = chunk_size
+        self._inner_keys = [
+            "|B|^2",
+            "p",
+            "|e_theta x e_zeta|",
+            "grad(theta)",
+            "grad(zeta)",
+            "n_rho",
+            "I",
+        ]
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        # TODO (#1243, #1154): Partial summation to evaluate Rb_lmn only.
+        #   Then pass in transforms=eq_transforms in eval_transforms
+        eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
+        eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
+        source_transforms = (
+            eval_transforms
+            if self._use_same_grid
+            else get_transforms("Phi_mn", self._field, grid=self._grid)
+        )
+        data, _ = self._field.compute(
+            ["interpolator", "Y_coil"],
+            grid=self._grid,
+            q=self._q,
+            transforms=source_transforms,
+            B_coil=self._field._B_coil,
+        )
+        self._field.Y = data["Y_coil"]
+        self._constants = {
+            "interpolator": data["interpolator"],
+            "eq_transforms": eq_transforms,
+            "eval_transforms": eval_transforms,
+            "source_transforms": source_transforms,
+            "profiles": get_profiles(self._inner_keys, eq, grid=self._eval_grid),
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
+        }
+        self._dim_f = self._eval_grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (
+                np.ones(self._eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary error [[B² + 2μ₀p]]*area Jacobian in T² m².
+
+        """
+        if constants is None:
+            constants = self.constants
+        eq = self.things[0]
+
+        inner = compute_fun(
+            eq,
+            self._inner_keys,
+            params,
+            constants["eq_transforms"],
+            constants["profiles"],
+        )
+        outer = {
+            key: inner[key]
+            for key in (
+                "e_theta",
+                "Z_z",
+                "e_zeta",
+                "R",
+                "0",
+                "omega_t",
+                "Z_t",
+                "R_z",
+                "e_theta x e_zeta",
+                "|e_theta x e_zeta|",
+                "omega_z",
+                "R_t",
+            )
+        }
+        outer["interpolator"] = constants["interpolator"]
+
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]],
+            "Y": self._field.Y,
+        }
+        # TODO: Replace with extension
+        outer["B0*n"] = dot(
+            field_params["I"] * inner["grad(theta)"]
+            + field_params["Y"] * inner["grad(zeta)"],
+            inner["n_rho"],
+        )
+        if not self._use_same_grid:
+            outer["Phi_mn"] = compute_fun(
+                self._field,
+                "Phi_mn",
+                field_params,
+                constants["source_transforms"],
+                constants["profiles"],
+                data={
+                    "interpolator": outer["interpolator"],
+                    "B0*n": _upsample(outer["B0*n"], self._eval_grid, self._grid),
+                },
+                surface=eq.surface,
+                maxiter=self._maxiter,
+                chunk_size=self._chunk_size,
+                B_coil=self._field._B_coil,
+            )["Phi_mn"]
+
+        outer = compute_fun(
+            self._field,
+            "|K_vc|^2",
+            field_params,
+            constants["eval_transforms"],
+            constants["profiles"],
+            data=outer,
+            surface=eq.surface,
+            maxiter=self._maxiter,
+            chunk_size=self._chunk_size,
+            B_coil=self._field._B_coil,
+        )
+        return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
+            "|e_theta x e_zeta|"
+        ]
 
 
 class BoundaryErrorNESTOR(_Objective):

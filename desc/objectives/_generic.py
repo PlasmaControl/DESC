@@ -530,7 +530,12 @@ class ObjectiveFromUser(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "Custom objective value: "
-    _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "_fun", "_p"]
+    _static_attrs = _Objective._static_attrs + [
+        "_compute_kwargs",
+        "_fun",
+        "_fun_wrapped",
+        "_p",
+    ]
 
     def __init__(
         self,

@@ -2251,7 +2251,7 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="grad(grad(rho))",
+    name="B_dot_grad(grad(rho))",
     label="\\nabla(\\nabla(\\rho))",
     units="m^{-2}",
     units_long="inverse square meters",
@@ -2262,45 +2262,36 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "e^rho",
         "e^theta",
         "e^zeta",
         "e_theta",
         "e_zeta",
-        "e_theta_r",
         "e_theta_t",
         "e_theta_z",
-        "e_zeta_r",
         "e_zeta_t",
         "e_zeta_z",
         "sqrt(g)",
-        "sqrt(g)_r",
         "sqrt(g)_t",
         "sqrt(g)_z",
+        "B_theta",
+        "B_zeta",
     ],
 )
-def _grad_grad_rho(params, transforms, profiles, data, **kwargs):
-    data["grad(grad(rho))"] = (
-        cross(data["e_theta_r"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
-        + cross(data["e_theta"], data["e_zeta_r"]) / data["sqrt(g)"][:, jnp.newaxis]
-        - cross(data["e_theta"], data["e_zeta"])
-        * data["sqrt(g)_r"][:, jnp.newaxis]
-        / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis]
-    +(
+def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
+    data["B_dot_grad(grad(rho))"] = (
         cross(data["e_theta_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
         / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis]
+    )[:, :] * data["B_theta"][:, jnp.newaxis]
     +(
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
         / data["sqrt(g)"][:, jnp.newaxis] ** 2
-    )[:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis]
+    )[:, :] * data["B_zeta"][:, jnp.newaxis]
 
     return data
 
@@ -2338,14 +2329,10 @@ def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["Jxgrad(rho)", "B", "grad(grad(rho))", "g^rr"],
+    data=["Jxgrad(rho)", "B_dot_grad(grad(rho))", "g^rr"],
 )
 def _finite_n_instability_drive(params, transforms, profiles, data, **kwargs):
     data["finite-n instability drive"] = -2 * (
-        dot(
-            data["Jxgrad(rho)"],
-            dot(data["B"][:, :, jnp.newaxis], data["grad(grad(rho))"], axis=2),
-        )
-        / data["g^rr"]
+        dot(data["Jxgrad(rho)"], data["B_dot_grad(grad(rho))"], axis=1) / data["g^rr"]
     )
     return data

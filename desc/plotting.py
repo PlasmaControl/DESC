@@ -4133,6 +4133,7 @@ def plot_particle_trajectories(
     rpz, _ = trace_particles(
         field=field, y0=x0, ms=ms, qs=qs, mus=mus, model=model, ts=ts, **trace_kwargs
     )
+    from desc.equilibrium import Equilibrium
 
     rs = rpz[:, :, 0]
     phis = rpz[:, :, 1]
@@ -4147,9 +4148,29 @@ def plot_particle_trajectories(
     plot_data["Z"] = []
     plot_data["R"] = []
     for i in range(rs.shape[0]):  # iterate over each particle
-        x = rs[i, :] * np.cos(phis[i, :])
-        y = rs[i, :] * np.sin(phis[i, :])
-        z = zs[i, :]
+        if model.frame == "flux":
+            if isinstance(field, Equilibrium):
+                rpz_i = map_coordinates(
+                    eq=field,
+                    coords=np.array([rs[i, :], phis[i, :], zs[i, :]]).T,
+                    inbasis=("rho", "theta", "zeta"),
+                    outbasis=("R", "phi", "Z"),
+                )
+                r = rpz_i[:, 0]
+                phi = rpz_i[:, 1]
+                z = rpz_i[:, 2]
+            else:
+                raise ValueError(
+                    "Field must be an Equilibrium when using flux coordinates."
+                )
+        else:
+            r = rs[i, :]
+            phi = phis[i, :]
+            z = zs[i, :]
+
+        x = r * np.cos(phi)
+        y = r * np.sin(phi)
+        z = z
 
         if return_data:
             plot_data["X"].append(x)

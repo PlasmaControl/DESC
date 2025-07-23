@@ -208,7 +208,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
-        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
+        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
     def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
@@ -488,8 +488,13 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         elif model.frame == "lab":
             if self.eq is None:
                 raise ValueError(
-                    "Mapping flux coordinates to real space requires an Equilibrium"
+                    "Mapping flux coordinates to real space requires an Equilibrium. "
+                    "Please provide an Equilibrium object when constructing this class!"
                 )
+            warnings.warn(
+                "The input coordinates are in flux coordinates, but the model operates "
+                "in lab coordinates. Converting the given coordinates to lab frame."
+            )
             grid = Grid(x)
             x = self.eq.compute("x", grid=grid)["x"]
         else:
@@ -557,9 +562,19 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         if model.frame == "flux":
             if self.eq is None:
                 raise ValueError(
-                    "Particle tracing in flux coordinates requires an Equilibrium"
+                    "Mapping from lab to flux coordinates requires an Equilibrium. "
+                    "Please provide an Equilibrium object when constructing this class!"
                 )
-            x = x
+            warnings.warn(
+                "The input coordinates are in lab coordinates, but the model operates "
+                "in flux coordinates. Converting the given coordinates to flux frame."
+            )
+            x = self.eq.map_coordinates(
+                eq=field,
+                coords=x,
+                inbasis=("R", "phi", "Z"),
+                outbasis=("rho", "theta", "zeta"),
+            )
         elif model.frame == "lab":
             x = x
         else:

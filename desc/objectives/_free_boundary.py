@@ -993,6 +993,8 @@ class FreeSurfaceError(_Objective):
         """
         eq = self.things[0]
 
+        # TODO (#1243, #1154): Partial summation to evaluate Rb_lmn only.
+        #   Then pass in transforms=eq_transforms in eval_transforms
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
         eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
         source_transforms = (
@@ -1077,19 +1079,23 @@ class FreeSurfaceError(_Objective):
         }
         outer["interpolator"] = constants["interpolator"]
 
-        params = params.copy()
-        params["I"] = inner["I"][self._eval_grid.unique_rho_idx[-1]]
-        params["Y"] = self._field.Y
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]],
+            "Y": self._field.Y,
+        }
         # TODO: Replace with extension
         outer["B0*n"] = dot(
-            params["I"] * inner["grad(theta)"] + params["Y"] * inner["grad(zeta)"],
+            field_params["I"] * inner["grad(theta)"]
+            + field_params["Y"] * inner["grad(zeta)"],
             inner["n_rho"],
         )
         if not self._use_same_grid:
             outer["Phi_mn"] = compute_fun(
                 self._field,
                 "Phi_mn",
-                params,
+                field_params,
                 constants["source_transforms"],
                 constants["profiles"],
                 data={
@@ -1105,7 +1111,7 @@ class FreeSurfaceError(_Objective):
         outer = compute_fun(
             self._field,
             "|K_vc|^2",
-            params,
+            field_params,
             constants["eval_transforms"],
             constants["profiles"],
             data=outer,

@@ -3770,19 +3770,19 @@ class TestObjectiveNaNGrad:
         eq = get("W7-X")
         field = FreeSurfaceOuterField(
             eq.surface,
-            eq.M,
-            eq.N,
+            3,
+            3,
             B_coil=ToroidalMagneticField(5, 1),
         )
         obj = ObjectiveFunction(
             FreeSurfaceError(
                 eq,
                 field,
-                eval_grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
-                grid=LinearGrid(M=eq.M_grid - 1, N=eq.N_grid, NFP=eq.NFP),
+                eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
+                grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
             )
         )
-        obj.build(use_jit=False)
+        obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"
 

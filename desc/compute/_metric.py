@@ -2096,26 +2096,6 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_PEST_alt",
-    label="\\sqrt{g}_PEST_{alt}",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of flux (PEST) coordinate system",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho|v,p", "e_theta_PEST", "e_phi|r,v"],
-)
-def _sqrtg_PEST_alt(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_alt"] = dot(
-        data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi|r,v"])
-    )
-    return data
-
-
-@register_compute_fun(
     name="g_rr|PEST",
     label="g_{\\rho\\rho}|PEST",
     units="m^{2}",

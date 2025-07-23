@@ -536,8 +536,9 @@ class Surface(IOAble, Optimizable, ABC):
                 f" instead got type {type(grid)}"
             )
 
-        if params is None:
-            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+        params = get_params(
+            names, obj=self, basis=kwargs.get("basis", "rpz"), params=params
+        )
         if transforms is None:
             transforms = get_transforms(
                 names,

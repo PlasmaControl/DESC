@@ -11,7 +11,7 @@ from desc.basis import DoubleFourierSeries
 from desc.geometry import FourierRZToroidalSurface
 from desc.integrals.singularities import get_interpolator
 from desc.magnetic_fields import ToroidalMagneticField
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, setdefault, warnif
 
 
 class SourceFreeField(FourierRZToroidalSurface):
@@ -60,7 +60,7 @@ class SourceFreeField(FourierRZToroidalSurface):
         M,
         N,
         sym=False,
-        B0=ToroidalMagneticField(0, 1),
+        B0=None,
         I=0.0,  # noqa: E741
         Y=0.0,
     ):
@@ -68,8 +68,7 @@ class SourceFreeField(FourierRZToroidalSurface):
         self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
         self.I = I
         self.Y = Y
-        errorif(I != 0, NotImplementedError, msg="TODO: I ∇θ field")
-        self._B0 = B0 + ToroidalMagneticField(Y, 1)
+        self._B0 = B0
 
     def __getattr__(self, attr):
         return getattr(self._surface, attr)
@@ -87,6 +86,20 @@ class SourceFreeField(FourierRZToroidalSurface):
     def surface(self):
         """Surface geometry defining boundary."""
         return self._surface
+
+    @surface.setter
+    def surface(self, new):
+        assert isinstance(
+            new, FourierRZToroidalSurface
+        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
+        assert (
+            self._Phi_basis.sym == new.sym
+        ), "Surface and basis must have the same symmetry"
+        assert (
+            self._Phi_basis.NFP == new.NFP
+        ), "Surface and basis must have the same NFP"
+        new.change_resolution(self.L, self.M, self.N)
+        self._surface = new
 
     @property
     def Phi_basis(self):
@@ -162,8 +175,12 @@ class SourceFreeField(FourierRZToroidalSurface):
             (R, ϕ, Z) coordinates in ``RpZ_data``.
 
         """
-        errorif(self.M_Phi > grid.M, msg=f"Got M_Phi={self.M_Phi} > {grid.M}=grid.M.")
-        errorif(self.N_Phi > grid.N, msg=f"Got N_Phi={self.N_Phi} > {grid.N}=grid.N.")
+        errorif(
+            self.M_Phi > grid.M, msg=f"Got M_Phi = {self.M_Phi} > {grid.M} = grid.M."
+        )
+        errorif(
+            self.N_Phi > grid.N, msg=f"Got N_Phi = {self.N_Phi} > {grid.N} = grid.N."
+        )
 
         # cludge until all magnetic field classes use new API
         kwargs.setdefault("B0", self._B0)
@@ -262,7 +279,7 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     """
 
-    _immediate_attributes_ = ["_Phi_coil_basis", "_B_coil", "_Y_coil"]
+    _immediate_attributes_ = ["_Phi_coil_basis", "_B_coil"]
 
     def __init__(
         self,
@@ -278,7 +295,10 @@ class FreeSurfaceOuterField(SourceFreeField):
         I_plasma=0.0,  # noqa: E741
         I_sheet=0.0,
     ):
-        super().__init__(surface, M, N, sym, I=I_plasma + I_sheet, Y=0)
+        I = I_plasma + I_sheet  # noqa: E741
+        super().__init__(
+            surface, M, N, sym, FreeSurfaceOuterField._B0(I, Y_coil), I, Y_coil
+        )
         if M_coil is None and N_coil is None and sym_coil is None:
             self._Phi_coil_basis = self._Phi_basis
         else:
@@ -289,7 +309,16 @@ class FreeSurfaceOuterField(SourceFreeField):
                 sym=setdefault(sym_coil, sym),
             )
         self._B_coil = B_coil
-        self._Y_coil = Y_coil
+
+    @staticmethod
+    def _B0(I, Y):  # noqa: E741
+        """Returns ∇(Φ (secular))."""
+        warnif(
+            I != 0,
+            NotImplementedError,
+            "Must supply B0 as kwarg in compute method for correctness.",
+        )
+        return ToroidalMagneticField(setdefault(Y, 0), 1)
 
     def __setattr__(self, name, value):
         if (
@@ -335,15 +364,27 @@ class FreeSurfaceOuterField(SourceFreeField):
         """Compute the quantity given by name on grid."""
         errorif(
             self.M_Phi_coil > grid.M,
-            msg=f"Got M_Phi_coil={self.M_Phi_coil} > {grid.M}=grid.M.",
+            msg=f"Got M_Phi_coil = {self.M_Phi_coil} > {grid.M} = grid.M.",
         )
         errorif(
             self.N_Phi_coil > grid.N,
-            msg=f"Got N_Phi_coil={self.N_Phi_coil} > {grid.N}=grid.N.",
+            msg=f"Got N_Phi_coil = {self.N_Phi_coil} > {grid.N} = grid.N.",
         )
-        if self._Y_coil is not None and "Y_coil" not in data:
-            data["Y_coil"] = self._Y_coil
         kwargs.setdefault("B_coil", self._B_coil)
+        if self.Y is None and (params is None or "Y" not in params):
+            data, RpZ_data = super().compute(
+                "Y_coil",
+                grid,
+                params,
+                transforms,
+                data,
+                RpZ_data,
+                RpZ_grid,
+                override_grid,
+                **kwargs,
+            )
+            params = setdefault(params, {})
+            params["Y"] = data["Y_coil"]
         return super().compute(
             names,
             grid,

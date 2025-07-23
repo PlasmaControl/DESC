@@ -9,8 +9,6 @@ References
 
 from functools import partial
 
-import numpy as np
-
 from desc.backend import fixed_point, jit, jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
@@ -201,7 +199,7 @@ def _iteration_operator(
     chunk_size,
     xi=2 / 3,
 ):
-    """Equation 3.16 in [1]."""
+    """Equation 3.12 in [1]."""
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi
     return (
@@ -268,13 +266,14 @@ def _fixed_point_potential(
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     public=False,
+    q="int : Order of quadrature in polar domain.",
 )
 def _interpolator(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     # Grids with resolution less than source grid yield poor convergence
     # due to FFT frequency spectrum truncation.
     grid = transforms["grid"]
-    data["interpolator"] = get_interpolator(grid, grid, data)
+    data["interpolator"] = get_interpolator(grid, grid, data, **kwargs)
     return data
 
 
@@ -717,16 +716,17 @@ def _B_coil_field(params, transforms, profiles, data, **kwargs):
     description="Net poloidal current produced by magnetic coils",
     dim=0,
     coordinates="",
-    params=[],
-    transforms={"grid": []},
+    params=["Y"],
+    transforms={},
     profiles=[],
     data=["e_zeta", "B_coil"],
     chunk_size=_doc["chunk_size"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Y_coil(params, transforms, profiles, data, **kwargs):
-    assert transforms["grid"].num_rho == 1
-    assert np.isclose(transforms["grid"].nodes[0, 0], 1)
+    if params.get("Y", None) is not None:
+        data["Y_coil"] = params["Y"]
+        return data
     # Equation B.2 in [1].
     data["Y_coil"] = dot(data["B_coil"], data["e_zeta"]).mean()
     return data
@@ -769,7 +769,6 @@ def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     assert grid.num_rho == 1
-    assert np.isclose(grid.nodes[0, 0], 1)
 
     basis = transforms["Phi_coil"].basis
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]

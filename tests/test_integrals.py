@@ -65,7 +65,11 @@ from desc.integrals.singularities import (
     _vanilla_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import FreeSurfaceOuterField, SourceFreeField
+from desc.magnetic_fields import (
+    FreeSurfaceOuterField,
+    SourceFreeField,
+    ToroidalMagneticField,
+)
 from desc.transform import Transform
 from desc.utils import dot, errorif, rpz2xyz, safediv
 
@@ -1053,7 +1057,8 @@ class TestLaplaceField:
         grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         data = eq.compute(["G"], grid=grid)
         Y_sheet_plus_coil = grid.compress(data["G"])[-1]
-        field = SourceFreeField(eq.surface, M=8, N=8, Y=Y_sheet_plus_coil)
+        B0 = ToroidalMagneticField(Y_sheet_plus_coil, 1)
+        field = SourceFreeField(eq.surface, M=8, N=8, B0=B0)
 
         RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
         RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)

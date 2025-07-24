@@ -960,11 +960,11 @@ class FreeSurfaceError(_Objective):
         self._inner_keys = [
             "|B|^2",
             "p",
-            "|e_theta x e_zeta|",
+            "I",
             "grad(theta)",
             "grad(zeta)",
+            "|e_theta x e_zeta|",
             "n_rho",
-            "I",
         ]
 
         super().__init__(
@@ -1062,20 +1062,21 @@ class FreeSurfaceError(_Objective):
         )
         outer = {
             key: inner[key]
-            for key in (
-                "e_theta",
-                "Z_z",
-                "e_zeta",
-                "R",
+            for key in [
                 "0",
-                "omega_t",
-                "Z_t",
-                "R_z",
-                "e_theta x e_zeta",
-                "|e_theta x e_zeta|",
-                "omega_z",
+                "R",
                 "R_t",
-            )
+                "R_z",
+                "Z_t",
+                "Z_z",
+                "e_theta",
+                "e_theta x e_zeta",
+                "e_zeta",
+                "n_rho",
+                "omega_t",
+                "omega_z",
+                "|e_theta x e_zeta|",
+            ]
         }
         outer["interpolator"] = constants["interpolator"]
 
@@ -1102,7 +1103,6 @@ class FreeSurfaceError(_Objective):
                     "interpolator": outer["interpolator"],
                     "B0*n": _upsample(outer["B0*n"], self._eval_grid, self._grid),
                 },
-                surface=eq.surface,
                 maxiter=self._maxiter,
                 chunk_size=self._chunk_size,
                 B_coil=self._field._B_coil,
@@ -1115,7 +1115,6 @@ class FreeSurfaceError(_Objective):
             constants["eval_transforms"],
             constants["profiles"],
             data=outer,
-            surface=eq.surface,
             maxiter=self._maxiter,
             chunk_size=self._chunk_size,
             B_coil=self._field._B_coil,

@@ -190,9 +190,7 @@ class SourceFreeField(FourierRZToroidalSurface):
             self.N_Phi > grid.N, msg=f"Got N_Phi = {self.N_Phi} > {grid.N} = grid.N."
         )
 
-        # cludge until all magnetic field classes use new API
         kwargs.setdefault("B0", self._B0)
-        kwargs.setdefault("surface", self._surface)
 
         # to simplify computation of a singular integral for ∇φ
         if kwargs.get("on_boundary", False) and "eval_interpolator" not in kwargs:
@@ -273,8 +271,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         Default is ``N``.
     sym_coil : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        coil potential. Default is ``sin`` when the surface is stellarator
-        symmetric and ``False`` otherwise.
+        coil potential. Default is ``sym``.
     B_coil : _MagneticField
         Magnetic field from coil current sources.
     Y_coil : float
@@ -325,7 +322,7 @@ class FreeSurfaceOuterField(SourceFreeField):
                 M=setdefault(M_coil, M),
                 N=setdefault(N_coil, N),
                 NFP=surface.NFP,
-                sym=setdefault(sym_coil, "sin" if surface.sym else False),
+                sym=setdefault(sym_coil, sym),
             )
         self._B_coil = B_coil
 

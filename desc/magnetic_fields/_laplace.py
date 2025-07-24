@@ -37,9 +37,14 @@ class SourceFreeField(FourierRZToroidalSurface):
         Poloidal Fourier resolution to interpolate potential on ∂𝒳.
     N : int
         Toroidal Fourier resolution to interpolate potential on ∂𝒳.
+    NFP : int
+        Field periodicity of potential on ∂𝒳.
+        Default is ``surface.NFP`` which is correct only if
+        the globally defined part of ``B0`` produces an NFP periodic
+        field.
     sym : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        potential. Default assumes no symmetry.
+        potential. Default is ``False``.
     B0 : _MagneticField
         Magnetic field due to currents in 𝒳 and net currents outside 𝒳
         which are not accounted for ``I`` and ``Y``.
@@ -59,13 +64,16 @@ class SourceFreeField(FourierRZToroidalSurface):
         surface,
         M,
         N,
+        NFP=None,
         sym=False,
         B0=None,
         I=0.0,  # noqa: E741
         Y=0.0,
     ):
         self._surface = surface
-        self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
+        self._Phi_basis = DoubleFourierSeries(
+            M=M, N=N, NFP=setdefault(NFP, surface.NFP), sym=sym
+        )
         self.I = I
         self.Y = Y
         self._B0 = B0
@@ -255,7 +263,8 @@ class FreeSurfaceOuterField(SourceFreeField):
         Toroidal Fourier resolution to interpolate potential on ∂𝒳.
     sym : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        potential. Default assumes no symmetry.
+        potential. Default is ``sin`` when the surface is stellarator
+        symmetric and ``False`` otherwise.
     M_coil : int
         Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
         Default is ``M``.
@@ -264,7 +273,8 @@ class FreeSurfaceOuterField(SourceFreeField):
         Default is ``N``.
     sym_coil : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        coil potential. Default is ``sym``.
+        coil potential. Default is ``sin`` when the surface is stellarator
+        symmetric and ``False`` otherwise.
     B_coil : _MagneticField
         Magnetic field from coil current sources.
     Y_coil : float
@@ -286,7 +296,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         surface,
         M,
         N,
-        sym=False,
+        sym=None,
         M_coil=None,
         N_coil=None,
         sym_coil=None,
@@ -295,9 +305,18 @@ class FreeSurfaceOuterField(SourceFreeField):
         I_plasma=0.0,
         I_sheet=0.0,
     ):
+        sym = setdefault(sym, "sin" if surface.sym else False)
         I = I_plasma + I_sheet  # noqa: E741
+
         super().__init__(
-            surface, M, N, sym, FreeSurfaceOuterField._B0(I, Y_coil), I, Y_coil
+            surface,
+            M,
+            N,
+            surface.NFP,
+            sym,
+            FreeSurfaceOuterField._B0(I, Y_coil),
+            I,
+            Y_coil,
         )
         if M_coil is None and N_coil is None and sym_coil is None:
             self._Phi_coil_basis = self._Phi_basis
@@ -306,7 +325,7 @@ class FreeSurfaceOuterField(SourceFreeField):
                 M=setdefault(M_coil, M),
                 N=setdefault(N_coil, N),
                 NFP=surface.NFP,
-                sym=setdefault(sym_coil, sym),
+                sym=setdefault(sym_coil, "sin" if surface.sym else False),
             )
         self._B_coil = B_coil
 

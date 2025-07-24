@@ -638,21 +638,20 @@ def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=[],
+    data=["x", "n_rho"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     B0="_MagneticField : Field object to compute with.",
-    surface="Surface : Surface to compute on.",
     chunk_size=_doc["chunk_size"],
 )
 def _B0_dot_n(params, transforms, profiles, data, **kwargs):
-    grid = transforms["grid"]
-    data["B0*n"] = kwargs["B0"].compute_Bnormal(
-        kwargs["surface"],
-        eval_grid=grid,
-        source_grid=grid,
-        vc_source_grid=grid,
-        chunk_size=kwargs.get("chunk_size", None),
-    )[0]
+    data["B0*n"] = dot(
+        kwargs["B0"].compute_magnetic_field(
+            coords=data["x"],
+            source_grid=transforms["grid"],
+            chunk_size=kwargs.get("chunk_size", None),
+        ),
+        data["n_rho"],
+    )
     return data
 
 

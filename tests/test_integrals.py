@@ -698,19 +698,17 @@ class TestSingularities:
 class TestLaplaceField:
     """Test multiply connected Laplace solvers."""
 
-    class _HarmonicInterior:
+    class _Z_hat_field:
         """Field to test the Dirichlet solver."""
 
-        def __init__(self, Y):
-            self.Y = Y
+        def __init__(self, Y=0):
+            pass
 
         def compute_magnetic_field(self, coords, source_grid, chunk_size):
-            """Returns ∇(Z + Yϕ)."""
+            """Returns ∇Z."""
             num_coords = coords.shape[0]
-            R = coords[:, 0]
-            B = jnp.column_stack(
-                [jnp.zeros(num_coords), self.Y / R, jnp.ones(num_coords)]
-            )
+            zeros = jnp.zeros(num_coords)
+            B = jnp.column_stack([zeros, zeros, jnp.ones(num_coords)])
             return B
 
     @pytest.mark.unit
@@ -734,8 +732,7 @@ class TestLaplaceField:
             grid.N - 1,
             M_coil=surface.M,
             N_coil=surface.N,
-            sym_coil="sin" if surface.sym else False,
-            B_coil=TestLaplaceField._HarmonicInterior(0),
+            B_coil=TestLaplaceField._Z_hat_field(),
         )
         assert field.M != grid.M and field.N != grid.N
         data, _ = field.compute(
@@ -849,7 +846,7 @@ class TestLaplaceField:
 
         # Φ = Z so these resolutions must give exact reconstruction.
         field = SourceFreeField(
-            surface, surface.M, surface.N, "sin" if surface.sym else False
+            surface, surface.M, surface.N, surface.NFP, "sin" if surface.sym else False
         )
         data, RpZ_data = field.compute(
             ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
@@ -976,6 +973,7 @@ class TestLaplaceField:
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
+        assert surface.NFP == 1
         x0 = rpz2xyz(np.array([R0, 0, 0]))
 
         def G(x):
@@ -985,7 +983,7 @@ class TestLaplaceField:
         data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
 
-        field = SourceFreeField(surface, M=grid.M, N=grid.N)
+        field = SourceFreeField(surface, grid.M, grid.N)
         data, RpZ_data = field.compute(
             ["∇φ", "Phi", "x", "n_rho"],
             grid,

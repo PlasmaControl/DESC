@@ -37,9 +37,14 @@ class SourceFreeField(FourierRZToroidalSurface):
         Poloidal Fourier resolution to interpolate potential on ∂𝒳.
     N : int
         Toroidal Fourier resolution to interpolate potential on ∂𝒳.
+    NFP : int
+        Field periodicity of potential on ∂𝒳.
+        Default is ``surface.NFP`` which is correct only if
+        the globally defined part of ``B0`` produces an NFP periodic
+        field.
     sym : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        potential. Default assumes no symmetry.
+        potential. Default is ``False``.
     B0 : _MagneticField
         Magnetic field due to currents in 𝒳 and net currents outside 𝒳
         which are not accounted for ``I`` and ``Y``.
@@ -59,13 +64,16 @@ class SourceFreeField(FourierRZToroidalSurface):
         surface,
         M,
         N,
+        NFP=None,
         sym=False,
         B0=None,
         I=0.0,  # noqa: E741
         Y=0.0,
     ):
         self._surface = surface
-        self._Phi_basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym=sym)
+        self._Phi_basis = DoubleFourierSeries(
+            M=M, N=N, NFP=setdefault(NFP, surface.NFP), sym=sym
+        )
         self.I = I
         self.Y = Y
         self._B0 = B0
@@ -86,20 +94,6 @@ class SourceFreeField(FourierRZToroidalSurface):
     def surface(self):
         """Surface geometry defining boundary."""
         return self._surface
-
-    @surface.setter
-    def surface(self, new):
-        assert isinstance(
-            new, FourierRZToroidalSurface
-        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
-        assert (
-            self._Phi_basis.sym == new.sym
-        ), "Surface and basis must have the same symmetry"
-        assert (
-            self._Phi_basis.NFP == new.NFP
-        ), "Surface and basis must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N)
-        self._surface = new
 
     @property
     def Phi_basis(self):
@@ -182,9 +176,7 @@ class SourceFreeField(FourierRZToroidalSurface):
             self.N_Phi > grid.N, msg=f"Got N_Phi = {self.N_Phi} > {grid.N} = grid.N."
         )
 
-        # cludge until all magnetic field classes use new API
         kwargs.setdefault("B0", self._B0)
-        kwargs.setdefault("surface", self._surface)
 
         # to simplify computation of a singular integral for ∇φ
         if kwargs.get("on_boundary", False) and "eval_interpolator" not in kwargs:
@@ -255,7 +247,8 @@ class FreeSurfaceOuterField(SourceFreeField):
         Toroidal Fourier resolution to interpolate potential on ∂𝒳.
     sym : str
         Symmetry for Fourier basis interpolating the periodic part of the
-        potential. Default assumes no symmetry.
+        potential. Default is ``sin`` when the surface is stellarator
+        symmetric and ``False`` otherwise.
     M_coil : int
         Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
         Default is ``M``.
@@ -286,7 +279,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         surface,
         M,
         N,
-        sym=False,
+        sym=None,
         M_coil=None,
         N_coil=None,
         sym_coil=None,
@@ -295,9 +288,18 @@ class FreeSurfaceOuterField(SourceFreeField):
         I_plasma=0.0,
         I_sheet=0.0,
     ):
+        sym = setdefault(sym, "sin" if surface.sym else False)
         I = I_plasma + I_sheet  # noqa: E741
+
         super().__init__(
-            surface, M, N, sym, FreeSurfaceOuterField._B0(I, Y_coil), I, Y_coil
+            surface,
+            M,
+            N,
+            surface.NFP,
+            sym,
+            FreeSurfaceOuterField._B0(I, Y_coil),
+            I,
+            Y_coil,
         )
         if M_coil is None and N_coil is None and sym_coil is None:
             self._Phi_coil_basis = self._Phi_basis

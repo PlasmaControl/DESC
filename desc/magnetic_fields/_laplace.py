@@ -95,20 +95,6 @@ class SourceFreeField(FourierRZToroidalSurface):
         """Surface geometry defining boundary."""
         return self._surface
 
-    @surface.setter
-    def surface(self, new):
-        assert isinstance(
-            new, FourierRZToroidalSurface
-        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
-        assert (
-            self._Phi_basis.sym == new.sym
-        ), "Surface and basis must have the same symmetry"
-        assert (
-            self._Phi_basis.NFP == new.NFP
-        ), "Surface and basis must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N)
-        self._surface = new
-
     @property
     def Phi_basis(self):
         """DoubleFourierSeries: Basis for periodic part of potential."""

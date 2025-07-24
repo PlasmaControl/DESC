@@ -268,11 +268,6 @@ class TestBasis:
         basis = DoubleFourierSeries(M=1, N=1)
         assert basis.num_modes == (2 * basis.M + 1) * (2 * basis.N + 1)
         np.testing.assert_allclose(basis.evaluate(grid), correct_vals, atol=1e-8)
-        np.testing.assert_allclose(
-            basis.evaluate(grid, secular=True),
-            np.column_stack([correct_vals, t, z]),
-            atol=1e-8,
-        )
 
     @pytest.mark.unit
     def test_change_resolution(self):

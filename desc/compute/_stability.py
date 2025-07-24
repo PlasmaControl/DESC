@@ -837,8 +837,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     iota = data["iota"][:, None]
     iota_r = data["iota_r"][:, None]
 
-    psi_r = data["psi_r"][:, None]
-    psi_rr = data["psi_rr"][:, None]
+    psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
+    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
 
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
@@ -876,12 +876,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
-        x_0 = 0.8
+        x_0 = 0.7
         m_1 = 3.0
         m_2 = 2.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-4
+        eps = 1.0e-2
         return eps + (1 - eps) * (lower + upper)
 
     dx_f = jax.grad(_f)
@@ -922,9 +922,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     theta_idx = slice(n_total, 2 * n_total)
     zeta_idx = slice(2 * n_total, 3 * n_total)
 
-    # assuming uniform spacing in and θ and ζ
-    dtheta = 2 * jnp.pi / n_theta_max
-    dzeta = 2 * jnp.pi / n_zeta_max
+    ## assuming uniform spacing in and θ and ζ
+    # dtheta = 2 * jnp.pi / n_theta_max
+    # dzeta = 2 * jnp.pi / n_zeta_max
+    dtheta = 1.0
+    dzeta = 1.0
 
     W = jnp.diag(jnp.kron(w0 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
@@ -1052,7 +1054,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     # from matplotlib import pyplot as plt
-
     # plt.spy(A)
     # plt.show()
 

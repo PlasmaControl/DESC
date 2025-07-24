@@ -1202,6 +1202,38 @@ class TestLaplaceField:
             axis=0,
         )
 
+    @pytest.mark.unit
+    def test_coil_potential(self):
+        """Test coil potential."""
+        from scipy.constants import mu_0
+
+        from desc.coils import FourierRZCoil
+        from desc.integrals._coil import scalar_potential
+
+        surface = get("DSHAPE").surface
+        assert surface.NFP == 1
+        grid = LinearGrid(M=20, N=20, NFP=surface.NFP)
+        x = surface.compute("x", grid=grid)["x"]
+        I = 100  # noqa: E741
+
+        # circular coil given by R(phi) = 10
+        R_n = 100
+        Z_n = 0
+        coil = FourierRZCoil(current=I / mu_0, R_n=R_n, Z_n=Z_n, modes_R=[0])
+        field = FreeSurfaceOuterField(surface, M=grid.M, N=grid.N, B_coil=coil)
+        data, _ = field.compute(["B_coil", "Phi_coil"], grid=grid)
+        np.testing.assert_allclose(
+            data["B_coil"], coil.compute_magnetic_field(x, source_grid=grid)
+        )
+
+        num_pts = 1000
+        R_c = jnp.full(num_pts, R_n)
+        phi_c = jnp.linspace(0, 2 * jnp.pi, num_pts)
+        Z = jnp.full(num_pts, Z_n)
+        x_c = jnp.column_stack([R_c, phi_c, Z])
+
+        np.testing.assert_allclose(scalar_potential(x, x_c, I), data["Phi_coil"])
+
 
 class TestBouncePoints:
     """Test that bounce points are computed correctly."""

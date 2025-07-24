@@ -2768,13 +2768,13 @@ class Bxdl(_Objective):
         minimize the perpendicular component to the Curve.
     eq : Equilibrium, optional
         Equilibrium to compute the B_plasma contribution from at the curve.
-        Assumed to be fixed. If ``eq`` is not fixed, input it as part of the list
-        for ``field``.
     eq_grid : Grid, optional
         Collocation grid containing the nodes in the equilibrium to compute the plasma
         magnetic field from.
         Default grid is: ``QuadratureGrid(L=2*eq.L_grid, M=2*eq.M_grid, N=2 *
         eq.N_grid, NFP=eq.NFP)``
+    eq_fixed : bool, optional
+        True if the equilibrium is fixed in the optimization. Default is True.
     eval_grid : Grid, optional
         Collocation grid for the points to evaluate the objective at on the curve.
         Default grid is determined by the Curve object.
@@ -2806,6 +2806,7 @@ class Bxdl(_Objective):
         field,
         eq=None,
         eq_grid=None,
+        eq_fixed=True,
         target=None,
         bounds=None,
         weight=1,
@@ -2829,10 +2830,16 @@ class Bxdl(_Objective):
         self._field_grid = field_grid
         self._eq = eq
         self._eq_grid = eq_grid
+        self._eq_fixed = eq_fixed
         self._bs_chunk_size = bs_chunk_size
 
+        if not self._eq_fixed and self._eq is not None:
+            things = [self._field, self._eq]
+        else:
+            things = self._field
+
         super().__init__(
-            things=self._field,
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2884,13 +2891,19 @@ class Bxdl(_Objective):
                 )
             else:
                 eq_grid = self._eq_grid
-            B_plasma = eq.compute_magnetic_field(
-                coords=x,
-                chunk_size=self._bs_chunk_size,
-                source_grid=eq_grid,
-                basis="rpz",
-            )
+            eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
+            transforms = get_transforms(eq_data_keys, obj=eq, grid=eq_grid)
+            if self._eq_fixed:
+                B_plasma = eq.compute_magnetic_field(
+                    coords=x,
+                    chunk_size=self._bs_chunk_size,
+                    source_grid=eq_grid,
+                    basis="rpz",
+                    transforms=transforms,
+                )
         else:
+            eq_grid = None
+            transforms = None
             B_plasma = None
 
         self._constants = {
@@ -2899,6 +2912,8 @@ class Bxdl(_Objective):
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": B_plasma,
+            "eq_transforms": transforms,
+            "eq_grid": eq_grid,
         }
 
         timer.stop("Precomputing transforms")
@@ -2913,13 +2928,16 @@ class Bxdl(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *field_params, constants=None):
+    def compute(self, *field_params, eq_params=None, constants=None):
         """Compute Bxdl error on curve.
 
         Parameters
         ----------
         field_params : dict
             Dictionary of the external field's degrees of freedom.
+        eq_params : dict, optional
+            Dictionary of the equilibrium's degrees of freedom, only provided
+            if eq_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -2947,6 +2965,16 @@ class Bxdl(_Objective):
         )
         if constants["B_plasma"] is not None:
             B_ext = B_ext + constants["B_plasma"]
+        elif self._eq is not None and not self._eq_fixed:
+            # compute B_plasma if eq is not fixed
+            B_ext += self._eq.compute_magnetic_field(
+                coords=x,
+                chunk_size=self._bs_chunk_size,
+                source_grid=constants["eq_grid"],
+                params=eq_params,
+                basis="rpz",
+                transforms=constants["eq_transforms"],
+            )
         f = safenorm(cross(B_ext, eval_data["frenet_tangent"], axis=-1), axis=-1)
         return f
 

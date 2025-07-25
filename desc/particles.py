@@ -743,20 +743,26 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
 def _find_random_indices(sqrtg, N, seed):
     """Find random indices for sampling particles on a surface or curve."""
+    # probability of particle generation in a given grid point is proportional to
+    # its volume/area/length, which is sqrtg. Normalize sqrtg for random number
+    # generation limit of 1
     sqrtg /= sqrtg.max()
-    # 10x seems plenty in practice, but should fix
-    # rejection sampling according to pdf~sqrtg to get samples
-    # roughly equally distributed in real space
-    nattempts = 10 * N
-    # TODO: use jax rng?
+    nattempts = 5 * N
     rng = np.random.default_rng(seed=seed)
-    idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
-    accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[0]
-    # TODO: figure out what to do if this fails, maybe iterate until enough samples?
-    assert len(accept) > N
-    idxs = np.sort(idxs[accept[:N]])
+    accept = None
+    # loop until choosing exactly N distinct indices
+    while len(np.unique(accept)) < N or accept is None:
+        # generated random integers might repeat if nattempts is large
+        idxs = np.unique(rng.integers(0, sqrtg.shape[0], size=(nattempts,)))
+        # note: probability of selecting a number <0.3 in range [0, 1] is 30%
+        accept = np.where(rng.uniform(0, 1, size=(idxs.shape[0],)) < sqrtg[idxs])[0]
+        # choose random N of the accepted indices (might end up choosing less)
+        accept = accept[np.unique(rng.integers(0, accept.shape[0], size=(N,)))]
+        # increase the attempt count if not enough particles were accepted
+        nattempts = int((nattempts / N + 5) * N)
+        idxs = idxs[accept]
 
-    return idxs
+    return np.sort(idxs)
 
 
 def trace_particles(

@@ -851,8 +851,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     p = data["p"] / B_N**2
 
-    # --no-verify n0 = p ** (1/3) + 1/(psi_r.flatten() + 1e-5)
-    n0 = p ** (1 / 3) + 10
+    n0 = p ** (1 / 3) + 1 / (psi_r2.flatten())
+    # --no-verify n0 = p ** (1 / 3) + 10
 
     axisym = kwargs.get("axisym", False)
 
@@ -876,12 +876,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
-        x_0 = 0.7
+        x_0 = 0.75
         m_1 = 3.0
         m_2 = 2.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-2
+        eps = 1.0e-3
         return eps + (1 - eps) * (lower + upper)
 
     dx_f = jax.grad(_f)
@@ -921,12 +921,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     rho_idx = slice(0, n_total)
     theta_idx = slice(n_total, 2 * n_total)
     zeta_idx = slice(2 * n_total, 3 * n_total)
+    all_idx = slice(0, 3 * n_total)
 
     ## assuming uniform spacing in and θ and ζ
-    # dtheta = 2 * jnp.pi / n_theta_max
-    # dzeta = 2 * jnp.pi / n_zeta_max
-    dtheta = 1.0
-    dzeta = 1.0
+    dtheta = 2 * jnp.pi / n_theta_max
+    dzeta = 2 * jnp.pi / n_zeta_max
+    # dtheta = 1.0
+    # dzeta = 1.0
 
     W = jnp.diag(jnp.kron(w0 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
@@ -952,6 +953,86 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     # manually set the instability drive to 0
     F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N**2 / B_N) ** 2
+
+    def _stab_fix(mat, safety=1e-17):
+        """
+        Using Gershgorin circle idea to ensure the spectrum is positive
+        definite.
+        """
+        diag = jnp.real(jnp.diag(mat))
+        row_sum = jnp.sum(jnp.abs(mat), axis=1) - jnp.abs(diag)
+        # eigenvalue >= diag - row_sum  (Gershgorin)
+        gap = -(diag - row_sum) + safety * diag.max()
+        pad = jnp.clip(gap, 0.0)  # only add if gap>0
+        return mat + jnp.diag(pad)
+
+    def lanczos_lowest(matvec, M, steps=20, *, key=jax.random.PRNGKey(0)):
+        """
+        M‑orthonormal Lanczos estimate of the smallest generalized eigenvalue
+        of (A, M).  No Python loops – uses lax.scan.
+
+        Parameters
+        ----------
+        matvec : callable
+            Function that returns A @ x for any vector x (JIT compatible).
+        M : (n, n) array
+            Symmetric positive‑definite mass matrix.
+        steps : int, optional
+            Number of Lanczos iterations (default 20).
+        key : jax.random.PRNGKey, optional
+            Random key for the starting vector.
+
+        Returns
+        -------
+        lam_min_est : float
+            Lower Ritz bound on the smallest λ of  A x = λ M x.
+            If negative, A is not positive‑definite w.r.t. M.
+        """
+
+        n = M.shape[0]
+        dotM = lambda x, y: jnp.dot(x, M @ y)  # <x, y>_M
+
+        # ---- 0. random start, M‑normalised ----
+        v0 = jax.random.normal(key, (n,), dtype=M.dtype)
+        v0 = v0 / jnp.sqrt(dotM(v0, v0))
+
+        # ---- 1. first alpha, beta (outside scan) ----
+        w = matvec(v0)
+        alpha0 = dotM(v0, w)
+        w = w - alpha0 * v0
+        beta0 = jnp.sqrt(dotM(w, w) + 1e-60)
+        v1 = w / beta0
+
+        # ---- 2. body for lax.scan (M‑orthonormal Lanczos) ----
+        def body(carry, _):
+            v_prev, v_cur, beta_prev = carry
+            w = matvec(v_cur) - beta_prev * v_prev
+            alpha = dotM(v_cur, w)
+            w = w - alpha * v_cur
+            beta = jnp.sqrt(dotM(w, w) + 1e-60)
+            v_next = w / beta
+            new_carry = (v_cur, v_next, beta)
+            return new_carry, (alpha, beta)
+
+        (_, _, beta_last), (alpha_tail, beta_tail) = jax.lax.scan(
+            body,
+            (v0, v1, beta0),
+            None,
+            length=steps - 1,
+        )
+
+        # ---- 3. build the tridiagonal T_k ----
+        alpha_all = jnp.concatenate((jnp.array([alpha0]), alpha_tail))
+        beta_all = jnp.concatenate((jnp.array([beta0]), beta_tail[:-1]))
+        T = jnp.diag(alpha_all) + jnp.diag(beta_all, 1) + jnp.diag(beta_all, -1)
+
+        lam_min_est = jnp.linalg.eigvalsh(T)[0]  # smallest Ritz value
+        return lam_min_est
+
+    def force_psd(M, floor=1e-11):
+        w, V = jnp.linalg.eigh(M, UPLO="U")
+        w = jnp.clip(w, floor * w.max(), None)
+        return (V * w) @ V.conj().T
 
     ####################
     ####----Q_11----####
@@ -1006,6 +1087,16 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         + D_rho.T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
     )
 
+    # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+    # A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
+    # A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx].T)
+
+    # w = jnp.linalg.eigvalsh(A)
+    # delta = (-w.min()) * 1.001         # 0.1% above the most negative λ
+    # A = A + delta * jnp.eye(A.shape[0])
+
+    # pdb.set_trace()
+
     ####################
     ####----Q_33----####
     ####################
@@ -1052,6 +1143,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp) * D_theta
         + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
     )
+
+    # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+    # A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
+    # A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx].T)
 
     # from matplotlib import pyplot as plt
     # plt.spy(A)
@@ -1264,8 +1359,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         + (W * psi_r2 * sqrtg * j_sup_zeta) * D_theta
     )
 
-    A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
-
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
     B = B.at[theta_idx, theta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
@@ -1300,16 +1393,32 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
         B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
 
+    # Force all the continuou
+    A = A.at[all_idx, all_idx].set(force_psd(A))
+
+    # Finally add the only instability drive term
+    A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
     y = A - A.conj().T
     print(jnp.max(jnp.abs(y)))
 
     y = B - B.conj().T
     print(jnp.max(jnp.abs(y)))
 
+    # matvec = lambda x: A @ x
+    # lam_min = lanczos_lowest(matvec, B, steps=100)
+    # delta = 1.05 * jnp.maximum(0.0, -lam_min)   # shift by 5%
+    # A = A + delta * B                 # scalar shift
+
+    # pdb.set_trace()
+
     # apply dirichlet BC to ξ^ρ
     keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
+
+    # w, _ = jnp.linalg.eigh(B)
+    # print(w)
 
     # --no-verify w, _ = jnp.linalg.eigh(B[jnp.ix_(keep, keep)])
     # --no-verify w, v = jnp.linalg.eigh(A[jnp.ix_(keep, keep)])
@@ -1319,6 +1428,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         jax.numpy.asarray(A[jnp.ix_(keep, keep)]),
         jax.numpy.asarray(B[jnp.ix_(keep, keep)]),
     )
+
+    pdb.set_trace()
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v

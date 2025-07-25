@@ -891,9 +891,7 @@ class ChebyshevFourierSeries(_Basis):
         y = np.hstack([z, mm, nn])
         return y
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None, unique=False):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -917,11 +915,15 @@ class ChebyshevFourierSeries(_Basis):
         if modes is None:
             modes = self.modes
         if derivatives[0] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return jnp.zeros((grid.nodes.shape[0], modes.shape[0]))
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((len(grid.nodes), 0))
 
-        r, t, z = nodes.T
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+
+        # TODO: avoid duplicate calculations when mixing derivatives
+        r, t, z = grid.nodes.T
         l, m, n = modes.T
 
         if unique:
@@ -1884,11 +1886,11 @@ class ChebyshevZernikeBasis(_Basis):
         """
         if not isinstance(grid, _Grid):
             grid = Grid(grid, sort=False, jitable=True)
-            
+
         if modes is None:
             modes = self.modes
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((len(grid.nodes), 0))
 
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = grid.nodes.T
@@ -1930,6 +1932,7 @@ class ChebyshevZernikeBasis(_Basis):
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
             axial = axial[zoutidx][:, noutidx]
+
         return radial * poloidal * axial
 
     def change_resolution(self, L, M, N, NFP=None, sym=None):
@@ -2421,7 +2424,6 @@ def chebyshev_z(z, l, dr=0):
         prod = 1
         for k in range(int(dr)):
             prod *= (l**2 - k**2) / (2 * k + 1)
-            # print("K", k, "prod", prod)
         sign = (-1) ** (l + dr)
         left_val = sign * prod / np.pi**dr
         right_val = prod / np.pi**dr

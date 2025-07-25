@@ -1971,3 +1971,226 @@ def _reactivity(params, transforms, profiles, data, **kwargs):
     )  # cm^3/s
     data["<sigma*nu>"] = sigma_nu / 1e6  # m^3/s
     return data
+
+
+#### adding p_perp profile, with takes standard pressure profile but with  coordinates="rtz",
+@register_compute_fun(
+    name="p_perp",
+    label="p_{\\perp}",
+    units="Pa",
+    units_long="Pascals",
+    description="perp pressure",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_perp(params, transforms, profiles, data, **kwargs):
+    data["p_perp"] = profiles["pressure"].compute(
+        transforms["grid"], params["p_l"], dr=0
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_perp_r",
+    label="\\partial_{\\rho} p_{\\perp}",
+    units="Pa",
+    units_long="Pascals",
+    description="perp pressure, first radial derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_perp_r(params, transforms, profiles, data, **kwargs):
+    data["p_perp_r"] = profiles["pressure"].compute(
+        transforms["grid"], params["p_l"], dr=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_perp_t",
+    label="\\partial_{\\theta} p_{\\perp}",
+    units="Pa",
+    units_long="Pascals",
+    description="perp pressure, first poloidal derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_perp_t(params, transforms, profiles, data, **kwargs):
+    data["p_perp_t"] = profiles["pressure"].compute(
+        transforms["grid"], params["p_l"], dt=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_perp_z",
+    label="\\partial_{\\zeta} p_{\\perp}",
+    units="Pa",
+    units_long="Pascals",
+    description="perp pressure, first toroidal derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_perp_z(params, transforms, profiles, data, **kwargs):
+    data["p_perp_z"] = profiles["pressure"].compute(
+        transforms["grid"], params["p_l"], dz=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="grad(p_perp)",
+    label="\\nabla p_{\\perp}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="perp pressure gradient",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "p_perp_r",
+        "p_perp_t",
+        "p_perp_z",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+    ],
+)
+def _grad_p_perp(params, transforms, profiles, data, **kwargs):
+    data["grad(p_perp)"] = (
+        data["p_perp_r"] * data["e^rho"].T
+        + data["p_perp_t"] * jnp.where(data["p_perp_t"] == 0, 0, data["e^theta"].T)
+        + data["p_perp_z"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+#### Adding p_parallel, which will depend on anisotropic profile
+
+
+@register_compute_fun(
+    name="p_parallel",
+    label="p_{\\parallel}",
+    units="Pa",
+    units_long="Pascals",
+    description="parallel pressure",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_parallel(params, transforms, profiles, data, **kwargs):
+    data["p_parallel"] = profiles["anisotropy"].compute(
+        transforms["grid"], params["a_lmn"], dr=0
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_parallel_r",
+    label="\\partial_{\\rho} p_{\\parallel}",
+    units="Pa",
+    units_long="Pascals",
+    description="parallel pressure, first radial derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_parallel_r(params, transforms, profiles, data, **kwargs):
+    data["p_parallel_r"] = profiles["anisotropy"].compute(
+        transforms["grid"], params["a_lmn"], dr=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_parallel_t",
+    label="\\partial_{\\theta} p_{\\parallel}",
+    units="Pa",
+    units_long="Pascals",
+    description="parallel pressure, first poloidal derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_parallel_t(params, transforms, profiles, data, **kwargs):
+    data["p_parallel_t"] = profiles["anisotropy"].compute(
+        transforms["grid"], params["a_lmn"], dt=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="p_parallel_z",
+    label="\\partial_{\\zeta} p_{\\parallel}",
+    units="Pa",
+    units_long="Pascals",
+    description="parallel pressure, first toroidal derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_parallel_z(params, transforms, profiles, data, **kwargs):
+    data["p_parallel_z"] = profiles["anisotropy"].compute(
+        transforms["grid"], params["a_lmn"], dz=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="grad(p_parallel)",
+    label="\\nabla p_{\\parallel}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="parallel pressure gradient",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "p_parallel_r",
+        "p_parallel_t",
+        "p_parallel_z",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+    ],
+)
+def _grad_p_parallel(params, transforms, profiles, data, **kwargs):
+    data["grad(p_parallel)"] = (
+        data["p_parallel_r"] * data["e^rho"].T
+        + data["p_parallel_t"]
+        * jnp.where(data["p_parallel_t"] == 0, 0, data["e^theta"].T)
+        + data["p_parallel_z"] * data["e^zeta"].T
+    ).T
+    return data

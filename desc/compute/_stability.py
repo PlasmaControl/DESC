@@ -881,8 +881,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         m_2 = 2.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-3
+        eps = 1.0e-5
         return eps + (1 - eps) * (lower + upper)
+
+    # def _f(x):
+    #    eps = 1e-5
+    #    return eps + (1 - eps) * (x+1)/2
 
     dx_f = jax.grad(_f)
 
@@ -907,6 +911,16 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     D_theta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
     D_zeta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
 
+    D_rhoT = jax.lax.stop_gradient(
+        jnp.kron(D_rho0.conj().T, jnp.kron(I_theta0, I_zeta0))
+    )
+    D_thetaT = jax.lax.stop_gradient(
+        jnp.kron(I_rho0, jnp.kron(D_theta0.conj().T, I_zeta0))
+    )
+    D_zetaT = jax.lax.stop_gradient(
+        jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0.conj().T))
+    )
+
     n_total = n_rho_max * n_theta_max * n_zeta_max
     ## Create the full matrix
 
@@ -923,17 +937,18 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     zeta_idx = slice(2 * n_total, 3 * n_total)
     all_idx = slice(0, 3 * n_total)
 
-    ## assuming uniform spacing in and θ and ζ
+    ### assuming uniform spacing in and θ and ζ
     dtheta = 2 * jnp.pi / n_theta_max
     dzeta = 2 * jnp.pi / n_zeta_max
-    # dtheta = 1.0
-    # dzeta = 1.0
 
     W = jnp.diag(jnp.kron(w0 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
+    def nan_to_zero(x):
+        return jnp.where(jnp.isnan(x), 0.0, x)
+
     sqrtg = data["sqrt(g)_PEST"][:, None]
 
-    psi_r_over_sqrtg = psi_r / sqrtg
+    psi_r_over_sqrtg = nan_to_zero(psi_r / sqrtg)
 
     g_rr = data["g_rr|PEST"][:, None] * a_N
     g_vv = data["g_vv|PEST"][:, None] * a_N
@@ -1038,10 +1053,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     ####----Q_11----####
     ####################
     A = A.at[rho_idx, rho_idx].add(
-        D_theta.T @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
-        + D_zeta.conj().T @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
-        + D_theta.T @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
-        + D_zeta.conj().T @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_theta)
+        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+        + ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta).conj().T @ D_theta
     )
 
     ####################
@@ -1051,40 +1066,50 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[theta_idx, theta_idx].add(
         0.5
         * (
-            D_zeta.conj().T @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
             + ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta).conj().T @ D_zeta
         )
     )
     A = A.at[zeta_idx, zeta_idx].add(
         0.5
         * (
-            D_zeta.conj().T @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
             + ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta).conj().T @ D_zeta
         )
     )
 
     A = A.at[theta_idx, zeta_idx].add(
-        -1 * D_zeta.conj().T @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+        -0.5
+        * (
+            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+            + ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta).conj().T @ D_zeta
+        )
     )
 
     A = A.at[rho_idx, rho_idx].add(
         jnp.diag((diota_psi_r2_drho**2 / psi_r * psi_r_over_sqrtg * W * g_vv).flatten())
-        + D_rho.T @ (((iota_psi_r2) ** 2 * psi_r_over_sqrtg * psi_r * W * g_vv) * D_rho)
-        + D_rho.T
-        * (diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_vv).flatten()
-        + (diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_vv) * D_rho
+        + D_rho.T @ (((iota_psi_r) ** 2 * psi_r_over_sqrtg * psi_r * W * g_vv) * D_rho)
     )
+
+    # A = A.at[rho_idx, rho_idx].add(
+    #    D_rhoT * (W * diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * g_vv).flatten()
+    #    + (W * diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * g_vv) * D_rho
+    # )
 
     A = A.at[rho_idx, theta_idx].add(
         -1
         * (
-            (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv) * D_zeta
-            + D_rho.T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
+            (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv)
+            * D_zeta
+            # + D_rho.conj().T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
+            # + 0.5* (D_rho.conj().T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
+            # + D_zeta.conj().T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_rho))
         )
     )
     A = A.at[rho_idx, zeta_idx].add(
-        (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv) * D_zeta
-        + D_rho.T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
+        (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv)
+        * D_zeta
+        #    + D_rho.T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
     )
 
     # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
@@ -1129,19 +1154,21 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             )  # enforcing symmetry exactly
             + (((psi_r2) ** 2 * psi_r_over_sqrtg * psi_r * W * g_pp) * D_rho).T @ D_rho
         )
-        + D_rho.T * (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp).flatten()
-        + (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp) * D_rho
+        # + D_rho.T * (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp).flatten()
+        # + (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp) * D_rho
     )
     A = A.at[rho_idx, theta_idx].add(
         -1
         * (
-            (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp) * D_theta
-            + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
+            (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp)
+            * D_theta
+            #    + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
         )
     )
     A = A.at[rho_idx, zeta_idx].add(
-        (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp) * D_theta
-        + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
+        (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp)
+        * D_theta
+        # + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
     )
 
     # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
@@ -1162,8 +1189,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             * (iota * psi_r * psi_r_over_sqrtg * diota_psi_r2_drho * W * g_rv).flatten()
             + D_zeta.conj().T
             * (psi_r * psi_r_over_sqrtg * diota_psi_r2_drho * W * g_rv).flatten()
-            + D_theta.T @ ((iota**2 * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_rho)
-            + D_zeta.conj().T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_rho)
+            # + D_theta.T @ ((iota**2 * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_rho)
+            # + D_zeta.conj().T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_rho)
         )
     )
 
@@ -1173,8 +1200,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         * (
             (iota * psi_r * psi_r_over_sqrtg * diota_psi_r2_drho * W * g_rv) * D_theta
             + (psi_r * psi_r_over_sqrtg * diota_psi_r2_drho * W * g_rv) * D_zeta
-            + D_rho.T @ ((iota**2 * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_theta)
-            + D_rho.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+            # + D_rho.T @ ((iota**2 * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_theta)
+            # + D_rho.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
         )
     )
 
@@ -1200,8 +1227,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             * (iota * psi_r * psi_r_over_sqrtg * dpsi_r2_drho * W * g_rp).flatten()
             + D_zeta.conj().T
             * (psi_r * psi_r_over_sqrtg * dpsi_r2_drho * W * g_rp).flatten()
-            + D_theta.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_rho)
-            + D_zeta.conj().T @ ((psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_rho)
+            # + D_theta.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_rho)
+            # + D_zeta.conj().T @ ((psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_rho)
         )
     )
 
@@ -1211,8 +1238,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         * (
             (iota * psi_r * psi_r_over_sqrtg * dpsi_r2_drho * W * g_rp) * D_theta
             + (psi_r * psi_r_over_sqrtg * dpsi_r2_drho * W * g_rp) * D_zeta
-            + D_rho.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_theta)
-            + D_rho.T @ ((psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_zeta)
+            # + D_rho.T @ ((iota * psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            # + D_rho.T @ ((psi_r3 * psi_r_over_sqrtg * W * g_rp) * D_zeta)
         )
     )
 
@@ -1244,15 +1271,17 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, theta_idx].add(
         -1
         * (
-            D_rho.T @ ((psi_r_over_sqrtg * W * psi_r2 * g_vp) * D_zeta)
-            + (psi_r_over_sqrtg * W * dpsi_r2_drho * g_vp) * D_zeta
+            # D_rho.T @ ((psi_r_over_sqrtg * W * psi_r2 * g_vp) * D_zeta)
+            +(psi_r_over_sqrtg * W * dpsi_r2_drho * g_vp)
+            * D_zeta
         )
     )
     A = A.at[rho_idx, zeta_idx].add(
         1
         * (
-            D_rho.T @ ((psi_r_over_sqrtg * W * psi_r2 * g_vp) * D_zeta)
-            + (psi_r_over_sqrtg * W * dpsi_r2_drho * g_vp) * D_zeta
+            # D_rho.T @ ((psi_r_over_sqrtg * W * psi_r2 * g_vp) * D_zeta)
+            +(psi_r_over_sqrtg * W * dpsi_r2_drho * g_vp)
+            * D_zeta
         )
     )
 
@@ -1263,15 +1292,17 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, theta_idx].add(
         1
         * (
-            D_rho.T @ ((psi_r_over_sqrtg * W * iota * psi_r2 * g_vp) * D_theta)
-            + (psi_r_over_sqrtg * W * diota_psi_r2_drho * g_vp) * D_theta
+            # D_rho.T @ ((psi_r_over_sqrtg * W * iota * psi_r2 * g_vp) * D_theta)
+            +(psi_r_over_sqrtg * W * diota_psi_r2_drho * g_vp)
+            * D_theta
         )
     )
     A = A.at[rho_idx, zeta_idx].add(
         -1
         * (
-            D_rho.T @ ((psi_r_over_sqrtg * W * iota * psi_r2 * g_vp) * D_theta)
-            + (psi_r_over_sqrtg * W * diota_psi_r2_drho * g_vp) * D_theta
+            # D_rho.T @ ((psi_r_over_sqrtg * W * iota * psi_r2 * g_vp) * D_theta)
+            +(psi_r_over_sqrtg * W * diota_psi_r2_drho * g_vp)
+            * D_theta
         )
     )
 
@@ -1280,11 +1311,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         + jnp.diag(
             psi_r_over_sqrtg * diota_psi_r2_drho * (dpsi_r2_drho / psi_r) * W * g_vp
         )
-        + D_rho.T
-        * (
-            psi_r_over_sqrtg * iota * psi_r2 * (dpsi_r2_drho / psi_r) * W * g_vp
-        ).flatten()
-        + (psi_r_over_sqrtg * diota_psi_r2_drho * psi_r * W * g_vp) * D_rho
+        # + D_rho.T
+        # * (
+        #    psi_r_over_sqrtg * iota * psi_r2 * (dpsi_r2_drho / psi_r) * W * g_vp
+        # ).flatten()
+        # + (psi_r_over_sqrtg * diota_psi_r2_drho * psi_r * W * g_vp) * D_rho
     )
 
     # ρ-ρ symmetrizing term
@@ -1293,8 +1324,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         + jnp.diag(
             psi_r_over_sqrtg * diota_psi_r2_drho * (dpsi_r2_drho / psi_r) * W * g_vp
         )
-        + (psi_r_over_sqrtg * iota * psi_r2 * (dpsi_r2_drho / psi_r) * W * g_vp) * D_rho
-        + ((psi_r_over_sqrtg * diota_psi_r2_drho * psi_r * W * g_vp) * D_rho).T
+        # + (psi_r_over_sqrtg * iota * psi_r2 * (dpsi_r2_drho / psi_r) * W * g_vp) * D_rho
+        # + ((psi_r_over_sqrtg * diota_psi_r2_drho * psi_r * W * g_vp) * D_rho).T
     )
 
     ## diagonal |J|^2 term
@@ -1318,8 +1349,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
                     + W * psi_r * sqrtg * j_sup_zeta * dpsi_r2_drho
                 ).flatten()
             )
-            - (W * iota * sqrtg * psi_r3) * D_rho
-            + (W * sqrtg * psi_r3) * D_rho
+            # - (W * iota * sqrtg * psi_r3) * D_rho
+            # + (W * sqrtg * psi_r3) * D_rho
         )
     )
 
@@ -1345,8 +1376,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
                     + W * psi_r * sqrtg * j_sup_zeta * dpsi_r2_drho
                 ).flatten()
             )
-            - ((W * iota * sqrtg * psi_r3) * D_rho).T
-            + ((W * sqrtg * psi_r3) * D_rho).T
+            # - ((W * iota * sqrtg * psi_r3) * D_rho).T
+            # + ((W * sqrtg * psi_r3) * D_rho).T
         )
     )
 

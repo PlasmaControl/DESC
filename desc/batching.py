@@ -243,7 +243,6 @@ def _evaluate_in_chunks(
     **kwargs,
 ):
     if kwargs.get("shard_input_data", False):
-        kwargs = kwargs.copy()
         kwargs.pop("shard_input_data")
         args_shardable, args_remainder = make_shardable(args)
         out_shardable = _evaluate_in_chunks(
@@ -265,6 +264,7 @@ def _evaluate_in_chunks(
             **kwargs,
         )
         return _concat(out_shardable, out_remainder)
+    kwargs.pop("shard_input_data", None)
 
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:

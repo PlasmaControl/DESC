@@ -176,6 +176,9 @@ class Equilibrium(IOAble, Optimizable):
         "_N_grid",
         "_spectral_indexing",
         "_bdry_mode",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
     ]
 
     @execute_on_cpu

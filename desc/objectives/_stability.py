@@ -394,7 +394,6 @@ class BallooningStability(_Objective):
 
     _static_attrs = _Objective._static_attrs + [
         "_iota_keys",
-        "_len_keys",
         "_Neigvals",
         "_nturns",
         "_nzetaperturn",

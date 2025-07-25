@@ -2286,12 +2286,12 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["Jxgrad(rho)", "B_dot_grad(grad(rho))", "g^rr"],
+    data=["J x grad(rho)", "B_dot_grad(grad(rho))", "g^rr"],
 )
 def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     data["finite-n instability drive"] = (
         -2
-        * dot(data["Jxgrad(rho)"], data["B_dot_grad(grad(rho))"], axis=1)
+        * dot(data["J x grad(rho)"], data["B_dot_grad(grad(rho))"], axis=1)
         / data["g^rr"]
     )
 

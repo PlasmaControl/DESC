@@ -161,7 +161,7 @@ def _J(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="Jxgrad(rho)",
+    name="J x grad(rho)",
     label="\\mathbf{J} \\times (\\nabla \\rho)",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubed meter",
@@ -177,7 +177,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
-    data["Jxgrad(rho)"] = cross(data["J"], data["e^rho"])
+    data["J x grad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 

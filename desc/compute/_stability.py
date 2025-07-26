@@ -1179,6 +1179,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # plt.spy(A)
     # plt.show()
 
+    # B = A.copy()
+    # B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    # B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    # B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    # w, _ = jnp.linalg.eigh(B)
+    # print(w)
+
     ####################
     ####----Q_12----####
     ####################
@@ -1255,11 +1262,24 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    #########################
-    ######-----Q_23-----#####
-    #########################
+    # B = A.copy()
+    # B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    # B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    # B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    # w, _ = jnp.linalg.eigh(B)
+    # print(w)
+
+    # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+    # A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
+    # A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx].T)
+    # w, _ = jnp.linalg.eigh(A)
+    # print(w)
+
+    ##########################
+    #######-----Q_23-----#####
+    ##########################
     A = A.at[theta_idx, theta_idx].add(
-        -1 * (D_zeta.conj().T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta))
+        -1 * (D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta))
         - 1 * (((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta).T @ D_zeta)
     )
 
@@ -1331,6 +1351,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     ## diagonal |J|^2 term
     A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
 
+    B = A.copy()
+    B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    w, _ = jnp.linalg.eigh(B)
+    print(w)
+
     # Mixed Q-J term
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -1381,6 +1408,14 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         )
     )
 
+    # B = A.copy()
+    # B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    # B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    # B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    # w, _ = jnp.linalg.eigh(B)
+    # print(w)
+
+    # introduce negative eigenvalues
     A = A.at[rho_idx, theta_idx].add(
         (W * psi_r2 * sqrtg * j_sup_theta) * D_zeta
         - (W * psi_r2 * sqrtg * j_sup_zeta) * D_theta
@@ -1389,6 +1424,18 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         -(W * psi_r2 * sqrtg * j_sup_theta) * D_zeta
         + (W * psi_r2 * sqrtg * j_sup_zeta) * D_theta
     )
+
+    # A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+    # A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
+    # A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx].T)
+
+    B = A.copy()
+    B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    w, _ = jnp.linalg.eigh(B)
+    print(w)
+    pdb.set_trace()
 
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))

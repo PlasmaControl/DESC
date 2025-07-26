@@ -6,15 +6,15 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import (
+    ChebyshevZernikeBasis,
+    chebyshev_z,
     zernike_radial,
     zernike_radial_coeffs,
-    chebyshev_z,
-    ChebyshevZernikeBasis,
 )
 
+from .linear_objectives import _FixedObjective
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .linear_objectives import _FixedObjective
 
 
 class FixEndCapR(_FixedObjective):
@@ -283,7 +283,7 @@ class FixEndCapZ(_FixedObjective):
     def _build_idx_mirror(self):
         """utility function for some codes in self.build"""
         pass
-    
+
     def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -331,7 +331,7 @@ class FixEndCapZ(_FixedObjective):
             #             "yellow",
             #         )
             #     )
-        
+
         Nmodes = np.unique(modes[:, 2])
         self._Nmodes = Nmodes
         num_Nmodes = Nmodes.shape[0]
@@ -470,7 +470,7 @@ class FixEndCapLambda(_FixedObjective):
     def _build_idx_mirror(self):
         """utility function for some codes in self.build"""
         pass
-    
+
     def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -491,34 +491,34 @@ class FixEndCapLambda(_FixedObjective):
             self._idx = idx
         else:  # specified modes
             raise NotImplementedError("Specifying Modes not implemented")
-            # modes = np.atleast_2d(self._modes)
-            # dtype = {
-            #     "names": ["f{}".format(i) for i in range(3)],
-            #     "formats": 3 * [modes.dtype],
-            # }
-            # _, idx, modes_idx = np.intersect1d(
-            #     eq.Z_basis.modes.astype(modes.dtype).view(dtype),
-            #     modes.view(dtype),
-            #     return_indices=True,
-            # )
-            # self._idx = idx
-            # # rearrange modes and weights to match order of eq.Z_basis.modes
-            # # and eq.Z_lmn,
-            # # necessary so that the A matrix rows match up with the target b
-            # modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
-            # if self._sum_weights is not None:
-            #     self._sum_weights = np.atleast_1d(self._sum_weights)
-            #     self._sum_weights = self._sum_weights[modes_idx]
+            #--no-verify modes = np.atleast_2d(self._modes)
+            #--no-verify dtype = {
+            #--no-verify     "names": ["f{}".format(i) for i in range(3)],
+            #--no-verify     "formats": 3 * [modes.dtype],
+            #--no-verify }
+            #--no-verify _, idx, modes_idx = np.intersect1d(
+            #--no-verify     eq.Z_basis.modes.astype(modes.dtype).view(dtype),
+            #--no-verify     modes.view(dtype),
+            #--no-verify     return_indices=True,
+            #--no-verify )
+            #--no-verify self._idx = idx
+            #--no-verify # rearrange modes and weights to match order of eq.Z_basis.modes
+            #--no-verify # and eq.Z_lmn,
+            #--no-verify # necessary so that the A matrix rows match up with the target b
+            #--no-verify modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
+            #--no-verify if self._sum_weights is not None:
+            #--no-verify     self._sum_weights = np.atleast_1d(self._sum_weights)
+            #--no-verify     self._sum_weights = self._sum_weights[modes_idx]
 
-            # if idx.size < modes.shape[0]:
-            #     warnings.warn(
-            #         colored(
-            #             "Some of the given modes are not in the basis, "
-            #             + "these modes will not be fixed.",
-            #             "yellow",
-            #         )
-            #     )
-        
+            #--no-verify if idx.size < modes.shape[0]:
+            #--no-verify     warnings.warn(
+            #--no-verify         colored(
+            #--no-verify             "Some of the given modes are not in the basis, "
+            #--no-verify             + "these modes will not be fixed.",
+            #--no-verify             "yellow",
+            #--no-verify         )
+            #--no-verify     )
+
         Nmodes = np.unique(modes[:, 2])
         self._Nmodes = Nmodes
         num_Nmodes = Nmodes.shape[0]
@@ -573,6 +573,7 @@ class FixEndCapLambda(_FixedObjective):
         """
         f = jnp.dot(self._A, params["L_lmn"])
         return f
+
 
 class MatchEndCapR(_FixedObjective):
     """Match Zernike R coefficients at 0 and 2pi.
@@ -643,15 +644,15 @@ class MatchEndCapR(_FixedObjective):
         )
 
     def _parse_modes_mirror(self):
-        """utility function for some codes in self.build"""
+        """Utility function for some codes in self.build."""
         pass
 
     def _set_target_mirror(self):
-        """utility function for some codes in self.build"""
+        """Utility function for some codes in self.build."""
         pass
 
     def _build_idx_mirror(self):
-        """utility function for some codes in self.build"""
+        """Utility function for some codes in self.build."""
         pass
 
     def build(self, eq=None, use_jit=False, verbose=1):
@@ -667,26 +668,48 @@ class MatchEndCapR(_FixedObjective):
             Level of output.
 
         """
+        # RG: The goal is to match R at z = 0 with z = 2pi
+
+        # In spectral form, the constraint should enforce the following equation
+
+        # T₀(0) ∑ₗₘ Rₗₘ₀ Zₗₘ(ρ, θ) + T₁(0) ∑ₗₘ  Rₗₘ₁ Zₗₘ(ρ, θ) + … = T₀(2π) ∑ₗₘ Rₗₘ₀ Zₗₘ(ρ, θ) + T₁(2π) ∑ₗₘ  Rₗₘ₁ Zₗₘ(ρ, θ) + …
+
+        # where T are the Chebyshev polynomials and R_lmn are the
+        # Chebyshev-Zernike spectral coefficients.
+
+        # Using the orthogonality relation of Zernike polynomials, we can
+        # separate out each l, m mode and we will get as many equations as
+        # the number of lm modes
+        #  ∑ₙ (Tₙ(0)−Tₙ(2π)) Rₗₘₙ
         eq = eq or self.things[0]
         modes = eq.R_basis.modes
 
         Nmodes = np.unique(modes[:, 2])
+
+        # Chebyshev polynomial eval at 0 and 2π
         N_weights_0 = chebyshev_z(0.0, Nmodes)
         N_weights_2pi = chebyshev_z(2 * np.pi, Nmodes)
 
         idx_N = {N: i for i, N in enumerate(Nmodes)}
-        LMmodes = np.unique(modes[:, :2], axis=0)
-        idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
-        self._dim_f = len(LMmodes)
-        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        # Find all the Zernike lm modes
+        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
-        for i, (l, m, n) in enumerate(modes):
-            j = eq.R_basis.get_idx(L=l, M=m, N=n)
-            k = idx_LM[(l, m)]
-            self._A[k, j] = chebyshev_z(0.0, n) - chebyshev_z(2 * np.pi, n)
+        LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
 
-        self.target = np.zeros(self._dim_f)
+        n_rows = LM_pairs.shape[0]
+        self._dim_f = n_rows
+        n_cols = modes.shape[0]
+
+        # Number of equations is same as the number of unique modes
+        self._A = np.zeros((n_rows, n_cols))
+
+        for col, (l, m, n) in enumerate(modes):
+            w = N_weights_0[idx_N[n]] - N_weights_2pi[idx_N[n]]
+            self._A[row_idx[col], col] = w
+
+        self.target = np.zeros(n_rows)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -705,6 +728,7 @@ class MatchEndCapR(_FixedObjective):
         """
         f = jnp.dot(self._A, params["R_lmn"])
         return f
+
 
 class MatchEndCapZ(_FixedObjective):
     """matches Zernike Z coefficients at 0 and 2pi).
@@ -786,7 +810,7 @@ class MatchEndCapZ(_FixedObjective):
     def _build_idx_mirror(self):
         """utility function for some codes in self.build"""
         pass
-    
+
     def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -804,24 +828,32 @@ class MatchEndCapZ(_FixedObjective):
         modes = eq.Z_basis.modes
 
         Nmodes = np.unique(modes[:, 2])
+
+        # Chebyshev polynomial eval at 0 and 2π
         N_weights_0 = chebyshev_z(0.0, Nmodes)
         N_weights_2pi = chebyshev_z(2 * np.pi, Nmodes)
 
         idx_N = {N: i for i, N in enumerate(Nmodes)}
-        LMmodes = np.unique(modes[:, :2], axis=0)
-        idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
-        self._dim_f = len(LMmodes)
-        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        # Find all the Zernike lm modes
+        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
-        for i, (l, m, n) in enumerate(modes):
-            j = eq.Z_basis.get_idx(L=l, M=m, N=n)
-            k = idx_LM[(l, m)]
-            self._A[k, j] = chebyshev_z(0.0, n) - chebyshev_z(2 * np.pi, n)
+        LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
 
-        self.target = np.zeros(self._dim_f)
+        n_rows = LM_pairs.shape[0]  # same as dim_f
+        self._dim_f = n_rows
+        n_cols = modes.shape[0]
+
+        self._A = np.zeros((n_rows, n_cols))
+
+        for col, (l, m, n) in enumerate(modes):
+            w = N_weights_0[idx_N[n]] - N_weights_2pi[idx_N[n]]
+            if w != 0.0:
+                self._A[row_idx[col], col] = w
+
+        self.target = np.zeros(n_rows)
         super().build(use_jit=use_jit, verbose=verbose)
-
 
     def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
@@ -923,7 +955,7 @@ class MatchEndCapLambda(_FixedObjective):
     def _build_idx_mirror(self):
         """utility function for some codes in self.build"""
         pass
-    
+
     def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -938,36 +970,35 @@ class MatchEndCapLambda(_FixedObjective):
 
         """
         eq = eq or self.things[0]
-        if self._modes is True:
-            modes = eq.L_basis.modes
-            idx = np.arange(eq.L_basis.num_modes)
-            self._idx = idx
-        else:
-            raise NotImplementedError("Specifying Modes not implemented")
+        modes = eq.L_basis.modes
 
         Nmodes = np.unique(modes[:, 2])
-        self._Nmodes = Nmodes
-        N0_weights = chebyshev_z(self._zeta0, Nmodes)
-        N1_weights = chebyshev_z(self._zeta1, Nmodes)
+
+        # Chebyshev polynomial eval at 0 and 2π
+        N_weights_0 = chebyshev_z(0.0, Nmodes)
+        N_weights_2pi = chebyshev_z(2 * np.pi, Nmodes)
 
         idx_N = {N: i for i, N in enumerate(Nmodes)}
-        LMmodes = np.unique(modes[:, :2], axis=0)
-        self._LMmodes = LMmodes
-        self._dim_f = len(LMmodes)
 
-        idx_LM = {}
-        for i, (L, M) in enumerate(LMmodes):
-            idx_LM.setdefault(L, {})[M] = i
+        # Find all the Zernike lm modes
+        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
-        self._A = np.zeros((self._dim_f, eq.L_basis.num_modes))
-        for i, (l, m, n) in enumerate(modes):
-            j = eq.L_basis.get_idx(L=l, M=m, N=n)
-            k = idx_LM[l][m]
-            self._A[k, j] = N0_weights[idx_N[n]] - N1_weights[idx_N[n]]
+        LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
+
+        n_rows = LM_pairs.shape[0]  # same as dim_f
+        self._dim_f = n_rows
+        n_cols = modes.shape[0]
+
+        self._A = np.zeros((n_rows, n_cols))
+
+        for col, (l, m, n) in enumerate(modes):
+            w = N_weights_0[idx_N[n]] - N_weights_2pi[idx_N[n]]
+            if w != 0.0:
+                self._A[row_idx[col], col] = w
 
         self.target = np.zeros(self._dim_f)
         super().build(use_jit=use_jit, verbose=verbose)
-
 
     def compute(self, params, constants=None):
         """Compute Sum mode L errors.

@@ -13,8 +13,8 @@ from desc.particles import (
 
 
 @pytest.mark.unit
-def test_vertical_field_cases():
-    """Test particle tracing with constant vertical magnetic field."""
+def test_constant_field_cases():
+    """Test particle tracing with constant magnetic field."""
     R0 = jnp.array([1.2, 1.25])
     ts = jnp.linspace(0, 1e-4, 10)
 

@@ -34,7 +34,7 @@ from desc.geometry import Curve, Surface
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot
+from desc.utils import cross, dot, safediv
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
@@ -245,7 +245,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         modB = jnp.linalg.norm(B, axis=-1)
         b = B / modB
         # factor of R from grad in cylindrical coordinates
-        grad_B = grad_B.at[1].divide(coord[0])
+        grad_Bphi = safediv(grad_B[1], coord[0])
+        grad_B = grad_B.at[1].set(grad_Bphi)
         Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
 
         vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))

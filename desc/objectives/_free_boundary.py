@@ -873,6 +873,9 @@ class FreeSurfaceError(_Objective):
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
         Default is ``LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP)``.
+    coil_grid : Grid, optional
+        Source grid used to discretize coil magnetic field computation.
+        Default is default grid of coil magnetic field.
     q : int
         Order of integration on the local singular grid.
     maxiter : int
@@ -907,6 +910,7 @@ class FreeSurfaceError(_Objective):
         *,
         eval_grid=None,
         grid=None,
+        coil_grid=None,
         q=None,
         maxiter=-1,
         chunk_size=None,
@@ -953,6 +957,7 @@ class FreeSurfaceError(_Objective):
         self._field = field
         self._grid = grid
         self._eval_grid = eval_grid
+        self._coil_grid = coil_grid
         self._use_same_grid = grid.equiv(eval_grid)
         self._q = q
         self._maxiter = maxiter
@@ -1106,6 +1111,7 @@ class FreeSurfaceError(_Objective):
                 maxiter=self._maxiter,
                 chunk_size=self._chunk_size,
                 B_coil=self._field._B_coil,
+                field_grid=self._coil_grid,
             )["Phi_mn"]
 
         outer = compute_fun(
@@ -1118,6 +1124,7 @@ class FreeSurfaceError(_Objective):
             maxiter=self._maxiter,
             chunk_size=self._chunk_size,
             B_coil=self._field._B_coil,
+            field_grid=self._coil_grid,
         )
         return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
             "|e_theta x e_zeta|"

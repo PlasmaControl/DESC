@@ -239,11 +239,11 @@ def _evaluate_in_chunks(
     argnums,
     reduction=None,
     chunk_reduction=_identity,
+    shard_input_data=False,
     *args,
     **kwargs,
 ):
-    if kwargs.get("shard_input_data", False):
-        kwargs.pop("shard_input_data")
+    if shard_input_data:
         args_shardable, args_remainder = make_shardable(args)
         out_shardable = _evaluate_in_chunks(
             vmapped_fun,
@@ -251,6 +251,7 @@ def _evaluate_in_chunks(
             argnums,
             reduction,
             chunk_reduction,
+            False,
             args_shardable,
             **kwargs,
         )
@@ -260,11 +261,11 @@ def _evaluate_in_chunks(
             argnums,
             reduction,
             chunk_reduction,
+            False,
             args_remainder,
             **kwargs,
         )
         return _concat(out_shardable, out_remainder)
-    kwargs.pop("shard_input_data", None)
 
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
@@ -356,7 +357,7 @@ def vmap_chunked(
         argnums,
         reduction,
         chunk_reduction,
-        shard_input_data=shard_input_data,
+        shard_input_data,
     )
 
 
@@ -410,8 +411,8 @@ def batch_map(
             (0,),
             reduction,
             chunk_reduction,
+            shard_input_data,
             fun_input,
-            shard_input_data=shard_input_data,
         )
     )
 

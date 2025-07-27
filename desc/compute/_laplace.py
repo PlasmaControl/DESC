@@ -344,7 +344,6 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
-        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -880,7 +879,6 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
-        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(

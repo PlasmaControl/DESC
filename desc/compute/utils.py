@@ -686,6 +686,7 @@ def get_transforms(
 
     transforms = setdefault(transforms, {})
     transforms.setdefault("grid", grid)
+    p = _parse_parameterization(obj)
 
     for c in derivs.keys():
         if c in transforms:
@@ -709,6 +710,12 @@ def get_transforms(
                         basis,
                         derivs=derivs[c],
                         build=False,
+                        build_pinv=c == "Phi"
+                        and (
+                            p == "desc.magnetic_fields._laplace.SourceFreeField"
+                            or p
+                            == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                        ),
                         method=method,
                     )
             else:  # don't perform checks if jitable=True as they are not jit-safe
@@ -717,6 +724,11 @@ def get_transforms(
                     basis,
                     derivs=derivs[c],
                     build=False,
+                    build_pinv=c == "Phi"
+                    and (
+                        p == "desc.magnetic_fields._laplace.SourceFreeField"
+                        or p == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                    ),
                     method=method,
                 )
             transforms[c] = c_transform

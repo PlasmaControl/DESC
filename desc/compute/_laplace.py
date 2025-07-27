@@ -265,7 +265,6 @@ def _fixed_point_potential(
     profiles=[],
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
-    public=False,
     q="int : Order of quadrature in polar domain.",
 )
 def _interpolator(params, transforms, profiles, data, **kwargs):
@@ -345,7 +344,6 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
-        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
@@ -641,13 +639,14 @@ def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
     data=["x", "n_rho"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     B0="_MagneticField : Field object to compute with.",
+    field_grid="Grid : Source grid used to compute magnetic field.",
     chunk_size=_doc["chunk_size"],
 )
 def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     data["B0*n"] = dot(
         kwargs["B0"].compute_magnetic_field(
             coords=data["x"],
-            source_grid=transforms["grid"],
+            source_grid=kwargs.get("field_grid", None),
             chunk_size=kwargs.get("chunk_size", None),
         ),
         data["n_rho"],
@@ -668,15 +667,16 @@ def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     profiles=[],
     data=[],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    chunk_size=_doc["chunk_size"],
     B0="_MagneticField : Field object to compute with.",
+    field_grid="Grid : Source grid used to compute magnetic field.",
+    chunk_size=_doc["chunk_size"],
     public=False,
 )
 def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
     coords = jnp.column_stack([RpZ_data["R"], RpZ_data["phi"], RpZ_data["Z"]])
     RpZ_data["B0"] = kwargs["B0"].compute_magnetic_field(
         coords=coords,
-        source_grid=transforms["grid"],
+        source_grid=kwargs.get("field_grid", None),
         chunk_size=kwargs.get("chunk_size", None),
     )
     return RpZ_data
@@ -697,11 +697,12 @@ def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     chunk_size=_doc["chunk_size"],
     B_coil="_MagneticField : Field object to compute with.",
+    field_grid="Grid : Source grid used to compute magnetic field.",
 )
 def _B_coil_field(params, transforms, profiles, data, **kwargs):
     data["B_coil"] = kwargs["B_coil"].compute_magnetic_field(
         coords=data["x"],
-        source_grid=transforms["grid"],
+        source_grid=kwargs.get("field_grid", None),
         chunk_size=kwargs.get("chunk_size", None),
     )
     return data
@@ -878,7 +879,6 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
-        transforms["Phi"].build_pinv()
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
         data["Phi_mn"] = _lsmr_compute_potential(

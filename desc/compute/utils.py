@@ -234,7 +234,7 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
-    data : dict[str, jnp.ndarray]
+    data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions
 
     Returns
@@ -309,7 +309,7 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Name(s) of the quantity(s) to compute.
     deps : set[str]
         Dependencies gathered so far.
-    data : dict[str, jnp.ndarray]
+    data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.

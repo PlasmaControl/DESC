@@ -977,6 +977,21 @@ class FreeSurfaceError(_Objective):
             "|e_theta x e_zeta|",
             "n_rho",
         ]
+        self._reuseable_keys = [
+            "0",
+            "R",
+            "R_t",
+            "R_z",
+            "Z_t",
+            "Z_z",
+            "e_theta",
+            "e_theta x e_zeta",
+            "e_zeta",
+            "n_rho",
+            "omega_t",
+            "omega_z",
+            "|e_theta x e_zeta|",
+        ]
 
         super().__init__(
             things=eq,
@@ -1083,26 +1098,7 @@ class FreeSurfaceError(_Objective):
             "I": inner["I"][self._eval_grid.unique_rho_idx[-1]],
             "Y": self._field.Y,
         }
-
-        outer = {
-            key: inner[key]
-            for key in [
-                "0",
-                "R",
-                "R_t",
-                "R_z",
-                "Z_t",
-                "Z_z",
-                "e_theta",
-                "e_theta x e_zeta",
-                "e_zeta",
-                "n_rho",
-                "omega_t",
-                "omega_z",
-                "|e_theta x e_zeta|",
-            ]
-        }
-        outer["interpolator"] = constants["interpolator"]
+        outer = {key: inner[key] for key in self._reuseable_keys}
 
         if self._use_same_grid:
             outer["B0*n"] = dot(
@@ -1110,6 +1106,7 @@ class FreeSurfaceError(_Objective):
                 + field_params["Y"] * inner["grad(zeta)"],
                 inner["n_rho"],
             )
+            outer["interpolator"] = constants["interpolator"]
         else:
             grads = compute_fun(
                 eq,
@@ -1118,24 +1115,7 @@ class FreeSurfaceError(_Objective):
                 constants["grad_transforms"],
                 constants["profiles"],
             )
-            data = {
-                key: grads[key]
-                for key in [
-                    "0",
-                    "R",
-                    "R_t",
-                    "R_z",
-                    "Z_t",
-                    "Z_z",
-                    "e_theta",
-                    "e_theta x e_zeta",
-                    "e_zeta",
-                    "n_rho",
-                    "omega_t",
-                    "omega_z",
-                    "|e_theta x e_zeta|",
-                ]
-            }
+            data = {key: grads[key] for key in self._reuseable_keys}
             data["B0*n"] = dot(
                 field_params["I"] * grads["grad(theta)"]
                 + field_params["Y"] * grads["grad(zeta)"],

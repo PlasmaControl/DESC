@@ -95,7 +95,10 @@ def _fixed_point(func, x0, tol, maxiter, method, is_converged):
         return p, err, i + 1
 
     return jax.lax.while_loop(
-        cond_fun, body_fun, (x0, jnp.full_like(jax.eval_shape(func, x0), jnp.inf), 0)
+        cond_fun,
+        body_fun,
+        # Using 10000 instead of jnp.inf to debug nan
+        (x0, jnp.full_like(jax.eval_shape(func, x0), 10000), 0),
     )
 
 

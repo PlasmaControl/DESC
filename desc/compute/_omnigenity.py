@@ -1000,10 +1000,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    nsurfs = len(params["t_1"])
-    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[
-        :, None
-    ]  # This way we ensure iota0 = iota
+    iota0 = kwargs.get("iota")[:, None]  # This way we ensure iota0 = iota
 
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP

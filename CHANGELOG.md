@@ -3,6 +3,10 @@ Changelog
 
 New Features
 
+- Multiple plotting related changes:
+    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
+    - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
+    - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
 - Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
 - Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
@@ -10,11 +14,14 @@ New Features
 - `desc.magnetic_fields.field_line_integrate` now integrates the field line always in the given `phis` direction, and `phis` will always correspond to the physical toroidal angle (instead of time like coordinate previously). Previous implementation might have caused confusion about the output positions, especially when the magnetic field has negative toroidal component.
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
+- Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
+- Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 
 Bug Fixes
 
 - Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.
 - Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
+- Fixes bugs in ideal ballooning stability and Newcomb ballooning metrics where the computation mixed data between field lines.
 
 
 v0.14.2
@@ -64,7 +71,7 @@ v0.14.0
 
 New Features
 
-- Adds Vacuum field solver that does not assume nested flux surfaces.
+- Adds non-singular Laplace solver which does not assume nested surfaces.
 - Updates default parameters for partition support size in the singular surface integrals.
 - Enables tracking multiple field lines in ``Bounce2D``.
 - Adds Bounce integral methods with ``desc.integrals.Bounce2D``.

@@ -161,9 +161,8 @@ def test_fixed_point(method):
     c1 = jnp.array([10.0, 12.0])
     c2 = jnp.array([3.0, 5.0])
     x0 = jnp.array([1.2, 1.3])
-    p, (converged, i) = fixed_point(
-        func, x0, (c1, c2), tol=1e-8, method=method, full_output=True
+    p, (_, i) = fixed_point(
+        func, x0, (c1, c2), xtol=1e-8, method=method, full_output=True
     )
-    assert converged
     np.testing.assert_allclose(p, [1.4920333, 1.37228132])
     assert (i == 3 and method == "del2") or (i == 11 and method == "iteration")

@@ -82,18 +82,21 @@ def _fixed_point(func, x0, tol, maxiter, method, is_converged):
     from desc.utils import safediv
 
     def cond_fun(state):
-        _, converged, i = state
-        return (i < maxiter) & (~converged)
+        _, err, i = state
+        return (i < maxiter) & (~is_converged(err, tol))
 
     def body_fun(state):
         p0, _, i = state
         p = func(p0)
         if method == "del2":
             p2 = func(p)
-            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 + p2)
-        return p, is_converged(p - p0, tol), i + 1
+            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 - p2)
+        err = p - p0
+        return p, err, i + 1
 
-    return jax.lax.while_loop(cond_fun, body_fun, (x0, False, 0))
+    return jax.lax.while_loop(
+        cond_fun, body_fun, (x0, jnp.full_like(jax.eval_shape(func, x0), jnp.inf), 0)
+    )
 
 
 def _lstsq(A, y):
@@ -129,6 +132,19 @@ def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         )
     xs = np.moveaxis(xs, source=in_axes, destination=0)
     return np.stack([f(x) for x in xs], axis=out_axes)
+
+
+def _diag_to_full(d, e):
+    j = np.arange(d.shape[-1])
+    return (
+        jnp.zeros(d.shape + (d.shape[-1],))
+        .at[..., j, j]
+        .set(d, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+    )
 
 
 if use_jax:  # noqa: C901
@@ -202,8 +218,64 @@ if use_jax:  # noqa: C901
 
         return wrapper
 
-    # JAX implementation is not differentiable on gpu.
-    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
+    _eigh_tridiagonal = jnp.vectorize(
+        jax.scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
+    if desc_config["kind"] == "gpu":
+        # JAX eigh_tridiagonal is not differentiable on gpu.
+        # https://github.com/jax-ml/jax/issues/23650
+        # # TODO (#1750): Eventually use this once it supports kwargs.
+        # https://docs.jax.dev/en/latest/_autosummary/jax.lax.platform_dependent.html
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            return jax.scipy.linalg.eigh(
+                _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+            )
+
+    else:
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            # Reverse mode also not differentiable on CPU.
+            # TODO (#1750): Update logic when resolving the linked issue?
+            if True or not eigvals_only:
+                # https://github.com/jax-ml/jax/issues/14019
+                return jax.scipy.linalg.eigh(
+                    _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+                )
+            return _eigh_tridiagonal(
+                d,
+                e,
+                eigvals_only=eigvals_only,
+                select=select,
+                select_range=select_range,
+                tol=tol,
+            )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -497,7 +569,7 @@ if use_jax:  # noqa: C901
         func,
         x0,
         args=(),
-        tol=1e-6,
+        xtol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -513,7 +585,7 @@ if use_jax:  # noqa: C901
             Initial guesses for fixed points.
         args : tuple
             Extra arguments to ``func``.
-        tol : float
+        xtol : float
             Pointwise convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
@@ -526,26 +598,26 @@ if use_jax:  # noqa: C901
         scalar : bool
             Whether ``func`` is a single-variable map.
         full_output : bool
-            Whether to return the iteration count and whether the result converged.
+            Whether to return the error and iteration count.
 
         Returns
         -------
         p : jnp.ndarray
             The fixed points, if convergence is achieved.
-            If full output is true, returns the tuple (p, (is_converged, iterations)).
+            If full output is true, returns the tuple (p, (err, iter_count)).
 
         """
 
         def solve(f, x0):
-            p, converged, i = _fixed_point(
+            p, err, i = _fixed_point(
                 _to_fp(f),
                 x0,
-                tol,
+                xtol,
                 maxiter,
                 method,
                 _is_converged_pointwise if scalar else _is_converged,
             )
-            return (p, (converged, i)) if full_output else p
+            return (p, (err, i)) if full_output else p
 
         def f(x):
             return func(x, *args) - x
@@ -572,7 +644,6 @@ else:  # pragma: no cover
         block_diag,
         cho_factor,
         cho_solve,
-        eigh_tridiagonal,
         qr,
         solve_triangular,
     )
@@ -580,6 +651,12 @@ else:  # pragma: no cover
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+    eigh_tridiagonal = np.vectorize(
+        scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
 
     def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
@@ -974,7 +1051,7 @@ else:  # pragma: no cover
         func,
         x0,
         args=(),
-        tol=1e-6,
+        xtol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -990,7 +1067,7 @@ else:  # pragma: no cover
             Initial guess for fixed point.
         args : tuple
             Extra arguments to ``func``.
-        tol : float
+        xtol : float
             Convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
@@ -1003,25 +1080,24 @@ else:  # pragma: no cover
         scalar : bool
             Whether ``func`` is a single-variable map.
         full_output : bool
-            Whether to return the iteration count and whether the result converged.
+            Whether to return the error and iteration count.
 
         Returns
         -------
         p : jnp.ndarray
-            The fixed point, if convergence is achieved.
-            If full output is true, returns the tuple (p, (converged, iterations)).
+            The fixed points, if convergence is achieved.
+            If full output is true, returns the tuple (p, (err, iter_count)).
 
         """
-        if scalar or full_output:
+        if full_output:
             raise NotImplementedError
         if method == "simple":
             method = "iteration"
         return scipy.optimize.fixed_point(
-            # Scipy interprets tol as relative tolerance..
             func,
             x0,
             args=args,
-            xtol=tol,
+            xtol=xtol,
             maxiter=maxiter,
             method=method,
         )

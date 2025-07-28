@@ -6,12 +6,20 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    Timer,
+    broadcast_tree,
+    copy_rpz_periods,
+    errorif,
+    rpz2xyz,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -1335,14 +1343,23 @@ class CoilArclengthVariance(_CoilObjective):
 
         coilset = self.things[0]
         # local import to avoid circular import
-        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+        from desc.coils import (
+            CoilSet,
+            FourierXYCoil,
+            FourierXYZCoil,
+            SplineXYZCoil,
+            _Coil,
+        )
 
         def _is_single_coil(c):
             return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
         coils = tree_leaves(coilset, is_leaf=_is_single_coil)
         self._constants["mask"] = np.array(
-            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+            [
+                int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil, FourierXYCoil)))
+                for coil in coils
+            ]
         )
 
         if self._normalize:

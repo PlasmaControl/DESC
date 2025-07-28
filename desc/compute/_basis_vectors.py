@@ -29,7 +29,7 @@ from .data_index import register_compute_fun
     data=["B", "|B|"],
 )
 def _b(params, transforms, profiles, data, **kwargs):
-    data["b"] = (data["B"].T / data["|B|"]).T
+    data["b"] = data["B"] / data["|B|"][:, jnp.newaxis]
     return data
 
 
@@ -55,11 +55,11 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^rho*sqrt(g)",
-    label="\\mathbf{e}^{\\rho} \\sqrt{g}",
+    name="e_theta x e_zeta",
+    label="\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}",
     units="m^{2}",
     units_long="square meters",
-    description="Contravariant radial basis vector weighted by 3-D volume Jacobian",
+    description="ρ surface area vector",
     dim=3,
     params=[],
     transforms={},
@@ -70,9 +70,10 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    aliases=["e^rho*sqrt(g)"],
 )
-def _e_sup_rho_sqrtg(params, transforms, profiles, data, **kwargs):
-    data["e^rho*sqrt(g)"] = cross(data["e_theta"], data["e_zeta"])
+def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
+    data["e_theta x e_zeta"] = cross(data["e_theta"], data["e_zeta"])
     return data
 
 
@@ -520,20 +521,20 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^theta*sqrt(g)", "sqrt(g)"],
+    data=["e_zeta x e_rho", "sqrt(g)"],
     aliases=["grad(theta)"],
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
+    data["e^theta"] = data["e_zeta x e_rho"] / data["sqrt(g)"][:, jnp.newaxis]
     return data
 
 
 @register_compute_fun(
-    name="e^theta*sqrt(g)",
-    label="\\mathbf{e}^{\\theta} \\sqrt{g}",
+    name="e_zeta x e_rho",
+    label="\\mathbf{e}_{\\zeta} \\times \\mathbf{e}_{\\rho}",
     units="m^{2}",
     units_long="square meters",
-    description="Contravariant poloidal basis vector weighted by 3-D volume Jacobian",
+    description="θ surface area vector",
     dim=3,
     params=[],
     transforms={},
@@ -543,11 +544,12 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
     ],
+    aliases=["e^theta*sqrt(g)"],
 )
-def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
+def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^θ √g | ρ=0 }.
-    data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
+    data["e_zeta x e_rho"] = cross(data["e_zeta"], data["e_rho"])
     return data
 
 
@@ -3319,7 +3321,7 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _secular_grad_alpha(params, transforms, profiles, data, **kwargs):
     data["grad(alpha) (secular)"] = (
-        data["alpha_r (secular)"][:, jnp.newaxis] * data["e^rho"]
+        data["alpha_r (secular)"][..., jnp.newaxis] * data["e^rho"]
     )
     return data
 
@@ -3353,7 +3355,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho*sqrt(g)", "|e_theta x e_zeta|"],
+    data=["e_theta x e_zeta", "|e_theta x e_zeta|"],
     axis_limit_data=["e_theta_r", "e_zeta", "|e_theta x e_zeta|_r"],
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
 )
@@ -3361,7 +3363,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_rho"] = transforms["grid"].replace_at_axis(
-        safediv(data["e^rho*sqrt(g)"], data["|e_theta x e_zeta|"][:, jnp.newaxis]),
+        safediv(data["e_theta x e_zeta"], data["|e_theta x e_zeta|"][:, jnp.newaxis]),
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
         lambda: safediv(
@@ -3444,7 +3446,7 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^theta*sqrt(g)", "|e_zeta x e_rho|"],
+    data=["e_zeta x e_rho", "|e_zeta x e_rho|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
     ],
@@ -3452,7 +3454,7 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
 def _n_theta(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^θ / ‖𝐞^θ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
-    data["n_theta"] = data["e^theta*sqrt(g)"] / data["|e_zeta x e_rho|"][:, jnp.newaxis]
+    data["n_theta"] = data["e_zeta x e_rho"] / data["|e_zeta x e_rho|"][:, jnp.newaxis]
     return data
 
 
@@ -3794,7 +3796,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     "\times \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Flux surface gradient of poloidal angle.",
+    description="Rotated surface gradient of poloidal angle.",
     dim=3,
     params=[],
     transforms={},
@@ -3819,7 +3821,7 @@ def _surface_gradient_theta(params, transforms, profiles, data, **kwargs):
     "\times \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Flux surface gradient of toroidal angle.",
+    description="Rotated surface gradient of toroidal angle.",
     dim=3,
     params=[],
     transforms={},
@@ -3843,7 +3845,7 @@ def _surface_gradient_zeta(params, transforms, profiles, data, **kwargs):
     "\times \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Flux surface gradient of toroidal angle.",
+    description="Rotated surface gradient of toroidal angle.",
     dim=3,
     params=[],
     transforms={},

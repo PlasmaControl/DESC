@@ -1658,21 +1658,20 @@ class PerpendicularPressureProfile(_Profile):
     """
 
     _io_attrs_ = _Profile._io_attrs_ + [
-        "_eq",
         "_coeffs",
         "_psi_profiles",
         "_hot_electron_profile",
     ]
 
     def __init__(
-        self, eq, psi_profiles, coeffs, hot_electron_profile=None, name="p_perp_total"
+        self, psi_profiles, coeffs, hot_electron_profile=None, name=""
     ):
         super().__init__(name)
         # assert len(psi_profiles) == len(coeffs), "Each species must have matching coeffs and psi profile"
-        self._eq = eq
         self._psi_profiles = psi_profiles
         self._coeffs = np.asarray(coeffs)  # shape (S, 3)
         self._hot_electron_profile = hot_electron_profile
+        self._basis = self.basis 
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -1700,12 +1699,19 @@ class PerpendicularPressureProfile(_Profile):
     def basis(self):
         return self._psi_profiles[0].basis
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0, B = None):
         """Compute p_perp at specified grid points."""
         if params is not None:
-            self.params = params  # safely update coeffs only
+            self.params = params
 
-        B = self._eq.compute(["|B|"], grid)["|B|"]
+        if params is not None:
+            self.params = params
+        
+        if B is None:
+            # this is for direct calls to the profile
+            # for optimization, B is an input to the profile from the p_parallel and p_perp computables so we are jittable
+            B = self._eq().compute(["|B|"], grid)["|B|"]
+        
         if B.shape[0] != grid.num_nodes:
             raise ValueError("Shape mismatch: B must be computed on the same grid.")
 
@@ -1722,9 +1728,13 @@ class PerpendicularPressureProfile(_Profile):
         return result
 
     def set_equilibrium(self, eq):
-        self._eq = eq
+        self._eq = lambda: eq
 
+    @classmethod
+    def from_values(cls, x, y, *args, **kwargs):
+        raise NotImplementedError("from_values not implemented for this profile")
 
+ 
 class ParallelPressureProfile(_Profile):
     """Implements p_parallel(ψ, B) = Σ_s p'_⊥,s(ψ) * (-a_s/3 B⁴ - b_s B² + c_s + d_s B) + p_∥,he(ψ)
 
@@ -1732,7 +1742,6 @@ class ParallelPressureProfile(_Profile):
     """
 
     _io_attrs_ = _Profile._io_attrs_ + [
-        "_eq",
         "_p_perp_profile",
         "_d_coeffs",
         "_hot_electron_profile",
@@ -1743,14 +1752,14 @@ class ParallelPressureProfile(_Profile):
         p_perp_profile,
         d_coeffs,
         hot_electron_profile=None,
-        name="p_parallel_total",
+        name="",
     ):
         super().__init__(name)
         self._p_perp_profile = p_perp_profile
-        self._eq = p_perp_profile._eq
         self._psi_profiles = p_perp_profile._psi_profiles
         self._d_coeffs = np.asarray(d_coeffs)
         self._hot_electron_profile = hot_electron_profile
+        self._basis = self.basis 
 
         if len(self._psi_profiles) != len(d_coeffs):
             raise ValueError("Must provide one d_s coefficient per psi_profile")
@@ -1778,12 +1787,19 @@ class ParallelPressureProfile(_Profile):
     def basis(self):
         return self._p_perp_profile.basis
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0, B = None):
         """Compute p_parallel at specified grid points."""
         if params is not None:
             self.params = params
 
-        B = self._eq.compute(["|B|"], grid)["|B|"]
+        if params is not None:
+            self.params = params
+        
+        if B is None:
+            # this is for calls direct calls to the profile
+            # for optimization, B is an input to the profile from the p_parallel and p_perp computables so we are jittable
+            B = self._eq().compute(["|B|"], grid)["|B|"]
+        
         if B.shape[0] != grid.num_nodes:
             raise ValueError("Shape mismatch: B must be computed on the same grid.")
 
@@ -1801,4 +1817,8 @@ class ParallelPressureProfile(_Profile):
         return result
 
     def set_equilibrium(self, eq):
-        self._eq = eq
+        self._eq = lambda: eq 
+
+    @classmethod
+    def from_values(cls, x, y, *args, **kwargs):
+        raise NotImplementedError("from_values not implemented for this profile")

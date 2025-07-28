@@ -695,7 +695,7 @@ def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
     profiles=[],
     data=["x"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    chunk_size=_doc["chunk_size"],
+    B_coil_chunk_size=_doc["chunk_size"],
     B_coil="_MagneticField : Field object to compute with.",
     field_grid="Grid : Source grid used to compute magnetic field.",
 )
@@ -703,7 +703,7 @@ def _B_coil_field(params, transforms, profiles, data, **kwargs):
     data["B_coil"] = kwargs["B_coil"].compute_magnetic_field(
         coords=data["x"],
         source_grid=kwargs.get("field_grid", None),
-        chunk_size=kwargs.get("chunk_size", None),
+        chunk_size=kwargs.get("B_coil_chunk_size", None),
     )
     return data
 

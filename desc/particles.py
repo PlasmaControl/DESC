@@ -8,6 +8,7 @@ import equinox as eqx
 import numpy as np
 from diffrax import (
     AbstractTerm,
+    ConstantStepSize,
     DiscreteTerminatingEvent,
     PIDController,
     RecursiveCheckpointAdjoint,
@@ -475,7 +476,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         q = q * elementary_charge
         E = E * JOULE_PER_EV
         rho0, theta0, zeta0, xi0, E, m, q = map(
-            jnp.asarray, (rho0, theta0, zeta0, xi0, E, m, q)
+            jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
         )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
@@ -554,7 +555,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         m = m * proton_mass
         q = q * elementary_charge
         E = E * JOULE_PER_EV
-        R0, phi0, Z0, xi0, E, m, q = map(jnp.asarray, (R0, phi0, Z0, xi0, E, m, q))
+        R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
         R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
         self.m = m
         self.q = q
@@ -581,7 +582,6 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
                 "in flux coordinates. Converting the given coordinates to flux frame."
             )
             x = self.eq.map_coordinates(
-                eq=field,
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
@@ -843,6 +843,11 @@ def trace_particles(
 
     """
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    stepsize_controller = (
+        ConstantStepSize()
+        if solver.__class__.__name__ == "Euler"
+        else stepsize_controller
+    )
 
     saveat = SaveAt(ts=ts)
 
@@ -860,7 +865,7 @@ def trace_particles(
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
-        max_steps=maxstep * len(ts),
+        max_steps=max(maxstep, int((ts[1] - ts[0]) / min_step_size)),
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,

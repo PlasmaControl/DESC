@@ -4009,6 +4009,7 @@ def plot_particle_trajectories(
     model,
     initializer,
     ts,
+    end_position=True,
     return_data=False,
     fig=None,
     **kwargs,
@@ -4027,6 +4028,9 @@ def plot_particle_trajectories(
         Particle initializer to use for initializing the particles.
     ts : array-like
         Time values to trace the particle trajectories for.
+    end_position : bool
+        If True, the last point in the trajectory is shown with a marker.
+        Defaults to True.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -4101,8 +4105,13 @@ def plot_particle_trajectories(
             field, model, initializer, ts=ts, fig=fig
         )
     """
+    from diffrax import diffeqsolve
+
     trace_kwargs = {}
     for key in inspect.signature(trace_particles).parameters:
+        if key in kwargs:
+            trace_kwargs[key] = kwargs.pop(key)
+    for key in inspect.signature(diffeqsolve).parameters:
         if key in kwargs:
             trace_kwargs[key] = kwargs.pop(key)
 
@@ -4195,6 +4204,19 @@ def plot_particle_trajectories(
                 showlegend=False,
             )
         )
+        if end_position:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=np.asarray(x[-1]),
+                    y=np.asarray(y[-1]),
+                    z=np.asarray(z[-1]),
+                    mode="markers",
+                    marker=dict(size=10, color=color[i % len(color)]),
+                    name=f"Particle[{i}] End Point",
+                    hovertext=f"Particle[{i}] End Point",
+                    showlegend=False,
+                )
+            )
     xaxis_title = (
         LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
     )

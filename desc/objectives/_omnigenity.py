@@ -927,7 +927,7 @@ class PiecewiseOmnigenity(_Objective):
         loss_function=None,
         eq_grid=None,
         field_grid=None,
-        deriv_mode="rev",
+        deriv_mode="auto",
         M_booz=None,
         N_booz=None,
         eq_fixed=False,

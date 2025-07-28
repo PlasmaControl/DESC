@@ -1247,6 +1247,7 @@ class Equilibrium(Optimizable, _MagneticField):
         phi_bounds=None,
         Z_bounds=[-5, 5],
         return_A=False,
+        support=1E-5
     ):
         """Compute magnetic field at a set of points.
 
@@ -1294,6 +1295,9 @@ class Equilibrium(Optimizable, _MagneticField):
         return_A: bool
             Only used if method == "vector potential".
             If True, the vector potential used to evaluate B will also be returned.
+        support: float
+            For the Biot-Savart magnetic field and vector potential calculations, a source point
+            will be removed if it is too close to the point being evaluated (|dr|<=support)
         Returns
         -------
         field : ndarray, shape(n,3)
@@ -1337,7 +1341,7 @@ class Equilibrium(Optimizable, _MagneticField):
                 source_xyz = rpz2xyz(source_rpz)
                 J = rpz2xyz_vec(data["J"], phi=phi)
                 fj = biot_savart_general(
-                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
                 )
                 f += fj
                 return f
@@ -1388,6 +1392,7 @@ class Equilibrium(Optimizable, _MagneticField):
                     params=params,
                     basis=basis,
                     transforms=transforms,
+                    support=support
                 )
                 if source_grid is None:
                     self.A_grid = A_grid
@@ -1446,6 +1451,7 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        support=1E-5
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1466,6 +1472,9 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        support: float
+            For the Biot-Savart magnetic field and vector potential calculations, a source point
+            will be removed if it is too close to the point being evaluated (|dr|<=support)
 
         Returns
         -------
@@ -1500,7 +1509,7 @@ class Equilibrium(Optimizable, _MagneticField):
             source_xyz = rpz2xyz(source_rpz)
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,support=support
             )
             f += fj
             return f

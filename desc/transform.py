@@ -38,6 +38,20 @@ class Transform(IOAble):
         * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
         * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
           you to create transforms inside JIT compiled functions.
+        * ``'rpz'`` uses a fast fourier transform in the phi (second) dimension, and 
+            direct cosine transforms in the R and Z (first and third) dimensions so
+            must have a compatible grid (CylindricalGrid) and basis (DoubleChebyshev
+            FourierBasis)
+        * ``'partialrpz'`` uses a fast fourier transform in the phi (second) dimension,
+            but directly evaluates the Chebyshev functions in the first and third dimensions
+            . still must have a compatible grid (CylindricalGrid) and basis (DoubleChebyshev
+            FourierBasis), but can have arbitrary node patterns in the first and third
+            dimensions
+        * ``'directrpz'``  directly evaluates the Chebyshev functions in the first
+            and third dimensions and evaluates the Fourier functions in the phi dimension,
+            but uses partial sums to improve memory usage compared to direct1.
+            still must have a compatible grid (CylindricalGrid) and basis (DoubleChebyshev
+            FourierBasis), but can have arbitrary node patterns in each dimension.
         * ``'auto'`` selects the method based on the grid and basis resolution.
 
     """

@@ -45,7 +45,7 @@ from desc.utils import (
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
+def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None, support=1E-10):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
@@ -66,7 +66,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-
+    support: float
+        A source point will be removed if it is too close to the point being
+        evaluated (|dr|<=support)
     Returns
     -------
     B : ndarray
@@ -80,8 +82,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
     def biot(re):
         dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        num = jnp.where((dr_norm>support),jnp.cross(dr, JdV, axis=-1),0)
+        den = dr_norm ** 3
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
@@ -89,7 +92,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
 
 def biot_savart_general_vector_potential(
-    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None, support=1E-10
 ):
     """Biot-Savart law for arbitrary sources for vector potential.
 
@@ -111,6 +114,10 @@ def biot_savart_general_vector_potential(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    support: float
+        A source point will be removed if it is too close to the point being
+        evaluated (|dr|<=support)
+
 
     Returns
     -------
@@ -125,8 +132,10 @@ def biot_savart_general_vector_potential(
 
     def biot(re):
         dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        num = jnp.where(dr_norm>support,JdV,0)
+        den = dr_norm
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)

@@ -114,7 +114,7 @@ class VacuumSolver(IOAble):
         self._I = I
         self._Y = Y
         self._B0 = B0
-        self._surface = surface
+
         self._evl_grid = evl_grid
         if src_grid is None:
             src_grid = LinearGrid(
@@ -146,7 +146,6 @@ class VacuumSolver(IOAble):
 
         # Compute data on source grid.
         self._src_transform = Transform(src_grid, basis, derivs=1)
-        self._evl_transform = Transform(evl_grid, basis, derivs=1)
         src_data = surface.compute(
             [
                 "x",
@@ -414,38 +413,6 @@ class VacuumSolver(IOAble):
         return self._data
 
     def compute_magnetic_field(self, chunk_size=None, coords=None):
-        """Compute magnetic field B = B₀ + ∇Φ.
-
-        Parameters
-        ----------
-        chunk_size : int or None
-            Size to split computation into chunks.
-            If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
-        coords : jnp.ndarray
-            Optional, evaluation points in 𝒳 in coordinates of R,phi,Z basis.
-
-        Returns
-        -------
-        data : dict
-            B stored in ``data["evl"]["B0+grad(Phi)"]``.
-
-        """
-        if coords is not None:
-            self._set_new_evl_coords(coords)
-        elif "B0+grad(Phi)" in self._data["evl"]:
-            return self._data
-
-        self._data = self.compute_current_field(chunk_size)
-        self._data = self.compute_vacuum_field(chunk_size)
-        self._data["evl"]["B0+grad(Phi)"] = (
-            self._data["evl"]["B0"] + self._data["evl"]["grad(Phi)"]
-        )
-        if coords is not None:
-            self._set_old_evl_coords()
-        return self._data
-
-    def compute_magnetic_field_mag_squared(self, data, chunk_size=None, coords=None):
         """Compute magnetic field B = B₀ + ∇Φ.
 
         Parameters

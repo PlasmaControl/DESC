@@ -1,0 +1,36 @@
+__pycache__/
+build/
+data/
+dist/
+docs/_api
+docs/_build
+htmlcov/
+local/
+matlab/
+tests/benchmarks/.benchmarks/
+.coverage
+.ipynb_checkpoints/
+.spyproject/
+*.egg-info
+*.gif
+*.h5
+*.ini
+*.mat
+*.out
+*.output
+*.pdf
+*.pyc
+*.swp
+*.swo
+.pymon
+
+# see https://github.com/github/gitignore/blob/main/Python.gitignore
+# pyenv
+.python-version
+
+# UV
+uv.lock
+
+# Environments
+.env
+.venv

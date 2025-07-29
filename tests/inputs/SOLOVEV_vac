@@ -1,0 +1,20 @@
+# This is the DESC input file for a vacuum Solov'ev equilibrium
+
+# global parameters
+sym = 1
+NFP = 1
+Psi = 1.0
+
+# spectral resolution
+M_pol  =  6, 12
+N_tor  =  0
+
+# solver methods
+objective = vacuum
+
+# fixed-boundary surface shape
+m:   0  n:   0  R1 =  3.999
+m:   1  n:   0  R1 =  1.026
+m:  -1  n:   0  Z1 =  1.580
+m:   2  n:   0  R1 =  0.068
+m:  -2  n:   0  Z1 = -0.010

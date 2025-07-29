@@ -8,13 +8,12 @@ import pytest
 
 from desc.coils import (
     FourierPlanarCoil,
-    FourierPlanarFiniteBuildCoil,
     FourierRZCoil,
     FourierXYCoil,
     FourierXYZCoil,
     SplineXYZCoil,
 )
-from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.compute import data_index
 from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
@@ -31,7 +30,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning, errorif
+from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
 
 
 def _compare_against_master(
@@ -189,14 +188,6 @@ def test_compute_everything():
         ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
-        ),
-        "desc.coils.FourierPlanarFiniteBuildCoil": FourierPlanarFiniteBuildCoil(
-            current=5,
-            center=[10, 1, 3],
-            normal=[1, 2, 3],
-            r_n=[1, 2, 3],
-            modes=[0, 1, 2],
-            cross_section_dims=[0.1, 0.2],
         ),
     }
     assert things.keys() == data_index.keys(), (

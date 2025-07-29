@@ -131,7 +131,6 @@ Coil Optimization
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
-    desc.objectives.CoilSetMaxB
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.LinkingCurrentConsistency
 
@@ -148,6 +147,17 @@ Profiles
     desc.objectives.ToroidalCurrent
     desc.objectives.Pressure
     desc.objectives.BootstrapRedlConsistency
+
+
+Power Balance
+-------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.FusionPower
+    desc.objectives.HeatingPowerISS04
 
 
 Fixing degrees of freedom
@@ -187,7 +197,7 @@ User defined objectives
     :recursive:
     :template: class.rst
 
-
+    desc.objectives.ExternalObjective
     desc.objectives.GenericObjective
     desc.objectives.ObjectiveFromUser
     desc.objectives.LinearObjectiveFromUser

@@ -16,12 +16,20 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    rpz2xyz_vec,
+    setdefault,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Surface
 

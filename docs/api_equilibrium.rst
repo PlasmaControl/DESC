@@ -63,6 +63,7 @@ profiles together by addition, multiplication, or scaling.
     desc.profiles.ProductProfile
     desc.profiles.SumProfile
     desc.profiles.PowerProfile
+    desc.profiles.FourierZernikeProfile
 
 
 Utilities
@@ -79,3 +80,4 @@ equilibria to a given size and/or field strength.
     desc.compat.flip_theta
     desc.compat.rescale
     desc.compat.rotate_zeta
+    desc.compat.contract_equilibrium

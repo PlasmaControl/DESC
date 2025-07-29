@@ -10,7 +10,6 @@ from scipy.constants import mu_0
 
 from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -23,9 +22,12 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._core import (

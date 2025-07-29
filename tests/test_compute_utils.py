@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
-from desc.compute.geom_utils import rotation_matrix
+from desc.utils import rotation_matrix
 
 
 @pytest.mark.unit

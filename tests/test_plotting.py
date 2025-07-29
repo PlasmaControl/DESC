@@ -1,11 +1,13 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
 
+import gc
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from desc.backend import jax
 from desc.basis import (
     DoubleFourierSeries,
     FourierSeries,
@@ -973,6 +975,8 @@ def test_plot_poincare():
 @pytest.mark.unit
 def test_plot_gammac():
     """Test plotting gamma_c."""
+    gc.collect()
+    jax.clear_caches()
     eq = get("W7-X")
     fig, ax = plot_gammac(eq, rho=0.5)
     return fig

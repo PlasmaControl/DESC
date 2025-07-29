@@ -8,7 +8,6 @@ from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
@@ -33,7 +32,7 @@ from desc.magnetic_fields import (
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
-from desc.utils import dot
+from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -1067,6 +1066,9 @@ class TestMagneticFields:
         field2 = SplineMagneticField.from_field(
             field1, R, p, Z, source_grid=LinearGrid(N=1)
         )
+        # this is just to test the logic when
+        # compute_vector_potential returns a ValueError
+        _ = SplineMagneticField.from_field(field2, R, p, Z, source_grid=LinearGrid(N=1))
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2

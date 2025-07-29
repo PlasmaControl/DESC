@@ -7,13 +7,16 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
+    ZernikePolynomial,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
-from desc.compute import data_index, xyz2rpz
+from desc.compute import data_index
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -46,7 +49,7 @@ from desc.plotting import (
     plot_surfaces,
     poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
 tol_1d = 4.5
 tol_2d = 10
@@ -220,10 +223,23 @@ class TestPlot2D:
         grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
-            eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+            eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
         )
-        for string in ["|F|", "theta", "zeta"]:
+        for string in ["|F|_normalized", "theta", "zeta"]:
             assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_2d_deprecated(self):
+        """Test deprecated 2d plot of normalized force."""
+        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_2d(eq, "|F|", figsize=(4, 4), norm_F=True, grid=grid)
         return fig
 
     @pytest.mark.unit
@@ -401,10 +417,22 @@ class TestPlotFSA:
     def test_fsa_F_normalized(self):
         """Test plotting flux surface average normalized force error on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_fsa(
-            eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol"
-        )
+        fig, ax = plot_fsa(eq, "|F|", log=True, normalize="<|grad(p)|>_vol")
         ax.set_ylim([1e-6, 1e-3])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_F_normalized_deprecated(self):
+        """Test plotting deprecated fsa normalized force error on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_fsa(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
         return fig
 
 
@@ -454,7 +482,22 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
+        fig, ax = plot_section(eq, "|F|_normalized", log=True)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_section_deprecated(self):
+        """Test old section plot of normalized force on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_section(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_section(eq, "|F|", log=True, norm_F=True)
+
         return fig
 
 
@@ -666,6 +709,34 @@ class TestPlotBasis:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_basis_chebyshevpoly(self):
+        """Test plotting Chebyshev polynomial."""
+        basis = ChebyshevPolynomial(L=6)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly(self):
+        """Test plotting zernike polynomial."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly_derivative(self):
+        """Test plotting zernike polynomial derivative."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax = plot_basis(basis, derivative=[2, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
@@ -691,6 +762,26 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_fourierzernike_derivative(self):
+        """Test plotting fourier-zernike basis derivative."""
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax = plot_basis(basis, derivative=[1, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_chebyshevdoublefourier(self):
+        """Test plotting chebyshev-double fourier basis."""
+        basis = ChebyshevDoubleFourierBasis(L=8, M=3, N=2)
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()

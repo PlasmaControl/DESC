@@ -12,8 +12,6 @@ from ._core import (
     VectorPotentialField,
     VerticalMagneticField,
     _MagneticField,
-    biot_savart_general,
-    biot_savart_general_vector_potential,
     field_line_integrate,
     read_BNORM_file,
 )

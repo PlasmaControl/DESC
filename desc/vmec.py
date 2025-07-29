@@ -3,6 +3,7 @@
 import io
 import os
 import warnings
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +11,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
+import desc
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.equilibrium import Equilibrium
@@ -83,7 +85,7 @@ class VMECIO:
 
         """
         assert profile in ["iota", "current"]
-        file = Dataset(path, mode="r")
+        file = Dataset(os.path.expanduser(path), mode="r")
         inputs = {}
 
         version = file.variables["version_"][0]
@@ -254,7 +256,9 @@ class VMECIO:
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
             see lines 300+ for full list of included variables
         """
-        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+        file = Dataset(
+            os.path.expanduser(path), mode="w", format="NETCDF3_64BIT_OFFSET"
+        )
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -1432,7 +1436,7 @@ class VMECIO:
         return vmec_data
 
     @classmethod
-    def write_vmec_input(cls, eq, fname, header="", **kwargs):  # noqa: C901
+    def write_vmec_input(cls, eq, fname, header=None, **kwargs):  # noqa: C901
         """Write a VMEC input file for an equivalent DESC equilibrium.
 
         Parameters
@@ -1455,7 +1459,17 @@ class VMECIO:
         else:
             f = fname
         f.seek(0)
-
+        if header is None:
+            now = datetime.now()
+            date = now.strftime("%m/%d/%Y")
+            time = now.strftime("%H:%M:%S")
+            # auto header
+            header = (
+                " This VMEC input file was auto generated in DESC"
+                + f" version {desc.__version__} from a\n"
+                + "! DESC Equilibrium using the method VMECIO.write_vmec_input\n"
+                + "! on {} at {}.\n".format(date, time)
+            )
         f.write("! " + header + "\n")
         f.write("&INDATA\n")
 
@@ -1566,7 +1580,7 @@ class VMECIO:
                         " {:+14.8E}".format(
                             0
                             if np.abs(r) < np.finfo(r.dtype).eps
-                            else float(current(r, dr=1) / (2 * r))
+                            else float(current(r, dr=1)[0] / (2 * r))
                         )
                     )
                 f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")
@@ -1635,7 +1649,8 @@ class VMECIO:
                     + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8E}\n"
                 )
 
-        f.write("/")
+        f.write("/\n")
+        f.write("&END")
         f.close()
         return None
 

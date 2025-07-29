@@ -12,6 +12,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
@@ -19,8 +20,7 @@ from desc.coils import (
     initialize_modular_coils,
     initialize_saddle_coils,
 )
-from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -28,7 +28,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
-from desc.utils import dot
+from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 
 class TestCoil:
@@ -121,6 +121,32 @@ class TestCoil:
             err_msg="Using FourierPlanarCoil",
         )
 
+        # FourierXYCoil
+        coil = FourierXYCoil(I)
+        B_xyz = coil.compute_magnetic_field(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        B_rpz = coil.compute_magnetic_field(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierXYCoil",
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierXYCoil",
+        )
+
         B_true_xyz = np.atleast_2d([0, 0, Bz_true])
         grid_xyz = np.atleast_2d([0, 0, y])
         grid_rpz = xyz2rpz(grid_xyz)
@@ -200,6 +226,10 @@ class TestCoil:
 
         # FourierPlanarCoil
         coil = FourierPlanarCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        # FourierXYCoil
+        coil = FourierXYCoil(I)
         test(coil, grid_xyz, grid_rpz)
 
         grid_xyz = np.atleast_2d([0, 0, y])
@@ -328,13 +358,27 @@ class TestCoil:
             )
 
             # FourierPlanarCoil
-            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, 1], r_n=R)
             test(
                 coil,
                 grid_xyz,
                 grid_rpz,
                 A_true_rpz,
                 correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # FourierXYCoil
+            coil = FourierXYCoil(
+                I, center=[0, 0, 0], normal=[0, 0, -1], X_n=[0, R], Y_n=[R, 0]
+            )
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                -A_true_rpz,
+                -correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
             )
@@ -415,19 +459,21 @@ class TestCoil:
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
         coil4 = coil1.to_FourierRZ(N=coil1.N)
-        coil5 = coil1.to_FourierPlanar(N=10, basis="rpz")
+        coil5 = coil1.to_FourierXY(N=10, basis="rpz")
+        coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
         x4 = coil4.compute("x", grid=grid, basis="xyz")["x"]
+        x5 = coil5.compute("x", grid=grid, basis="xyz")["x"]
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
             x1[:, 1] - coil5.center[1],
             x1[:, 0] - coil5.center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
-        x5 = coil5.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -444,15 +490,20 @@ class TestCoil:
         B5 = coil5.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+        B6 = coil6.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
 
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)
         np.testing.assert_allclose(x1, x5, atol=1e-12)
+        np.testing.assert_allclose(x1, x6, atol=1e-10)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=1e-7)
 
 
 class TestCoilSet:
@@ -760,63 +811,76 @@ class TestCoilSet:
         coil = FourierRZCoil(1e6, [0, 10, 1], [0, 0, 0])
 
         # MixedCoilSet
-        coils1 = MixedCoilSet.linspaced_linear(coil, displacement=[0, 0, 2.5], n=4)
-        coils2 = coils1.to_SplineXYZ(grid=grid, check_intersection=False)
-        coils3 = coils1.to_FourierXYZ(grid=grid, check_intersection=False)
-        coils4 = coils1.to_FourierPlanar(grid=grid, check_intersection=False)
+        coils0 = MixedCoilSet.linspaced_linear(coil, displacement=[0, 0, 2.5], n=4)
+        coils1 = coils0.to_SplineXYZ(grid=grid, check_intersection=False)
+        coils2 = coils0.to_FourierXYZ(grid=grid, check_intersection=False)
+        coils3 = coils0.to_FourierXY(grid=grid, check_intersection=False)
+        coils4 = coils0.to_FourierPlanar(grid=grid, check_intersection=False)
+        assert isinstance(coils1, MixedCoilSet)
         assert isinstance(coils2, MixedCoilSet)
         assert isinstance(coils3, MixedCoilSet)
         assert isinstance(coils4, MixedCoilSet)
-        assert all(isinstance(coil, SplineXYZCoil) for coil in coils2)
-        assert all(isinstance(coil, FourierXYZCoil) for coil in coils3)
+        assert all(isinstance(coil, SplineXYZCoil) for coil in coils1)
+        assert all(isinstance(coil, FourierXYZCoil) for coil in coils2)
+        assert all(isinstance(coil, FourierXYCoil) for coil in coils3)
         assert all(isinstance(coil, FourierPlanarCoil) for coil in coils4)
+        x0 = coils0.compute("x", grid=grid, basis="xyz")
         x1 = coils1.compute("x", grid=grid, basis="xyz")
         x2 = coils2.compute("x", grid=grid, basis="xyz")
         x3 = coils3.compute("x", grid=grid, basis="xyz")
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
-            x1[0]["x"][:, 1] - coils4[0].center[1],
-            x1[0]["x"][:, 0] - coils4[0].center[0],
+            x0[0]["x"][:, 1] - coils3[0].center[1],
+            x0[0]["x"][:, 0] - coils3[0].center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
-            [xi["x"] for xi in x1], [xi["x"] for xi in x2], atol=1e-12
+            [xi["x"] for xi in x0], [xi["x"] for xi in x1], atol=1e-12
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x1], [xi["x"] for xi in x3], atol=1e-12
+            [xi["x"] for xi in x0], [xi["x"] for xi in x2], atol=1e-12
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x1], [xi["x"] for xi in x4], atol=1e-12
+            [xi["x"] for xi in x0], [xi["x"] for xi in x3], atol=1e-12
         )
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x0], [xi["x"] for xi in x4], atol=1e-12
+        )
+        B0 = coils0.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B1 = coils1.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B2 = coils2.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B3 = coils3.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B4 = coils4.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
-        np.testing.assert_allclose(B1, B2, rtol=1e-2)
-        np.testing.assert_allclose(B1, B3, rtol=1e-2)
-        np.testing.assert_allclose(B1, B4, rtol=1e-2)
+        np.testing.assert_allclose(B0, B1, rtol=1e-2)
+        np.testing.assert_allclose(B0, B2, rtol=1e-2)
+        np.testing.assert_allclose(B0, B3, rtol=1e-2)
+        np.testing.assert_allclose(B0, B4, rtol=1e-2)
 
         # CoilSet
-        coil = coils3[0]  # FourierXYZCoil
+        coil = coils2[0]  # FourierXYZCoil
         coils5 = CoilSet.linspaced_linear(coil, displacement=[0, 0, 3.5], n=6)
         coils6 = coils5.to_SplineXYZ(grid=grid, check_intersection=False)
         coils7 = coils5.to_FourierRZ(grid=grid, check_intersection=False)
-        coils8 = coils5.to_FourierPlanar(grid=grid, check_intersection=False)
+        coils8 = coils5.to_FourierXY(grid=grid, check_intersection=False)
+        coils9 = coils5.to_FourierPlanar(grid=grid, check_intersection=False)
         assert isinstance(coils6, CoilSet)
         assert isinstance(coils7, CoilSet)
         assert isinstance(coils8, CoilSet)
+        assert isinstance(coils9, CoilSet)
         assert all(isinstance(coil, SplineXYZCoil) for coil in coils6)
         assert all(isinstance(coil, FourierRZCoil) for coil in coils7)
-        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils8)
+        assert all(isinstance(coil, FourierXYCoil) for coil in coils8)
+        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils9)
         x5 = coils5.compute("x", grid=grid, basis="xyz")
         x6 = coils6.compute("x", grid=grid, basis="xyz")
         x7 = coils7.compute("x", grid=grid, basis="xyz")
+        x8 = coils8.compute("x", grid=grid, basis="xyz")
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
             x5[0]["x"][:, 1] - coils8[0].center[1],
             x5[0]["x"][:, 0] - coils8[0].center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
-        x8 = coils8.compute("x", grid=grid_planar, basis="xyz")
+        x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
             [xi["x"] for xi in x5], [xi["x"] for xi in x6], atol=1e-12
         )
@@ -826,13 +890,18 @@ class TestCoilSet:
         np.testing.assert_allclose(
             [xi["x"] for xi in x5], [xi["x"] for xi in x8], atol=1e-12
         )
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x5], [xi["x"] for xi in x9], atol=1e-12
+        )
         B5 = coils5.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B6 = coils6.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
-        B7 = coils6.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
-        B8 = coils6.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
+        B7 = coils7.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
+        B8 = coils8.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
+        B9 = coils9.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         np.testing.assert_allclose(B5, B6, rtol=1e-2)
         np.testing.assert_allclose(B5, B7, rtol=1e-2)
         np.testing.assert_allclose(B5, B8, rtol=1e-2)
+        np.testing.assert_allclose(B5, B9, rtol=1e-2)
 
 
 @pytest.mark.unit
@@ -1502,3 +1571,47 @@ def test_initialize_helical():
     # first take a min over plasma pts to get distance from each coil pt to plasma
     # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
     np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)
+
+
+@pytest.mark.unit
+def test_planar_coil_from_values_orientation():
+    """Test that fitting to a planar coils preserves orientation."""
+    # easiest to check this is working using a coil, as can use
+    # biot savart to see if B is same or not
+    # tests fix for GH #1715
+    coil_XYZ = FourierXYZCoil(
+        current=1e6, X_n=[0, 10, 2], Y_n=[-2, 0, 0], Z_n=[0, 0, 0.1]
+    )
+    coil_planar1 = coil_XYZ.to_FourierPlanar(N=1)
+    coil_planar2 = coil_XYZ.to_FourierXY(N=1)
+
+    coords = [[1, 1, 1]]
+    grid = LinearGrid(N=40)
+    B_XYZ = coil_XYZ.compute_magnetic_field(coords, source_grid=grid)
+    B_planar1 = coil_planar1.compute_magnetic_field(coords, source_grid=grid)
+    B_planar2 = coil_planar2.compute_magnetic_field(coords, source_grid=grid)
+    np.testing.assert_allclose(B_XYZ, B_planar1, rtol=1e-3)
+    np.testing.assert_allclose(B_XYZ, B_planar2, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_planar_coil_opposing_normals_fields():
+    """Test that planar coils with opposing normals have opposing fields."""
+    coil_r = FourierPlanarCoil(current=1e6, center=[0, 0, 0], normal=[0, 0, 1], r_n=[2])
+    coil_xy = FourierXYCoil(
+        current=1e6, center=[0, 0, 0], normal=[0, 0, 1], X_n=[0, 2], Y_n=[2, 0]
+    )
+
+    def test(coil1):
+        coil2 = coil1.copy()
+        coil2.normal = -coil1.normal
+        grid = LinearGrid(N=20)
+        field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        # because the normals are opposite directions, the "positive" current direction
+        # for each coil is opposite the other, so their fields should be exactly
+        # opposite in direction but equal in magnitude (as the geometry is the same)
+        np.testing.assert_allclose(field1, -field2)
+
+    test(coil_r)
+    test(coil_xy)

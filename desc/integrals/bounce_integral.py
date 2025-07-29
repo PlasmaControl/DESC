@@ -145,7 +145,7 @@ class Bounce2D(Bounce):
     Notes
     -----
     Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
-      α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
+      α : ρ, θ, ζ ↦ θ + Λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
       θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
@@ -411,8 +411,8 @@ class Bounce2D(Bounce):
         # Hence, it more efficient to compute the real transform in the poloidal angle.
         # Likewise to perform partial summation in this application, the real transform
         # must be done in the poloidal angle and the complex transform in the toroidal.
-        a = rfft2(f, norm="forward").at[..., i].divide(2) * 2
-        return a[..., jnp.newaxis, :, :]
+        f = rfft2(f, norm="forward").at[..., i].divide(2) * 2
+        return f[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
@@ -693,7 +693,7 @@ class Bounce2D(Bounce):
         return result[0] if len(result) == 1 else result
 
     # TODO: Singularity subtraction quadrature enables more efficient algorithms.
-    #  To compute
+    #  for weakly singular integrals. To compute
     #    ∫ fh dζ where e.g. h = (1−λ|B|)⁰ᐧ⁵
     #  Taylor expand the singular part. For example, to first order
     #    g₁ = f(ζ₁) [−λ [∂|B|/∂ζ|ρ,α](ζ₁)]⁰ᐧ⁵ (ζ − ζ₁)⁰ᐧ⁵
@@ -707,7 +707,7 @@ class Bounce2D(Bounce):
     #     points to interpolate to is reduced by a factor of ``num_pitch*NFP``.
     #  3. Longer bounce orbits merit more quadrature points than short ones.
     #     This is now possible.
-    #  4. Uiform FFT can be used in toroidal direction. Combined with partial
+    #  4. Uniform FFT can be used in toroidal direction. Combined with partial
     #     summation the interpolation becomes cheap.
     #     (Same code as ``desc/integrals/_bounce_utils.py::cubic_spline``).
     #  5. The quadrature points are no longer functions of the solutions

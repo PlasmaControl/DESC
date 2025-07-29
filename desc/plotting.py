@@ -3870,8 +3870,13 @@ def plot_field_lines(
 
         fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
     """
+    from diffrax import diffeqsolve
+
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+    for key in inspect.signature(diffeqsolve).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
 
@@ -4080,24 +4085,35 @@ def plot_particle_trajectories(
             VacuumGuidingCenterTrajectory,
         )
 
-        # Equilibrium is not necessary but helps to find initial particle positions
+        # One can either use the Equilibrum or MagneticField object
+        # to plot the particle trajectories. Here we will use eq to
+        # get the initial position and plotting the LCFS. Particle tracing will
+        # use the field object.
         eq = desc.examples.get("precise_QA")
-        grid_trace = desc.grid.LinearGrid(rho=[0.8])
-        r0 = eq.compute("R", grid=grid_trace)["R"]
-        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+
+        rhos = [0.5]
 
         fig = plot_3d(eq, "|B|", alpha=0.5)
-        initializer = ManualParticleInitializerLab(
-            R0=r0,
-            phi0 = jnp.zeros_like(R0),
-            Z0=z0,
-            xi0=0.7*jnp.ones_like(R0),
+        # For demo purposes, we show how to initialize particles
+        # in the lab frame using the flux coordinates as inputs.
+        # Initializer will perform the conversion from flux to lab coordinates
+        # using the equilibrium object.
+
+        # Note: Initializers return the cordinates in the frame specified by
+        # the trajectory model.
+        initializer = ManualParticleInitializerFlux(
+            rho0=rhos,
+            theta0=0,
+            zeta0=0,
+            xi0=0.7,
             E = 1e-1,
             m = 4.0,
             q = 1.0,
-            eq = eq,
+            eq=eq, # needed for flux->lab conversion
         )
-        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        # One can also use frame='flux', and pass eq to
+        # plot_particle_trajectories function
         model = VacuumGuidingCenterTrajectory(frame="lab")
         ts=np.linspace(0, 1e-2, 1000)
 
@@ -4106,6 +4122,8 @@ def plot_particle_trajectories(
         )
     """
     from diffrax import diffeqsolve
+
+    from desc.equilibrium import Equilibrium
 
     trace_kwargs = {}
     for key in inspect.signature(trace_particles).parameters:
@@ -4137,12 +4155,12 @@ def plot_particle_trajectories(
     if not isinstance(color, (list, tuple)):
         color = [color]
 
+    # prepare arguments for partile tracing
     x0, args = initializer.init_particles(model=model, field=field)
     ms, qs, mus = args[:3]
     rpz, _ = trace_particles(
         field=field, y0=x0, ms=ms, qs=qs, mus=mus, model=model, ts=ts, **trace_kwargs
     )
-    from desc.equilibrium import Equilibrium
 
     rs = rpz[:, :, 0]
     phis = rpz[:, :, 1]

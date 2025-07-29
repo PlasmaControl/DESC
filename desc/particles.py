@@ -26,7 +26,7 @@ from scipy.constants import (
     proton_mass,
 )
 
-from desc.backend import jnp, tree_map, vmap
+from desc.backend import jit, jnp, tree_map, vmap
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
@@ -140,6 +140,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which additional args are needed by the model."""
         return ["m", "q", "mu"]
 
+    @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
@@ -279,6 +280,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which additional args are needed by the model."""
         return ["m", "q"]
 
+    @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
@@ -776,7 +778,7 @@ def trace_particles(
     model,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=1000,
     min_step_size=1e-8,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
@@ -808,7 +810,7 @@ def trace_particles(
         Trajectory model to integrate with. Available options are
     rtol, atol : float
         relative and absolute tolerances for ode integration
-    maxstep : int
+    max_steps : int
         maximum number of steps between different output times
     min_step_size: float
         minimum step size (in t) that the integration can take. default is 1e-8
@@ -843,6 +845,7 @@ def trace_particles(
 
     """
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    # Euler method does not support adavtive step size controller
     stepsize_controller = (
         ConstantStepSize()
         if solver.__class__.__name__ == "Euler"
@@ -865,7 +868,7 @@ def trace_particles(
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
-        max_steps=max(maxstep, int((ts[1] - ts[0]) / min_step_size)),
+        max_steps=int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts)),
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,

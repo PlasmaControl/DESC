@@ -7,6 +7,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from diffrax import (
+    ConstantStepSize,
     DiscreteTerminatingEvent,
     ODETerm,
     PIDController,
@@ -2577,7 +2578,7 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=1000,
     min_step_size=1e-8,
     solver=Tsit5(),
     bounds_R=(0, np.inf),
@@ -2602,7 +2603,7 @@ def field_line_integrate(
         Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for ode integration
-    maxstep : int
+    max_steps : int
         maximum number of steps between different phis
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
@@ -2671,6 +2672,12 @@ def field_line_integrate(
         "discrete_terminating_event",
         DiscreteTerminatingEvent(default_terminating_event_fxn),
     )
+    # Euler method does not support adavtive step size controller
+    kwargs["stepsize_controller"] = (
+        ConstantStepSize()
+        if solver.__class__.__name__ == "Euler"
+        else kwargs["stepsize_controller"]
+    )
 
     term = ODETerm(odefun)
     saveat = SaveAt(ts=phis)
@@ -2682,7 +2689,7 @@ def field_line_integrate(
         t0=phis[0],
         t1=phis[-1],
         saveat=saveat,
-        max_steps=maxstep * len(phis),
+        max_steps=max_steps * len(phis),
         dt0=min_step_size,
         **kwargs,
     ).ys

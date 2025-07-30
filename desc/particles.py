@@ -375,7 +375,7 @@ class AbstractParticleInitializer(IOAble, ABC):
         pass
 
     def _return_particles(self, x, v, vpar, model, field):
-        """Return the particles in common a format.
+        """Return the particles in a common format.
 
         Parameters
         ----------

@@ -869,6 +869,7 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
 
 
 def _upsample(x, source_grid, grid):
+    errorif(True, msg="https://github.com/jax-ml/jax/issues/29325")
     return irfft2(
         rfft2(
             source_grid.meshgrid_reshape(x, "rtz")[0],

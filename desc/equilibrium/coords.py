@@ -1,10 +1,11 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
 import functools
+from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, root, root_scalar, vmap
+from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -398,7 +399,6 @@ def _map_PEST_coordinates(
     return out
 
 
-# TODO(#568): decide later whether to assume given phi instead of zeta.
 def _map_clebsch_coordinates(
     coords,
     iota,
@@ -501,6 +501,132 @@ def _map_clebsch_coordinates(
     if full_output:
         return out, (res, niter)
     return out
+
+
+def _L_partial_sum(L, L_lmn):
+    """Convert FourierZernikeBasis to set of Fourier series.
+
+    TODO(#1243) Do proper partial summation once the DESC
+    DESC basis are improved to store the padded tensor product basis.
+    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+
+    Parameters
+    ----------
+    L : Transform
+        FourierZernikeBasis
+    L_lmn : jnp.ndarray
+        FourierZernikeBasis basis coefficients.
+
+    Returns
+    -------
+    L_m, modes
+        Spectral coefficients and modes.
+
+    """
+    grid = L.grid
+    errorif(grid.sym, NotImplementedError, msg="See note in docstring.")
+    L_m = (
+        rfft(grid.meshgrid_reshape(L.transform(L_lmn), "rzt"), norm="forward")
+        .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
+        .divide(2)
+        * 2
+    )
+    return L_m, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
+
+
+def _map_clebsch_coordinates_partial_sum(
+    rho,
+    alpha,
+    zeta,
+    iota,
+    L_lmn,
+    L,
+    guess=None,
+    period=np.inf,
+    tol=1e-6,
+    maxiter=30,
+    **kwargs,
+):
+    """Find θ for given Clebsch field line poloidal label α.
+
+    Parameters
+    ----------
+    rho : ndarray
+        Shape (num rho, )
+    alpha : ndarray
+        Shape (num alpha, )
+    zeta : ndarray
+        Shape (num zeta, )
+    iota : ndarray
+        Shape (num rho, ).
+        Rotational transform on each node.
+    L_lmn : jnp.ndarray
+        Spectral coefficients for lambda.
+    L : Transform
+        Transform for lambda built on coordinates [ρ, θ, ζ].
+    guess : jnp.ndarray
+        Shape (num rho, num alpha, num zeta).
+        Optional initial guess for the computational coordinates.
+    period : float
+        Assumed periodicity for α.
+        Use ``np.inf`` to denote no periodicity.
+    tol : float
+        Stopping tolerance.
+    maxiter : int
+        Maximum number of Newton iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
+        ``alpha``.
+
+    Returns
+    -------
+    theta : ndarray
+        Shape (num rho, num alpha, num zeta).
+        DESC computational coordinates θ at given input meshgrid.
+    info : tuple
+        2 element tuple containing residuals and number of iterations for each point.
+        Only returned if ``full_output`` is True.
+
+    """
+    # noqa: D202
+
+    # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
+    def rootfun(theta, alpha, zeta, iota, L_m):
+        assert L_m.ndim == 1
+        lmbda = (jnp.exp(1j * modes * theta) * L_m).real.sum()
+        alpha_k = theta + lmbda - iota * zeta
+        return _fixup_residual(alpha_k - alpha, period)
+
+    def jacfun(theta, alpha, zeta, iota, L_m):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
+        assert L_m.ndim == 1
+        lmbda_t = ((1j * jnp.exp(1j * modes * theta) * L_m).real * modes).sum()
+        return 1 + lmbda_t
+
+    def fixup(x, *args):
+        return _periodic(x, period)
+
+    @partial(jnp.vectorize, signature="(),(),(),(),(m)->()")
+    def vecroot(theta0, alpha, zeta, iota, L_m):
+        return root_scalar(
+            rootfun,
+            theta0,
+            jac=jacfun,
+            args=(alpha, zeta, iota, L_m),
+            fixup=fixup,
+            tol=tol,
+            maxiter=maxiter,
+            full_output=False,
+            **kwargs,
+        )
+
+    alpha = alpha[..., jnp.newaxis]
+    iota = iota[:, jnp.newaxis, jnp.newaxis]
+    if guess is None:
+        # Assume λ=0 for default initial guess.
+        guess = alpha + iota * zeta
+    L_m, modes = _L_partial_sum(L, L_lmn)
+    return vecroot(guess, alpha, zeta, iota, L_m[:, jnp.newaxis])
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

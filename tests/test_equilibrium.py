@@ -9,7 +9,12 @@ from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import (
+    _map_clebsch_coordinates,
+    _map_clebsch_coordinates_partial_sum,
+)
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
@@ -79,6 +84,33 @@ def test_map_coordinates():
         maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_map_coordinates_2():
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    eq = get("NCSX")
+    assert eq.NFP > 1
+    rho = np.linspace(0, 1, 4)
+    alpha = np.linspace(0, 2 * np.pi, 5)
+    # TODO:
+    # This fails if I switch the order of np.e and np.pi
+    # to my knowledge that shouldn't matter for this...
+    zeta = np.array([0, np.e, np.pi])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
+
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    out = _map_clebsch_coordinates(grid.nodes, grid.expand(iota), eq.L_lmn, eq.L_basis)
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", UserWarning)
+        L = get_transforms("lambda", eq, LinearGrid(rho=rho, M=eq.M_grid, zeta=zeta))[
+            "L"
+        ]
+    assert L.basis.NFP == eq.NFP
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates_partial_sum(rho, alpha, zeta, iota, eq.L_lmn, L),
+        grid.meshgrid_reshape(out[:, 1], "raz"),
+    )
 
 
 @pytest.mark.unit

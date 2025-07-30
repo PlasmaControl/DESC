@@ -6,6 +6,7 @@ from orthax.legendre import leggauss
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.integrals._interp_utils import cheb_pts
 from desc.utils import setdefault
 
 from ..integrals import Bounce2D
@@ -28,6 +29,12 @@ _bounce_overwrite = {
         to retain the default for that.
         """
 }
+
+
+def _L_transform(eq, Y, rho):
+    zeta = cheb_pts(Y, (0 * 2 * np.pi), False)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, zeta=zeta)
+    return get_transforms("lambda", eq, grid)["L"]
 
 
 class EffectiveRipple(_Objective):
@@ -210,11 +217,9 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
+        rho = self._grid.compress(self._grid.nodes[:, 0])
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X,
-            self._Y,
-            self._grid.compress(self._grid.nodes[:, 0]),
-            domain=(0, 2 * np.pi),
+            self._X, self._Y, rho, domain=(0, 2 * np.pi)
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))

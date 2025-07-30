@@ -4245,8 +4245,21 @@ def plot_gammac(
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
         Default: 16
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
-        Arguments to the Bounce2D class and figure object
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``: int, hyperparameters for bounce integration. See ``Bounce2D``
 
     Returns
     -------
@@ -4254,6 +4267,8 @@ def plot_gammac(
         The figure object containing the plot
     ax : matplotlib.axes.Axes
         The axes object for further customization
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -4342,13 +4357,18 @@ def plot_gammac(
     cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
     cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
 
-    ax = plt.gca()
     ax.tick_params(axis="x", labelsize=22)
     ax.tick_params(axis="y", labelsize=22)
 
     # Add labels
-    plt.xlabel(r"$1/\lambda (T)$", fontsize=24)
-    plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
-    plt.title(r"$\gamma_c$", fontsize=26)
-
+    ax.set_xlabel(r"$1/\lambda (T)$", fontsize=24)
+    ax.set_ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+    ax.set_title(r"$\gamma_c$", fontsize=26)
+    if return_data:
+        data = {"inv_pitch": inv_pitch,
+                "alpha": alphas,
+                "gammac": data_full[0],
+                }
+        return fig, ax, data
+               
     return fig, ax

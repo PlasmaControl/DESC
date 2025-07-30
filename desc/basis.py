@@ -55,6 +55,8 @@ class _Basis(IOAble, ABC):
             self._inverse_N_idx,
             self._unique_LM_idx,
             self._inverse_LM_idx,
+            self._unique_MN_idx,
+            self._inverse_MN_idx,
         ) = self._find_unique_inverse_modes()
 
     def _set_up(self):
@@ -79,6 +81,8 @@ class _Basis(IOAble, ABC):
             self._inverse_N_idx,
             self._unique_LM_idx,
             self._inverse_LM_idx,
+            self._unique_MN_idx,
+            self._inverse_MN_idx,
         ) = self._find_unique_inverse_modes()
 
     def _enforce_symmetry(self):
@@ -125,6 +129,9 @@ class _Basis(IOAble, ABC):
         __, unique_LM_idx, inverse_LM_idx = np.unique(
             self.modes[:, :2], axis=0, return_index=True, return_inverse=True
         )
+        __, unique_MN_idx, inverse_MN_idx = np.unique(
+            self.modes[:, 1:], axis=0, return_index=True, return_inverse=True
+        )
 
         return (
             unique_L_idx,
@@ -135,6 +142,8 @@ class _Basis(IOAble, ABC):
             inverse_N_idx,
             unique_LM_idx,
             inverse_LM_idx,
+            unique_MN_idx,
+            inverse_MN_idx,
         )
 
     def _sort_modes(self):
@@ -188,7 +197,9 @@ class _Basis(IOAble, ABC):
         """ndarray: Mode numbers for the basis."""
 
     @abstractmethod
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -199,6 +210,10 @@ class _Basis(IOAble, ABC):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -287,6 +302,11 @@ class _Basis(IOAble, ABC):
         return self._unique_LM_idx
 
     @property
+    def unique_MN_idx(self):
+        """ndarray: Indices of unique poloidal/toroidal mode pairs."""
+        return self._unique_MN_idx
+
+    @property
     def inverse_L_idx(self):
         """ndarray: Indices of unique_L_idx that recover the radial modes."""
         return self._inverse_L_idx
@@ -305,6 +325,11 @@ class _Basis(IOAble, ABC):
     def inverse_LM_idx(self):
         """ndarray: Indices of unique_LM_idx that recover the LM mode pairs."""
         return self._inverse_LM_idx
+
+    @property
+    def inverse_MN_idx(self):
+        """ndarray: Indices of unique_MN_idx that recover the MN mode pairs."""
+        return self._inverse_MN_idx
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -367,7 +392,9 @@ class PowerSeries(_Basis):
         z = np.zeros_like(l)
         return np.array([l, z, z]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -378,6 +405,10 @@ class PowerSeries(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -407,9 +438,11 @@ class PowerSeries(_Basis):
         r = grid.nodes[ridx, 0]
         l = modes[lidx, 0]
 
-        radial = powers(r, l, dr=derivatives[0])
-        radial = radial[routidx, :][:, loutidx]
-
+        if "r" in partial:
+            radial = powers(r, l, dr=derivatives[0])
+            radial = radial[routidx, :][:, loutidx]
+        else:
+            radial = jnp.ones((routidx.size, loutidx.size))
         return radial
 
     def change_resolution(self, L):
@@ -480,7 +513,9 @@ class FourierSeries(_Basis):
         z = np.zeros_like(n)
         return np.array([z, z, n]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -491,6 +526,10 @@ class FourierSeries(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -523,9 +562,11 @@ class FourierSeries(_Basis):
         z = grid.nodes[zidx, 2]
         n = modes[nidx, 2]
 
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-        toroidal = toroidal[zoutidx, :][:, noutidx]
-
+        if "z" in partial:
+            toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+            toroidal = toroidal[zoutidx, :][:, noutidx]
+        else:
+            toroidal = jnp.ones((zoutidx.size, noutidx.size))
         return toroidal
 
     def change_resolution(self, N, NFP=None, sym=None):
@@ -608,7 +649,9 @@ class DoubleFourierSeries(_Basis):
         z = np.zeros_like(m)
         return np.array([z, m, n]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -619,6 +662,10 @@ class DoubleFourierSeries(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -666,11 +713,17 @@ class DoubleFourierSeries(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-        poloidal = poloidal[toutidx][:, moutidx]
-        toroidal = toroidal[zoutidx][:, noutidx]
+        if "t" in partial:
+            poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+            poloidal = poloidal[toutidx][:, moutidx]
+        else:
+            poloidal = jnp.ones((toutidx.size, moutidx.size))
 
+        if "z" in partial:
+            toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+            toroidal = toroidal[zoutidx][:, noutidx]
+        else:
+            toroidal = jnp.ones((zoutidx.size, noutidx.size))
         return poloidal * toroidal
 
     def change_resolution(self, M, N, NFP=None, sym=None):
@@ -735,7 +788,7 @@ class ZernikePolynomial(_Basis):
 
     """
 
-    _fft_poloidal = False
+    _fft_poloidal = True
     _fft_toroidal = True
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
@@ -824,7 +877,9 @@ class ZernikePolynomial(_Basis):
 
         return np.hstack([pol, tor])
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -835,6 +890,10 @@ class ZernikePolynomial(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -878,10 +937,18 @@ class ZernikePolynomial(_Basis):
         lm = lm[lmidx]
         m = m[midx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        radial = radial[routidx][:, lmoutidx]
-        poloidal = poloidal[toutidx][:, moutidx]
+        if "r" in partial:
+            radial = zernike_radial(
+                r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0]
+            )
+            radial = radial[routidx][:, lmoutidx]
+        else:
+            radial = jnp.ones((routidx.size, lmoutidx.size))
+        if "t" in partial:
+            poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+            poloidal = poloidal[toutidx][:, moutidx]
+        else:
+            poloidal = jnp.ones((toutidx.size, moutidx.size))
 
         return radial * poloidal
 
@@ -977,7 +1044,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
         n = n.ravel()
         return np.array([l, m, n]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -988,6 +1057,10 @@ class ChebyshevDoubleFourierBasis(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -1044,13 +1117,21 @@ class ChebyshevDoubleFourierBasis(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-
-        radial = radial[routidx][:, loutidx]
-        poloidal = poloidal[toutidx][:, moutidx]
-        toroidal = toroidal[zoutidx][:, noutidx]
+        if "r" in partial:
+            radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+            radial = radial[routidx][:, loutidx]
+        else:
+            radial = jnp.ones((routidx.size, loutidx.size))
+        if "t" in partial:
+            poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+            poloidal = poloidal[toutidx][:, moutidx]
+        else:
+            poloidal = jnp.ones((toutidx.size, moutidx.size))
+        if "z" in partial:
+            toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+            toroidal = toroidal[zoutidx][:, noutidx]
+        else:
+            toroidal = jnp.ones((zoutidx.size, noutidx.size))
 
         return radial * poloidal * toroidal
 
@@ -1131,7 +1212,7 @@ class FourierZernikeBasis(_Basis):
 
     """
 
-    _fft_poloidal = False
+    _fft_poloidal = True
     _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
@@ -1225,7 +1306,9 @@ class FourierZernikeBasis(_Basis):
         ).T
         return np.unique(np.hstack([pol, tor]), axis=0)
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -1236,6 +1319,10 @@ class FourierZernikeBasis(_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -1287,13 +1374,23 @@ class FourierZernikeBasis(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
-
-        radial = radial[routidx][:, lmoutidx]
-        poloidal = poloidal[toutidx][:, moutidx]
-        toroidal = toroidal[zoutidx][:, noutidx]
+        if "r" in partial:
+            radial = zernike_radial(
+                r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0]
+            )
+            radial = radial[routidx][:, lmoutidx]
+        else:
+            radial = jnp.ones((routidx.size, lmoutidx.size))
+        if "t" in partial:
+            poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
+            poloidal = poloidal[toutidx][:, moutidx]
+        else:
+            poloidal = jnp.ones((toutidx.size, moutidx.size))
+        if "z" in partial:
+            toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
+            toroidal = toroidal[zoutidx][:, noutidx]
+        else:
+            toroidal = jnp.ones((zoutidx.size, noutidx.size))
 
         return radial * poloidal * toroidal
 
@@ -1380,7 +1477,9 @@ class ChebyshevPolynomial(_Basis):
         z = np.zeros_like(l)
         return np.array([l, z, z]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, grid, derivatives=np.array([0, 0, 0]), modes=None, partial="rtz"
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -1394,6 +1493,10 @@ class ChebyshevPolynomial(_Basis):
         unique : bool, optional
             whether to reduce workload by only calculating for unique values of nodes,
             modes can be faster, but doesn't work with jit or autodiff
+        partial : str
+            Which coordinates to evaluate, for multivariate basis. eg, ``partial="r"``
+            does a partial evaluation where only the radial coordinate is evaluated,
+            with other coordinates held fixed.
 
         Returns
         -------
@@ -1401,6 +1504,7 @@ class ChebyshevPolynomial(_Basis):
             basis functions evaluated at nodes
 
         """
+        assert "r" in partial, "partial evaluation for 1d basis is not supported"
         if not isinstance(grid, _Grid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:

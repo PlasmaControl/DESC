@@ -307,7 +307,6 @@ def legendre_D1(N: int) -> jnp.ndarray:
     return D
 
 
-
 def create_lele_D1_6_matrix(n, h=1.0):
     """
     Create 6th-order Lele compact approximation matrix for first derivative.
@@ -397,3 +396,49 @@ def apply_compact_derivative(A, B, f):
     b = B @ f
     df = jnp.linalg.solve(A, b)
     return df
+
+
+@partial(jit, static_argnums=(0, 1))
+def D1_FD_4(n: int, return_weights=False):
+    """
+    4th‑order SBP finite‑difference D1 with diagonal norm on [-1, 1].
+
+    Strand (1994) coefficients: interior 4‑point stencil, 2nd‑order
+    one‑sided closures at i = 0,1 and i = n-2,n-1.
+
+    Parameters
+    ----------
+    n : int      ( n ≥ 5 )
+    return_weights : bool
+        Also return the diagonal norm W if True.
+
+    Returns
+    -------
+    D : (n, n) jax.Array
+    W : (n,)   jax.Array   (if return_weights)
+    """
+    if n < 5:
+        raise ValueError("n ≥ 5 required for 4th‑order SBP")
+
+    h = 1.0 / (n - 1)  # uniform spacing on [0,1]
+
+    w = jnp.ones((n,)) * h
+    w = w.at[[0, 1, -2, -1]].set(jnp.array([17, 59, 59, 17]) * h / 48)
+
+    D = jnp.zeros((n, n))
+
+    # interior 4‑point central stencil
+    coeff_int = jnp.array([1, -8, 0, 8, -1]) / (12.0 * h)
+    rows = jnp.arange(2, n - 2)[:, None]
+    col_offsets = jnp.arange(-2, 3)
+    D = D.at[rows, (rows + col_offsets) % n].set(coeff_int)
+
+    # left boundary closures (rows 0,1)  – Strand table 3
+    D = D.at[0, :5].set(jnp.array([-24, 59, -36, 9, -1]) / (12.0 * h))
+    D = D.at[1, :5].set(jnp.array([-1, -10, 18, -6, 1]) / (12.0 * h))
+
+    # right boundary closures (rows n-2,n-1) – symmetry
+    D = D.at[-2, -5:].set(-jnp.array([1, -6, 18, -10, -1]) / (12.0 * h))
+    D = D.at[-1, -5:].set(-jnp.array([-1, 9, -36, 59, -24]) / (12.0 * h))
+
+    return D, w

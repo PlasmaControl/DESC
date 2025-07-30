@@ -4245,8 +4245,21 @@ def plot_gammac(
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
         Default: 16
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
-        Arguments to the Bounce2D class and figure object
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``: int, hyperparameters for bounce integration. See ``Bounce2D``
 
     Returns
     -------

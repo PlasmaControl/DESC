@@ -894,17 +894,21 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
     # scale_vector1 = jnp.ones_like(x0) * (2 * jnp.pi-1e-3)
+    scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
 
     scale_x1 = scale_vector1[:, None]
 
     # Get differentiation matrices
     # RG: setting the gradient to 0 to save some memory?
-    D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
+    # D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
     # D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
+    D_rho0, W = D1_FD_4(n_rho_max)
+    D_rho0 = D_rho0 * scale_x1
     D_theta0 = fourier_diffmat(n_theta_max)
 
-    w0 = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
+    # w0 = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
     # w0 = jnp.diag((2*jnp.pi-1e-3)/n_rho_max * jnp.ones_like(x0))
+    w0 = jnp.diag(1 / scale_vector1 * W)
     w1 = jnp.diag(legendre_lobatto_weights(n_rho_max - 1))
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))

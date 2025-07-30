@@ -398,47 +398,58 @@ def apply_compact_derivative(A, B, f):
     return df
 
 
-@partial(jit, static_argnums=(0, 1))
-def D1_FD_4(n: int, return_weights=False):
+@partial(jit, static_argnums=(0,))
+def D1_FD_4(n: int, *, domain: tuple[float, float] = (0.0, 1.0)):
     """
-    4th‑order SBP finite‑difference D1 with diagonal norm on [-1, 1].
-
-    Strand (1994) coefficients: interior 4‑point stencil, 2nd‑order
-    one‑sided closures at i = 0,1 and i = n-2,n-1.
+    CD‑4 interior + 4‑point 4th‑order one‑sided closures (Carpenter‑Gottlieb).
+    Satisfies   Dᵀ W + W D = diag([-1,0,…,0,1])   with diagonal norm W.
 
     Parameters
     ----------
-    n : int      ( n ≥ 5 )
-    return_weights : bool
-        Also return the diagonal norm W if True.
+    n : int      (n ≥ 6)
+    domain : (a,b), optional
+        Physical interval.  Default = (-1,1).
 
     Returns
     -------
-    D : (n, n) jax.Array
-    W : (n,)   jax.Array   (if return_weights)
+    D : (n,n) jax.Array     derivative matrix
+    W : (n,)  jax.Array     diagonal SBP weights
     """
-    if n < 5:
-        raise ValueError("n ≥ 5 required for 4th‑order SBP")
+    if n < 6:
+        raise ValueError("n must be at least 6 for 4‑point closures")
 
-    h = 1.0 / (n - 1)  # uniform spacing on [0,1]
+    a, b = domain
+    h = (b - a) / (n - 1)
 
-    w = jnp.ones((n,)) * h
-    w = w.at[[0, 1, -2, -1]].set(jnp.array([17, 59, 59, 17]) * h / 48)
+    # diagonal weights  (CD 4‑4)
+    W = jnp.full((n,), h)
+    W = W.at[jnp.array([0, 1, n - 2, n - 1])].set(jnp.array([31, 49, 49, 31]) * h / 72)
 
     D = jnp.zeros((n, n))
 
-    # interior 4‑point central stencil
-    coeff_int = jnp.array([1, -8, 0, 8, -1]) / (12.0 * h)
-    rows = jnp.arange(2, n - 2)[:, None]
-    col_offsets = jnp.arange(-2, 3)
-    D = D.at[rows, (rows + col_offsets) % n].set(coeff_int)
+    # ---------- interior rows: centred 5‑point ----------------------
+    rows_int = jnp.arange(2, n - 2)[:, None]  # shape (m,1)
+    cols_int = rows_int + jnp.arange(-2, 3)  # shape (m,5)
+    coeff_int = jnp.array([1, -8, 0, 8, -1]) / (12.0 * h)  # (5,)
+    D = D.at[rows_int, cols_int].set(
+        jnp.broadcast_to(coeff_int, rows_int.shape[:-1] + (5,))
+    )
 
-    # left boundary closures (rows 0,1)  – Strand table 3
-    D = D.at[0, :5].set(jnp.array([-24, 59, -36, 9, -1]) / (12.0 * h))
-    D = D.at[1, :5].set(jnp.array([-1, -10, 18, -6, 1]) / (12.0 * h))
+    # ---------- left boundary closures (rows 0 & 1) ----------------
+    left_rows = jnp.array([0, 1])[:, None]  # (2,1)
+    left_cols = jnp.arange(5)[None, :]  # (1,5)
+    left_coef = jnp.array(
+        [
+            [-25, 48, -36, 16, -3],
+            [-3, -10, 18, -6, 1],
+        ]
+    ) / (12.0 * h)
+    D = D.at[left_rows, left_cols].set(left_coef)
 
-    # right boundary closures (rows n-2,n-1) – symmetry
-    D = D.at[-2, -5:].set(-jnp.array([1, -6, 18, -10, -1]) / (12.0 * h))
-    D = D.at[-1, -5:].set(-jnp.array([-1, 9, -36, 59, -24]) / (12.0 * h))
+    # ---------- right boundary closures  (rows n-2 & n-1) ----------
+    right_rows = jnp.array([n - 2, n - 1])[:, None]  # (2,1)
+    right_cols = jnp.arange(n - 5, n)[None, :]  # (1,5)
+    right_coef = -left_coef[:, ::-1]  # antisymmetric
+    D = D.at[right_rows, right_cols].set(right_coef)
 
-    return D, w
+    return D, W

@@ -88,7 +88,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     def args(self):  # noqa : F811
         """Additional arguments needed by the model.
 
-        Eg, "m", "q", "mu", for mass, charge, magnetic moment.
+        Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
         """
         pass
 
@@ -115,7 +115,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B³) ⋅ (v∥² + 1/2 v⊥²) ( 𝐁 × ∇B )
+    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − (v⊥² / 2B) ( 𝐛 ⋅ ∇B )
 
@@ -205,7 +205,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         This function is written for vmap, so it expects x to be a coordinate of a
         single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
-        m, q and mu (v⊥²/|B|) being scalars.
+        m, q and mu (mv⊥²/2|B|) being scalars.
         """
         rho, theta, zeta, vpar = x
         grid = Grid(
@@ -230,14 +230,14 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar * data["b"] + (
-            (m / q / data["|B|"] ** 2)
-            * ((mu * data["|B|"]) + vpar**2)
+            (m * vpar**2 / q / data["|B|"] ** 2)
+            * ((mu * data["|B|"] / m) + vpar**2)
             * cross(data["b"], data["grad(|B|)"])
         )
         rhodot = dot(Rdot, data["e^rho"])
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
-        vpardot = -mu * dot(data["b"], data["grad(|B|)"])
+        vpardot = -mu / m * dot(data["b"], data["grad(|B|)"])
         dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
@@ -264,11 +264,12 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         modB = jnp.linalg.norm(B, axis=-1)
         b = B / modB
         # factor of R from grad in cylindrical coordinates
-        grad_Bphi = safediv(grad_B[1], coord[0])
-        grad_B = grad_B.at[1].set(grad_Bphi)
-        Rdot = vpar * b + (m / q / modB**2 * (mu * modB + vpar**2)) * cross(b, grad_B)
+        grad_B = grad_B.at[1].set(safediv(grad_B[1], coord[0]))
+        Rdot = vpar * b + (
+            m * vpar**2 / q / modB**2 * (mu * modB / m + vpar**2)
+        ) * cross(b, grad_B)
 
-        vpardot = jnp.atleast_2d(-mu * dot(b, grad_B))
+        vpardot = jnp.atleast_2d(-mu / m * dot(b, grad_B))
         dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
         return dxdt.squeeze()
 
@@ -278,7 +279,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B³) ⋅ (v∥² + 1/2 v⊥²) ( 𝐁 × ∇B )
+    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − ((v² - v∥²) / 2B) ( 𝐛 ⋅ ∇B )
 
@@ -410,8 +411,11 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         vc = slowing_down_critical_velocity(data["Te"], self.m_eff)
 
         # derivative of the guiding center position in R, phi, Z coordinates
+        # TODO: Is this correct? Check
         Rdot = vpar * data["b"] + (
-            (m / q / data["|B|"] ** 2) * (v**2) * cross(data["b"], data["grad(|B|)"])
+            (m * vpar**2 / q / data["|B|"] ** 2)
+            * (vpar**2 + 0.5 * (v**2 - vpar**2))
+            * cross(data["b"], data["grad(|B|)"])
         )
         rhodot = dot(Rdot, data["e^rho"])
         thetadot = dot(Rdot, data["e^theta"])
@@ -425,7 +429,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
 
 class AbstractParticleInitializer(IOAble, ABC):
-    """ABC for initial distribution of particles for tracing.
+    """Abstract base class for initial distribution of particles for tracing.
 
     Subclasses should implement the `init_particles` method.
     """
@@ -473,7 +477,7 @@ class AbstractParticleInitializer(IOAble, ABC):
             the model parallel velocity and total velocity.
         args : tuple
             Additional arguments needed by the model, such as mass, charge, and
-            magnetic moment (v⊥²/|B|) of each particle.
+            magnetic moment (mv⊥²/2|B|) of each particle.
         """
         vs = []
         for vcoord in model.vcoords:
@@ -494,13 +498,14 @@ class AbstractParticleInitializer(IOAble, ABC):
             elif arg == "mu":
                 vperp2 = v**2 - vpar**2
                 modB = _compute_modB(x, field)
-                args += [vperp2 / modB]
+                args += [self.m * vperp2 / (2 * modB)]
 
         return jnp.hstack([x, v0]), tuple(args)
 
 
 def _compute_modB(x, field, **kwargs):
     if isinstance(field, Equilibrium):
+        # if Equilibrium doesn't have an iota profile, this will give bad results
         grid = Grid(
             x.T,
             spacing=jnp.zeros_like(x),

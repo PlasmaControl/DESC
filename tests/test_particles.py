@@ -4,12 +4,13 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
-from desc.magnetic_fields import VerticalMagneticField
+from desc.magnetic_fields import MagneticFieldFromUser, VerticalMagneticField
 from desc.particles import (
     ManualParticleInitializerLab,
     VacuumGuidingCenterTrajectory,
     trace_particles,
 )
+from desc.utils import rpz2xyz, xyz2rpz_vec
 
 
 @pytest.mark.unit
@@ -68,3 +69,55 @@ def test_constant_field_cases():
     assert np.allclose(p2r, R0[1], atol=1e-12)
     assert np.allclose(p1z, 0.0, atol=1e-12)
     assert np.allclose(p2z, 0.0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_mirror_force_drift():
+    """Test particle tracing with a magnetic field that has a mirror force."""
+
+    def custom_B(coords, params):
+        """Custom magnetic field function.
+
+        B_Z = B0 + dB * Z
+        B_R = B_phi = 0
+        """
+        xyz = rpz2xyz(coords)
+        _, _, Z = xyz.T
+        B0, dB = params
+        B = jnp.zeros_like(coords)
+        B = B.at[:, 2].set(B0 + dB * Z)
+        B = xyz2rpz_vec(B, phi=coords[:, 1])
+        return B
+
+    B0 = 1.0  # Constant magnetic field strength
+    dB = 0.1  # Gradient of the magnetic field
+    E = 1e8  # Particle energy
+    xi0 = 0.9  # Initial pitch angle
+    R0 = np.array([1.0])
+
+    field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=xi0, E=E)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    ts = np.linspace(0, 1e-6, 10)
+    x0, args = particles.init_particles(model=model, field=field)
+    ms, qs, mus = args[:3]
+    rpz, vpar = trace_particles(
+        field=field,
+        y0=x0,
+        ms=ms,
+        qs=qs,
+        mus=mus,
+        model=model,
+        ts=ts,
+    )
+    # The time derivative of drift velocity due to the mirror force is:
+    # vpardot = - (mu / m) (𝐛 ⋅ ∇B)   # noqa : E800
+    # For the given field, this is -dB * mu / m. So, the exact Z position
+    # should be: z(t) = z0 + v0 * t - (dB * mu / m) * t^2 / 2
+    # where v0 is the initial parallel velocity and z0 is the initial Z position.
+    z = x0[0, 2] + x0[0, 3] * ts - dB * mus[0] / ms[0] * ts**2 / 2
+    # The parallel velocity should be vpar(t) = v0 - (dB * mu / m) * t
+    vpar_exact = x0[0, 3] - dB * mus[0] / ms[0] * ts
+
+    assert np.allclose(rpz[0, :, 2], z, atol=1e-5)
+    assert np.allclose(vpar[0, :, 0], vpar_exact, atol=1e-5)

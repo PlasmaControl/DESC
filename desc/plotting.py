@@ -4355,7 +4355,6 @@ def plot_gammac(
     cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
     cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
 
-    ax = plt.gca()
     ax.tick_params(axis="x", labelsize=22)
     ax.tick_params(axis="y", labelsize=22)
 

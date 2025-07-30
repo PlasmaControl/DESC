@@ -2672,7 +2672,7 @@ def field_line_integrate(
         "discrete_terminating_event",
         DiscreteTerminatingEvent(default_terminating_event_fxn),
     )
-    # Euler method does not support adavtive step size controller
+    # Euler method does not support adaptive step size controller
     kwargs["stepsize_controller"] = (
         ConstantStepSize()
         if solver.__class__.__name__ == "Euler"

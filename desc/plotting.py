@@ -4285,6 +4285,7 @@ def plot_gammac(
     Y = kwargs.pop("Y", 32)
     Y_B = kwargs.pop("Y_B", 64)
     num_quad = kwargs.pop("num_quad", 24)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
     num_transit = kwargs.pop("num_transit", 1)
 
     figsize = kwargs.pop("figsize", (6, 5))
@@ -4307,6 +4308,7 @@ def plot_gammac(
         num_transit=num_transit,
         num_quad=num_quad,
         num_pitch=num_pitch,
+        pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
     data_full = grid.compress(data0["gamma_c"])

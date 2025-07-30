@@ -1001,9 +1001,11 @@ class Equilibrium(IOAble, Optimizable):
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1dr = calc1dz = False
+                calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1dr = calc1dz = False
+                calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
         else:
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
@@ -1039,13 +1041,14 @@ class Equilibrium(IOAble, Optimizable):
                 )
                 warnif(
                     # if need more toroidal resolution
-                    "z" in req and grid.N < self.N_grid
+                    "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
                     and not (
                         override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
                     ),
                     ResolutionWarning,
-                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
+                    f"< {self._N_grid}*{self.NFP}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available

@@ -22,7 +22,7 @@ Bug Fixes
 - Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.
 - Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
 - Fixes bugs in ideal ballooning stability and Newcomb ballooning metrics where the computation mixed data between field lines.
-
+- Fixes bug in ``desc.geometry.curve.FourierRZCurve.from_values`` when numpy array is passed in for the ``coords`` argument.
 
 v0.14.2
 -------

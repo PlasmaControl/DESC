@@ -318,6 +318,8 @@ class _BIESTInterpolator(IOAble, ABC):
         "_shift_z",
     ]
 
+    _static_attrs = ["_q"]
+
     def __init__(self, eval_grid, source_grid, st, sz, q):
         check_posint(eval_grid.NFP)
         check_posint(source_grid.NFP)

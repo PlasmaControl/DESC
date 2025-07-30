@@ -871,35 +871,36 @@ def trace_particles(
     qs : array-like
         Particle charges, must be broadcastable to the shape of y0.
     mus : array-like
-        Particle magnetic moments, must be broadcastable to the shape of y0. For the
-        slowndown model, it won't be used, but must be provided for consistency.
-    initializer : AbstractParticleInitializer
-        Object to initialize particle distribution.
+        Particle magnetic moments (v⊥²/|B|), must be broadcastable to the shape of
+        y0. For the slowndown model, it won't be used, but must be provided for
+        consistency.
     ts : array-like
-        Strictly increasing array of times where output is desired.
-    mode : str
-        Trajectory model to integrate with. Available options are
+        Strictly increasing array of time values where output is desired.
+    model : AbstractTrajectoryModel
+        Trajectory model to integrate with.
     rtol, atol : float
         relative and absolute tolerances for ode integration
     max_steps : int
         maximum number of steps between different output times
     min_step_size: float
-        minimum step size (in t) that the integration can take. default is 1e-8
+        minimum step size (in t) that the integration can take. Defaults to 1e-8
     solver: diffrax.AbstractSolver
-        diffrax Solver object to use in integration,
-        defaults to Tsit5(), a RK45 explicit solver.
+        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
+        explicit solver.
     adjoint : diffrax.AbstractAdjoint
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
     bounds_R : tuple of (float,float), optional
         R bounds for particle tracing bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (0,np.inf)
+        box will be stopped, and NaN returned for points outside the box. When tracing
+        in flux coordinates, this corresponds to rho bounds and the upper value must
+        be 1. Defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for particle tracing bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (-np.inf,np.inf)
+        box will be stopped, and NaN returned for points outside the box. When tracing
+        in flux coordinates, this corresponds to zeta bounds.
+        Defaults to (-np.inf,np.inf).
     kwargs : dict, optional
         Additional keyword arguments to pass to the field computation, such as
             - source_grid: Grid

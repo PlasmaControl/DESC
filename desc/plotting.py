@@ -4362,5 +4362,11 @@ def plot_gammac(
     ax.set_xlabel(r"$1/\lambda (T)$", fontsize=24)
     ax.set_ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
     ax.set_title(r"$\gamma_c$", fontsize=26)
-
+    if return_data:
+        data = {"inv_pitch": inv_pitch,
+                "alpha": alphas,
+                "gammac": data_full[0],
+                }
+        return fig, ax, data
+               
     return fig, ax

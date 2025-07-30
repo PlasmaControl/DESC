@@ -113,12 +113,28 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
     """Guiding center trajectories in vacuum, conserving energy and mu.
 
+    Solves the following ODEs,
+
+    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B³) ⋅ (v∥² + 1/2 v⊥²) ( 𝐁 × ∇B )
+
+    dv∥/dt = − (v⊥² / 2B) ( 𝐛 ⋅ ∇B )
+
+    where 𝐁 is the magnetic field vector at position 𝐑, B is the magnitude of
+    the magnetic field and 𝐛 is the unit magnetic field 𝐁/B.
+
     Parameters
     ----------
     frame : {"lab", "flux"}
-        Which coordinate frame is used for tracing particles. Should correspond to the
-        source of the field. If tracing in an Equilibrium, set frame="flux". If tracing
-        in a CoilSet or MagneticField, choose "lab".
+        Which coordinate frame is used for tracing particles. 'lab' corresponds to
+        {R, phi, Z} coordinates, 'flux' corresponds to {rho, theta, zeta} coordinates.
+        Frame must be compatible with the source of the field, i.e. if tracing in an
+        Equilibrium, set frame="flux" or if tracing in a MagneticField, choose "lab".
+
+        Although particles can be traced in "lab" frame using an Equilibrium, it is
+        not recommended, since it requires coodinate mapping at each step of the
+        integration. Thus, it is not implemented. For that case, we recommend converting
+        the final output to "lab" frame after the integration is done using
+        Equilibrium.map_coordinates method.
     """
 
     def __init__(self, frame):
@@ -157,6 +173,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         args : tuple
             Additional arguments needed by model, (m, q, mu, eq_or_field, kwargs).
             kwargs will be passed to the field.compute_magnetic_field method.
+            mu is the v⊥²/|B|.
 
         Returns
         -------
@@ -188,7 +205,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         This function is written for vmap, so it expects x to be a coordinate of a
         single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
-        m, q and mu being scalars.
+        m, q and mu (v⊥²/|B|) being scalars.
         """
         rho, theta, zeta, vpar = x
         grid = Grid(
@@ -259,11 +276,60 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     """Guiding center trajectories with slowing down on electrons and main ions.
 
-    Works only in flux coordinates.
+    Solves the following ODEs,
+
+    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B³) ⋅ (v∥² + 1/2 v⊥²) ( 𝐁 × ∇B )
+
+    dv∥/dt = − ((v² - v∥²) / 2B) ( 𝐛 ⋅ ∇B )
+
+    dv/dt = - v / τₛ (1 + v_c³ / v³)
+
+    where 𝐁 is the magnetic field vector at position 𝐑, B is the magnitude of
+    the magnetic field, 𝐛 is the unit magnetic field 𝐁/B, τₛ is the Spitzer
+    ion–electron momentum exchange time and v_c is the critical velocity associated
+    with the critical energy at which the velocity reduction transitions from
+    nearly exponential (drag on electrons) to significantly steeper (drag on ions).
+    τₛ and v_c are defined as follows:
+
+          mᵢ (4πϵ₀)² 3mₑ¹ᐟ² Tₑ³ᐟ²
+    τₛ = ───────────────────────────
+          mₑ 4√(2π) nₑ Zᵢ² e⁴ lnΛ
+
+    v_c = [ (3√π / 4) (mₑ / mᵢ) ]¹ᐟ³ v_{Tₑ}
+
+    v_{Tₑ} = √(2 Tₑ / mₑ)
+
+    See ref [1] Eq. (1-4) for definitions, and other references for the details.
+
+    References
+    ----------
+    [1] McMillan M, Lazerson S A. "BEAMS3D neutral beam injection model"
+    Plasma Physics and Controlled Fusion (2014).
+    [2] Callen J D, "Fundamentals of Plasma Physics (Lecture Notes)" (Madison, WI:
+    University of Wisconsin Press) (2003)
+    [3] Fowler R H, Morris R N, Rome J A and Hanatani K, "Neutral beam injection
+    benchmark studies for stellarators/heliotrons", Nucl. Fusion 30 997–1010 (1990)
+    [4] Rosenbluth M N, MacDonald W M and Judd D L, "Fokker–Planck equation for an
+    inverse-square force", Phys.Rev. 107 1–6 (1957)
+
+    Works only in flux coordinates corresponding to {rho, theta, zeta}. Particle
+    tracing can be performed with an Equilibrium object, which must have electron
+    temperature Te and electron density ne defined.
+
+    Parameters
+    ----------
+    m_eff : float
+        Effective mass of the plasma main ions, in units of proton mass. Default is 2.5,
+        for a 50/50 DT plasma
+    Z_eff : float
+        Effective charge of the plasma main ions, in units of elementary charge.
+        Default is 1, for H/D/T plasmas.
     """
 
-    def __init__(self, frame="flux"):
+    def __init__(self, frame="flux", m_eff=2.5, Z_eff=1):
         assert frame == "flux"
+        self.Z_eff = Z_eff
+        self.m_eff = m_eff
 
     @property
     def frame(self):
@@ -305,6 +371,11 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         rho, theta, zeta, vpar, v = x
         m, q, _, eq, _ = args
 
+        assert (
+            eq.Te_l.size > 0
+        ), "Equilibrium must have electron temperature Te defined."
+        assert eq.ne_l.size > 0, "Equilibrium must have electron density ne defined."
+
         grid = Grid(
             jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
@@ -335,8 +406,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
         # neutral beam injection model." Plasma Physics and Controlled Fusion (2014)
-        tau_s = slowing_down_time(data["Te"], data["ne"])
-        vc = slowing_down_critical_velocity(data["Te"])
+        tau_s = slowing_down_time(data["Te"], data["ne"], self.m_eff, self.Z_eff)
+        vc = slowing_down_critical_velocity(data["Te"], self.m_eff)
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar * data["b"] + (
@@ -402,7 +473,7 @@ class AbstractParticleInitializer(IOAble, ABC):
             the model parallel velocity and total velocity.
         args : tuple
             Additional arguments needed by the model, such as mass, charge, and
-            magnetic moment of each particle.
+            magnetic moment (v⊥²/|B|) of each particle.
         """
         vs = []
         for vcoord in model.vcoords:
@@ -937,7 +1008,7 @@ def slowing_down_time(Te, ne, m_eff=2.5, Z_eff=1):
     lnlambda = coulomb_logarithm(ne, ne / Z_eff, Te, Te, m_eff, Z_eff)
 
     tau_s = (
-        (2 * mi / me)
+        (mi / me)
         * (4 * jnp.pi * epsilon_0) ** 2
         / (4 * jnp.sqrt(2 * jnp.pi))
         * (3 * me ** (1 / 2) * (Te * JOULE_PER_EV) ** (3 / 2))

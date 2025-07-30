@@ -4033,13 +4033,13 @@ def plot_particle_trajectories(
         Particle initializer to use for initializing the particles.
     ts : array-like
         Time values to trace the particle trajectories for.
-    end_position : bool
+    end_position : bool, optional
         If True, the last point in the trajectory is shown with a marker.
         Defaults to True.
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on.
-    return_data : bool
-        If True, return the data plotted as well as fig
+        Figure to plot on. Defaults to None, in which case a new figure is created.
+    return_data : bool, optional
+        If True, return the data plotted as well as fig, Defaults to False.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -4047,10 +4047,10 @@ def plot_particle_trajectories(
 
         Valid keyword arguments are:
 
-        * ``color``: color to use for field lines, default is black.
+        * ``color``: color to use for particle trajectories, default is black.
         * ``figsize``: tuple of length 2, the size of the figure in inches
-        * ``lw``: float, linewidth of plotted field lines
-        * ``ls``: str, linestyle of plotted field lines
+        * ``lw``: float, linewidth of plotted particle trajectories
+        * ``ls``: str, linestyle of plotted particle trajectories
         * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
           True by default.
         * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
@@ -4069,39 +4069,28 @@ def plot_particle_trajectories(
         Figure being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
-        Contains keys ``["X","Y","Z","R","phi"]``, each entry in the dict is a list
-        of length `R0.size` corresponding to the number of field lines, and each
-        element of that list is an array of size `phis.size` corresponding to the
-        coordinate values along that field line.
+        Contains keys ``["X","Y","Z","R"]``, each entry in the dict is a list
+        with length corresponding to the number of particles, and each
+        element of that list is an array of size `ts.size` corresponding to the
+        coordinate values along that particles trajectory.
 
     Examples
     --------
+    We will give couple of examples of how to plot particle trajectories, and trace
+    particles in general in DESC. First, we will trace particles using Equilibrium's
+    magnetic field.
     .. code-block:: python
 
         import desc
         from desc.plotting import plot_particle_trajectories
         from desc.particles import (
-            ManualParticleInitializerLab,
+            ManualParticleInitializerFlux,
             VacuumGuidingCenterTrajectory,
         )
 
-        # One can either use the Equilibrum or MagneticField object
-        # to plot the particle trajectories. Here we will use eq to
-        # get the initial position and plotting the LCFS. Particle tracing will
-        # use the field object.
         eq = desc.examples.get("precise_QA")
-        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        rhos = [0.7]
 
-        rhos = [0.5]
-
-        fig = plot_3d(eq, "|B|", alpha=0.5)
-        # For demo purposes, we show how to initialize particles
-        # in the lab frame using the flux coordinates as inputs.
-        # Initializer will perform the conversion from flux to lab coordinates
-        # using the equilibrium object.
-
-        # Note: Initializers return the cordinates in the frame specified by
-        # the trajectory model.
         initializer = ManualParticleInitializerFlux(
             rho0=rhos,
             theta0=0,
@@ -4110,13 +4099,47 @@ def plot_particle_trajectories(
             E = 1e-1,
             m = 4.0,
             q = 1.0,
-            eq=eq, # needed for flux->lab conversion
         )
-        # One can also use frame='flux', and pass eq to
-        # plot_particle_trajectories function
-        model = VacuumGuidingCenterTrajectory(frame="lab")
+        model = VacuumGuidingCenterTrajectory(frame="flux")
         ts=np.linspace(0, 1e-2, 1000)
 
+        # For visual purposes, we will plot the LCFS of the equilibrium
+        fig = plot_3d(eq, "|B|", alpha=0.5)
+        # Plot the particle trajectories
+        plot_particle_trajectories(
+            eq, model, initializer, ts=ts, fig=fig
+        )
+
+    One can also compare above particle trajectories with the field created by
+    a coilset, or any MagneticField subclass. As opposed to previous case, we need
+    to trace particle in lab coordinates. Since having the same initial points
+    will help for comparison, we will use same initializer and show how to use it with
+    model with frame set to "lab".
+
+    ...code-block:: python
+
+        # an example coilset for precise QA equilibrium. Note that it is not perfect
+        # and trajectories might not match exactly.
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+
+        # Initializer classes are named after their input format. But they return
+        # the initial particle coordinates in whatever the model's frame is. One
+        # needs to specify the equilibrium object for the conversion.
+        initializer = ManualParticleInitializerFlux(
+            rho0=rhos,
+            theta0=0,
+            zeta0=0,
+            xi0=0.7,
+            E = 1e-1,
+            m = 4.0,
+            q = 1.0,
+            eq = eq, # needed for flux -> lab coordinate transformation
+        )
+        model = VacuumGuidingCenterTrajectory(frame="lab")
+
+        # For visual purposes, we will plot the LCFS of the equilibrium
+        fig = plot_3d(eq, "|B|", alpha=0.5)
+        # Plot the particle trajectories
         plot_particle_trajectories(
             field, model, initializer, ts=ts, fig=fig
         )

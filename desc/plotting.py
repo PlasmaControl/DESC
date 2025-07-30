@@ -4259,7 +4259,8 @@ def plot_gammac(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``: int, hyperparameters for bounce integration. See ``Bounce2D``
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``: int,
+        hyperparameters for bounce integration. See ``Bounce2D``
 
     Returns
     -------
@@ -4365,10 +4366,11 @@ def plot_gammac(
     ax.set_ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
     ax.set_title(r"$\gamma_c$", fontsize=26)
     if return_data:
-        data = {"inv_pitch": inv_pitch,
-                "alpha": alphas,
-                "gammac": data_full[0],
-                }
+        data = {
+            "inv_pitch": inv_pitch,
+            "alpha": alphas,
+            "gammac": data_full[0],
+        }
         return fig, ax, data
-               
+
     return fig, ax

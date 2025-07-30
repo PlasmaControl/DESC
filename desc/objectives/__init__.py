@@ -2,21 +2,26 @@
 
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
+    Bxdl,
     CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
     CoilIntegratedCurvature,
     CoilLength,
+    CoilSetCurrentLengthField,
     CoilSetLinkingNumber,
+    CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
     LinkingCurrentConsistency,
+    MinCoilSetPointDistance,
     PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
     SurfaceQuadraticFlux,
     ToroidalFlux,
+    XPointDistanceBound,
 )
 from ._equilibrium import (
     CurrentDensity,

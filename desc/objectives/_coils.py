@@ -779,7 +779,7 @@ class XPointDistanceBound(_Objective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "Plasma-coil distance: "
+    _print_value_fmt = "Plasma-X Point distance: "
 
     def __init__(
         self,

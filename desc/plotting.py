@@ -4254,6 +4254,8 @@ def plot_gammac(
         The figure object containing the plot
     ax : matplotlib.axes.Axes
         The axes object for further customization
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------

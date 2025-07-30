@@ -271,6 +271,20 @@ _class_inheritance = {
         "desc.geometry.curve.FourierXYCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.coils.FourierPlanarFiniteBuildCoil": [
+        "desc.coils.AbstractFramedCoil",
+        "desc.coils.AbstractFiniteBuildCoil",
+        "desc.coils.FourierPlanarCoil",
+        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.FourierXYFiniteBuildCoil": [
+        "desc.coils.AbstractFramedCoil",
+        "desc.coils.AbstractFiniteBuildCoil",
+        "desc.coils.FourierXYCoil",
+        "desc.geometry.curve.FourierXYCurve",
+        "desc.geometry.core.Curve",
+    ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
@@ -316,7 +330,7 @@ def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
 
 
 def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over toroidal sections and needs full section to compute?."""
+    """Is name constant over toroidal surfaces and needs full surface to compute?."""
     return (
         data_index[p][name]["coordinates"] == "z"
         and data_index[p][name]["resolution_requirement"] == "rt"

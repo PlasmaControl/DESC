@@ -4359,8 +4359,8 @@ def plot_gammac(
     ax.tick_params(axis="y", labelsize=22)
 
     # Add labels
-    plt.xlabel(r"$1/\lambda (T)$", fontsize=24)
-    plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
-    plt.title(r"$\gamma_c$", fontsize=26)
+    ax.set_xlabel(r"$1/\lambda (T)$", fontsize=24)
+    ax.set_ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+    ax.set_title(r"$\gamma_c$", fontsize=26)
 
     return fig, ax

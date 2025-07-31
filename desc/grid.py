@@ -917,7 +917,7 @@ class Grid(_Grid):
         ----------
         nodes : list of ndarray
             Three arrays, one for each coordinate.
-            Sorted unique values of each coordinate.
+            Unique values of each coordinate sorted in increasing order.
         spacing : list of ndarray
             Three arrays, one for each coordinate.
             Weights for integration. Defaults to a midpoint rule.
@@ -1335,7 +1335,8 @@ class LinearGrid(_Grid):
             self._fft_toroidal = not endpoint
         elif zeta is not None:
             errorif(
-                np.any(zeta > zeta_period), msg="LinearGrid defined on 1 field period."
+                np.any(np.asarray(zeta) > zeta_period),
+                msg="LinearGrid defined on 1 field period.",
             )
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP

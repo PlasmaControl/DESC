@@ -21,6 +21,7 @@ from ._coils import (
     SurfaceCurrentRegularization,
     SurfaceQuadraticFlux,
     ToroidalFlux,
+    XPointDistanceBound,
 )
 from ._equilibrium import (
     CurrentDensity,

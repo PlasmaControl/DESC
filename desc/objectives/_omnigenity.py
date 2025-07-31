@@ -6,7 +6,7 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -823,7 +823,6 @@ class Omnigenity(_Objective):
             zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
-
         def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
             nodes = jnp.vstack(
                 (
@@ -854,6 +853,379 @@ class Omnigenity(_Objective):
             field_data["eta"]
         )
         return omnigenity_error * weights
+
+
+class PiecewiseOmnigenity(_Objective):
+    """Omnigenity error relative to a piecewise omnigenous field.
+
+    Errors are relative to a target field that is roughly omnigenous,
+    and are computed on a collocation grid in Boozer coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to be optimized to satisfy the Objective.
+    field : OmnigenousField
+        Omnigenous magnetic field to be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    eq_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at for equilibrium data.
+        Defaults to a linearly space grid on the rho=1 surface.
+        Must be a single flux surface without stellarator symmetry.
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    eq_fixed: bool, optional
+        Whether the Equilibrium `eq` is fixed or not.
+        If True, the equilibrium is fixed and its values are precomputed, which saves on
+        computation time during optimization and self.things = [field] only.
+        If False, the equilibrium is allowed to change during the optimization and its
+        associated data are re-computed at every iteration (Default).
+    field_fixed: bool, optional
+        Whether the OmnigenousField `field` is fixed or not.
+        If True, the field is fixed and its values are precomputed, which saves on
+        computation time during optimization and self.things = [eq] only.
+        If False, the field is allowed to change during the optimization and its
+        associated data are re-computed at every iteration (Default).
+    name : str
+        Name of the objective function.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _coordinates = "rtz"
+    _units = "(T)"
+    _print_value_fmt = "Piecewise omnigenity error: "
+
+    def __init__(
+        self,
+        eq,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        eq_grid=None,
+        field_grid=None,
+        deriv_mode="auto",
+        M_booz=None,
+        N_booz=None,
+        eq_fixed=False,
+        field_fixed=False,
+        overlap_penalty=1.0,
+        p=10,
+        name="Piecewise omnigenity",
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        self._eq = eq
+        self._field = field
+        self._eq_grid = eq_grid
+        self._field_grid = field_grid
+        self.M_booz = M_booz
+        self.N_booz = N_booz
+        self._eq_fixed = eq_fixed
+        self._field_fixed = field_fixed
+        self._overlap_penalty = overlap_penalty
+        self._p = p
+
+        if not eq_fixed and not field_fixed:
+            things = [eq, field]
+        elif eq_fixed and not field_fixed:  # Need to test this
+            things = [field]
+        elif field_fixed and not eq_fixed:
+            things = [eq, field]
+        else:
+            raise ValueError("Cannot fix both the eq and field.")
+
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._eq_fixed:
+            eq = self._eq
+            field = self.things[0]
+        elif self._field_fixed:
+            eq = self.things[0]
+            field = self._field
+        else:
+            eq = self.things[0]
+            field = self.things[1]
+
+        M_booz = self.M_booz or 2 * eq.M
+        N_booz = self.N_booz or 2 * eq.N
+
+        # default grids
+        if self._eq_grid is None:
+            rho = 0.5
+            eq_grid = LinearGrid(
+                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+            )
+        else:
+            eq_grid = self._eq_grid
+
+        self._dim_f = eq_grid.num_nodes
+        self._eq_data_keys = ["|B|", "theta_B", "zeta_B"]
+        self._field_data_keys = ["|B|_pwO", "Q_pwO"]
+
+        errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
+        eq_transforms = get_transforms(
+            self._eq_data_keys,
+            obj=eq,
+            grid=eq_grid,
+        )
+
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(
+            rho=eq_grid.nodes[eq_grid.unique_rho_idx, 0],
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        self._iota_keys = ["iota", "iota_r", "shear"]
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
+
+        self._constants = {
+            "eq_profiles": profiles,
+            "eq_transforms": eq_transforms,
+            "iota_profiles": iota_profiles,
+            "iota_transforms": iota_transforms,
+            "nsurfs": eq_grid.num_rho,
+            "Ntheta_B": eq_grid.num_theta,
+            "Nzeta_B": eq_grid.num_zeta,
+            "overlap_penalty": self._overlap_penalty,
+            "quad_weights": 1.0,
+            "p": self._p,
+            "B0": (
+                (field.B_min + field.B_max)[:, None]
+                / 2
+                * jnp.ones((eq_grid.num_rho, eq_grid.num_zeta * eq_grid.num_theta))
+            ).flatten(),
+        }
+
+        if self._eq_fixed:  # if equilibrium fixed, calculate data in build
+            eq_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=self._eq.params_dict,
+                transforms=eq_transforms,
+                profiles=profiles,
+            )
+            self._constants["eq_data"] = eq_data
+
+        # However, if field is fixed and eq changes, it changes the boozer grid
+        # field transform and field data
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            # normalized with max |B|_pwO
+            # not working with multiple surfaces
+            # --no-verify self._normalization = (field.B_min+field.B_max).flatten() / 2
+            # RG: For now, I'll normalize manually in the compute function below
+            self._normalization = 1.0
+
+        super().build(use_jit=use_jit, verbose=0)
+
+    def compute(self, params_1=None, params_2=None, constants=None):
+        """Compute omnigenity errors.
+
+        Parameters
+        ----------
+        params_1 : dict
+            If eq_fixed=True, dictionary of field degrees of freedom,
+            eg OmnigenousField.params_dict. Otherwise, dictionary of equilibrium degrees
+            of freedom, eg Equilibrium.params_dict.
+        params_2 : dict
+            If eq_fixed=False and field_fixed=False, dictionary of field degrees of
+            freedom, eg OmnigenousField.params_dict. Otherwise None.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        omnigenity_error : ndarray
+            Omnigenity error at each node (T).
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        if self._eq_fixed:
+            field_params = params_1
+            field = self.things[0]
+        elif self._field_fixed:
+            eq_params = params_1
+            field = self._field
+        else:
+            # sort parameters
+            eq_params = params_1
+            field_params = params_2
+            field = self.things[1]
+
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            self._eq,
+            self._iota_keys,
+            params=eq_params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+
+        if self._eq_fixed:
+            eq_data = constants["eq_data"]
+        else:
+            eq_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq_params,
+                transforms=constants["eq_transforms"],
+                profiles=constants["eq_profiles"],
+            )
+
+        data = {
+            "iota": constants["iota_transforms"]["grid"].compress(iota_data["iota"]),
+            "iota_r": constants["iota_transforms"]["grid"].compress(
+                iota_data["iota_r"]
+            ),
+            "shear": constants["iota_transforms"]["grid"].compress(iota_data["shear"]),
+        }
+
+        ### Passing a Grid of Boozer coordinate values because for the same
+        # DESC grid changing the eq changes the Boozer grid
+        #### TODO: Have to account for NFP
+        NFP = constants["eq_transforms"]["grid"].NFP
+        field_grid = Grid(
+            jnp.array(
+                [
+                    eq_data["rho"],
+                    eq_data["theta_B"],
+                    jnp.mod(eq_data["zeta_B"], 2 * jnp.pi / NFP),
+                ]
+            ).T,
+            NFP=NFP,
+            jitable=True,
+        )
+
+        field_transforms = get_transforms(
+            self._field_data_keys,
+            obj=field,
+            grid=field_grid,
+            jitable=True,
+        )
+
+        if self._field_fixed:
+            field_data = compute_fun(
+                "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+                self._field_data_keys,
+                params=self._field.params_dict,  # Should keep field params fixed
+                transforms=field_transforms,
+                profiles={},
+                data=data,
+                iota=data["iota"],
+                p=constants["p"],
+            )
+        else:
+            field_data = compute_fun(
+                "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+                self._field_data_keys,
+                params=field_params,
+                transforms=field_transforms,
+                profiles={},
+                data={},
+                iota=data["iota"],
+                p=constants["p"],
+            )
+
+        Ntheta = constants["Ntheta_B"]
+
+        # Rolling ensures max(B) occurs in the corners
+        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2, axis=1)
+        B_pwO = B_pwO.flatten() / constants["B0"]
+
+        # --no-verify meshgrid_reshape(nodes0, order="zrt")
+        # will be exactly the same as nodes0
+        Q_pwO = field_data["Q_pwO"]
+
+        B_eq = (
+            constants["eq_transforms"]["grid"]
+            .meshgrid_reshape(eq_data["|B|"], order="rtz")
+            .flatten()
+            / constants["B0"]
+        )
+
+        # ReLU operation
+        Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)
+
+        # temporarily commenting the Q_pwO calculation
+        # --no-verify overlap_penalty = constants["overlap_penalty"] * Q_pwO
+        overlap = constants["overlap_penalty"] * Q_pwO
+
+        # Dividing by Ntheta so objective doesn't change too much
+        # upon changing grid resolution
+        pwO_error = (jnp.abs(B_eq - B_pwO) + jnp.abs(overlap)) / Ntheta
+
+        return pwO_error.ravel()
 
 
 class Isodynamicity(_Objective):

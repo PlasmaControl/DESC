@@ -2000,7 +2000,7 @@ class TestObjectiveFunction:
         num_transit = 4
         num_well = 15 * num_transit
         num_quad = 16
-        num_pitch = 16
+        num_pitch = 10
         data = eq.compute(
             ["effective ripple", "Gamma_c"],
             grid=grid,

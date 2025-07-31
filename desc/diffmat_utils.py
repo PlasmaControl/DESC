@@ -398,58 +398,74 @@ def apply_compact_derivative(A, B, f):
     return df
 
 
-@partial(jit, static_argnums=(0,))
-def D1_FD_4(n: int, *, domain: tuple[float, float] = (0.0, 1.0)):
+def D1_FD_4(N, h, dtype=jnp.float64):
     """
-    CD‑4 interior + 4‑point 4th‑order one‑sided closures (Carpenter‑Gottlieb).
-    Satisfies   Dᵀ W + W D = diag([-1,0,…,0,1])   with diagonal norm W.
-
-    Parameters
-    ----------
-    n : int      (n ≥ 6)
-    domain : (a,b), optional
-        Physical interval.  Default = (-1,1).
+    Fourth‑order / second‑order diagonal‑norm SBP first‑derivative matrix
+    on a uniform grid of spacing `h`.
 
     Returns
     -------
-    D : (n,n) jax.Array     derivative matrix
-    W : (n,)  jax.Array     diagonal SBP weights
+    D : (N,N) jax.numpy.ndarray
     """
-    if n < 6:
-        raise ValueError("n must be at least 6 for 4‑point closures")
+    D = jnp.zeros((N, N), dtype)
+    H = jnp.ones((N,), dtype)
 
-    a, b = domain
-    h = (b - a) / (n - 1)
+    # ---- interior rows (indices 4 … N‑5) 5‑point central stencil
+    rows = jnp.arange(4, N - 4, dtype=jnp.int32)  # shape (Ni,)
+    offsets = jnp.array([-2, -1, 0, 1, 2], dtype=jnp.int32)
+    stencil_coeffs = jnp.array([1, -8, 0, 8, -1], dtype) / 12.0  # shape (5,)
 
-    # diagonal weights  (CD 4‑4)
-    W = jnp.full((n,), h)
-    W = W.at[jnp.array([0, 1, n - 2, n - 1])].set(jnp.array([31, 49, 49, 31]) * h / 72)
+    row_idx = jnp.repeat(rows, 5)  # (Ni*5,)
+    col_idx = (rows[:, None] + offsets).reshape(-1)  # (Ni*5,)
+    vals = jnp.tile(stencil_coeffs, rows.size)  # (Ni*5,)
 
-    D = jnp.zeros((n, n))
+    D = D.at[row_idx, col_idx].set(vals)
 
-    # ---------- interior rows: centred 5‑point ----------------------
-    rows_int = jnp.arange(2, n - 2)[:, None]  # shape (m,1)
-    cols_int = rows_int + jnp.arange(-2, 3)  # shape (m,5)
-    coeff_int = jnp.array([1, -8, 0, 8, -1]) / (12.0 * h)  # (5,)
-    D = D.at[rows_int, cols_int].set(
-        jnp.broadcast_to(coeff_int, rows_int.shape[:-1] + (5,))
+    # ---- forward boundary closures (Carpenter–Nordström)
+    f0 = jnp.array([-24 / 17, 59 / 34, -4 / 17, -3 / 34], dtype)
+    f1 = jnp.array([-1 / 2, 0.0, 1 / 2], dtype)
+    f2 = jnp.array([4 / 43, -59 / 86, 0.0, 59 / 86, -4 / 43], dtype)
+    f3 = jnp.array([3 / 98, 0.0, -59 / 98, 0.0, 32 / 49, -4 / 49], dtype)
+
+    D = (
+        D.at[0, :4]
+        .set(f0)
+        .at[1, :3]
+        .set(f1)
+        .at[2, :5]
+        .set(f2)
+        .at[3, :6]
+        .set(f3)
+        # lower boundary rows by SBP antisymmetry  D[N‑1‑i,N‑1‑j] = −D[i,j]
+        .at[-1, -4:]
+        .set(-f0[::-1])
+        .at[-2, -3:]
+        .set(-f1[::-1])
+        .at[-3, -5:]
+        .set(-f2[::-1])
+        .at[-4, -6:]
+        .set(-f3[::-1])
     )
 
-    # ---------- left boundary closures (rows 0 & 1) ----------------
-    left_rows = jnp.array([0, 1])[:, None]  # (2,1)
-    left_cols = jnp.arange(5)[None, :]  # (1,5)
-    left_coef = jnp.array(
-        [
-            [-25, 48, -36, 16, -3],
-            [-3, -10, 18, -6, 1],
-        ]
-    ) / (12.0 * h)
-    D = D.at[left_rows, left_cols].set(left_coef)
+    # specialised edge weights
+    edge_vals = jnp.array([17 / 48, 59 / 48, 43 / 48, 49 / 48], dtype)
+    H = (
+        H.at[0]
+        .set(edge_vals[0])
+        .at[-1]
+        .set(edge_vals[0])
+        .at[1]
+        .set(edge_vals[1])
+        .at[-2]
+        .set(edge_vals[1])
+        .at[2]
+        .set(edge_vals[2])
+        .at[-3]
+        .set(edge_vals[2])
+        .at[3]
+        .set(edge_vals[3])
+        .at[-4]
+        .set(edge_vals[3])
+    )
 
-    # ---------- right boundary closures  (rows n-2 & n-1) ----------
-    right_rows = jnp.array([n - 2, n - 1])[:, None]  # (2,1)
-    right_cols = jnp.arange(n - 5, n)[None, :]  # (1,5)
-    right_coef = -left_coef[:, ::-1]  # antisymmetric
-    D = D.at[right_rows, right_cols].set(right_coef)
-
-    return D, W
+    return D / h, H * h

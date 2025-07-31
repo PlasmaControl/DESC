@@ -364,7 +364,7 @@ class GammaC(_Objective):
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["zeta"],
+            constants["Y"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,

@@ -7,7 +7,6 @@ from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import cheb_pts, fourier_pts
 from desc.utils import setdefault
@@ -271,7 +270,7 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        theta = _map_clebsch_coordinates(
+        theta = eq._map_clebsch_coordinates(
             iota=constants["transforms"]["grid"].compress(data["iota"]),
             alpha=constants["X"],
             zeta=constants["Y"],

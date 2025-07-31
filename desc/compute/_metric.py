@@ -2236,7 +2236,7 @@ def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_rr_t|PEST",
+    name="g_rr_v|PEST",
     label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2248,8 +2248,8 @@ def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_rho|v,p", "e_rho_v|PEST"],
 )
-def _g_sub_rr_t_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rr_t|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_v|PEST"])
+def _g_sub_rr_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rr_v|PEST"] = 2 * dot(data["e_rho|v,p"], data["e_rho_v|PEST"])
     return data
 
 
@@ -2272,7 +2272,7 @@ def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g_tt_r|PEST",
+    name="g_vv_r|PEST",
     label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2284,13 +2284,13 @@ def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_vartheta|r,p", "e_vartheta_r|PEST"],
 )
-def _g_sub_tt_r_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tt_r|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_r|PEST"])
+def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vv_r|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_r|PEST"])
     return data
 
 
 @register_compute_fun(
-    name="g_tt_z|PEST",
+    name="g_vv_z|PEST",
     label="\\partial_{\\theta_PEST} g_{\\vartheta\\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2302,13 +2302,13 @@ def _g_sub_tt_r_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_vartheta|r,p", "e_vartheta_z|PEST"],
 )
-def _g_sub_tt_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_tt_z|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_z|PEST"])
+def _g_sub_vv_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vv_z|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_z|PEST"])
     return data
 
 
 @register_compute_fun(
-    name="g_zz_t|PEST",
+    name="g_zz_v|PEST",
     label="\\partial_{\\theta_PEST} g_{\\zeta\\zeta}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2320,13 +2320,13 @@ def _g_sub_tt_z_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_phi|r,v", "e_phi_t|PEST"],
 )
-def _g_sub_zz_t_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_zz_t|PEST"] = 2 * dot(data["e_phi|r,v"], data["e_phi_t|PEST"])
+def _g_sub_zz_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_zz_v|PEST"] = 2 * dot(data["e_phi|r,v"], data["e_phi_t|PEST"])
     return data
 
 
 @register_compute_fun(
-    name="g_rt_z|PEST",
+    name="g_rv_z|PEST",
     label="\\partial_{\\rho} g_{\\zeta\\zeta}|PEST",
     units="m^{2}",
     units_long="square meters",
@@ -2338,8 +2338,8 @@ def _g_sub_zz_t_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_rho|v,p", "e_vartheta|r,p", "e_rho_z|PEST", "e_vartheta_z|PEST"],
 )
-def _g_sub_rt_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_rt_z|PEST"] = dot(data["e_rho|v,p"], data["e_vartheta_z|PEST"]) + dot(
+def _g_sub_rv_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_rv_z|PEST"] = dot(data["e_rho|v,p"], data["e_vartheta_z|PEST"]) + dot(
         data["e_rho_z|PEST"], data["e_vartheta|r,p"]
     )
     return data
@@ -2380,7 +2380,7 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_PEST_t|PEST",
+    name="sqrt(g)_PEST_v|PEST",
     label="\\partial_{\\rho} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
@@ -2398,10 +2398,9 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
         "e_theta_PEST_v|PEST",
         "e_phi_v|PEST",
     ],
-    aliases=["sqrt(g)_PEST_v|PEST"],
 )
 def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_t|PEST"] = (
+    data["sqrt(g)_PEST_v|PEST"] = (
         dot(data["e_rho_v|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(data["e_rho|v,p"], cross(data["e_theta_PEST_v|PEST"], data["e_phi|r,v"]))
         + dot(data["e_rho|v,p"], cross(data["e_theta_PEST"], data["e_phi_v|PEST"]))

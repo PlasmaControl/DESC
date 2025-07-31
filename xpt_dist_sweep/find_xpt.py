@@ -42,7 +42,7 @@ def find_xpt(l,small_coils,large_coils,dir,dist=None):
                     weight=weights['dist'],
                     target=0)
     #linking = PlasmaLinkingNumber(c,eq,eval_grid,target=0,weight=weights["linking"])
-    o = XPointDistanceBound(eq, c, N_grid=36,M_grid=36, eq_fixed=True,bounds=(0.01,0.4),weight=weights['dist'])
+    o = XPointDistanceBound(eq, c, N_grid=36,M_grid=36, eq_fixed=True,bounds=(0,0.4),weight=weights['dist'])
 
     obj = ObjectiveFunction((o,bxdl))#((o,bxdl,linking))
     obj.build()

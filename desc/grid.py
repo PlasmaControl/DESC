@@ -1510,21 +1510,23 @@ class QuadratureGrid(_Grid):
     """
 
     _fft_poloidal = True
-    _fft_toroidal = True
+    
 
-    def __init__(self, L, M, N, NFP=1):
+    def __init__(self, L, M, N=None, NFP=1, zeta=None):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "N", False)
-        self._N = check_nonnegint(N, "N", False)
+        self._N = check_nonnegint(N, "N", True)
         self._NFP = check_posint(NFP, "NFP", False)
+        assert (N is None) or (zeta is None), "cannot specify both N and zeta"
         self._sym = False
         self._node_pattern = "quad"
         self._coordinates = "rtz"
         self._is_meshgrid = True
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
-        self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
+        self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP, zeta=zeta)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
+        self._fft_toroidal = True
         self._axis = self._find_axis()
         (
             self._unique_rho_idx,
@@ -1535,9 +1537,12 @@ class QuadratureGrid(_Grid):
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
         # quadrature weights do not need scaling
-        self._weights = self.spacing.prod(axis=1)
+        if True:#zeta is None:
+            self._weights = self.spacing.prod(axis=1)
+        #else:
+        #    self._weights = self._scale_weights()
 
-    def _create_nodes(self, L=1, M=1, N=1, NFP=1):
+    def _create_nodes(self, L=1, M=1, N=1, NFP=1, zeta=None):
         """Create grid nodes and weights.
 
         Parameters
@@ -1559,9 +1564,10 @@ class QuadratureGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
+        
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
-        self._N = check_nonnegint(N, "N", False)
+        self._N = check_nonnegint(N, "N", True)
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         # floor divide (L+2) by 2 bc only need (L+1)/2  points to
@@ -1569,7 +1575,6 @@ class QuadratureGrid(_Grid):
         # ensures we have enough pts for both odd and even L
         L = (L + 2) // 2
         M = 2 * M + 1
-        N = 2 * N + 1
 
         # rho
         r, dr = special.js_roots(L, 2, 2)
@@ -1580,8 +1585,17 @@ class QuadratureGrid(_Grid):
         dt = 2 * np.pi / M * np.ones_like(t)
 
         # zeta/phi
-        z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
-        dz = 2 * np.pi / N * np.ones_like(z)
+        if zeta is None:
+            N = 2 * N + 1
+            z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
+            dz = 2 * np.pi / N * np.ones_like(z)
+        else:
+            zeta_grid = LinearGrid(rho=1,theta=0,zeta=zeta,NFP=NFP)
+            self._N = zeta_grid.N
+            z = zeta_grid.nodes[:,2]
+            dz = zeta_grid.spacing[:,2]
+            self._fft_toroidal = zeta_grid._fft_toroidal
+
 
         r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
         dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
@@ -1620,6 +1634,7 @@ class QuadratureGrid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
+
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 

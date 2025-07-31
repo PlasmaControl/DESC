@@ -115,7 +115,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
+    # TODO: Is this correct? Check (m v∥² / q B²) term
+
+    d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − (v⊥² / 2B) ( 𝐛 ⋅ ∇B )
 
@@ -229,8 +231,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         data = compute_fun(eq, data_keys, eq.params_dict, transforms, profiles)
 
         # derivative of the guiding center position in R, phi, Z coordinates
+        # TODO: Is this correct? Check
         Rdot = vpar * data["b"] + (
-            (m * vpar**2 / q / data["|B|"] ** 2)
+            (m / q / data["|B|"] ** 2)
             * ((mu * data["|B|"] / m) + vpar**2)
             * cross(data["b"], data["grad(|B|)"])
         )
@@ -265,9 +268,10 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         b = B / modB
         # factor of R from grad in cylindrical coordinates
         grad_B = grad_B.at[1].set(safediv(grad_B[1], coord[0]))
-        Rdot = vpar * b + (
-            m * vpar**2 / q / modB**2 * (mu * modB / m + vpar**2)
-        ) * cross(b, grad_B)
+        # TODO: Is this correct? Check
+        Rdot = vpar * b + (m / q / modB**2 * (mu * modB / m + vpar**2)) * cross(
+            b, grad_B
+        )
 
         vpardot = jnp.atleast_2d(-mu / m * dot(b, grad_B))
         dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
@@ -279,7 +283,9 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    d𝐑/dt = v∥ 𝐛 + (m v∥² / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
+    # TODO: Is this correct? Check (m v∥² / q B²) term
+
+    d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − ((v² - v∥²) / 2B) ( 𝐛 ⋅ ∇B )
 
@@ -413,7 +419,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         # derivative of the guiding center position in R, phi, Z coordinates
         # TODO: Is this correct? Check
         Rdot = vpar * data["b"] + (
-            (m * vpar**2 / q / data["|B|"] ** 2)
+            (m / q / data["|B|"] ** 2)
             * (vpar**2 + 0.5 * (v**2 - vpar**2))
             * cross(data["b"], data["grad(|B|)"])
         )

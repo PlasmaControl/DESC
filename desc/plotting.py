@@ -4226,7 +4226,7 @@ def plot_particle_trajectories(
             plot_data["X"].append(x)
             plot_data["Y"].append(y)
             plot_data["Z"].append(z)
-            plot_data["R"].append(rs[:, i])
+            plot_data["R"].append(r)
 
         fig.add_trace(
             go.Scatter3d(

@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
-from desc.magnetic_fields import MagneticFieldFromUser, VerticalMagneticField
+from desc.magnetic_fields import (
+    MagneticFieldFromUser,
+    ToroidalMagneticField,
+    VerticalMagneticField,
+)
 from desc.particles import (
     ManualParticleInitializerLab,
     VacuumGuidingCenterTrajectory,
@@ -121,3 +125,46 @@ def test_mirror_force_drift():
 
     assert np.allclose(rpz[0, :, 2], z, atol=1e-5)
     assert np.allclose(vpar[0, :, 0], vpar_exact, atol=1e-5)
+
+
+@pytest.mark.unit
+def test_traceing_pure_toroidal_magnetic_field():
+    """Test particle tracing within a purely toroidal magnetic field."""
+    B0 = 1.0  # Constant magnetic field strength
+    R0t = 3.0  # Major radius of the toroidal field
+    R0 = np.array([4.0])  # Initial radial position of the particle
+    ts = np.linspace(0, 1e-6, 100)
+    # B_phi = B0 * R0t / r  # noqa : E800
+    field = ToroidalMagneticField(B0=B0, R0=R0t)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e8)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    x0, args = particles.init_particles(model=model, field=field)
+    ms, qs, mus = args[:3]
+    rpz, vpar = trace_particles(
+        field=field,
+        y0=x0,
+        ms=ms,
+        qs=qs,
+        mus=mus,
+        model=model,
+        ts=ts,
+    )
+    # Total drif velocity is given by
+    # vd = m / (qB^2) (vpar^2 + vperp^2/2) (𝐛 x ∇B)
+    # For purely toroidal field,
+    # 𝐛 = [0, 1, 0].T   # noqa : E800
+    # ∇B = [-B0*R0t/r^2, 0, 0].T   # noqa : E800
+    # B = B0*R0t/r   # noqa : E800
+    # So, the drift velocity in Z direction is:
+    # vd = m / (qB0*R0t) * (vpar^2 + vperp^2/2)   # noqa : E800
+    vd = (
+        ms[0]
+        / (qs[0] * B0 * R0t)
+        * (particles.vpar0[0] ** 2 + particles.v0[0] ** 2)
+        / 2
+    )
+    z_exact = vd * ts
+
+    assert np.allclose(rpz[0, :, 2], z_exact, atol=1e-12)
+    assert np.allclose(rpz[0, :, 0], R0[0], atol=1e-12)
+    assert np.allclose(vpar[0, :, 0], particles.vpar0, atol=1e-12)

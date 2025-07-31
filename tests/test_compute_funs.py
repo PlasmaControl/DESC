@@ -1293,6 +1293,12 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
         "e_rho|v,p",
         "e_vartheta|r,p",
         "e_phi|r,v",
+        "e_vartheta_v|PEST",
+        "e_vartheta_z|PEST",
+        "e_vartheta_r|PEST",
+        "e_phi_r|PEST",
+        "e_phi_z|PEST",
+        "e_rho_r|PEST",
     ]
 
     N = 2000
@@ -1336,6 +1342,8 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
 
     for key in keys_PEST:
         lhs, rhs = key.split("|")
+        # rhs can be PEST or r,v or p,v or r,p etc.
+        # So it's not really needed for the FD calculation
         parts = lhs.split("_")
         if len(parts) == 2:  # like "e_rho"
             deriv_tokn = parts[-1]

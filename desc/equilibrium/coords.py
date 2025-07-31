@@ -124,18 +124,9 @@ def map_coordinates(  # noqa: C901
                         ["iota", "iota_r"], params=params, **kwargs
                     )
                 iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
-            return _map_clebsch_coordinates(
-                coords=coords,
-                iota=iota,
-                L_lmn=params["L_lmn"],
-                L_basis=eq.L_basis,
-                guess=guess[:, 1] if guess is not None else None,
-                period=period[1] if period is not None else np.inf,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
+            rho, alpha, zeta = coords.T
+            coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
+            inbasis = ("rho", "theta_PEST", "zeta")
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(
                 coords=coords,
@@ -377,126 +368,15 @@ def _map_PEST_coordinates(
         )
     )
     rho, theta_PEST, zeta = coords.T
-    if full_output:
-        theta, (res, niter) = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
-    else:
-        theta = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
-    if full_output:
-        return out, (res, niter)
-    return out
-
-
-def _map_clebsch_coordinates(
-    coords,
-    iota,
-    L_lmn,
-    L_basis,
-    guess=None,
-    period=np.inf,
-    tol=1e-6,
-    maxiter=30,
-    full_output=False,
-    **kwargs,
-):
-    """Find θ for given Clebsch field line poloidal label α.
-
-    Parameters
-    ----------
-    coords : ndarray
-        Shape (k, 3).
-        Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
-        Each row is a different point in space.
-    iota : ndarray
-        Shape (k, ).
-        Rotational transform on each node.
-    L_lmn : jnp.ndarray
-        Spectral coefficients for lambda.
-    L_basis : Basis
-        Spectral basis for lambda.
-    guess : jnp.ndarray
-        Shape (k, ).
-        Optional initial guess for the computational coordinates.
-    period : float
-        Assumed periodicity for α.
-        Use ``np.inf`` to denote no periodicity.
-    tol : float
-        Stopping tolerance.
-    maxiter : int
-        Maximum number of Newton iterations.
-    full_output : bool, optional
-        If True, also return a tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
-    kwargs : dict, optional
-        Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
-        ``alpha``.
-
-    Returns
-    -------
-    out : ndarray
-        Shape (k, 3).
-        DESC computational coordinates [ρ, θ, ζ].
-    info : tuple
-        2 element tuple containing residuals and number of iterations for each point.
-        Only returned if ``full_output`` is True.
-
-    """
-    # noqa: D202
-
-    # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
-    def rootfun(theta, alpha, rho, zeta, iota):
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A = L_basis.evaluate(nodes)
-        lmbda = A @ L_lmn
-        alpha_k = theta + lmbda - iota * zeta
-        return _fixup_residual(alpha_k - alpha, period).squeeze()
-
-    def jacfun(theta, alpha, rho, zeta, iota):
-        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A1 = L_basis.evaluate(nodes, (0, 1, 0))
-        lmbda_t = jnp.dot(A1, L_lmn)
-        return 1 + lmbda_t.squeeze()
-
-    def fixup(x, *args):
-        return _periodic(x, period)
-
-    vecroot = jit(
-        vmap(
-            lambda x0, *p: root_scalar(
-                rootfun,
-                x0,
-                jac=jacfun,
-                args=p,
-                fixup=fixup,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
-        )
-    )
-    rho, alpha, zeta = coords.T
-    if guess is None:
+    theta = vecroot(
         # Assume λ=0 for default initial guess.
-        guess = alpha + iota * zeta
+        setdefault(guess, theta_PEST),
+        theta_PEST,
+        rho,
+        zeta,
+    )
     if full_output:
-        theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
-    else:
-        theta = vecroot(guess, alpha, rho, zeta, iota)
-
+        theta, (res, niter) = theta
     out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:
         return out, (res, niter)
@@ -534,7 +414,7 @@ def _L_partial_sum(L, L_lmn):
     return L_m, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
-def _map_clebsch_coordinates_partial_sum(
+def _map_clebsch_coordinates(
     rho,
     alpha,
     zeta,
@@ -592,14 +472,12 @@ def _map_clebsch_coordinates_partial_sum(
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, zeta, iota, L_m):
-        assert L_m.ndim == 1
         lmbda = (jnp.exp(1j * modes * theta) * L_m).real.sum()
         alpha_k = theta + lmbda - iota * zeta
         return _fixup_residual(alpha_k - alpha, period)
 
     def jacfun(theta, alpha, zeta, iota, L_m):
         # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
-        assert L_m.ndim == 1
         lmbda_t = ((1j * jnp.exp(1j * modes * theta) * L_m).real * modes).sum()
         return 1 + lmbda_t
 

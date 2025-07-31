@@ -1,16 +1,17 @@
 """Objectives for neoclassical transport."""
 
+import warnings
+
 import numpy as np
 from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import cheb_pts
+from desc.integrals._interp_utils import cheb_pts, fourier_pts
 from desc.utils import setdefault
 
-from ..integrals import Bounce2D
-from ..integrals.basis import FourierChebyshevSeries
 from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
@@ -29,12 +30,6 @@ _bounce_overwrite = {
         to retain the default for that.
         """
 }
-
-
-def _L_transform(eq, Y, rho):
-    zeta = cheb_pts(Y, (0 * 2 * np.pi), False)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, zeta=zeta)
-    return get_transforms("lambda", eq, grid)["L"]
 
 
 class EffectiveRipple(_Objective):
@@ -172,9 +167,12 @@ class EffectiveRipple(_Objective):
 
         self._spline = spline
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
-        self._X = X
-        self._Y = Y
+        self._constants = {
+            "quad_weights": 1.0,
+            "alpha": alpha,
+            "X": fourier_pts(X),
+            "Y": cheb_pts(Y, (0, 2 * np.pi), False),
+        }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
             "Y_B": Y_B,
@@ -217,21 +215,30 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
+
         rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X, self._Y, rho, domain=(0, 2 * np.pi)
-        )
+        self._constants["rho"] = rho
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["profiles"] = get_profiles(
+            "effective ripple", eq, grid=self._grid
         )
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
+        with warnings.catch_warnings():
+            warnings.filterwarnings("default", "Unequal number of field periods")
+            # TODO(#1243): Pad basis for partial summation and set grid.sym=eq.sym.
+            self._constants["lambda"] = get_transforms(
+                "lambda",
+                eq,
+                grid=LinearGrid(rho=rho, M=100, zeta=self._constants["Y"]),
+            )["L"]
+        assert self._constants["lambda"].basis.NFP == eq.NFP
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, rho
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -262,16 +269,17 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO (#1034): Use old theta values as initial guess.
-        theta = Bounce2D.compute_theta(
-            eq,
-            self._X,
-            self._Y,
+        theta = _map_clebsch_coordinates(
+            rho=constants["rho"],
+            alpha=constants["X"],
+            zeta=constants["Y"],
             iota=constants["transforms"]["grid"].compress(data["iota"]),
-            clebsch=constants["clebsch"],
             # Pass in params so that root finding is done with the new
             # perturbed λ coefficients and not the original equilibrium's.
-            params=params,
+            L_lmn=params["L_lmn"],
+            L=constants["lambda"],
+            # TODO (#1034): Use old theta values as initial guess.
+            tol=1e-7,
         )
         data = compute_fun(
             eq,
@@ -289,6 +297,11 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_spline(self, use_jit=True, verbose=1):
+        Y_B = self._hyperparam.pop("Y_B")
+        num_transit = self._hyperparam.pop("num_transit")
+        num_quad = self._hyperparam.pop("num_quad")
+        del self._constants["X"]
+
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -297,27 +310,28 @@ class EffectiveRipple(_Objective):
             "max_tz |B|",
             "R0",
         ]
-        num_transit = self._hyperparam.pop("num_transit")
-        Y_B = self._hyperparam.pop("Y_B")
 
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
+
+        rho = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["rho"] = rho
+        self._constants["Y"] = np.linspace(
             0, 2 * np.pi * num_transit, Y_B * num_transit
         )
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+        self._constants["quad"] = chebgauss2(num_quad)
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["old effective ripple"], eq, self._grid
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, rho
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -335,7 +349,7 @@ class EffectiveRipple(_Objective):
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["zeta"],
+            constants["Y"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,

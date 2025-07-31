@@ -11,10 +11,7 @@ from desc.__main__ import main
 from desc.backend import sign
 from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import (
-    _map_clebsch_coordinates,
-    _map_clebsch_coordinates_partial_sum,
-)
+from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
@@ -87,28 +84,27 @@ def test_map_coordinates():
 
 
 @pytest.mark.unit
-def test_map_coordinates_2():
-    """Test root finding for (rho,theta,zeta) for common use cases."""
+def test_map_clebsch_coordinates():
+    """Test root finding for (rho,alpha,zeta)."""
     eq = get("NCSX")
     assert eq.NFP > 1
     rho = np.linspace(0, 1, 4)
     alpha = np.linspace(0, 2 * np.pi, 5)
-    # TODO:
-    # This fails if I switch the order of np.e and np.pi
-    # to my knowledge that shouldn't matter for this...
     zeta = np.array([0, np.e, np.pi])
     iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
 
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-    out = _map_clebsch_coordinates(grid.nodes, grid.expand(iota), eq.L_lmn, eq.L_basis)
+    out = eq.map_coordinates(
+        grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
+    )
     with warnings.catch_warnings():
-        warnings.simplefilter("always", UserWarning)
+        warnings.filterwarnings("default", "Unequal number of field periods")
         L = get_transforms("lambda", eq, LinearGrid(rho=rho, M=eq.M_grid, zeta=zeta))[
             "L"
         ]
     assert L.basis.NFP == eq.NFP
     np.testing.assert_allclose(
-        _map_clebsch_coordinates_partial_sum(rho, alpha, zeta, iota, eq.L_lmn, L),
+        _map_clebsch_coordinates(rho, alpha, zeta, iota, eq.L_lmn, L),
         grid.meshgrid_reshape(out[:, 1], "raz"),
     )
 
@@ -150,33 +146,6 @@ def test_map_coordinates_derivative():
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
         np.testing.assert_allclose(j1, j2, atol=1e-12)
-
-    # Check map_coordinates with full_output is still runs without errors
-    # this time _map_clebsch_coordinates is called inside map_coordinates
-    inbasis2 = ["rho", "alpha", "zeta"]
-    in_data = eq.compute(inbasis2, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
-
-    @jax.jit
-    def foo(params, in_coords):
-        out, (_, _) = eq.map_coordinates(
-            in_coords,
-            inbasis2,
-            ("rho", "theta", "zeta"),
-            np.array([rho, theta, zeta]).T,
-            params,
-            period=(2 * np.pi, 2 * np.pi, np.inf),
-            maxiter=40,
-            full_output=True,
-        )
-        return out
-
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
-    for j1, j2 in zip(J1.values(), J2.values()):
-        assert ~np.any(np.isnan(j1))
-        assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)

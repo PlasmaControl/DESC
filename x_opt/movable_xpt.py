@@ -41,17 +41,7 @@ from desc.objectives import (
     ObjectiveFunction,
     CoilSetMaxB,
 )
-from desc.geometry import SplineXYZCurve
 
-xpt_offset_options = [0,10,20,30,40,50]
-
-# Get the Slurm array task ID from environment variables
-task_id = 0 #int(os.environ['SLURM_ARRAY_TASK_ID'])
-
-xpt_offset = xpt_offset_options[task_id]
-dir = "/global/homes/m/mavida/DESC/xpt_dist_sweep/xpt_dist_sweep/"
-
-# Use the task ID to index the list of radii
 rad = 0.6
 offset = 0.3
 max_current = 6e6   
@@ -452,7 +442,7 @@ def postproc_finite_build(shaping_coils, encircling):
     total_tape = (total_gmat_capped*1e-9)/4.03
     print("Total tape length with capping (Mm):", total_tape)
 
-def optimize_coils(**weights):
+def optimize_coils(dir, **weights):
     out_tag = f"shaping_div_98_{int(rad * 100)}cm_{int(max_current / 1e6)}MA_" + '_'.join([f'{key}{value}' for key, value in weights.items()])
 
     log_filename = f"{out_tag}.log"
@@ -496,4 +486,4 @@ def optimize_coils(**weights):
             save_vector_potential=True,
             chunk_size = 300)
         
-        curve.save(out_tag + "_xpt_final.h5")
+        curve.save(dir + out_tag + "_xpt_final.h5")

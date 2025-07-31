@@ -1990,7 +1990,7 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    def test_objective_compute_grids(self):
+    def test_objective_compute_against_compute(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)

@@ -456,6 +456,8 @@ class Bounce2D(Bounce):
             ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
 
         """
+        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
+        #  the note in _L_partial_sum method is resolved.
         if clebsch is None:
             clebsch = FourierChebyshevSeries.nodes(X, Y, rho, domain=(0, 2 * jnp.pi))
         if iota is not None:
@@ -466,9 +468,8 @@ class Bounce2D(Bounce):
             inbasis=("rho", "alpha", "zeta"),
             period=(jnp.inf, jnp.inf, jnp.inf),
             tol=kwargs.pop("tol", 1e-7),
-            maxiter=kwargs.pop("maxiter", 40),
             **kwargs,
-        ).reshape(-1, X, Y, 3)[..., 1]
+        )[:, 1].reshape(-1, X, Y)
 
     def _swap_pitch(self, pitch_inv):
         # Move num pitch axis to front so that the num rho axis broadcasts with

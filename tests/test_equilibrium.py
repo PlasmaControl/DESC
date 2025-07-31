@@ -88,9 +88,9 @@ def test_map_clebsch_coordinates():
     """Test root finding for (rho,alpha,zeta)."""
     eq = get("NCSX")
     assert eq.NFP > 1
-    rho = np.linspace(0, 1, 4)
-    alpha = np.linspace(0, 2 * np.pi, 5)
-    zeta = np.array([0, np.e, np.pi])
+    rho = np.linspace(0.5, 1, 2)
+    alpha = np.linspace(0, 2 * np.pi, 3)
+    zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
     iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
 
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
@@ -99,12 +99,15 @@ def test_map_clebsch_coordinates():
     )
     with warnings.catch_warnings():
         warnings.filterwarnings("default", "Unequal number of field periods")
-        L = get_transforms("lambda", eq, LinearGrid(rho=rho, M=eq.M_grid, zeta=zeta))[
-            "L"
-        ]
+        L = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+        )["L"]
     assert L.basis.NFP == eq.NFP
     np.testing.assert_allclose(
-        _map_clebsch_coordinates(rho, alpha, zeta, iota, eq.L_lmn, L),
+        L.grid.meshgrid_reshape(L.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+    )
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, L)[..., ::-1],
         grid.meshgrid_reshape(out[:, 1], "raz"),
     )
 

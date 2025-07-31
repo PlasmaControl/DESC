@@ -173,7 +173,7 @@ class EffectiveRipple(_Objective):
             "quad_weights": 1.0,
             "alpha": alpha,
             "X": fourier_pts(X),
-            "Y": cheb_pts(Y, (0, 2 * np.pi), False),
+            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
         }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
@@ -219,7 +219,6 @@ class EffectiveRipple(_Objective):
         assert self._grid.can_fft2
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["rho"] = rho
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._constants["profiles"] = get_profiles(
@@ -230,11 +229,11 @@ class EffectiveRipple(_Objective):
         )
         with warnings.catch_warnings():
             warnings.filterwarnings("default", "Unequal number of field periods")
-            # TODO(#1243): Pad basis for partial summation and set grid.sym=eq.sym.
+            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
             self._constants["lambda"] = get_transforms(
                 "lambda",
                 eq,
-                grid=LinearGrid(rho=rho, M=100, zeta=self._constants["Y"]),
+                grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=self._constants["Y"]),
             )["L"]
         assert self._constants["lambda"].basis.NFP == eq.NFP
 
@@ -268,21 +267,20 @@ class EffectiveRipple(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
         theta = _map_clebsch_coordinates(
-            rho=constants["rho"],
+            iota=constants["transforms"]["grid"].compress(data["iota"]),
             alpha=constants["X"],
             zeta=constants["Y"],
-            iota=constants["transforms"]["grid"].compress(data["iota"]),
-            # Pass in params so that root finding is done with the new
-            # perturbed λ coefficients and not the original equilibrium's.
             L_lmn=params["L_lmn"],
             L=constants["lambda"],
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
-        )
+        )[..., ::-1]
+
         data = compute_fun(
             eq,
             "effective ripple",
@@ -303,7 +301,9 @@ class EffectiveRipple(_Objective):
         num_transit = self._hyperparam.pop("num_transit")
         num_quad = self._hyperparam.pop("num_quad")
         del self._constants["X"]
-
+        self._constants["Y"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
+        )
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -320,9 +320,6 @@ class EffectiveRipple(_Objective):
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         self._constants["rho"] = rho
-        self._constants["Y"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
         self._constants["quad"] = chebgauss2(num_quad)
         self._constants["profiles"] = get_profiles(
             self._keys_1dr + ["old effective ripple"], eq, self._grid
@@ -341,6 +338,7 @@ class EffectiveRipple(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -348,6 +346,8 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
+        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
+        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

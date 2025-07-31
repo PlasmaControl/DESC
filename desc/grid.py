@@ -1335,7 +1335,7 @@ class LinearGrid(_Grid):
             self._fft_toroidal = not endpoint
         elif zeta is not None:
             errorif(
-                (zeta > zeta_period).any(), msg="LinearGrid defined on 1 field period."
+                np.any(zeta > zeta_period), msg="LinearGrid defined on 1 field period."
             )
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP

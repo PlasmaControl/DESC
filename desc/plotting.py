@@ -4297,10 +4297,10 @@ def plot_gammac(
         num_pitch = 16
 
     # TODO(#1352)
-    X = kwargs.pop("X", 32)
+    X = kwargs.pop("X", 16)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", 64)
-    num_quad = kwargs.pop("num_quad", 24)
+    Y_B = kwargs.pop("Y_B", 24)
+    num_quad = kwargs.pop("num_quad", 20)
     pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
     num_transit = kwargs.pop("num_transit", 1)
 

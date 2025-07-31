@@ -131,6 +131,14 @@ class EffectiveRipple(_Objective):
         overwrite=_bounce_overwrite,
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_hyperparam",
+        "_keys_1dr",
+        "_spline",
+        "_X",
+        "_Y",
+    ]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Effective ripple ε: "

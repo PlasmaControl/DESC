@@ -86,6 +86,24 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta_PEST",
+    label="J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e^theta_PEST"],
+)
+def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST"] = dot(data["J"], data["e^theta_PEST"])
+    return data
+
+
+@register_compute_fun(
     name="J^zeta",
     label="J^{\\zeta}",
     units="A \\cdot m^{-3}",
@@ -139,6 +157,27 @@ def _J(params, transforms, profiles, data, **kwargs):
         + data["J^theta*sqrt(g)"] * data["e_theta/sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="J x grad(rho)",
+    label="\\mathbf{J} \\times (\\nabla \\rho)",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubed meter",
+    description="Plasma current density cross with grad(rho)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J",
+        "e^rho",
+    ],
+)
+def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
+    data["J x grad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 

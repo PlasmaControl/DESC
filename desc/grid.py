@@ -48,6 +48,21 @@ class _Grid(IOAble, ABC):
         "_fft_toroidal",
     ]
 
+    _static_attrs = [
+        "_endpoint",
+        "_can_fft2",
+        "_coordinates",
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_is_meshgrid",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_node_pattern",
+        "_sym",
+    ]
+
     @abstractmethod
     def _create_nodes(self, *args, **kwargs):
         """Allow for custom node creation."""

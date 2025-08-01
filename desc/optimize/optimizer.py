@@ -129,8 +129,13 @@ class Optimizer(IOAble):
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. If passing a custom array, it must have size equal to the total
+            number of optimization parameters across all objects in ``things`` (i.e.,
+            sum of ``t.dim_x`` for each ``t`` in ``things``). For Equilibrium objects,
+            the ordering must match ``eq.x_idx`` parameter indices. The array should
+            be ordered by concatenating parameters from each object in ``things`` in
+            the same order. If set to ``'auto'``, the scale is iteratively updated
+            using the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
             this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``.
             ``ess_alpha`` is the decay rate of the scaling, and ``ess_type`` is the type
@@ -510,7 +515,7 @@ def _maybe_wrap_nonlinear_constraints(
     return objective, nonlinear_constraints
 
 
-def get_combined_constraint_objectives(
+def get_combined_constraint_objectives(  # noqa: C901
     eq,
     constraints,
     objective,
@@ -578,6 +583,22 @@ def get_combined_constraint_objectives(
                 nonlinear_constraint, linear_constraint
             )
             nonlinear_constraint.build(verbose=verbose)
+
+    if is_prox and not isinstance(x_scale, str):
+        # If we have ProximalProjection, get original dimension from equilibrium
+        # and project x_scale through both stages: (eq.dim_x) ->
+        # (dim size post proximal projection)
+        original_dim = objective._objective._eq.dim_x
+        x_scale = np.broadcast_to(x_scale, original_dim)
+
+        # Project from (eq.dim_x) -> (dim size post proximal projection)
+        # (remove excluded parameters from ProximalProjection)
+        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        included_idx = []
+        for arg in objective._objective._eq.optimizable_params:
+            if arg not in excluded_params:
+                included_idx.extend(objective._objective._eq.x_idx[arg])
+        x_scale = x_scale[included_idx]
 
     if linear_constraint is not None and not isinstance(x_scale, str):
         # need to project x_scale down to correct size

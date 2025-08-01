@@ -620,11 +620,12 @@ def _singular_part(
 
     - hyperparameter M replaced by ``st`` and ``sz``.
     - density sigma / function f is absorbed into kernel.
-    """
-    # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
-    #  singular point. Hence the quadrature may not converge for Cauchy
-    #  principal values. Prove otherwise or remove singularity.
 
+    TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
+       singular point. Hence the quadrature may not converge for Cauchy
+       principal values. Prove otherwise or remove singularity.
+
+    """
     eval_grid = interpolator.eval_grid
     # Casting to JAX arrays reduces memory usage.
     eval_theta = jnp.asarray(eval_grid.unique_theta)
@@ -677,7 +678,6 @@ def _singular_part(
                 t=eval_theta + interpolator.shift_t[i],
                 z=eval_zeta + interpolator.shift_z[i],
             )
-
         return kernel(eval_data, source_data_polar, v[i], diag=True)
 
     f = vmap_chunked(

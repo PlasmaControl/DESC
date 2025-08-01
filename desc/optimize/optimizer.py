@@ -673,10 +673,7 @@ def _create_exponential_spectral_scale(
         Array of scale values for each parameter
     """
     # Initialize x_scale array
-    total_size = (
-        len(eq.p_l) + len(eq.c_l) + len(eq.i_l) + 1 + len(eq.Rb_lmn) + len(eq.Zb_lmn)
-    )
-    x_scale = np.zeros(total_size)
+    x_scale = np.ones(eq.dim_x)
 
     # Get R and Z modes (m,n pairs)
     R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
@@ -695,9 +692,9 @@ def _create_exponential_spectral_scale(
     R_scales = get_mode_scales(R_modes)
     Z_scales = get_mode_scales(Z_modes)
 
-    start_idx = len(eq.p_l) + len(eq.c_l) + len(eq.i_l) + 1
-    x_scale[start_idx : start_idx + len(eq.Rb_lmn)] = R_scales
-    x_scale[start_idx + len(eq.Rb_lmn) :] = Z_scales
+    # Apply scaling to R and Z boundary coefficients
+    x_scale[eq.x_idx["Rb_lmn"]] = R_scales
+    x_scale[eq.x_idx["Zb_lmn"]] = Z_scales
 
     return x_scale
 

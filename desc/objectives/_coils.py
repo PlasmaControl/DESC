@@ -3264,7 +3264,7 @@ class Bxdl(_Objective):
             x,
             source_grid=constants["field_grid"],
             basis="rpz",
-            params=field_params,
+            params=field_params if not self._field_fixed else None,
             chunk_size=self._bs_chunk_size,
         )
         if constants["B_plasma"] is not None:
@@ -3277,7 +3277,7 @@ class Bxdl(_Objective):
                 coords=x,
                 chunk_size=self._bs_chunk_size,
                 source_grid=eq_grid,
-                params=eq_params,
+                params=eq_params if not self._eq_fixed else None,
                 basis="rpz",
                 transforms=constants["eq_transforms"],
                 **self._eq_kwargs,

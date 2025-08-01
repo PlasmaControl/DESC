@@ -627,9 +627,8 @@ def _singular_part(
 
     """
     eval_grid = interpolator.eval_grid
-    # Casting to JAX arrays reduces memory usage.
-    eval_theta = jnp.asarray(eval_grid.unique_theta)
-    eval_zeta = jnp.asarray(eval_grid.unique_zeta)
+    eval_theta = eval_grid.unique_theta
+    eval_zeta = eval_grid.unique_zeta
 
     r, w, dr, dw = _get_polar_quadrature(interpolator.q)
     r = jnp.abs(r)

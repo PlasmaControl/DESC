@@ -13,7 +13,7 @@ import numpy as np
 from interpax import interp1d
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, irfft2, jnp, rfft, rfft2, take
+from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
@@ -866,16 +866,3 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
         [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
     )
     return vander
-
-
-def _upsample(x, source_grid, grid):
-    return irfft2(
-        rfft2(
-            source_grid.meshgrid_reshape(x, "rtz")[0],
-            norm="forward",
-            axes=(0, 1),
-        ),
-        s=(grid.num_theta, grid.num_zeta),
-        norm="forward",
-        axes=(0, 1),
-    ).reshape(grid.num_nodes, order="F")

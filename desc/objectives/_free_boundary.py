@@ -4,11 +4,10 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import get_interpolator, virtual_casing_biot_savart
-from desc.integrals._interp_utils import _upsample
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
@@ -63,6 +62,12 @@ class VacuumBoundaryError(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+    ]
 
     _scalar = False
     _linear = False
@@ -437,6 +442,17 @@ class BoundaryError(_Objective):
         objective = BoundaryError(eq, field)
 
     """
+
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+        "_q",
+        "_sheet_current",
+        "_sheet_data_keys",
+        "_use_same_grid",
+    ]
 
     _scalar = False
     _linear = False
@@ -867,7 +883,8 @@ class FreeSurfaceError(_Objective):
         Evaluation points to evaluate objective error.
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
-        Default is ``grid``.
+        Default is ``grid``, but it is likely best to use a grid
+        with much lower resolution.
     grid : Grid
         Grid for the integral transforms.
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
@@ -889,6 +906,10 @@ class FreeSurfaceError(_Objective):
         then supply ``None``.  Default is ``None``.
         Recommend to verify computation with ``chunk_size`` set to a
         small number due to bugs in JAX or XLA.
+    B_coil_chunk_size : int or None
+        Size to split coil integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.  Default is ``None``.
 
     """
 
@@ -900,6 +921,17 @@ class FreeSurfaceError(_Objective):
     _scalar = False
     _print_value_fmt = "Free surface Error: "
     _units = "T^2 m^2"
+
+    _static_attrs = _Objective._static_attrs + [
+        "_field",
+        "_use_same_grid",
+        "_q",
+        "_maxiter",
+        "_chunk_size",
+        "_B_coil_chunk_size",
+        "_inner_keys",
+        "_reuseable_keys",
+    ]
 
     _coordinates = "rtz"
 
@@ -914,6 +946,7 @@ class FreeSurfaceError(_Objective):
         q=None,
         maxiter=-1,
         chunk_size=None,
+        B_coil_chunk_size=None,
         target=None,
         bounds=None,
         weight=1,
@@ -962,6 +995,7 @@ class FreeSurfaceError(_Objective):
         self._q = q
         self._maxiter = maxiter
         self._chunk_size = chunk_size
+        self._B_coil_chunk_size = B_coil_chunk_size
         self._inner_keys = [
             "|B|^2",
             "p",
@@ -970,6 +1004,21 @@ class FreeSurfaceError(_Objective):
             "grad(zeta)",
             "|e_theta x e_zeta|",
             "n_rho",
+        ]
+        self._reuseable_keys = [
+            "0",
+            "R",
+            "R_t",
+            "R_z",
+            "Z_t",
+            "Z_z",
+            "e_theta",
+            "e_theta x e_zeta",
+            "e_zeta",
+            "n_rho",
+            "omega_t",
+            "omega_z",
+            "|e_theta x e_zeta|",
         ]
 
         super().__init__(
@@ -1002,22 +1051,28 @@ class FreeSurfaceError(_Objective):
         #   Then pass in transforms=eq_transforms in eval_transforms
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
         eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
-        source_transforms = (
-            eval_transforms
-            if self._use_same_grid
-            else get_transforms("Phi_mn", self._field, grid=self._grid)
-        )
+        if self._use_same_grid:
+            source_transforms = eval_transforms
+            grad_transforms = eq_transforms
+        else:
+            source_transforms = get_transforms("Phi_mn", self._field, grid=self._grid)
+            # TODO: Replace with arbitrary extension
+            grad_transforms = get_transforms(
+                ["grad(theta)", "grad(zeta)", "n_rho"], eq, grid=self._grid
+            )
         data, _ = self._field.compute(
             ["interpolator", "Y_coil"],
             grid=self._grid,
             q=self._q,
             transforms=source_transforms,
             B_coil=self._field._B_coil,
+            B_coil_chunk_size=self._B_coil_chunk_size,
         )
         self._field.Y = data["Y_coil"]
         self._constants = {
             "interpolator": data["interpolator"],
             "eq_transforms": eq_transforms,
+            "grad_transforms": grad_transforms,
             "eval_transforms": eval_transforms,
             "source_transforms": source_transforms,
             "profiles": get_profiles(self._inner_keys, eq, grid=self._eval_grid),
@@ -1065,51 +1120,46 @@ class FreeSurfaceError(_Objective):
             constants["eq_transforms"],
             constants["profiles"],
         )
-        outer = {
-            key: inner[key]
-            for key in [
-                "0",
-                "R",
-                "R_t",
-                "R_z",
-                "Z_t",
-                "Z_z",
-                "e_theta",
-                "e_theta x e_zeta",
-                "e_zeta",
-                "n_rho",
-                "omega_t",
-                "omega_z",
-                "|e_theta x e_zeta|",
-            ]
-        }
-        outer["interpolator"] = constants["interpolator"]
-
         field_params = {
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
             "I": inner["I"][self._eval_grid.unique_rho_idx[-1]],
             "Y": self._field.Y,
         }
-        # TODO: Replace with extension
-        outer["B0*n"] = dot(
-            field_params["I"] * inner["grad(theta)"]
-            + field_params["Y"] * inner["grad(zeta)"],
-            inner["n_rho"],
-        )
-        if not self._use_same_grid:
+        outer = {key: inner[key] for key in self._reuseable_keys}
+
+        if self._use_same_grid:
+            outer["B0*n"] = dot(
+                field_params["I"] * inner["grad(theta)"]
+                + field_params["Y"] * inner["grad(zeta)"],
+                inner["n_rho"],
+            )
+            outer["interpolator"] = constants["interpolator"]
+        else:
+            grads = compute_fun(
+                eq,
+                ["grad(theta)", "grad(zeta)", "n_rho"],
+                params,
+                constants["grad_transforms"],
+                constants["profiles"],
+            )
+            data = {key: grads[key] for key in self._reuseable_keys}
+            data["B0*n"] = dot(
+                field_params["I"] * grads["grad(theta)"]
+                + field_params["Y"] * grads["grad(zeta)"],
+                grads["n_rho"],
+            )
+            data["interpolator"] = constants["interpolator"]
             outer["Phi_mn"] = compute_fun(
                 self._field,
                 "Phi_mn",
                 field_params,
                 constants["source_transforms"],
                 constants["profiles"],
-                data={
-                    "interpolator": outer["interpolator"],
-                    "B0*n": _upsample(outer["B0*n"], self._eval_grid, self._grid),
-                },
+                data=data,
                 maxiter=self._maxiter,
                 chunk_size=self._chunk_size,
+                B_coil_chunk_size=self._B_coil_chunk_size,
                 B_coil=self._field._B_coil,
                 field_grid=self._coil_grid,
             )["Phi_mn"]
@@ -1123,6 +1173,7 @@ class FreeSurfaceError(_Objective):
             data=outer,
             maxiter=self._maxiter,
             chunk_size=self._chunk_size,
+            B_coil_chunk_size=self._B_coil_chunk_size,
             B_coil=self._field._B_coil,
             field_grid=self._coil_grid,
         )
@@ -1239,11 +1290,6 @@ class BoundaryErrorNESTOR(_Objective):
         )
         grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         timer = Timer()
         if verbose > 0:

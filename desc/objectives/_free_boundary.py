@@ -922,6 +922,17 @@ class FreeSurfaceError(_Objective):
     _print_value_fmt = "Free surface Error: "
     _units = "T^2 m^2"
 
+    _static_attrs = _Objective._static_attrs + [
+        "_field",
+        "_use_same_grid",
+        "_q",
+        "_maxiter",
+        "_chunk_size",
+        "_B_coil_chunk_size",
+        "_inner_keys",
+        "_reuseable_keys",
+    ]
+
     _coordinates = "rtz"
 
     def __init__(

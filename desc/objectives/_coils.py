@@ -3171,6 +3171,7 @@ class Bxdl(_Objective):
         w = eval_data["ds"]
 
         eq = self._eq
+        B_plasma = None
         if self._eq is not None and self._curve_fixed:
             x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
             if self._eq_grid is None:
@@ -3193,7 +3194,6 @@ class Bxdl(_Objective):
         else:
             eq_grid = None
             transforms = None
-            B_plasma = None
 
         self._constants = {
             "field": SumMagneticField(self._field),

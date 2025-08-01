@@ -186,12 +186,12 @@ def _lsmr_compute_potential(
     D = lx.MatrixLinearOperator(D)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
-    return (
-        lx.linear_solve(D, boundary_condition)
-        if (potential_grid.num_nodes == basis.num_modes)
-        else lx.linear_solve(
-            D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=None)
-        )
+    return lx.linear_solve(
+        D,
+        boundary_condition,
+        solver=lx.AutoLinearSolver(
+            well_posed=None if (potential_grid.num_nodes > basis.num_modes) else True
+        ),
     ).value
 
 

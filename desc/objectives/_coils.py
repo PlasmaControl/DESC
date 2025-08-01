@@ -3048,7 +3048,12 @@ class Bxdl(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
-
+    field_fixed : bool
+        Whether the coil set will be fixed during the optimization.
+    curve_fixed : bool
+        Whether the curve will be fixed during the optimization.
+    b_hat : bool
+        Whether to evaluate |Bxdl| or |Bxdl|/|B|
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -3082,6 +3087,7 @@ class Bxdl(_Objective):
         eq_kwargs={},
         field_fixed=False,
         curve_fixed=True,
+        b_hat=False,
         **kwargs,
     ):
 
@@ -3099,6 +3105,7 @@ class Bxdl(_Objective):
         things = []
         self._field_fixed = field_fixed
         self._curve_fixed = curve_fixed
+        self._b_hat = b_hat
         if not field_fixed:
             things += self._field
         if not curve_fixed:
@@ -3180,10 +3187,10 @@ class Bxdl(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        if self._normalize and self._eq is not None:
+        if self._normalize and self._eq is not None and not self._b_hat:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]  # assume field of same scale as eq
-        elif self._normalize and self._eq is None:
+        elif self._normalize:
             self._normalization = 1
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -3254,10 +3261,94 @@ class Bxdl(_Objective):
             )
             B_ext = B_ext + B_plasma
         f = safenorm(cross(B_ext, eval_data["frenet_tangent"], axis=-1), axis=-1)
+        if self._b_hat:
+            f = f/safenorm(B_ext, axis=-1)
         return f
 
+class ArcSineBxdl(Bxdl):
+    """Target the angle between B and a curve.
 
+    Computes field from MagneticField object(s), and optimizes them to produce a field
+    which is parallel relative to a given Curve object.
 
+    Parameters
+    ----------
+    curve : Curve
+        Curve along which magnetic field will be optimized.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the perpendicular component to the Curve.
+    eq : Equilibrium, optional
+        Equilibrium to compute the B_plasma contribution from at the curve.
+        Assumed to be fixed. If ``eq`` is not fixed, input it as part of the list
+        for ``field``.
+    eq_grid : Grid, optional
+        Collocation grid containing the nodes in the equilibrium to compute the plasma
+        magnetic field from.
+        Default grid is: ``QuadratureGrid(L=2*eq.L_grid, M=2*eq.M_grid, N=2 *
+        eq.N_grid, NFP=eq.NFP)``
+    eval_grid : Grid, optional
+        Collocation grid for the points to evaluate the objective at on the curve.
+        Default grid is determined by the Curve object.
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    field_fixed : bool
+        Whether the coil set will be fixed during the optimization.
+    curve_fixed : bool
+        Whether the curve will be fixed during the optimization.
+    """
+    def __init__(
+        self,
+        curve,
+        field,
+        eq=None,
+        eq_grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        eval_grid=None,
+        field_grid=None,
+        name="ArcSineBxdl",
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        eq_kwargs={},
+        field_fixed=False,
+        curve_fixed=True,
+        **kwargs,
+    ):
+        super().__init__(
+            self,
+            curve,
+            field,
+            eq=eq,
+            eq_grid=eq_grid,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=False,
+            normalize_target=False,
+            eval_grid=eval_grid,
+            field_grid=field_grid,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+            bs_chunk_size=bs_chunk_size,
+            eq_kwargs=eq_kwargs,
+            field_fixed=field_fixed,
+            curve_fixed=curve_fixed,
+            b_hat=True,
+            **kwargs,
+        )
+    def compute(self, *params, constants=None):
+        f = super().compute(*params,constants=constants)
+        return jnp.arcsin(f)
+    
 class LinkingCurrentConsistency(_Objective):
     """Target the self-consistent poloidal linking current between the plasma and coils.
 

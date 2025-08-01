@@ -14,7 +14,7 @@ def load_inputs(coil_paths,eq_path):
     eq = load(eq_path)
 
     return eq, large_coils,small_coils
-def find_xpt(l,small_coils,large_coils,dir,dist=None):
+def find_xpt(l,small_coils,large_coils,dir,eq,dist=None):
     # Optimize X point location
     if dist is None:
         offset = 0.4
@@ -60,24 +60,3 @@ def find_xpt(l,small_coils,large_coils,dir,dist=None):
     #coords = optimized_coilset.compute(['R','Z'],grid=LinearGrid())#[0]
     np.save(f'{dir}x_point_Rn.npy',optimized_coilset.R_n)
     np.save(f'{dir}x_point_Zn.npy',optimized_coilset.Z_n)
-
-root_dir = "/global/homes/m/mavida/DESC/xpt_dist_sweep/G1600_E/G1600_E/"
-eq_path = root_dir + "equil_G1600.h5"
-eq = load(eq_path)
-grid = LinearGrid(rho=[1.0],theta=[3*np.pi/2],N=24,NFP=eq.NFP)
-l = eq.compute(['R','phi','Z'],grid=grid)
-
-
-for dist in [0,20,40]:
-    dir = root_dir + f"G1600_E_{dist}/"
-    coil_paths = (
-            f"{dir}encircling_G1600_E_{dist}.h5",
-            f"{dir}shaping_G1600_E_{dist}.h5",
-        )
-    line_path = f"{dir}G1600_xpt_coil_location_{dist}cm.txt"
-    eq, large_coils, small_coils = load_inputs(coil_paths,eq_path)
-    find_xpt(l,small_coils,large_coils,root_dir+f"{dist}cm_",dist=dist/100)
-    
-coil_paths = (f"{root_dir}encircling_G1600_B.h5", f"{root_dir}shaping_G1600_B.h5")
-eq, large_coils, small_coils = load_inputs(coil_paths,eq_path)
-find_xpt(l,small_coils,large_coils,root_dir+'null_hyp_',dist=dist/100)

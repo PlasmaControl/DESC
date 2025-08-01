@@ -1489,7 +1489,6 @@ class LinearGrid(_Grid):
         """bool: Whether the grid is made of open or closed intervals."""
         return self.__dict__.setdefault("_endpoint", False)
 
-
 class QuadratureGrid(_Grid):
     """Grid used for numerical quadrature.
 
@@ -1636,6 +1635,7 @@ class QuadratureGrid(_Grid):
             ) = self._find_unique_inverse_nodes()
 
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
+
 
 
 class ConcentricGrid(_Grid):

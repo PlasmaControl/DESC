@@ -208,7 +208,6 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.magnetic_fields import OmnigenousField
         from desc.objectives import QuadraticFlux
 
         # eq may be None
@@ -226,19 +225,24 @@ class Optimizer(IOAble):
             # save these for later
             eq_params_init = eq.params_dict.copy()
 
-            if x_scale == "ess":
+            if isinstance(x_scale, str) and x_scale == "ess":
                 options = {} if options is None else options
                 ess_alpha = options.pop("ess_alpha", 1.2)
                 ess_type = options.pop("ess_type", "Linf")
                 ess_min_value = options.pop("ess_min_value", 1e-7)
-                x_scale = _create_exponential_spectral_scale(
-                    eq=eq, alpha=ess_alpha, scale_type=ess_type, min_value=ess_min_value
-                )
-                # This assumes that Equilibrium is first in things
-                for i, t in enumerate(things):
-                    if isinstance(t, OmnigenousField):
-                        x_scale = np.concatenate([x_scale, np.ones(t.dim_x)])
-
+                x_scales = []
+                for t in things:
+                    if isinstance(t, Equilibrium):
+                        t_scale = _create_exponential_spectral_scale(
+                            eq=t,
+                            alpha=ess_alpha,
+                            scale_type=ess_type,
+                            min_value=ess_min_value,
+                        )
+                    else:
+                        t_scale = np.ones(t.dim_x)
+                    x_scales.append(t_scale)
+                x_scale = np.concatenate(x_scales)
         options = {} if options is None else options
         timer = Timer()
         options = {} if options is None else options

@@ -173,9 +173,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             Position of particle in phase space [rho, theta, zeta, vpar] or
             [R, phi, Z, vpar].
         args : tuple
-            Additional arguments needed by model, (m, q, mu, eq_or_field, kwargs).
-            kwargs will be passed to the field.compute_magnetic_field method.
-            mu is the v⊥²/|B|.
+            Additional arguments needed by model, (m, q, mu, eq_or_field, params,
+            kwargs). kwargs will be passed to the field.compute_magnetic_field method.
+            mu is the mv⊥²/2|B|.
 
         Returns
         -------
@@ -183,14 +183,16 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         x = x.squeeze()
-        m, q, mu, eq_or_field, kwargs = args
+        m, q, mu, eq_or_field, params, kwargs = args
         if self.frame == "flux":
             eq_or_field = eqx.error_if(
                 eq_or_field,
                 not isinstance(eq_or_field, Equilibrium),
                 "Integration in flux coordinates requires a MagneticField.",
             )
-            return self._compute_flux_coordinates(x, eq_or_field, m, q, mu, **kwargs)
+            return self._compute_flux_coordinates(
+                x, eq_or_field, params, m, q, mu, **kwargs
+            )
         elif self.frame == "lab":
             eq_or_field = eqx.error_if(
                 eq_or_field,
@@ -200,13 +202,15 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 "output to lab coordinates only at the end by the helper function "
                 "Equilibrium.map_coordinates.",
             )
-            return self._compute_lab_coordinates(x, eq_or_field, m, q, mu, **kwargs)
+            return self._compute_lab_coordinates(
+                x, eq_or_field, params, m, q, mu, **kwargs
+            )
 
-    def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
+    def _compute_flux_coordinates(self, x, eq, params, m, q, mu, **kwargs):
         """ODE equation for vacuum guiding center in flux coordinates.
 
         This function is written for vmap, so it expects x to be a coordinate of a
-        single particle, and args to be a tuple of (m, q, mu, eq, kwargs) with
+        single particle, and args to be a tuple of (m, q, mu, eq, params, kwargs) with
         m, q and mu (mv⊥²/2|B|) being scalars.
         """
         rho, theta, zeta, vpar = x
@@ -228,7 +232,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         transforms = get_transforms(data_keys, eq, grid, jitable=True)
         profiles = get_profiles(data_keys, eq, grid)
-        data = compute_fun(eq, data_keys, eq.params_dict, transforms, profiles)
+        data = compute_fun(eq, data_keys, params, transforms, profiles)
 
         # derivative of the guiding center position in R, phi, Z coordinates
         # TODO: Is this correct? Check
@@ -244,25 +248,23 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
-    def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
+    def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):
         """Compute the RHS of the ODE using MagneticField.
 
         This function is written for vmap, so it expects x to be a coordinate of a
-        single particle, and args to be a tuple of (m, q, mu, field, kwargs) with
-        m, q and mu being scalars.
+        single particle, and args to be a tuple of (m, q, mu, field, params, kwargs)
+        with m, q and mu (mv⊥²/2|B|) being scalars.
         """
-        # this is the one implemented in simsopt for method="gc_vac"
-        # should be equivalent to full lagrangian from Cary & Brizard in vacuum
         vpar = x[-1]
         coord = x[:-1]
 
-        field_compute = lambda y: jnp.linalg.norm(
-            field.compute_magnetic_field(y, **kwargs), axis=-1
+        field_norm_compute = lambda y: jnp.linalg.norm(
+            field.compute_magnetic_field(y, params=params, **kwargs), axis=-1
         ).squeeze()
 
         # magnetic field vector in R, phi, Z coordinates
-        B = field.compute_magnetic_field(coord, **kwargs)
-        grad_B = Derivative(field_compute, mode="grad")(coord)
+        B = field.compute_magnetic_field(coord, params=params, **kwargs)
+        grad_B = Derivative(field_norm_compute, mode="grad")(coord)
 
         modB = jnp.linalg.norm(B, axis=-1)
         b = B / modB
@@ -272,6 +274,9 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         Rdot = vpar * b + (m / q / modB**2 * (mu * modB / m + vpar**2)) * cross(
             b, grad_B
         )
+        # velocity and angular velocity are related by the radial coordinate
+        # v_phi = R * phi_dot, so phi_dot = v_phi / R
+        Rdot = Rdot.at[1].set(safediv(Rdot[1], coord[0]))
 
         vpardot = jnp.atleast_2d(-mu / m * dot(b, grad_B))
         dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
@@ -376,7 +381,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         rho, theta, zeta, vpar, v = x
-        m, q, _, eq, _ = args
+        m, q, _, eq, params, _ = args
 
         assert (
             eq.Te_l.size > 0
@@ -406,7 +411,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         data = compute_fun(
             eq,
             data_keys,
-            eq.params_dict,
+            params,
             transforms,
             profiles,
         )
@@ -516,6 +521,7 @@ def _compute_modB(x, field, **kwargs):
             x.T,
             spacing=jnp.zeros_like(x),
             sort=False,
+            NFP=field.NFP,
         )
         return field.compute("|B|", grid=grid)["|B|"]
     return jnp.linalg.norm(field.compute_magnetic_field(x, **kwargs), axis=-1)
@@ -858,6 +864,7 @@ def trace_particles(
     mus,
     ts,
     model,
+    params=None,
     rtol=1e-8,
     atol=1e-8,
     max_steps=1000,
@@ -889,6 +896,9 @@ def trace_particles(
         Strictly increasing array of time values where output is desired.
     model : AbstractTrajectoryModel
         Trajectory model to integrate with.
+    params : dict, optional
+        Parameters of the field object, needed for automatic differentiation.
+        Defaults to field.params_dict.
     rtol, atol : float
         relative and absolute tolerances for ode integration
     max_steps : int
@@ -927,6 +937,9 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
+    if not params:
+        params = field.params_dict
+
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
     # Euler method does not support adavtive step size controller
     stepsize_controller = (
@@ -947,7 +960,7 @@ def trace_particles(
         model,
         solver,
         y0=x,
-        args=[m, q, mu, field, kwargs],
+        args=[m, q, mu, field, params, kwargs],
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,

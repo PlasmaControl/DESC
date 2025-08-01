@@ -4069,7 +4069,7 @@ def plot_particle_trajectories(
         Figure being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
-        Contains keys ``["X","Y","Z","R"]``, each entry in the dict is a list
+        Contains keys ``["X","Y","Z","R", "phi]``, each entry in the dict is a list
         with length corresponding to the number of particles, and each
         element of that list is an array of size `ts.size` corresponding to the
         coordinate values along that particles trajectory.
@@ -4197,6 +4197,7 @@ def plot_particle_trajectories(
     plot_data["Y"] = []
     plot_data["Z"] = []
     plot_data["R"] = []
+    plot_data["phi"] = []
     for i in range(rs.shape[0]):  # iterate over each particle
         if model.frame == "flux":
             if isinstance(field, Equilibrium):
@@ -4227,6 +4228,7 @@ def plot_particle_trajectories(
             plot_data["Y"].append(y)
             plot_data["Z"].append(z)
             plot_data["R"].append(r)
+            plot_data["phi"].append(phi)
 
         fig.add_trace(
             go.Scatter3d(

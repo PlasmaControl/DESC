@@ -78,6 +78,16 @@ class PointBMeasurement(_Objective):
     _units = "(T)"
     _print_value_fmt = "Point B Measurement Error: "
     _print_error = True
+    _static_attrs = _Objective._static_attrs + [
+        # TODO: should we add an intermediate flag to avoid using an array as static?
+        "_directions",
+        "_sheet_current",
+        "_vacuum",
+        "_eq_vc_data_keys",
+        "_field_fixed",
+        "_sheet_data_keys",
+        "_compute_A_or_B_from_CurrentPotentialField",
+    ]
 
     def __init__(
         self,

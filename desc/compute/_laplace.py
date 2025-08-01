@@ -9,6 +9,8 @@ References
 
 from functools import partial
 
+import lineax as lx
+
 from desc.backend import fixed_point, jit, jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
@@ -181,13 +183,16 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
+    D = lx.MatrixLinearOperator(D)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return (
-        jnp.linalg.solve(D, boundary_condition)
+        lx.linear_solve(D, boundary_condition)
         if (potential_grid.num_nodes == basis.num_modes)
-        else jnp.linalg.lstsq(D, boundary_condition)[0]
-    )
+        else lx.linear_solve(
+            D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=None)
+        )
+    ).value
 
 
 def _iteration_operator(
@@ -774,16 +779,19 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
 
-    mat = (
-        _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
-        + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
-    ).reshape(grid.num_nodes * 3, basis.num_modes)
+    mat = lx.MatrixLinearOperator(
+        (
+            _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
+            + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
+        ).reshape(grid.num_nodes * 3, basis.num_modes)
+    )
 
     # Equation 5.16 in [1].
-    data["Phi_coil_mn"] = jnp.linalg.lstsq(
+    data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-    )[0]
+        solver=lx.AutoLinearSolver(well_posed=None),
+    ).value
     return data
 
 

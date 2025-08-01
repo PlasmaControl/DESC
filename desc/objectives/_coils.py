@@ -3172,8 +3172,7 @@ class Bxdl(_Objective):
 
         eq = self._eq
         B_plasma = None
-        if self._eq is not None and self._curve_fixed:
-            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        if self._eq is not None:
             if self._eq_grid is None:
                 eq_grid = QuadratureGrid(
                     L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
@@ -3182,7 +3181,8 @@ class Bxdl(_Objective):
                 eq_grid = self._eq_grid
             eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
             transforms = get_transforms(eq_data_keys, obj=eq, grid=eq_grid)
-            if self._eq_fixed:
+            if self._eq_fixed and self._curve_fixed:
+                x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
                 B_plasma = eq.compute_magnetic_field(
                     coords=x,
                     chunk_size=self._bs_chunk_size,
@@ -3223,7 +3223,7 @@ class Bxdl(_Objective):
         Parameters
         ----------
         field_params : dict
-            Dictionary of the external field's and/or the curve's and/or the 
+            Dictionary of the external field's and/or the curve's and/or the
             equilibrium's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to

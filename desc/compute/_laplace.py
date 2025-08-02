@@ -800,7 +800,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-        solver=lx.AutoLinearSolver(well_posed=None),
+        solver=lx.AutoLinearSolver(well_posed=False),
     ).value
     return data
 

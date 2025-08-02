@@ -721,6 +721,25 @@ def _B_coil_field(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="n_rho x B_coil",
+    label="n_{\\rho} \\times B_{\\text{coil}}",
+    units="T",
+    units_long="Tesla",
+    description="Flux surface normal cross magnetic field due to coils",
+    dim=1,
+    coordinates="rtz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["n_rho", "B_coil"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+)
+def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
+    data["n_rho x B_coil"] = cross(data["n_rho"], data["B_coil"])
+    return data
+
+
+@register_compute_fun(
     name="Y_coil",
     label="Y_{\\text{coil}}",
     units="T m",
@@ -744,26 +763,7 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     return data
 
 
-@register_compute_fun(
-    name="n_rho x B_coil",
-    label="n_{\\rho} \\times B_{\\text{coil}}",
-    units="T",
-    units_long="Tesla",
-    description="Flux surface normal cross magnetic field due to coils",
-    dim=1,
-    coordinates="rtz",
-    params=[],
-    transforms={},
-    profiles=[],
-    data=["n_rho", "B_coil"],
-    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
-)
-def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
-    data["n_rho x B_coil"] = cross(data["n_rho"], data["B_coil"])
-    return data
-
-
-# TODO: compute this from vector or scalar potential
+# TODO: compute this directly from scalar potential without inversion
 @register_compute_fun(
     name="Phi_coil_mn",
     label="\\Phi_{\\text{coil}, mn}",

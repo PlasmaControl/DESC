@@ -13,6 +13,7 @@ from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    cross,
     dot,
     errorif,
     parse_argname_change,
@@ -749,7 +750,7 @@ class BoundaryError(_Objective):
         )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
-            Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
+            Kerr = mu_0 * sheet_eval_data["K"] - cross(eval_data["n_rho"], Bjump)
             Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
             return jnp.concatenate([Bn_err, Bsq_err, Kerr])
         else:
@@ -877,8 +878,11 @@ class FreeSurfaceError(_Objective):
     ----------
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
-    field : FreeSurfaceOuterField
-        Laplace solver object.
+    field : FreeSurfaceOuterField or SourceFreeField
+        Laplace solver object. If is an instance of ``FreeSurfaceOuterField``
+        assumes ``field._B_coil`` is the magnetic field due to coils.
+        If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
+        the magnetic field due to coils.
     eval_grid : Grid
         Evaluation points to evaluate objective error.
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
@@ -923,12 +927,15 @@ class FreeSurfaceError(_Objective):
     _units = "T^2 m^2"
 
     _static_attrs = _Objective._static_attrs + [
+        "_is_neumann",
         "_field",
+        "_B_coil",
         "_use_same_grid",
         "_q",
         "_maxiter",
         "_chunk_size",
         "_B_coil_chunk_size",
+        "_grad_keys",
         "_inner_keys",
         "_reuseable_keys",
     ]
@@ -970,24 +977,22 @@ class FreeSurfaceError(_Objective):
                 sym=False,
             )
         assert grid.can_fft2
+        errorif(field.M_Phi > grid.M, msg=f"M_Phi = {field.M_Phi} > {grid.M} = grid.M.")
+        errorif(field.N_Phi > grid.N, msg=f"N_Phi = {field.N_Phi} > {grid.N} = grid.N.")
+
+        self._is_neumann = not hasattr(field, "M_Phi_coil")
         errorif(
-            field.M_Phi > grid.M, msg=f"Got M_Phi = {field.M_Phi} > {grid.M} = grid.M."
+            not self._is_neumann and field.M_Phi_coil > grid.M,
+            msg=f"M_Phi_coil = {getattr(field, "M_Phi_coil", 0)} > {grid.M} = grid.M.",
         )
         errorif(
-            field.N_Phi > grid.N, msg=f"Got N_Phi = {field.N_Phi} > {grid.N} = grid.N."
-        )
-        errorif(
-            field.M_Phi_coil > grid.M,
-            msg=f"Got M_Phi_coil = {field.M_Phi_coil} > {grid.M} = grid.M.",
-        )
-        errorif(
-            field.N_Phi_coil > grid.N,
-            msg=f"Got N_Phi_coil = {field.N_Phi_coil} > {grid.N} = grid.N.",
+            not self._is_neumann and field.N_Phi_coil > grid.N,
+            msg=f"N_Phi_coil = {getattr(field, "N_Phi_coil", 0)} > {grid.N} = grid.N.",
         )
         eval_grid = setdefault(eval_grid, grid)
-        assert eval_grid.can_fft2
 
         self._field = field
+        self._B_coil = field._B0 if self._is_neumann else field._B_coil
         self._grid = grid
         self._eval_grid = eval_grid
         self._coil_grid = coil_grid
@@ -996,15 +1001,8 @@ class FreeSurfaceError(_Objective):
         self._maxiter = maxiter
         self._chunk_size = chunk_size
         self._B_coil_chunk_size = B_coil_chunk_size
-        self._inner_keys = [
-            "|B|^2",
-            "p",
-            "I",
-            "grad(theta)",
-            "grad(zeta)",
-            "|e_theta x e_zeta|",
-            "n_rho",
-        ]
+        self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
+        self._inner_keys = ["|B|^2", "p", "I", "|e_theta x e_zeta|"] + self._grad_keys
         self._reuseable_keys = [
             "0",
             "R",
@@ -1020,6 +1018,10 @@ class FreeSurfaceError(_Objective):
             "omega_z",
             "|e_theta x e_zeta|",
         ]
+        if self._is_neumann:
+            self._grad_keys.append("x")
+            self._inner_keys.append("x")
+            self._reuseable_keys += ["Z", "omega", "phi", "x", "zeta"]
 
         super().__init__(
             things=eq,
@@ -1056,19 +1058,19 @@ class FreeSurfaceError(_Objective):
             grad_transforms = eq_transforms
         else:
             source_transforms = get_transforms("Phi_mn", self._field, grid=self._grid)
-            # TODO: Replace with arbitrary extension
-            grad_transforms = get_transforms(
-                ["grad(theta)", "grad(zeta)", "n_rho"], eq, grid=self._grid
-            )
+            grad_transforms = get_transforms(self._grad_keys, eq, grid=self._grid)
+
         data, _ = self._field.compute(
-            ["interpolator", "Y_coil"],
+            ["interpolator"] if self._is_neumann else ["interpolator", "Y_coil"],
             grid=self._grid,
             q=self._q,
             transforms=source_transforms,
-            B_coil=self._field._B_coil,
+            B_coil=self._B_coil,
             B_coil_chunk_size=self._B_coil_chunk_size,
         )
-        self._field.Y = data["Y_coil"]
+        # No net poloidal current in equation 4.13 of [1].
+        self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
+
         self._constants = {
             "interpolator": data["interpolator"],
             "eq_transforms": eq_transforms,
@@ -1128,28 +1130,51 @@ class FreeSurfaceError(_Objective):
         }
         outer = {key: inner[key] for key in self._reuseable_keys}
 
-        if self._use_same_grid:
-            outer["B0*n"] = dot(
-                field_params["I"] * inner["grad(theta)"]
-                + field_params["Y"] * inner["grad(zeta)"],
-                inner["n_rho"],
+        if self._is_neumann:
+            outer = compute_fun(
+                self._field,
+                "B_coil",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=outer,
+                B_coil_chunk_size=self._B_coil_chunk_size,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
             )
+
+        problem = {"problem": "exterior Neumann"} if self._is_neumann else {}
+
+        if self._use_same_grid:
             outer["interpolator"] = constants["interpolator"]
+            outer["B0*n"] = self._phi_sec_dot_n(field_params, inner)
+            if self._is_neumann:
+                outer["B0*n"] += dot(outer["B_coil"], inner["n_rho"])
         else:
             grads = compute_fun(
                 eq,
-                ["grad(theta)", "grad(zeta)", "n_rho"],
+                self._grad_keys,
                 params,
                 constants["grad_transforms"],
                 constants["profiles"],
             )
             data = {key: grads[key] for key in self._reuseable_keys}
-            data["B0*n"] = dot(
-                field_params["I"] * grads["grad(theta)"]
-                + field_params["Y"] * grads["grad(zeta)"],
-                grads["n_rho"],
-            )
             data["interpolator"] = constants["interpolator"]
+            data["B0*n"] = self._phi_sec_dot_n(field_params, grads)
+            if self._is_neumann:
+                data = compute_fun(
+                    self._field,
+                    "B_coil",
+                    field_params,
+                    constants["source_transforms"],
+                    constants["profiles"],
+                    data=data,
+                    B_coil_chunk_size=self._B_coil_chunk_size,
+                    B_coil=self._B_coil,
+                    field_grid=self._coil_grid,
+                )
+                data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+
             outer["Phi_mn"] = compute_fun(
                 self._field,
                 "Phi_mn",
@@ -1160,13 +1185,14 @@ class FreeSurfaceError(_Objective):
                 maxiter=self._maxiter,
                 chunk_size=self._chunk_size,
                 B_coil_chunk_size=self._B_coil_chunk_size,
-                B_coil=self._field._B_coil,
+                B_coil=self._B_coil,
                 field_grid=self._coil_grid,
+                **problem,
             )["Phi_mn"]
 
         outer = compute_fun(
             self._field,
-            "|K_vc|^2",
+            ["K_vc", "n_rho x B_coil"] if self._is_neumann else "|K_vc|^2",
             field_params,
             constants["eval_transforms"],
             constants["profiles"],
@@ -1174,12 +1200,24 @@ class FreeSurfaceError(_Objective):
             maxiter=self._maxiter,
             chunk_size=self._chunk_size,
             B_coil_chunk_size=self._B_coil_chunk_size,
-            B_coil=self._field._B_coil,
+            B_coil=self._B_coil,
             field_grid=self._coil_grid,
+            **problem,
         )
+        if self._is_neumann:
+            outer["K_vc"] -= outer["n_rho x B_coil"]
+            outer["|K_vc|^2"] = dot(outer["K_vc"], outer["K_vc"])
+
         return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
             "|e_theta x e_zeta|"
         ]
+
+    @staticmethod
+    def _phi_sec_dot_n(params, grads):
+        return dot(
+            params["I"] * grads["grad(theta)"] + params["Y"] * grads["grad(zeta)"],
+            grads["n_rho"],
+        )
 
 
 class BoundaryErrorNESTOR(_Objective):

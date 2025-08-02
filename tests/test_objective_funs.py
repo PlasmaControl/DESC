@@ -38,6 +38,7 @@ from desc.magnetic_fields import (
     FreeSurfaceOuterField,
     OmnigenousField,
     PoloidalMagneticField,
+    SourceFreeField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -3333,7 +3334,8 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_free_surface_error(self):
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_compute_scalar_resolution_free_surface_error(self, flag):
         """FreeSurfaceError."""
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -3351,11 +3353,11 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            field = FreeSurfaceOuterField(
-                eq.surface,
-                eq.M,
-                eq.N,
-                B_coil=ToroidalMagneticField(5, 1),
+            B = ToroidalMagneticField(5, 1)
+            field = (
+                FreeSurfaceOuterField(eq.surface, eq.M, eq.N, B_coil=B)
+                if flag
+                else SourceFreeField(eq.surface, eq.M, eq.N, B0=B)
             )
             obj = ObjectiveFunction(FreeSurfaceError(eq, field))
             obj.build()
@@ -3796,14 +3798,15 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "boundary error"
 
     @pytest.mark.unit
-    def test_objective_no_nangrad_free_surface_error(self):
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_objective_no_nangrad_free_surface_error(self, flag):
         """FreeSurfaceError."""
         eq = get("W7-X")
-        field = FreeSurfaceOuterField(
-            eq.surface,
-            3,
-            3,
-            B_coil=ToroidalMagneticField(5, 1),
+        B = ToroidalMagneticField(5, 1)
+        field = (
+            FreeSurfaceOuterField(eq.surface, 3, 3, B_coil=B)
+            if flag
+            else SourceFreeField(eq.surface, 3, 3, B0=B)
         )
         obj = ObjectiveFunction(
             FreeSurfaceError(

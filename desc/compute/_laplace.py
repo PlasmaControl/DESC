@@ -149,9 +149,17 @@ def _lsmr_compute_potential(
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
-    assume_quadrature_accurate=False,
     **kwargs,
 ):
+    """Returns potential harmonics.
+
+    The exterior Neumann and interior Dirichlet problems are in general well-conditied
+    for inversion [1]. However 𝛷_out (periodic) has "sin" symmetry when the stellarator
+    has "stellarator-symmetry". If the full basis is chosen to interpolate, then the
+    coefficients of non-symmetric modes should vanish, implying the system has
+    vanishing eigenvalues and hence a high condition number. For this reason, when the
+    system is not square, forcing ``well_posed=False`` to use an SVD may be beneficial.
+    """
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
     potential_grid = interpolator.eval_grid
@@ -160,7 +168,6 @@ def _lsmr_compute_potential(
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
-    tag = ()
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -188,13 +195,14 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
-        if well_posed:
-            tag = lx.negative_semidefinite_tag
-        else:
+        if not well_posed:
             well_posed = None
-    elif well_posed:
-        tag = lx.positive_semidefinite_tag
-    D = lx.MatrixLinearOperator(D, tag if assume_quadrature_accurate else ())
+        # This system is negative definite, but perhaps not symmetric. (For example,
+        # there is discretization error in the quadrature that could destory symmetry).
+        # Lineax assumes ``tag=negative_semidefinite`` means the operator is symmetric.
+        # Hence we do not set that tag even when ``well_posed`` is true.
+    # else the system is positive definite but the same logic applies.
+    D = lx.MatrixLinearOperator(D)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(
@@ -763,7 +771,6 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: compute this directly from scalar potential without inversion
 @register_compute_fun(
     name="Phi_coil_mn",
     label="\\Phi_{\\text{coil}, mn}",
@@ -779,6 +786,15 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
+    """Returns coil potential harmonics.
+
+    TODO: Compute this directly from scalar potential without inversion.
+
+    𝜑_coil (periodic) has "sin" symmetry when the stellarator has
+    "stellarator-symmetry". If the full basis is chosen to interpolate, then the
+    coefficients of non-symmetric modes should vanish, implying the system has
+    vanishing eigenvalues and hence a high condition number.
+    """
     grid = transforms["grid"]
     assert grid.num_rho == 1
 
@@ -799,6 +815,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
+        # Setting to False to use SVD for reason discussed in docstring.
         solver=lx.AutoLinearSolver(well_posed=False),
     ).value
     return data

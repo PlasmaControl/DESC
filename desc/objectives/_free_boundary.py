@@ -1018,10 +1018,6 @@ class FreeSurfaceError(_Objective):
             "omega_z",
             "|e_theta x e_zeta|",
         ]
-        if self._is_neumann:
-            self._grad_keys.append("x")
-            self._inner_keys.append("x")
-            self._reuseable_keys += ["Z", "omega", "phi", "x", "zeta"]
 
         super().__init__(
             things=eq,

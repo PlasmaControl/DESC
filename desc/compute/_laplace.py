@@ -158,6 +158,7 @@ def _lsmr_compute_potential(
 
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
+    well_posed = potential_grid.num_nodes == basis.num_modes
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -166,6 +167,8 @@ def _lsmr_compute_potential(
         source_grid,
         _kernel_dipole_plus_half,
     )
+    # could compute these in objective build
+    # and avoid computing if they are passed in as kwargs
     Phi = basis.evaluate(potential_grid)
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi if same_grid else basis.evaluate(source_grid)
@@ -183,15 +186,13 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
+        if not well_posed:
+            well_posed = None
     D = lx.MatrixLinearOperator(D)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(
-        D,
-        boundary_condition,
-        solver=lx.AutoLinearSolver(
-            well_posed=None if (potential_grid.num_nodes > basis.num_modes) else True
-        ),
+        D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
     ).value
 
 
@@ -776,6 +777,8 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     assert grid.num_rho == 1
 
     basis = transforms["Phi_coil"].basis
+    # could compute these in objective build
+    # and avoid computing if they are passed in as kwargs
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
 

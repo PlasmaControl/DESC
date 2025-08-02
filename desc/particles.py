@@ -268,18 +268,23 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         modB = jnp.linalg.norm(B, axis=-1)
         b = B / modB
+
         # factor of R from grad in cylindrical coordinates
         grad_B = grad_B.at[1].set(safediv(grad_B[1], coord[0]))
-        # TODO: Is this correct? Check
-        Rdot = vpar * b + (m / q / modB**2 * (mu * modB / m + vpar**2)) * cross(
-            b, grad_B
-        )
+        b_cross_grad_B = cross(b, grad_B).squeeze()
         # velocity and angular velocity are related by the radial coordinate
         # v_phi = R * phi_dot, so phi_dot = v_phi / R
-        Rdot = Rdot.at[:, 1].set(safediv(Rdot[:, 1], coord[0]))
+        # factor of R bc we want Rdot[1] to be phi_dot
+        b_cross_grad_B = b_cross_grad_B.at[1].set(safediv(b_cross_grad_B[1], coord[0]))
 
-        vpardot = jnp.atleast_2d(-mu / m * dot(b, grad_B))
-        dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)
+        # TODO: Is this correct? Check
+        b = b.squeeze()
+        # factor of R bc we want Rdot[1] to be phi_dot
+        b = b.at[1].set(safediv(b[1], coord[0]))
+        Rdot = vpar * b + (m / q / modB**2 * (mu * modB / m + vpar**2)) * b_cross_grad_B
+
+        vpardot = jnp.atleast_1d(-mu / m * dot(b, grad_B))
+        dxdt = jnp.hstack([Rdot.squeeze(), vpardot.T]).reshape(x.shape)
         return dxdt.squeeze()
 
 

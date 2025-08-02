@@ -90,11 +90,12 @@ def test_mirror_force_drift():
         """
         xyz = rpz2xyz(coords)
         _, _, Z = xyz.T
-        B0, dB = params
+        B0 = params[0]
+        dB = params[1]
         B = jnp.zeros_like(coords)
         B = B.at[:, 2].set(B0 + dB * Z)
         B = xyz2rpz_vec(B, phi=coords[:, 1])
-        return B
+        return B.squeeze()
 
     B0 = 1.0  # Constant magnetic field strength
     dB = 0.1  # Gradient of the magnetic field
@@ -103,6 +104,7 @@ def test_mirror_force_drift():
     R0 = np.array([1.0])
 
     field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))
+    print(field.params_dict)
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=xi0, E=E)
     model = VacuumGuidingCenterTrajectory(frame="lab")
     ts = np.linspace(0, 1e-6, 10)

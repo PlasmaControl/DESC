@@ -151,15 +151,6 @@ def _lsmr_compute_potential(
     _D_quad=False,
     **kwargs,
 ):
-    """Returns potential harmonics.
-
-    The exterior Neumann and interior Dirichlet problems are in general well-conditioned
-    for inversion [1]. However 𝛷_out (periodic) has "sin" symmetry when the stellarator
-    has "stellarator-symmetry". If the full basis is chosen to interpolate, then the
-    coefficients of non-symmetric modes should vanish, implying the system has
-    vanishing eigenvalues and hence a high condition number. For this reason, when the
-    system is not square, forcing ``well_posed=False`` to use an SVD may be beneficial.
-    """
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
     potential_grid = interpolator.eval_grid
@@ -789,11 +780,6 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     """Returns coil potential harmonics.
 
     TODO: Compute this directly from scalar potential without inversion.
-
-    𝜑_coil (periodic) has "sin" symmetry when the stellarator has
-    "stellarator-symmetry". If the full basis is chosen to interpolate, then the
-    coefficients of non-symmetric modes should vanish, implying the system has
-    vanishing eigenvalues and hence a high condition number.
     """
     grid = transforms["grid"]
     assert grid.num_rho == 1
@@ -815,7 +801,6 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-        # Setting to False to use SVD for reason discussed in docstring.
         solver=lx.AutoLinearSolver(well_posed=False),
     ).value
     return data

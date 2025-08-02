@@ -29,11 +29,6 @@ class SourceFreeField(FourierRZToroidalSurface):
     -       curl (B - B₀)(x) = 0   x ∉ ∂𝒳
     -               div B(x) = 0   ∀x
 
-    Warnings
-    --------
-    Choosing the correct symmetry for the basis is required for the system
-    to be well-conditioned.
-
     Parameters
     ----------
     surface : Surface
@@ -241,11 +236,6 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     Implements the interior Dirichlet formulation in multiply connected
     geometry described in [1].
-
-    Warnings
-    --------
-    Choosing the correct symmetry for the basis is required for the system
-    to be well-conditioned.
 
     Parameters
     ----------

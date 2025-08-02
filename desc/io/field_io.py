@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from netCDF4 import Dataset
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
+from desc.utils import rpz2xyz, rpz2xyz_vec
 
 
 def save_bmw_format(
@@ -57,9 +57,9 @@ def save_bmw_format(
     file.createDimension("v", num_zeta)
 
     # variables
-    _series = file.createVariable("series", np.int64)
+    _series = file.createVariable("series", np.int32)
     _series[:] = series
-    nfp = file.createVariable("nfp", np.int64)
+    nfp = file.createVariable("nfp", np.int32)
     nfp[:] = NFP
     rmin = file.createVariable("rmin", np.float64)
     rmin[:] = Rmin

@@ -20,7 +20,6 @@ from desc.basis import (
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -38,7 +37,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
-from desc.io import IOAble#, save_bmw_format
+from desc.io import IOAble, save_bmw_format
 from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
 from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
@@ -66,6 +65,9 @@ from desc.utils import (
     only1,
     setdefault,
     warnif,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz_vec
 )
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
@@ -1263,18 +1265,20 @@ class Equilibrium(Optimizable, _MagneticField):
             "biot-savart", "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates  the magnetic field directly from the
             current density, whereas "vector potential" first calculates A, and then
-            takes curl(A) to ensure a divergence-free field.
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
+            fastest method and accurate at high resolution, but doesn't work inside the 
+            plasma.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating B from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+            Grid used to discretize MagneticField object. Should NOT include
+            endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
         L, M, N: int
             Only used if method == "vector potential".
             Spectral resolution to use when taking the curl of the vector potential
@@ -1490,8 +1494,7 @@ class Equilibrium(Optimizable, _MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating A from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+            Grid used to discretize MagneticField object. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
@@ -1725,10 +1728,10 @@ class Equilibrium(Optimizable, _MagneticField):
     def save_bmw_format(
         self,
         path,
-        Rmin,
-        Rmax,
-        Zmin,
-        Zmax,
+        Rmin=5,
+        Rmax=11,
+        Zmin=-5,
+        Zmax=5,
         nR=101,
         nZ=101,
         nphi=90,
@@ -1740,6 +1743,45 @@ class Equilibrium(Optimizable, _MagneticField):
         curl_A_grid=None,
         series=3,
     ):
+        """
+        Save the magnetic field produced by the plasma current in the same file format as BMW.
+
+        Parameters
+        ----------
+        Rmin, Rmax, Zmin, Zmax : float, optional
+            Bounds for the R and Z coordinates of the desired evaluation points
+        nR, nZ, nphi : int, optional
+            Desired number of evaluation points in the radial, vertical, and toroidal
+            directions.
+        save_vector_potential : bool, optional
+            Whether to also calculate the vector potential and save it as well
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object. Should NOT include 
+            endpoint at 2pi.
+        A_source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object for calculating A.
+            Defaults to the source_grid unless method == 'virtual casing'.
+            Should NOT include endpoint at 2pi.
+        method: string
+            "biot-savart", "virtual casing" or "vector potential". "biot-savart"
+            and "virtual casing" calculates the magnetic field directly from the
+            current density, whereas "vector potential" first calculates A, and then
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
+            fastest method and accurate at high resolution, but doesn't work inside the 
+            plasma.
+            if passing method='virtual casing' and save_vector_potential=False, the
+            final dataset will not contain the source current density values (which BMW 
+            normally contains) since the current density is not directly computed in the
+            virtual casing method.
+        curl_A_grid : Grid
+            If using method='vector potential', the grid that A will be evaluated on in 
+            order to take B=curl(A). Does not affect the grid on which the vector potential 
+            is evaluated to be saved.
+        """
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
@@ -1760,7 +1802,6 @@ class Equilibrium(Optimizable, _MagneticField):
                 A_source_grid = source_grid
             A, data = self.compute_magnetic_vector_potential(
                 grid,
-                source_grid=source_grid,
                 chunk_size=chunk_size,
                 source_grid=A_source_grid,
                 return_data=True,
@@ -1769,17 +1810,17 @@ class Equilibrium(Optimizable, _MagneticField):
             A = None
         save_bmw_format(
             path,
-            B,
-            Rmin,
-            Rmax,
-            Zmin,
-            Zmax,
-            data,
-            source_grid,
-            nR,
-            nphi,
-            nZ,
-            self.NFP,
+            B=B,
+            Rmin=Rmin,
+            Rmax=Rmax,
+            Zmin=Zmin,
+            Zmax=Zmax,
+            source_data=data,
+            source_grid=source_grid,
+            nR=nR,
+            nZ=nZ,
+            nphi=nphi,
+            NFP=self.NFP,
             A=A,
             series=series,
         )

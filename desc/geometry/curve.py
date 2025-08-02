@@ -279,6 +279,7 @@ class FourierRZCurve(Curve):
             New representation of the curve parameterized by Fourier series for R,Z.
 
         """
+        coords = jnp.atleast_2d(coords)
         if basis == "rpz":
             coords_rpz = coords
             coords_xyz = rpz2xyz(coords)

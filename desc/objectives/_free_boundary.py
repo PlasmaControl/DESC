@@ -894,9 +894,7 @@ class FreeSurfaceError(_Objective):
         If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
         the magnetic field due to coils.
     eval_grid : Grid
-        Evaluation points to evaluate objective error.
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
+        Evaluation points on boundary to evaluate objective error.
         Default is ``grid``, but it is likely best to use a grid
         with much lower resolution.
     grid : Grid

@@ -2647,6 +2647,7 @@ def field_line_integrate(
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
+        field = args[0]
         r = rpz[:, 0]
         br, bp, bz = (
             scale
@@ -2691,6 +2692,7 @@ def field_line_integrate(
         saveat=saveat,
         max_steps=max_steps * len(phis),
         dt0=min_step_size,
+        args=(field,),
         **kwargs,
     ).ys
 

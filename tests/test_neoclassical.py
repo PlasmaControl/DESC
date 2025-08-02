@@ -7,16 +7,14 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
-from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
 from desc.utils import setdefault
 from desc.vmec import VMECIO
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple_2D():
     """Test effective ripple with W7-X against NEO."""
@@ -57,7 +55,7 @@ def test_effective_ripple_1D():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
-    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         "old effective ripple", grid=grid, num_well=num_well, surf_batch_size=2
     )
@@ -89,7 +87,7 @@ def test_fieldline_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
@@ -104,7 +102,7 @@ def test_fieldline_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )

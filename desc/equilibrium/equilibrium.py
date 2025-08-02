@@ -29,7 +29,8 @@ from desc.compute.utils import (
     get_transforms,
 )
 from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
-#from desc.compute.extend_flux_coords import build_extended_coords, metric
+
+# from desc.compute.extend_flux_coords import build_extended_coords, metric
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -37,7 +38,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
-from desc.io import IOAble
+from desc.io import IOAble#, save_bmw_format
 from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
 from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
@@ -1238,16 +1239,14 @@ class Equilibrium(Optimizable, _MagneticField):
         transforms=None,
         chunk_size=50,
         method="biot-savart",
-        L=None,
-        M=8,
-        N=None,
         out_grid=None,
         A_grid=None,
         R_bounds=[5, 11],
         phi_bounds=None,
         Z_bounds=[-5, 5],
         return_A=False,
-        support=1E-5
+        support=1e-5,
+        return_data=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1339,9 +1338,15 @@ class Equilibrium(Optimizable, _MagneticField):
                 # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
                 source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
                 source_xyz = rpz2xyz(source_rpz)
+
                 J = rpz2xyz_vec(data["J"], phi=phi)
                 fj = biot_savart_general(
-                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
+                    eval_xyz,
+                    source_xyz,
+                    J=J,
+                    dV=dV,
+                    chunk_size=chunk_size,
+                    support=support,
                 )
                 f += fj
                 return f
@@ -1360,14 +1365,15 @@ class Equilibrium(Optimizable, _MagneticField):
                 )
             kernel = _kernel_biot_savart
 
-            source_data = self.compute(kernel.keys,
-                        grid=source_grid,
-                        params=params,
-                        transforms=transforms,
-                        override_grid=False
+            data = self.compute(
+                kernel.keys,
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                override_grid=False,
             )
             B = integrate_surface(
-                coords, source_data, source_grid, kernel, chunk_size=chunk_size
+                coords, data, source_grid, kernel, chunk_size=chunk_size
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
@@ -1392,8 +1398,9 @@ class Equilibrium(Optimizable, _MagneticField):
                     params=params,
                     basis=basis,
                     transforms=transforms,
-                    support=support
+                    support=support,
                 )
+
                 if source_grid is None:
                     self.A_grid = A_grid
                     self.A_coords = A_coords
@@ -1402,22 +1409,28 @@ class Equilibrium(Optimizable, _MagneticField):
                 A = self.vector_potential
 
             # Default spectral resolution parameters
-            if L is None:
-                L = A_grid.L
-            if M is None:
-                M = A_grid.M
-            if N is None:
-                N = A_grid.N
+            L = A_grid.L
+            M = A_grid.M
+            N = A_grid.N
 
             # Build spectral transforms
-            basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
-            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False, method="rpz")
+            basis_obj = DoubleChebyshevFourierBasis(L, M, N, self.NFP)
+            in_transform = Transform(
+                A_grid, basis_obj, build_pinv=True, build=False, method="rpz"
+            )
             if out_grid is None:
                 out_grid = Grid((coords - shifts) / scales)
-            if coords is None:
+                method = "direct1"
+            if coords is None and out_grid.is_meshgrid:
                 coords = out_grid.nodes * scales + shifts
+                method = "directrpz"
             out_transform = Transform(
-                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
+                out_grid,
+                basis_obj,
+                build_pinv=False,
+                build=True,
+                derivs=1,
+                method=method,
             )
 
             A = self.compute_magnetic_vector_potential(
@@ -1427,7 +1440,10 @@ class Equilibrium(Optimizable, _MagneticField):
                 params=params,
                 basis=basis,
                 transforms=transforms,
+                return_data=return_data,
             )
+            if return_data:
+                A, data = A
             if basis.lower == "xyz":
                 A_rpz = xyz2rpz_vec(A, phi=coords[:, 1])
             else:
@@ -1439,10 +1455,16 @@ class Equilibrium(Optimizable, _MagneticField):
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
             if return_A:
-                B = (B, A)
-        return B
+                if not return_data:
+                    data = {}
+                data["A_coords_rpz"] = A_coords
+                data["A"] = A
+                return B, data
+        if return_data:
+            return B, data
+        else:
+            return B
 
-    
     def compute_magnetic_vector_potential(
         self,
         coords,
@@ -1451,7 +1473,8 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
-        support=1E-5
+        support=1e-5,
+        return_data=False,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1507,9 +1530,11 @@ class Equilibrium(Optimizable, _MagneticField):
             # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
             source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
             source_xyz = rpz2xyz(source_rpz)
+            if return_data:
+                data["xyz"] = source_xyz
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,support=support
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
             )
             f += fj
             return f
@@ -1517,7 +1542,10 @@ class Equilibrium(Optimizable, _MagneticField):
         A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
-        return A
+        if return_data:
+            return A, data
+        else:
+            return A
 
     def _get_rtz_grid(
         self,
@@ -1690,6 +1718,68 @@ class Equilibrium(Optimizable, _MagneticField):
 
         """
         return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+
+    def save_bmw_format(
+        self,
+        path,
+        Rmin,
+        Rmax,
+        Zmin,
+        Zmax,
+        nR=101,
+        nZ=101,
+        nphi=90,
+        save_vector_potential=True,
+        chunk_size=50,
+        source_grid=None,
+        A_source_grid=None,
+        method="biot-savart",
+        curl_A_grid=None,
+        series=3,
+    ):
+        R = np.linspace(Rmin, Rmax, nR)
+        Z = np.linspace(Zmin, Zmax, nZ)
+        phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
+        [PHI, ZZ, RR] = np.meshgrid(phi, Z, R, indexing="ij")
+        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+
+        B, data = self.compute_magnetic_field(
+            grid,
+            source_grid=source_grid,
+            chunk_size=chunk_size,
+            method=method,
+            A_grid=curl_A_grid,
+            return_data=True,
+        )
+
+        if save_vector_potential:
+            if method != "virtual casing" and A_source_grid is None:
+                A_source_grid = source_grid
+            A, data = self.compute_magnetic_vector_potential(
+                grid,
+                source_grid=source_grid,
+                chunk_size=chunk_size,
+                source_grid=A_source_grid,
+                return_data=True,
+            )
+        else:
+            A = None
+        save_bmw_format(
+            path,
+            B,
+            Rmin,
+            Rmax,
+            Zmin,
+            Zmax,
+            data,
+            source_grid,
+            nR,
+            nphi,
+            nZ,
+            self.NFP,
+            A=A,
+            series=series,
+        )
 
     @property
     def surface(self):

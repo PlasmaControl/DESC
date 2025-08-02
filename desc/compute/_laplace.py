@@ -779,7 +779,8 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     """Returns coil potential harmonics.
 
-    TODO: Compute this directly from scalar potential without inversion.
+    ``B_coil`` must be smooth and divergence free for correctness of inversion.
+    TODO: Compute this from scalar potential integral, without inversion.
     """
     grid = transforms["grid"]
     assert grid.num_rho == 1

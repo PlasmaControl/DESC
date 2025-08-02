@@ -872,7 +872,17 @@ class BoundaryError(_Objective):
 
 
 class FreeSurfaceError(_Objective):
-    """Target for free boundary conditions on LCFS.
+    """Target for free surface ideal MHD equilirium conditions on LCFS.
+
+    References
+    ----------
+        [1] Unalmis et al. New high-order accurate free surface stellarator
+            equilibria optimization and boundary integral methods in DESC.
+
+    Warnings
+    --------
+    If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
+    must be smooth and divergence free until GitHub issue #1796 is resolved.
 
     Parameters
     ----------
@@ -904,6 +914,10 @@ class FreeSurfaceError(_Objective):
         Default is zero, which means that matrix inversion will be used.
         If nonzero, then performs fixed point iterations until maximum
         iterations or error tolerance of ``1e-7`` is reached.
+        It is reccomended to set this parameter to a positive value, for example
+        ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
+        An advantage of such a fixed point method is that the Jacobian of the
+        optimization may be computed more efficiently. 
     chunk_size : int or None
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input

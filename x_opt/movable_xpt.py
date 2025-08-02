@@ -28,7 +28,7 @@ from desc.objectives import (
     ObjectiveFunction,
     MinCoilSetPointDistance,
     Bxdl,
-    XPointDistanceBound
+    XPointDistanceBound,
 )
 
 from desc.optimize import Optimizer
@@ -44,7 +44,8 @@ from desc.objectives import (
 
 rad = 0.6
 offset = 0.3
-max_current = 6e6   
+max_current = 6e6
+
 
 def compute_intersections(centers, clearance):
     centers = centers[
@@ -80,7 +81,7 @@ def compute_intersections(centers, clearance):
 
     distances = np.linalg.norm(x[:, np.newaxis, :] - x[np.newaxis, :, :], axis=-1)
 
-    np.fill_diagonal(distances, 10*clearance)  # Ensure self-intersection not flagged
+    np.fill_diagonal(distances, 10 * clearance)  # Ensure self-intersection not flagged
 
     intersections_symmetric = (distances < clearance).astype(int)
     intersections_symmetric = np.array(intersections_symmetric)
@@ -172,6 +173,7 @@ def add_coils(
     print(f"Added {len(final_centers)} new coils.")
     return shaping_coils
 
+
 def pack_remaining_coils(shaping_coils, shaping_sheet):
     # pack the remaining coils densely
     hfp_grid = LinearGrid(M=20, N=40, NFP=2, sym=True)
@@ -200,7 +202,10 @@ def pack_remaining_coils(shaping_coils, shaping_sheet):
 
     return shaping_coils
 
-def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
+
+def optimize_coils_xpoint(
+    shaping_coils, encircling, eq, eval_grid_N=360, curve_N=24, **weights
+):
     N = 40
 
     encircling_points = encircling._compute_position(grid=2 * N, basis="xyz")
@@ -209,13 +214,13 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
 
     # Define a starting curve based on a curve below the plasma boundary
     offset = 0.02
-    grid = LinearGrid(rho=[1.0],theta=[3*np.pi/2],N=24,NFP=eq.NFP)
-    l = eq.compute(['R','phi','Z'],grid=grid)
+    grid = LinearGrid(rho=[1.0], theta=[3 * np.pi / 2], N=24, NFP=eq.NFP)
+    l = eq.compute(["R", "phi", "Z"], grid=grid)
     coords = jnp.stack([l["R"], l["phi"], l["Z"] - offset]).T
 
     # Define c as a FourierRZCoil (this code doesn't work otherwise!!)
     curve = FourierRZCoil.from_values(
-        current=0, coords=coords, basis="rpz", NFP=eq.NFP, name="x-point"
+        current=0, coords=coords, N=curve_N, basis="rpz", NFP=eq.NFP, name="x-point"
     )
     obj = ObjectiveFunction(
         (
@@ -225,7 +230,7 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 field_grid=[LinearGrid(N=N), LinearGrid(N=2 * N)],
                 bs_chunk_size=1,
                 B_plasma_chunk_size=1,
-                weight=weights.get('b_dot_n', 10),
+                weight=weights.get("b_dot_n", 10),
                 loss_function="mean",
             ),
             # small coils
@@ -238,7 +243,7 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 grid=LinearGrid(N=N),
                 normal_project_dist=0.5,
                 name="small coil-coil dist",
-                weight=weights.get('coil_coil',1)
+                weight=weights.get("coil_coil", 1),
             ),
             PlasmaCoilSetDistanceBound(
                 eq,
@@ -251,7 +256,7 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 coil_grid=LinearGrid(N=5),
                 plasma_grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
                 name="small plasma-coil dist",
-                weight=weights.get('plasma_coil',1)
+                weight=weights.get("plasma_coil", 1),
             ),
             MinCoilSetPointDistance(
                 coil=shaping_coils,
@@ -262,7 +267,7 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 softmin_alpha=100,
                 dist_chunk_size=1,
                 name="small coil-encircling dist",
-                weight=weights.get('coil_encircling',1)
+                weight=weights.get("coil_encircling", 1),
             ),
             MinCoilSetPointDistance(
                 coil=shaping_coils,
@@ -271,7 +276,7 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 coil_grid=LinearGrid(N=N),
                 dist_chunk_size=1,
                 name="small coil-xpoint dist",
-                weight=weights.get('coil_xpt',1)
+                weight=weights.get("coil_xpt", 1),
             ),
             Bxdl(
                 curve=curve,
@@ -279,19 +284,19 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 field=[shaping_coils, encircling],
                 target=0,
                 field_grid=[LinearGrid(N=N), LinearGrid(N=2 * N)],
-                eval_grid=LinearGrid(N=360),
+                eval_grid=LinearGrid(N=eval_grid_N),
                 bs_chunk_size=1,
                 name="x point Bxdl",
                 field_fixed=False,
                 curve_fixed=False,
                 eq_kwargs={"method": "biot-savart"},
-                weight=weights.get('bxdl',1e2)
+                weight=weights.get("bxdl", 1e2),
             ),
             FixCoilCurrent(
                 shaping_coils,
                 bounds=(-max_current, max_current),
                 name="small coil current",
-                weight=weights.get('small_current',1)
+                weight=weights.get("small_current", 1),
             ),
             XPointDistanceBound(
                 eq,
@@ -300,8 +305,8 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
                 M_grid=36,
                 eq_fixed=True,
                 target=0,
-                weight=weights.get('xpt_dist',1),
-                name="x-point distance bound"
+                weight=weights.get("xpt_dist", 1),
+                name="x-point distance bound",
             ),
         ),
         deriv_mode="batched",
@@ -344,20 +349,45 @@ def optimize_coils_xpoint(shaping_coils, encircling, eq, **weights):
     print("================")
 
     return shaping_coils, curve
-    
-def postproc_finite_build(shaping_coils, encircling):
-    #convert coils to finite build version
-    shaping_coils_fb_list = [FourierPlanarFiniteBuildCoil.from_FourierPlanarCoil(coil, cross_section_dims=[0.2, 0.2]) for coil in shaping_coils]
-    shaping_coils_fb = CoilSet(shaping_coils_fb_list, NFP = shaping_coils.NFP, sym = shaping_coils.sym, check_intersection = False)
 
-    encircling_flatten = CoilSet.from_symmetry(encircling, NFP = encircling.NFP, sym=True, check_intersection=False)
+
+def postproc_finite_build(shaping_coils, encircling):
+    # convert coils to finite build version
+    shaping_coils_fb_list = [
+        FourierPlanarFiniteBuildCoil.from_FourierPlanarCoil(
+            coil, cross_section_dims=[0.2, 0.2]
+        )
+        for coil in shaping_coils
+    ]
+    shaping_coils_fb = CoilSet(
+        shaping_coils_fb_list,
+        NFP=shaping_coils.NFP,
+        sym=shaping_coils.sym,
+        check_intersection=False,
+    )
+
+    encircling_flatten = CoilSet.from_symmetry(
+        encircling, NFP=encircling.NFP, sym=True, check_intersection=False
+    )
     encircling_currents = np.array([coil.current for coil in encircling_flatten.coils])
     encircling_a = np.repeat(0.4, len(encircling_currents))
-    current_density = 7e6/(.2*.4*1.4) #A/m^2, scaled to A008 new cross section for large encircling coils
+    current_density = 7e6 / (
+        0.2 * 0.4 * 1.4
+    )  # A/m^2, scaled to A008 new cross section for large encircling coils
     encircling_b = np.abs(encircling_currents / (current_density * encircling_a))
 
-    encircling_fb_list = [FourierXYFiniteBuildCoil.from_FourierXYCoil(coil, cross_section_dims=[encircling_a[i], encircling_b[i]]) for i, coil in enumerate(encircling_flatten)]
-    encircling_fb = CoilSet(encircling_fb_list, NFP=encircling_flatten.NFP, sym=encircling_flatten.sym, check_intersection=False)
+    encircling_fb_list = [
+        FourierXYFiniteBuildCoil.from_FourierXYCoil(
+            coil, cross_section_dims=[encircling_a[i], encircling_b[i]]
+        )
+        for i, coil in enumerate(encircling_flatten)
+    ]
+    encircling_fb = CoilSet(
+        encircling_fb_list,
+        NFP=encircling_flatten.NFP,
+        sym=encircling_flatten.sym,
+        check_intersection=False,
+    )
 
     print("Shaping coils finite build:")
     objective = ObjectiveFunction(
@@ -407,13 +437,19 @@ def postproc_finite_build(shaping_coils, encircling):
     encircling_fields = np.array(objective_large.compute_unscaled(x_large))
     objective_large.print_value(x_large)
 
-    shaping_lengths = shaping_coils.compute(["length"], grid=LinearGrid(N=64), basis="xyz")
+    shaping_lengths = shaping_coils.compute(
+        ["length"], grid=LinearGrid(N=64), basis="xyz"
+    )
     shaping_lengths = np.array([coil_data["length"] for coil_data in shaping_lengths])
     shaping_currents = np.array([coil.current for coil in shaping_coils.coils])
     shaping_currents = np.abs(shaping_currents)
 
-    encircling_lengths = encircling_flatten.compute(["length"], grid=LinearGrid(N=64), basis="xyz")
-    encircling_lengths = np.array([coil_data["length"] for coil_data in encircling_lengths])
+    encircling_lengths = encircling_flatten.compute(
+        ["length"], grid=LinearGrid(N=64), basis="xyz"
+    )
+    encircling_lengths = np.array(
+        [coil_data["length"] for coil_data in encircling_lengths]
+    )
     encircling_currents = np.array([coil.current for coil in encircling_flatten.coils])
     encircling_currents = np.abs(encircling_currents)
 
@@ -421,51 +457,57 @@ def postproc_finite_build(shaping_coils, encircling):
     encircling_gmat = encircling_lengths * encircling_currents * encircling_fields
 
     total_shaping_gmat = np.sum(shaping_gmat) * 4
-    total_encircling_gmat = np.sum(encircling_gmat) 
+    total_encircling_gmat = np.sum(encircling_gmat)
 
-    print("Total shaping coil GmAT:", total_shaping_gmat*1e-9)
-    print("Total encircling coil GmAT:", total_encircling_gmat*1e-9)
+    print("Total shaping coil GmAT:", total_shaping_gmat * 1e-9)
+    print("Total encircling coil GmAT:", total_encircling_gmat * 1e-9)
 
     total_gmat = np.sum(shaping_gmat) * 4 + np.sum(encircling_gmat)
 
-    print("Total GmAT:", total_gmat*1e-9)
+    print("Total GmAT:", total_gmat * 1e-9)
 
-    shaping_gmat_capped = shaping_lengths * shaping_currents * np.clip(shaping_fields, 0, 20)
+    shaping_gmat_capped = (
+        shaping_lengths * shaping_currents * np.clip(shaping_fields, 0, 20)
+    )
     total_shaping_gmat_capped = np.sum(shaping_gmat_capped) * 4
-    print("Total shaping coil GmAT capped:", total_shaping_gmat_capped*1e-9)
-    encircling_gmat_capped = encircling_lengths * encircling_currents * np.clip(encircling_fields, 0, 20)
+    print("Total shaping coil GmAT capped:", total_shaping_gmat_capped * 1e-9)
+    encircling_gmat_capped = (
+        encircling_lengths * encircling_currents * np.clip(encircling_fields, 0, 20)
+    )
     total_encircling_gmat_capped = np.sum(encircling_gmat_capped)
-    print("Total encircling coil GmAT capped:", total_encircling_gmat_capped*1e-9)
+    print("Total encircling coil GmAT capped:", total_encircling_gmat_capped * 1e-9)
     total_gmat_capped = total_shaping_gmat_capped + total_encircling_gmat_capped
-    print("Total GmAT capped:", total_gmat_capped*1e-9)
+    print("Total GmAT capped:", total_gmat_capped * 1e-9)
 
-    total_tape = (total_gmat_capped*1e-9)/4.03
+    total_tape = (total_gmat_capped * 1e-9) / 4.03
     print("Total tape length with capping (Mm):", total_tape)
 
+
 def optimize_coils(dir, **weights):
-    out_tag = f"shaping_div_98_{int(rad * 100)}cm_{int(max_current / 1e6)}MA_" + '_'.join([f'{key}{value}' for key, value in weights.items()])
+    out_tag = (
+        f"shaping_div_98_{int(rad * 100)}cm_{int(max_current / 1e6)}MA_"
+        + "_".join([f"{key}{value}" for key, value in weights.items()])
+    )
 
     log_filename = f"{out_tag}.log"
     with open(log_filename, "w") as log_file, contextlib.redirect_stdout(log_file):
-        
+
         print_backend_info()
 
-        eq = load(dir+"equil_div-opt_98_DESC_fixed.h5")
+        eq = load(dir + "equil_div-opt_98_DESC_fixed.h5")
 
-        shaping_sheet = load(
-            dir+"shaping_sheet_div_98.h5"
-        )
+        shaping_sheet = load(dir + "shaping_sheet_div_98.h5")
         shaping_sheet.change_resolution(M=12, N=24)
-        encircling = load(
-            dir+"encircling_div_98.h5"
-        )
+        encircling = load(dir + "encircling_div_98.h5")
 
         print("Dense packing remaining coils")
         shaping_coils = pack_remaining_coils(None, shaping_sheet)
 
         # Final optimization
         print("Final optimization of coils")
-        shaping_coils, curve = optimize_coils_xpoint(shaping_coils, encircling, eq,**weights)
+        shaping_coils, curve = optimize_coils_xpoint(
+            shaping_coils, encircling, eq, **weights
+        )
         print("Final optimization done.")
 
         shaping_coils.save(out_tag + "_shaping_coils_final.h5")
@@ -475,15 +517,16 @@ def optimize_coils(dir, **weights):
         all_fields = SumMagneticField([encircling, shaping_coils])
 
         all_fields.save_mgrid(
-            dir+"mgrid_" + out_tag + "-128x128x128_vecpot_larger.nc",
-            Rmin = 5,
-            Rmax = 11,
-            Zmin = -5,
-            Zmax = 5,
-            nR = 128,
-            nZ = 128,
-            nphi = 128,
+            dir + "mgrid_" + out_tag + "-128x128x128_vecpot_larger.nc",
+            Rmin=5,
+            Rmax=11,
+            Zmin=-5,
+            Zmax=5,
+            nR=128,
+            nZ=128,
+            nphi=128,
             save_vector_potential=True,
-            chunk_size = 300)
-        
+            chunk_size=300,
+        )
+
         curve.save(dir + out_tag + "_xpt_final.h5")

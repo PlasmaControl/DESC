@@ -53,7 +53,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import (
+    _map_clebsch_coordinates,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1339,55 +1345,21 @@ class Equilibrium(IOAble, Optimizable):
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
-    def compute_theta_coords(
-        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    @staticmethod
+    def _map_clebsch_coordinates(
+        iota,
+        alpha,
+        zeta,
+        L_lmn,
+        L,
+        theta0=None,
+        period=np.inf,
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
-
-        Parameters
-        ----------
-        flux_coords : ndarray
-            Shape (k, 3).
-            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
-
-        Returns
-        -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
-
-        """
-        warnif(
-            True,
-            DeprecationWarning,
-            "Use map_coordinates instead of compute_theta_coords.",
-        )
-        return map_coordinates(
-            self,
-            coords=flux_coords,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
+        return _map_clebsch_coordinates(
+            iota, alpha, zeta, L_lmn, L, theta0, period, tol, maxiter, **kwargs
         )
 
     @execute_on_cpu

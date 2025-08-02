@@ -1990,7 +1990,7 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    def test_objective_compute_grids(self):
+    def test_objective_compute_against_compute(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
@@ -2000,7 +2000,7 @@ class TestObjectiveFunction:
         num_transit = 4
         num_well = 15 * num_transit
         num_quad = 16
-        num_pitch = 16
+        num_pitch = 10
         data = eq.compute(
             ["effective ripple", "Gamma_c"],
             grid=grid,

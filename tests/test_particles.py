@@ -172,13 +172,15 @@ def test_tracing_purely_toroidal_magnetic_field():
     # where vpar0 is the initial parallel velocity and R0 is the major radius.
     phi_exact = particles.vpar0[0] / R0 * ts
 
-    assert np.allclose(rpz[0, :, 2], z_exact, atol=1e-12)
+    np.testing.assert_allclose(rpz[0, :, 2], z_exact, atol=1e-12)
     # There is no radial drift, R should remain constant
-    assert np.allclose(rpz[0, :, 0], R0, atol=1e-12)
+    np.testing.assert_allclose(rpz[0, :, 0], R0, atol=1e-12)
     # There is no mirror force, parallel velocity should be the same
-    assert np.allclose(vpar[0, :, 0], particles.vpar0, atol=1e-12)
+    np.testing.assert_allclose(
+        vpar[0, :, 0], particles.vpar0 * np.ones_like(vpar[0, :, 0]), atol=1e-12
+    )
     # The phi position should be given by the angular velocity
-    assert np.allclose(rpz[0, :, 1], phi_exact, atol=1e-12)
+    np.testing.assert_allclose(rpz[0, :, 1], phi_exact, atol=1e-12)
 
 
 @pytest.mark.unit

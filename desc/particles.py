@@ -276,7 +276,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         )
         # velocity and angular velocity are related by the radial coordinate
         # v_phi = R * phi_dot, so phi_dot = v_phi / R
-        Rdot = Rdot.at[1].set(safediv(Rdot[1], coord[0]))
+        Rdot = Rdot.at[:, 1].set(safediv(Rdot[:, 1], coord[0]))
 
         vpardot = jnp.atleast_2d(-mu / m * dot(b, grad_B))
         dxdt = jnp.hstack([Rdot, vpardot.T]).reshape(x.shape)

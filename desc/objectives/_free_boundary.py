@@ -917,7 +917,7 @@ class FreeSurfaceError(_Objective):
         It is reccomended to set this parameter to a positive value, for example
         ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
         An advantage of such a fixed point method is that the Jacobian of the
-        optimization may be computed more efficiently. 
+        optimization may be computed more efficiently.
     chunk_size : int or None
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input

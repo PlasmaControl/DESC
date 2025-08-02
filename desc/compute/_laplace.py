@@ -36,6 +36,10 @@ _doc = {
         Default is zero, which means that matrix inversion will be used.
         If nonzero, then performs fixed point iterations until maximum
         iterations or error tolerance of ``1e-7`` is reached.
+        It is reccomended to set this parameter to a positive value, for example
+        ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
+        An advantage of such a fixed point method is that the Jacobian of the
+        optimization may be computed more efficiently.
         """,
     "chunk_size": """int or None :
         Size to split integral computation into chunks.
@@ -149,7 +153,6 @@ def _lsmr_compute_potential(
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
-    assume_quadrature_accurate=False,
     **kwargs,
 ):
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
@@ -160,7 +163,6 @@ def _lsmr_compute_potential(
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
-    tag = ()
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -188,13 +190,14 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
-        if well_posed:
-            tag = lx.negative_semidefinite_tag
-        else:
+        if not well_posed:
             well_posed = None
-    elif well_posed:
-        tag = lx.positive_semidefinite_tag
-    D = lx.MatrixLinearOperator(D, tag if assume_quadrature_accurate else ())
+        # This system is negative definite, but perhaps not symmetric. (For example,
+        # there is discretization error in the quadrature that could destroy symmetry).
+        # Lineax assumes ``tag=negative_semidefinite`` means the operator is symmetric.
+        # Hence we do not set that tag even when ``well_posed`` is true.
+    # else the system is positive definite but the same logic applies.
+    D = lx.MatrixLinearOperator(D)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(
@@ -721,6 +724,25 @@ def _B_coil_field(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="n_rho x B_coil",
+    label="n_{\\rho} \\times B_{\\text{coil}}",
+    units="T",
+    units_long="Tesla",
+    description="Flux surface normal cross magnetic field due to coils",
+    dim=1,
+    coordinates="rtz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["n_rho", "B_coil"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+)
+def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
+    data["n_rho x B_coil"] = cross(data["n_rho"], data["B_coil"])
+    return data
+
+
+@register_compute_fun(
     name="Y_coil",
     label="Y_{\\text{coil}}",
     units="T m",
@@ -745,26 +767,6 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="n_rho x B_coil",
-    label="n_{\\rho} \\times B_{\\text{coil}}",
-    units="T",
-    units_long="Tesla",
-    description="Flux surface normal cross magnetic field due to coils",
-    dim=1,
-    coordinates="rtz",
-    params=[],
-    transforms={},
-    profiles=[],
-    data=["n_rho", "B_coil"],
-    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
-)
-def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
-    data["n_rho x B_coil"] = cross(data["n_rho"], data["B_coil"])
-    return data
-
-
-# TODO: compute this from vector or scalar potential
-@register_compute_fun(
     name="Phi_coil_mn",
     label="\\Phi_{\\text{coil}, mn}",
     units="T m",
@@ -779,6 +781,11 @@ def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
+    """Returns coil potential harmonics.
+
+    ``B_coil`` must be smooth and divergence free for correctness of inversion.
+    TODO: Compute this from scalar potential integral, without inversion.
+    """
     grid = transforms["grid"]
     assert grid.num_rho == 1
 
@@ -799,7 +806,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-        solver=lx.AutoLinearSolver(well_posed=None),
+        solver=lx.AutoLinearSolver(well_posed=False),
     ).value
     return data
 

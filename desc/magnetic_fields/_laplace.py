@@ -17,7 +17,10 @@ from desc.utils import errorif, setdefault, warnif
 class SourceFreeField(FourierRZToroidalSurface):
     """Compute source free magnetic fields.
 
-    Let 𝒳 be an open set with continuously differenitable
+    Implements the Neumann formulation in multiply connected
+    geometry described in [1].
+
+    Let 𝒳 be an open set with continuously differentiable
     closed boundary ∂𝒳. This class solves the following
     partial differential equation for
     varphi = φ = Φ (periodic) = ``Phi (periodic)``.
@@ -47,12 +50,11 @@ class SourceFreeField(FourierRZToroidalSurface):
         potential. Default is ``False``.
     B0 : _MagneticField
         Magnetic field due to currents in 𝒳 and net currents outside 𝒳
-        which are not accounted for ``I`` and ``Y``.
     I : float
-        Net toroidal current determining a circulation of Φ.
+        Net toroidal current determining a circulation of Φ (not φ).
         Default is zero.
     Y : float
-        Net poloidal current determining a circulation of Φ.
+        Net poloidal current determining a circulation of Φ (not φ).
         Default is zero.
 
     """
@@ -260,6 +262,7 @@ class FreeSurfaceOuterField(SourceFreeField):
         coil potential. Default is ``sym``.
     B_coil : _MagneticField
         Magnetic field from coil current sources.
+        This must be smooth and divergence free for correctness.
     Y_coil : float
         Net poloidal current determining circulation of coil field.
         Default is to compute from ``B_coil``.

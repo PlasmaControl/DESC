@@ -159,6 +159,7 @@ def _lsmr_compute_potential(
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
+    tag = ()
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -186,9 +187,13 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
-        if not well_posed:
+        if well_posed:
+            tag = lx.negative_semidefinite_tag
+        else:
             well_posed = None
-    D = lx.MatrixLinearOperator(D)
+    elif well_posed:
+        tag = lx.positive_semidefinite_tag
+    D = lx.MatrixLinearOperator(D, tag)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(

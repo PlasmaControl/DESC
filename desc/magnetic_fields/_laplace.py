@@ -17,7 +17,7 @@ from desc.utils import errorif, setdefault, warnif
 class SourceFreeField(FourierRZToroidalSurface):
     """Compute source free magnetic fields.
 
-    Let 𝒳 be an open set with continuously differenitable
+    Let 𝒳 be an open set with continuously differentiable
     closed boundary ∂𝒳. This class solves the following
     partial differential equation for
     varphi = φ = Φ (periodic) = ``Phi (periodic)``.

@@ -153,7 +153,7 @@ def _lsmr_compute_potential(
 ):
     """Returns potential harmonics.
 
-    The exterior Neumann and interior Dirichlet problems are in general well-conditied
+    The exterior Neumann and interior Dirichlet problems are in general well-conditioned
     for inversion [1]. However 𝛷_out (periodic) has "sin" symmetry when the stellarator
     has "stellarator-symmetry". If the full basis is chosen to interpolate, then the
     coefficients of non-symmetric modes should vanish, implying the system has
@@ -198,7 +198,7 @@ def _lsmr_compute_potential(
         if not well_posed:
             well_posed = None
         # This system is negative definite, but perhaps not symmetric. (For example,
-        # there is discretization error in the quadrature that could destory symmetry).
+        # there is discretization error in the quadrature that could destroy symmetry).
         # Lineax assumes ``tag=negative_semidefinite`` means the operator is symmetric.
         # Hence we do not set that tag even when ``well_posed`` is true.
     # else the system is positive definite but the same logic applies.

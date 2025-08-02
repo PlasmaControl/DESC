@@ -149,7 +149,7 @@ def _lsmr_compute_potential(
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
-    assume_sufficient_resolution=False,
+    assume_quadrature_accurate=False,
     **kwargs,
 ):
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
@@ -190,12 +190,11 @@ def _lsmr_compute_potential(
         D -= Phi
         if well_posed:
             tag = lx.negative_semidefinite_tag
-        elif assume_sufficient_resolution:
-            # If D was computed with insufficient resolution then we can't change this.
+        else:
             well_posed = None
     elif well_posed:
         tag = lx.positive_semidefinite_tag
-    D = lx.MatrixLinearOperator(D, tag)
+    D = lx.MatrixLinearOperator(D, tag if assume_quadrature_accurate else ())
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(

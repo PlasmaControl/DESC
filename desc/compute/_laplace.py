@@ -149,6 +149,7 @@ def _lsmr_compute_potential(
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
+    assume_sufficient_resolution=False,
     **kwargs,
 ):
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
@@ -189,7 +190,8 @@ def _lsmr_compute_potential(
         D -= Phi
         if well_posed:
             tag = lx.negative_semidefinite_tag
-        else:
+        elif assume_sufficient_resolution:
+            # If D was computed with insufficient resolution then we can't change this.
             well_posed = None
     elif well_posed:
         tag = lx.positive_semidefinite_tag

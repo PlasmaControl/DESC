@@ -9,6 +9,8 @@ References
 
 from functools import partial
 
+import lineax as lx
+
 from desc.backend import fixed_point, jit, jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
@@ -147,6 +149,7 @@ def _lsmr_compute_potential(
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
+    assume_sufficient_resolution=False,
     **kwargs,
 ):
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
@@ -156,6 +159,8 @@ def _lsmr_compute_potential(
 
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
+    well_posed = potential_grid.num_nodes == basis.num_modes
+    tag = ()
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -164,6 +169,8 @@ def _lsmr_compute_potential(
         source_grid,
         _kernel_dipole_plus_half,
     )
+    # could compute these in objective build
+    # and avoid computing if they are passed in as kwargs
     Phi = basis.evaluate(potential_grid)
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi if same_grid else basis.evaluate(source_grid)
@@ -181,13 +188,19 @@ def _lsmr_compute_potential(
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
+        if well_posed:
+            tag = lx.negative_semidefinite_tag
+        elif assume_sufficient_resolution:
+            # If D was computed with insufficient resolution then we can't change this.
+            well_posed = None
+    elif well_posed:
+        tag = lx.positive_semidefinite_tag
+    D = lx.MatrixLinearOperator(D, tag)
 
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
-    return (
-        jnp.linalg.solve(D, boundary_condition)
-        if (potential_grid.num_nodes == basis.num_modes)
-        else jnp.linalg.lstsq(D, boundary_condition)[0]
-    )
+    return lx.linear_solve(
+        D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
+    ).value
 
 
 def _iteration_operator(
@@ -771,19 +784,24 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     assert grid.num_rho == 1
 
     basis = transforms["Phi_coil"].basis
+    # could compute these in objective build
+    # and avoid computing if they are passed in as kwargs
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
 
-    mat = (
-        _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
-        + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
-    ).reshape(grid.num_nodes * 3, basis.num_modes)
+    mat = lx.MatrixLinearOperator(
+        (
+            _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
+            + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
+        ).reshape(grid.num_nodes * 3, basis.num_modes)
+    )
 
     # Equation 5.16 in [1].
-    data["Phi_coil_mn"] = jnp.linalg.lstsq(
+    data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-    )[0]
+        solver=lx.AutoLinearSolver(well_posed=None),
+    ).value
     return data
 
 

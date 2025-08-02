@@ -370,12 +370,13 @@ def nfp_loop(source_grid, func, init_val):
         msg="Source grid cannot compute toroidal effects.\n"
         "Increase NFP of source grid to e.g. 64.",
     )
+    zeta = source_grid.nodes[:, 2]
+    NFP = source_grid.NFP
 
     def body(j, f):
-        zeta_j = source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP
-        return f + func(zeta_j)
+        return f + func(zeta + j * 2 * jnp.pi / NFP)
 
-    return fori_loop(0, source_grid.NFP, body, init_val)
+    return fori_loop(0, NFP, body, init_val)
 
 
 def chi(r):

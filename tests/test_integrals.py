@@ -714,7 +714,7 @@ class TestLaplaceField:
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "surface, M, N, maxiter, chunk_size, just_err",
-        [(None, 16, 16, -1, 1000, False), (None, 16, 16, 40, 1000, False)],
+        [(None, 16, 16, -1, 500, False), (None, 16, 16, 40, 500, False)],
     )
     def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
         """Test multiply connected interior Dirichlet Laplace solver."""

@@ -515,7 +515,6 @@ class DFTInterpolator(_BIESTInterpolator):
         return jnp.real(vander @ f)
 
 
-# TODO (reviewer): Do we need to cast to jax array?
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
     """Returns new dictionaries with only required data."""
     x = rpz2xyz(jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]]))
@@ -527,6 +526,7 @@ def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
     eval_data = {key: jnp.asarray(eval_data[key]) for key in keys if key in eval_data}
     eval_data["x"] = x
     if eval_grid is not None:
+        # Casting to JAX arrays reduces memory usage.
         if "theta" not in eval_data:
             eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
         if "zeta" not in eval_data:
@@ -620,13 +620,13 @@ def _singular_part(
 
     - hyperparameter M replaced by ``st`` and ``sz``.
     - density sigma / function f is absorbed into kernel.
-    """
-    # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
-    #  singular point. Hence the quadrature may not converge for Cauchy
-    #  principal values. Prove otherwise or remove singularity.
 
+    TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
+       singular point. Hence the quadrature may not converge for Cauchy
+       principal values. Prove otherwise or remove singularity.
+
+    """
     eval_grid = interpolator.eval_grid
-    # TODO: (for reviewers) should these be wrapped in jnp.asarray()?
     eval_theta = eval_grid.unique_theta
     eval_zeta = eval_grid.unique_zeta
 
@@ -665,17 +665,18 @@ def _singular_part(
             for key, val in fsource
         }
         # Coordinates of the polar nodes around the evaluation point.
-        t = eval_theta + interpolator.shift_t[i]
-        z = eval_zeta + interpolator.shift_z[i]
-        source_data_polar["theta"] = t[eval_grid.inverse_theta_idx]
-        source_data_polar["zeta"] = z[eval_grid.inverse_zeta_idx]
+        source_data_polar["theta"] = eval_data["theta"] + interpolator.shift_t[i]
+        source_data_polar["zeta"] = eval_data["zeta"] + interpolator.shift_z[i]
         if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
         if known_map is not None:
-            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
-
+            source_data_polar[map_name] = map_fun(
+                eval_grid,
+                t=eval_theta + interpolator.shift_t[i],
+                z=eval_zeta + interpolator.shift_z[i],
+            )
         return kernel(eval_data, source_data_polar, v[i], diag=True)
 
     f = vmap_chunked(

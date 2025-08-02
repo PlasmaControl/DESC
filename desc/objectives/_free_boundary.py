@@ -983,11 +983,11 @@ class FreeSurfaceError(_Objective):
         self._is_neumann = not hasattr(field, "M_Phi_coil")
         errorif(
             not self._is_neumann and field.M_Phi_coil > grid.M,
-            msg=f"M_Phi_coil = {getattr(field, "M_Phi_coil", 0)} > {grid.M} = grid.M.",
+            msg=f"M_Phi_coil = {getattr(field, 'M_Phi_coil', 0)} > {grid.M} = grid.M.",
         )
         errorif(
             not self._is_neumann and field.N_Phi_coil > grid.N,
-            msg=f"N_Phi_coil = {getattr(field, "N_Phi_coil", 0)} > {grid.N} = grid.N.",
+            msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
         )
         eval_grid = setdefault(eval_grid, grid)
 

@@ -909,10 +909,10 @@ class FreeSurfaceError(_Objective):
         Order of integration on the local singular grid.
     maxiter : int
         Maximum number of iterations for fixed point method.
-        Default is zero, which means that matrix inversion will be used.
-        If nonzero, then performs fixed point iterations until maximum
-        iterations or error tolerance of ``1e-7`` is reached.
-        It is reccomended to set this parameter to a positive value, for example
+        Default is ``-1``, which means that matrix inversion will be used.
+        If positive, then performs that many fixed point iterations until
+        ``maxiter`` or an error tolerance of ``1e-7`` is reached.
+        It is recommended to set this parameter to a positive value, for example
         ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
         An advantage of such a fixed point method is that the Jacobian of the
         optimization may be computed more efficiently.
@@ -926,6 +926,9 @@ class FreeSurfaceError(_Objective):
         Size to split coil integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.  Default is ``None``.
+    I_sheet : float
+        Net toroidal sheet current determining a circulation of Φ.
+        Default is zero.
 
     """
 
@@ -966,6 +969,7 @@ class FreeSurfaceError(_Objective):
         maxiter=-1,
         chunk_size=None,
         B_coil_chunk_size=None,
+        I_sheet=0.0,
         target=None,
         bounds=None,
         weight=1,
@@ -1030,6 +1034,7 @@ class FreeSurfaceError(_Objective):
             "omega_z",
             "|e_theta x e_zeta|",
         ]
+        self._I_sheet = I_sheet
 
         super().__init__(
             things=eq,
@@ -1133,7 +1138,8 @@ class FreeSurfaceError(_Objective):
         field_params = {
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
-            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]],
+            # This is I_plasma + I_sheet.
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]] + self._I_sheet,
             "Y": self._field.Y,
         }
         outer = {key: inner[key] for key in self._reuseable_keys}

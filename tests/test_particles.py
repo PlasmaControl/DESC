@@ -101,6 +101,8 @@ def test_mirror_force_drift():
     dB = 0.1  # Gradient of the magnetic field
     E = 1e8  # Particle energy
     xi0 = 0.9  # Initial pitch angle
+    # TODO: test when R0 is not 1
+    # (to make sure the vphi -> phidot conversions are right)
     R0 = np.array([1.0])
 
     field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))

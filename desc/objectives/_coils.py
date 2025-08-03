@@ -3030,6 +3030,8 @@ class Bxdl(_Objective):
         minimize the perpendicular component to the Curve.
     eq : Equilibrium, optional
         Equilibrium to compute the B_plasma contribution from at the curve.
+        Assumed to be fixed. If ``eq`` is not fixed, input it as part of the list
+        for ``field``.
     eq_grid : Grid, optional
         Collocation grid containing the nodes in the equilibrium to compute the plasma
         magnetic field from.
@@ -3048,17 +3050,10 @@ class Bxdl(_Objective):
         then supply ``None``.
     field_fixed : bool
         Whether the coil set will be fixed during the optimization.
+    curve_fixed : bool
+        Whether the curve will be fixed during the optimization.
     b_hat : bool
-        Whether to evaluate |Bxdl| or |Bxdl|/|B|    field_fixed : bool, optional
-        Whether to fix the field's DOFs during the optimization. Default is False.
-    curve_fixed : bool, optional
-        Whether to fix the curve's DOFs during the optimization. Default is True.
-    eq_kwargs : dict, optional
-        Additional keyword arguments to pass to the equilibrium's
-        ``compute_magnetic_field`` method.
-    eq_fixed : bool, optional
-        True if the equilibrium is fixed in the optimization. Default is True.
-
+        Whether to evaluate |Bxdl| or |Bxdl|/|B|
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -3092,7 +3087,6 @@ class Bxdl(_Objective):
         eq_kwargs={},
         field_fixed=False,
         curve_fixed=True,
-        eq_fixed=True,
         b_hat=False,
         **kwargs,
     ):
@@ -3111,22 +3105,11 @@ class Bxdl(_Objective):
         things = []
         self._field_fixed = field_fixed
         self._curve_fixed = curve_fixed
-        self._eq_fixed = eq_fixed
-
         self._b_hat = b_hat
         if not field_fixed:
             things += self._field
         if not curve_fixed:
             things += [self._curve]
-        if not eq_fixed and eq is not None:
-            things += [self._eq]
-
-        errorif(
-            curve_fixed and eq_fixed and field_fixed,
-            ValueError,
-            "Cannot have all `curve_fixed`, `eq_fixed` and `field_fixed` set to True. "
-            "At least one of them must be False.",
-        )
 
         super().__init__(
             things=things,
@@ -3183,20 +3166,15 @@ class Bxdl(_Objective):
                 )
             else:
                 eq_grid = self._eq_grid
-            eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
-            transforms = get_transforms(eq_data_keys, obj=eq, grid=eq_grid)
-            if self._eq_fixed:
-                B_plasma = eq.compute_magnetic_field(
-                    coords=x,
-                    chunk_size=self._bs_chunk_size,
-                    source_grid=eq_grid,
-                    basis="rpz",
-                    transforms=transforms,
-                    **self._eq_kwargs,
-                )
+            B_plasma = eq.compute_magnetic_field(
+                coords=x,
+                chunk_size=self._bs_chunk_size,
+                source_grid=eq_grid,
+                basis="rpz",
+                **self._eq_kwargs,
+            )
         else:
-            eq_grid = None
-            transforms = None
+            B_plasma = None
 
         self._constants = {
             "field": SumMagneticField(self._field),
@@ -3204,8 +3182,6 @@ class Bxdl(_Objective):
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": B_plasma,
-            "eq_transforms": transforms,
-            "eq_grid": eq_grid,
         }
 
         timer.stop("Precomputing transforms")
@@ -3226,8 +3202,7 @@ class Bxdl(_Objective):
         Parameters
         ----------
         field_params : dict
-            Dictionary of the external field's and/or the curve's and/or the 
-            equilibrium's degrees of freedom.
+            Dictionary of the external field's and/or the curve's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -3238,30 +3213,27 @@ class Bxdl(_Objective):
             Bxdl error at points
 
         """
-        # Use an index to track the end of the main parameters
-        end_index = len(params)
-
-        # Conditionally extract items from the end of the tuple
-        if not self._eq_fixed:
-            eq_params = params[end_index - 1]
-            end_index -= 1
-        if not self._curve_fixed:
-            curve_params = params[end_index - 1]
-            end_index -= 1
-        if not self._field_fixed:
-            field_params = params[:end_index]
+        if self._curve_fixed:
+            field_params = params
+        else:
+            curve_params = params[-1]
+            if not self._field_fixed:
+                field_params = params[:-1]
+            else:
+                field_params = constants["field"].params_dict
 
         if constants is None:
             constants = self.constants
         if self._curve_fixed:
             eval_data = constants["eval_data"]
         else:
-            eval_data = self._curve.compute(
+            curve = self._things[-1]
+            eval_data = curve.compute(
                 self._data_keys, grid=self._eval_grid, basis="rpz", params=curve_params
             )
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        # B_ext is not pre-computed because field is not fixed typically
+        # B_ext is not pre-computed because field is not fixed
 
         B_ext = constants["field"].compute_magnetic_field(
             x,
@@ -3275,14 +3247,17 @@ class Bxdl(_Objective):
         elif self._eq is not None:
             eq = self._eq
             x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-            eq_grid = constants["eq_grid"]
+            if self._eq_grid is None:
+                eq_grid = QuadratureGrid(
+                    L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
+                )
+            else:
+                eq_grid = self._eq_grid
             B_plasma = eq.compute_magnetic_field(
                 coords=x,
                 chunk_size=self._bs_chunk_size,
                 source_grid=eq_grid,
-                params=eq_params,
                 basis="rpz",
-                transforms=constants["eq_transforms"],
                 **self._eq_kwargs,
             )
             B_ext = B_ext + B_plasma

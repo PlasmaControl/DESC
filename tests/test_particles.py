@@ -207,7 +207,7 @@ def test_tracing_vacuum_tokamak():
     eq.solve(verbose=1)
 
     particles = ManualParticleInitializerLab(
-        R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7, eq=eq
+        R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7
     )
     model = VacuumGuidingCenterTrajectory(frame="flux")
 

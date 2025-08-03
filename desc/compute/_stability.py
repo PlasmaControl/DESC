@@ -986,10 +986,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # manually set the instability drive to 0
     F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N / B_N) ** 2
 
-    def _stab_fix(mat, safety=1e-17):
+    def _stab_fix(mat, safety=1e-12):
         """
         Using Gershgorin circle idea to ensure the spectrum is positive
         definite.
+
+        This is basically equivalent to shifting the whole
+        eigenspectrum.
         """
         diag = jnp.real(jnp.diag(mat))
         row_sum = jnp.sum(jnp.abs(mat), axis=1) - jnp.abs(diag)
@@ -998,10 +1001,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         pad = jnp.clip(gap, 0.0)  # only add if gap>0
         return mat + jnp.diag(pad)
 
-    def force_psd(M, floor=-1e-20):
+    def force_psd(M, floor=-1e-15):
         w, V = jnp.linalg.eigh(M, UPLO="U")
         w = jnp.clip(w, floor * w.max(), None)
-        return (V * w) @ V.conj().T
+        proj = (V * w) @ V.conj().T
+        # Becomes identity during backward pass
+        return M + jax.lax.stop_gradient(proj - M)
 
     ####################
     ####----Q_11----####
@@ -1150,18 +1155,18 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # plt.spy(A)
     # plt.show()
 
-    # B = A.copy()
-    # B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
-    # B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
-    # B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
-    # w, _ = jnp.linalg.eigh(B)
+    B = A.copy()
+    B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+    B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+    B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+    w, _ = jnp.linalg.eigh(B)
 
-    # print(w)
-    # from matplotlib import pyplot as plt
+    print(w)
+    from matplotlib import pyplot as plt
 
-    # plt.yscale("symlog", linthresh=1e-20);
-    # plt.plot(w);
-    # pdb.set_trace()
+    plt.yscale("symlog", linthresh=1e-20)
+    plt.plot(w)
+    pdb.set_trace()
 
     # A = A.at[all_idx, all_idx].set(force_psd(A))
 
@@ -1759,12 +1764,6 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
         + D_rho.T @ (((iota_psi_r) ** 2 * psi_r_over_sqrtg * psi_r * W * g_vv) * D_rho)
     )
 
-    # A = A.at[rho_idx, rho_idx].add(
-    #    D_rho.T
-    #    * (W * diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * g_vv).flatten()
-    #    + (W * diota_psi_r2_drho * psi_r_over_sqrtg * iota_psi_r * g_vv) * D_rho
-    # )
-
     A = A.at[rho_idx, rho_idx].add(
         -1
         * jnp.diag(
@@ -1777,11 +1776,7 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, theta_idx].add(
         -1
         * (
-            jnp.diag(
-                (
-                    -0.5 * W * (D_zeta @ (diota_psi_r2_drho * psi_r_over_sqrtg * g_vv))
-                ).flatten()
-            )
+            (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv) * D_zeta
             + 0.5
             * (
                 D_rho.conj().T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
@@ -1791,11 +1786,7 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
         )
     )
     A = A.at[rho_idx, zeta_idx].add(
-        jnp.diag(
-            (
-                -0.5 * W * (D_zeta @ (diota_psi_r2_drho * psi_r_over_sqrtg * g_vv))
-            ).flatten()
-        )
+        (diota_psi_r2_drho * psi_r_over_sqrtg * W * g_vv) * D_zeta
         + 0.5
         * (
             D_rho.conj().T @ ((iota_psi_r2 * psi_r_over_sqrtg * W * g_vv) * D_zeta)
@@ -1859,8 +1850,6 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
             )  # enforcing symmetry exactly
             + (((psi_r2) ** 2 * psi_r_over_sqrtg * psi_r * W * g_pp) * D_rho).T @ D_rho
         )
-        # + D_rho.T * (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp).flatten()
-        # + (dpsi_r2_drho * psi_r_over_sqrtg * iota_psi_r * W * g_pp) * D_rho
     )
 
     A = A.at[rho_idx, rho_idx].add(
@@ -1871,32 +1860,15 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, theta_idx].add(
-            jnp.diag(
-                (
-                    -0.5 * W * (D_theta @ (dpsi_r2_drho * psi_r_over_sqrtg * g_pp))
-                ).flatten()
-            )
-            + 0.5
-            * (
-                D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
-                + ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta).T @ D_rho
-            )
-    )
-
-    A = A.at[rho_idx, zeta_idx].add(
         -1
         * (
-            jnp.diag(
-                (
-                    -0.5 * W * (D_theta @ (dpsi_r2_drho * psi_r_over_sqrtg * g_pp))
-                ).flatten()
-            )
-            + 0.5
-            * (
-                D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
-                + ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta).T @ D_rho
-            )
+            (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp) * D_theta
+            + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
         )
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        (dpsi_r2_drho * psi_r_over_sqrtg * W * g_pp) * D_theta
+        + D_rho.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_pp) * D_theta)
     )
 
     ## A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
@@ -1915,7 +1887,6 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
     # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
 
-    ## apply dirichlet BC to ξ^ρ
     # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
     # keep_2 = jnp.arange(n_total, 3 * n_total)
     # keep = jnp.concatenate([keep_1, keep_2])

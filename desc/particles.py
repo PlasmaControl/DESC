@@ -290,9 +290,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     nearly exponential (drag on electrons) to significantly steeper (drag on ions).
     τₛ and v_c are defined as follows:
 
-          mᵢ (4πϵ₀)² 3mₑ¹ᐟ² Tₑ³ᐟ²
-    τₛ = ─────────────────────────
-          mₑ 4√(2π) nₑ Zᵢ² e⁴ lnΛ
+    τₛ = (mᵢ (4πϵ₀)² 3mₑ¹ᐟ² Tₑ³ᐟ²) / (mₑ 4√(2π) nₑ Zᵢ² e⁴ lnΛ)
 
     v_c = [ (3√π / 4) (mₑ / mᵢ) ]¹ᐟ³ v_Tₑ
 

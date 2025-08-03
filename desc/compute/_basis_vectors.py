@@ -529,6 +529,25 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^vartheta_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^vartheta_t", "theta_PEST_t"],
+)
+def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_v|PEST"] = data["e^zeta_t"] / (data["theta_PEST_t"])
+    return data
+
+
+@register_compute_fun(
     name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
     units="m^{2}",
@@ -1204,6 +1223,46 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
             - cross(data["e_rho"], data["e_theta_r"]).T
             * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^zeta_t", "theta_PEST_t"],
+)
+def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_v"] = data["e^zeta_t"] / (data["theta_PEST_t"])
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_z|PEST",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt zeta poloidal"
+    " coordinate at constnat rho and vartheta",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^zeta_t", "e^zeta_z", "theta_PEST_t", "theta_PEST_z"],
+)
+def _e_sup_zeta_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_z|PEST"] = data["e^zeta_z"] - data["e^zeta_t"] * (
+        data["theta_PEST_z"] / data["theta_PEST_t"]
     )
     return data
 

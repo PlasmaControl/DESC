@@ -104,6 +104,50 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta_t",
+    label="\\partial_{\\theta} J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Derivative of Contravariant poloidal component of plasma current"
+    "density w.r.t the poloidal coorindate, weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_zt", "B_zeta_rt", "B_rho_z", "B_zeta_r", "sqrt(g)", "sqrt(g)_t"],
+)
+def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
+    data["J^theta_t"] = (
+        (data["B_rho_zt"] - data["B_zeta_rt"]) / data["sqrt(g)"]
+        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_t"] / data["sqrt(g)"]
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_z",
+    label="\\partial_{\\theta} J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Derivative of Contravariant poloidal component of plasma current"
+    "density w.r.t the toroidal coorindate, weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_zz", "B_zeta_rz", "B_rho_z", "B_zeta_r", "sqrt(g)", "sqrt(g)_z"],
+)
+def _J_sup_theta_z(params, transforms, profiles, data, **kwargs):
+    data["J^theta_z"] = (
+        (data["B_rho_zz"] - data["B_zeta_rz"]) / data["sqrt(g)"]
+        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_z"] / data["sqrt(g)"]
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
     name="J^zeta",
     label="J^{\\zeta}",
     units="A \\cdot m^{-3}",
@@ -127,6 +171,56 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
             safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"]),
             lambda: safediv(data["B_theta_rr"] - data["B_rho_rt"], data["sqrt(g)_r"]),
         )
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_t",
+    label="\\partial_{\\theta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Derivative of the contravariant toroidal component of plasma"
+    "current density w.r.t the poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "sqrt(g)_t", "B_theta_r", "B_rho_t", "B_theta_rt", "B_theta_tt"],
+    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rt",
+    # "B_theta_rr", "B_rho_rt", "B_theta_rrt", "B_rho_rtt"],
+)
+def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_t"] = (
+        safediv(data["B_theta_rt"] - data["B_rho_tt"], data["sqrt(g)"])
+        - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
+        * data["sqrt(g)_t"],
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_z",
+    label="\\partial_{\\zeta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Derivative of the contravariant toroidal component of plasma"
+    "current density w.r.t the toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "sqrt(g)_z", "B_theta_r", "B_rho_t", "B_theta_rz", "B_theta_tz"],
+    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rz", "B_theta_rr",
+    # --no-verify "B_rho_rt", "B_theta_rrz", "B_rho_rtz"],
+)
+def _J_sup_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_z"] = (
+        safediv(data["B_theta_rz"] - data["B_rho_tz"], data["sqrt(g)"])
+        - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
+        * data["sqrt(g)_z"],
     ) / mu_0
     return data
 

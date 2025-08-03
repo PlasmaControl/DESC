@@ -101,9 +101,8 @@ def test_mirror_force_drift():
     dB = 0.1  # Gradient of the magnetic field
     E = 1e8  # Particle energy
     xi0 = 0.9  # Initial pitch angle
-    # TODO: test when R0 is not 1
-    # (to make sure the vphi -> phidot conversions are right)
-    R0 = np.array([1.0])
+    # choose R0 != 1 to make sure the vphi -> phidot conversions are right
+    R0 = np.array([2.0])
 
     field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))
     print(field.params_dict)
@@ -195,6 +194,8 @@ def test_tracing_vacuum_tokamak():
     ts = np.linspace(0, 1e-7, 100)
     R0 = rmajor + rminor / 2
 
+    # Create a vacuum tokamak equilibrium with a FourierRZToroidalSurface
+    # TODO: replace with one of the existing vacuum tokamak
     surf = FourierRZToroidalSurface(
         R_lmn=np.array([rmajor, rminor]),
         modes_R=np.array([[0, 0], [1, 0]]),
@@ -241,7 +242,7 @@ def test_tracing_vacuum_tokamak():
     )
     # We will find the B0*r00/R field representation of the vacuum tokamak
     # First, find the magnetic field at a random R position (equation doesn't
-    # depend on R as llong as B0 and r00 are consistent)
+    # depend on R as long as B0 and r00 are consistent)
     # Then, the exact solution is the same as given in the
     # test_tracing_purely_toroidal_magnetic_field above
     grid = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
@@ -257,7 +258,7 @@ def test_tracing_vacuum_tokamak():
     z_exact = vd * ts
     # Angular velocity is constant and given by vpar0 / R0 in radians per second
     # So, the exact phi position is given by phi(t) = vpar0 / R0 * t
-    # where vpar0 is the initial parallel velocity and R0 is the major radius.
+    # where vpar0 is the initial parallel velocity and R0 is the initial R.
     phi_exact = particles.vpar0[0] / R0 * ts
 
     assert np.allclose(rpz[:, 2], z_exact, atol=1e-12)

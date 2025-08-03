@@ -206,9 +206,7 @@ def test_tracing_vacuum_tokamak():
     eq = Equilibrium(surface=surf, L=8, M=8, N=0, Psi=3)
     eq.solve(verbose=1)
 
-    particles = ManualParticleInitializerLab(
-        R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7
-    )
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7)
     model = VacuumGuidingCenterTrajectory(frame="flux")
 
     # Particle tracing compute the field on individual points as grid which

@@ -1516,7 +1516,7 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
-            # dummy value; h depends on ζ alone,so doesn't matter what θ(α, ζ) is
+            # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,

@@ -235,10 +235,7 @@ class FourierChebyshevSeries(IOAble):
         ) * (Y - self.lobatto)
 
     def harmonics(self):
-        """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.
-
-        Transform Fourier interpolant harmonics to Nyquist trigonometric
-        interpolant harmonics so that the coefficients are all real.
+        """Real spectral coefficients aₘₙ of the interpolating polynomial.
 
         The order of the returned coefficient array
         matches the Vandermonde matrix formed by an outer
@@ -464,11 +461,12 @@ class PiecewiseChebyshevSeries(IOAble):
         # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
         y = jnp.where(mask, y.real, 0.0)
 
-        # TODO: Multipoint evaluation with FFT.
-        #   See note in integrals/_interp_utils.py.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
+        # TODO: Fast multipoint method to evaluate exactly. Reduces to FFT. Cost is
+        # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
+        # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
         df_dy_sign = jnp.sign(
             jnp.linalg.vecdot(
                 n * jnp.sin(n * jnp.arccos(y)[..., jnp.newaxis]),

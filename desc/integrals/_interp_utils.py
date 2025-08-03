@@ -11,29 +11,12 @@ from functools import partial
 
 import numpy as np
 from interpax import interp1d
+from jax_finufft import nufft2
 from orthax.chebyshev import chebroots
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
-
-# TODO (#1154):
-#  We use the spline method to compute roots right now, but with the following
-#  algorithm, the Chebyshev method will be more efficient except when NFP is high.
-#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64.
-#  2. Then to find roots of bounce points use the closed formula in Boyd's
-#  spectral methods section 19.6. Can isolate interval to search for root by
-#  observing whether B - 1/pitch changes sign at extrema. Only need to do
-#  evaluate Chebyshev series at quadrature points once, and can use that to
-#  compute the integral for every pitch. The integral will converge rapidly
-#  since a low order polynomial approximates |B| well in between adjacent
-#  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
-#  Implementing 1 and 2 will remove all eigenvalue solves from computation.
-#  2 is a larger improvement than 1.
-chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 def cheb_pts(n, domain=(-1, 1), lobatto=False):
@@ -79,22 +62,6 @@ def fourier_pts(n):
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
-# TODO (#1294): For inverse transforms, use non-uniform fast transforms (NFFT).
-#   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
-#   and number of points (non-uniform) to evaluate be Q. A non-uniform
-#   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
-#   interpolation error term (depending on implementation how ε appears
-#   may change, but it is always logarithmic). Direct evaluation is 𝒪(F Q).
-#   Note that for the inverse Chebyshev transforms, we can also use fast
-#   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
-#   The cost is 𝒪([F+Q] log²[F + Q]). This might be useful to evaluating
-#   |B|, since the integrands are not smooth functions of |B|, which we know
-#   as a Chebyshev series, and the nodes are packed more tightly near the
-#   singular regions.
-
-
 def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     """Interpolate real-valued ``f`` to ``xq`` with FFT.
 
@@ -121,7 +88,7 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     )
 
 
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -159,7 +126,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
     return (vander * a).real.sum(axis=-1)
 
 
-def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+def ifft_non_uniform(
+    xq, a, domain=(0, 2 * jnp.pi), axis=-1, nufft=False, *, _modes=None
+):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -182,11 +151,18 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Function value at query points.
 
     """
+    xq = xq - domain[0]
+    if nufft:
+        return nufft2(
+            jnp.fft.fftshift(a),
+            xq * 2 * np.pi / (domain[1] - domain[0]),
+            iflag=1,
+        )
     if _modes is None:
         n = a.shape[axis]
         _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
     a = jnp.moveaxis(a, axis, -1)
-    vander = jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    vander = jnp.exp(-1j * _modes * xq[..., jnp.newaxis])
     return jnp.linalg.vecdot(vander, a)
 
 
@@ -488,6 +464,9 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
+    # TODO: Fast multipoint method to evaluate exactly. Reduces to FFT. Cost
+    # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
+    # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
     n = jnp.arange(n)
     a = jnp.moveaxis(a, axis, -1)
     # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
@@ -669,7 +648,7 @@ def polyroot_vec(
         and get_only_real_roots
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
-        # TODO: Differentiate through root alone with custom_linear_solve.
+        # TODO: Differentiate through root alone with custom_linear_solve
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient. Also consumes less memory.
         r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)
@@ -789,6 +768,23 @@ def _concat_sentinel(r, sentinel, num=1):
     """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)
+
+
+#  The default method for root finding for bounce points is to use splines
+#  then polish with Newton. If the root finding is selected to be done with
+#  the Chebyshev series, the following changes would make that more efficient.
+#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
+#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+#  Use that once to find extrema of |B| if Y_B > 64.
+#  2. Then to find roots of bounce points use the closed formula in Boyd's
+#  spectral methods section 19.6. Can isolate interval to search for root by
+#  observing whether |B|-1/λ changes sign at extrema. Only need to do
+#  evaluate Chebyshev series at quadrature points once, and can use that to
+#  compute the integral for every λ. The integral will converge rapidly
+#  since a low order polynomial approximates |B| well in between adjacent
+#  extrema. 2 is a larger improvement than 1.
+chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 def rfft_to_trig(a, n, axis=-1):

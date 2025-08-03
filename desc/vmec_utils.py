@@ -344,8 +344,6 @@ def zernike_to_fourier(x_lmn, basis, rho, sym=False):
         axis to the boundary.
 
     """
-    # TODO (PR #680): this always returns the full double Fourier basis
-    # regardless of symmetry
     M = basis.M
     N = basis.N
     if sym:

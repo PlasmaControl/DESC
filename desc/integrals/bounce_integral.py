@@ -414,11 +414,6 @@ class Bounce2D(Bounce):
         f = rfft2(f, norm="forward").at[..., i].divide(2) * 2
         return f[..., jnp.newaxis, :, :]
 
-    # TODO (#1034): Pass in the previous
-    #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
-    #  Might be possible to perturb the coefficients of the
-    #  θ(α, ζ) since these are related to lambda.
-
     @staticmethod
     def compute_theta(eq, X=16, Y=32, rho=1.0, iota=None, clebsch=None, **kwargs):
         """Return DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.
@@ -712,7 +707,7 @@ class Bounce2D(Bounce):
     #     summation the interpolation becomes cheap.
     #     (Same code as ``desc/integrals/_bounce_utils.py::cubic_spline``).
     #  5. The quadrature points are no longer functions of the solutions
-    #     to the nonlinear equation λB = 1. In particular, all the ζ values
+    #     to the nonlinear equation λ|B| = 1. In particular, all the ζ values
     #     are constants throughout optimization. This makes AD cheaper.
     #  6. Because the interpolation is now purely a function of ``num_transit``
     #     and θ, rather than the apriori unknown number of bounce points, the
@@ -720,9 +715,6 @@ class Bounce2D(Bounce):
 
     # TODO (#1303).
     def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
-        # TODO (#1294): Use non-uniform fast transforms here.
-        #  Compare to Cubic-Fourier spline (3x up-sampled with poloidal FFT)
-        #  done once in ``desc/_compute/_neoclassical.py::_compute``.
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
@@ -834,7 +826,7 @@ class Bounce2D(Bounce):
         # Integrating an analytic oscillatory map so a high order quadrature is ideal.
         # Difficult to pick the right frequency for Filon quadrature in general, which
         # would work best, especially at high NFP. Gauss-Legendre is superior to
-        # Clenshaw-Curtis for smooth oscillatory maps. Any prolate spheroidal wave
+        # Clenshaw-Curtis for smooth oscillatory maps. Prolate spheroidal wave
         # function quadrature would be an improvement.
         deg = (
             self._c["B(z)"].Y
@@ -855,9 +847,9 @@ class Bounce2D(Bounce):
         par_sum = ifft_non_uniform(
             zeta[:, jnp.newaxis],
             self._c["B^zeta"],  # Shape broadcasts with (num rho, 1, n, m).
-            _modes=self._n_modes,
             domain=(0, 2 * jnp.pi / self._NFP),
             axis=-2,
+            _modes=self._n_modes,
         )
         # θ at roots of Legendre polynomial in ζ
         theta = idct_non_uniform(
@@ -1191,9 +1183,6 @@ class Bounce1D(Bounce):
             **kwargs,
         )
 
-    # TODO (#1428): Add option for adaptive quadrature with quadax
-    #  quadax.quadgk with the c.o.v. used for legendre works best.
-    #  Some people want more accurate computation on W shaped wells.
     def integrate(
         self,
         integrand,

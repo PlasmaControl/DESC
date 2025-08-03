@@ -733,9 +733,9 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     f = ifft_non_uniform(
         zeta[:, jnp.newaxis],
         f,
-        _modes=n_modes,
         domain=(0, 2 * jnp.pi / NFP),
         axis=-2,
+        _modes=n_modes,
     )
     # f at Chebyshev points in ζ on field lines
     f = irfft_non_uniform(T.evaluate(Y), f[..., jnp.newaxis, :, :], m, _modes=m_modes)
@@ -804,9 +804,9 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
         f = ifft_non_uniform(
             zeta[:num_zeta, jnp.newaxis],
             f,
-            _modes=n_modes,
             domain=(0, 2 * jnp.pi / NFP),
             axis=-2,
+            _modes=n_modes,
         )[..., jnp.newaxis, :, :]
 
     # θ at uniform ζ on field lines

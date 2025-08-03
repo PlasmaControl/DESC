@@ -18,6 +18,7 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
+    ifft_non_uniform,
     interp_dct,
     interp_rfft,
     interp_rfft2,
@@ -194,7 +195,7 @@ class TestFastInterp:
     @pytest.mark.parametrize(
         "func, n, domain",
         [
-            # Test cases chosen with purpose, don't remove any.
+            # Test cases chosen with purpose, do not remove any.
             (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi)),
             (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi)),
             (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi)),
@@ -214,6 +215,44 @@ class TestFastInterp:
         coef = rfft_to_trig(rfft(f, norm="forward"), M)
         vander = trig_vander(xq, M, domain)
         np.testing.assert_allclose((vander * coef).sum(axis=-1), fq)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "func, n, domain, imag_undersampled",
+        [
+            # Test cases chosen with purpose, do not remove any.
+            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi), False),
+            (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi), True),
+            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi), False),
+            (_f_1d, 2 * _f_1d_nyquist_freq(), (-np.pi, np.pi), True),
+            (lambda x: np.cos(7 * x), 2, (-np.pi / 7, np.pi / 7), True),
+            (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7), False),
+        ],
+    )
+    def test_interp_fft_and_nufft(self, func, n, domain, imag_undersampled):
+        """Test fast non-uniform FFT interpolation."""
+        x = np.linspace(domain[0], domain[1], n, endpoint=False)
+        f = func(x)
+        xq = np.array([7.34, 1.10134, 2.28])
+        fq = func(xq)
+
+        a = np.fft.fft(f, norm="forward")
+        np.testing.assert_allclose(a[0].imag, 0, atol=1e-12)
+        if n % 2 == 0:
+            np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
+        r = ifft_non_uniform(xq, a, domain)
+        np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
+        r = ifft_non_uniform(xq, a, domain, nufft=True)
+        np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
+
+        try:
+            from finufft import nufft1d2
+
+            xq = (xq - domain[0]) * 2 * np.pi / (domain[1] - domain[0])
+            r = nufft1d2(xq, a, modeord=1, isign=1)
+            np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
+        except ImportError:
+            pass
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

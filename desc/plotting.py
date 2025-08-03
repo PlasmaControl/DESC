@@ -4124,8 +4124,7 @@ def plot_particle_trajectories(
         field = desc.io.load('../tests/inputs/precise_QA_helical_coils.h5')
 
         # Initializer classes are named after their input format. But they return
-        # the initial particle coordinates in whatever the model's frame is. One
-        # needs to specify the equilibrium object for the conversion.
+        # the initial particle coordinates in whatever the model's frame is.
         initializer = ManualParticleInitializerFlux(
             rho0=rhos,
             theta0=0,
@@ -4134,7 +4133,6 @@ def plot_particle_trajectories(
             E = 1e-1,
             m = 4.0,
             q = 1.0,
-            eq = eq, # needed for flux -> lab coordinate transformation
         )
         model = VacuumGuidingCenterTrajectory(frame='lab')
 

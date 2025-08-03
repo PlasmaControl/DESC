@@ -963,13 +963,13 @@ def trace_particles(
         Source of magnetic field to integrate
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of `ParticleInitializer.init_particles`.
+        The first output of ``ParticleInitializer.init_particles``.
     ms : array-like
         Particle masses, must be broadcastable to the shape of y0.
     qs : array-like
         Particle charges, must be broadcastable to the shape of y0.
     mus : array-like
-        Particle magnetic moments (v⊥²/|B|), must be broadcastable to the shape of
+        Particle magnetic moments (mv⊥²/2B), must be broadcastable to the shape of
         y0. For the slowndown model, it won't be used, but must be provided for
         consistency.
     ts : array-like

@@ -146,6 +146,11 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         assert frame in ["lab", "flux"]
         self._frame = frame
 
+    @property
+    def frame(self):
+        """Coordinate frame of the model."""
+        return self._frame
+
     @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
@@ -334,6 +339,11 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         self._frame = frame
         self.Z_eff = Z_eff
         self.m_eff = m_eff
+
+    @property
+    def frame(self):
+        """Coordinate frame of the model."""
+        return self._frame
 
     @jit
     def vf(self, t, x, args):

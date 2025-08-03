@@ -2,7 +2,7 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Union
 
 import equinox as eqx
 import numpy as np
@@ -35,7 +35,7 @@ from desc.geometry import Curve, Surface
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot, safediv
+from desc.utils import cross, dot, errorif, safediv
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
@@ -66,7 +66,7 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
         "lab" traces particles in (R, phi, Z) lab frame
 
         """
-        pass
+        return self._frame
 
     @property
     @abstractmethod
@@ -139,24 +139,12 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         Equilibrium.map_coordinates method.
     """
 
+    vcoords = ["vpar"]
+    args = ["m", "q", "mu"]
+
     def __init__(self, frame):
         assert frame in ["lab", "flux"]
         self._frame = frame
-
-    @property
-    def frame(self):
-        """Which frame the model is defined in."""
-        return self._frame
-
-    @property
-    def vcoords(self):
-        """Which velocity coordinates the model uses."""
-        return ["vpar"]
-
-    @property
-    def args(self):
-        """Which additional args are needed by the model."""
-        return ["m", "q", "mu"]
 
     @jit
     def vf(self, t, x, args):
@@ -338,25 +326,14 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         Default is 1, for H/D/T plasmas.
     """
 
+    vcoords = ["vpar", "v"]
+    args = ["m", "q"]
+
     def __init__(self, frame="flux", m_eff=2.5, Z_eff=1):
         assert frame == "flux"
+        self._frame = frame
         self.Z_eff = Z_eff
         self.m_eff = m_eff
-
-    @property
-    def frame(self):
-        """Which frame the model is defined in."""
-        return "flux"
-
-    @property
-    def vcoords(self):
-        """Which velocity coordinates the model uses."""
-        return ["vpar", "v"]
-
-    @property
-    def args(self):
-        """Which additional args are needed by the model."""
-        return ["m", "q"]
 
     @jit
     def vf(self, t, x, args):
@@ -547,9 +524,6 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         Particle mass, in proton masses
     q : float
         Particle charge, in units of elementary charge.
-    eq : Equilibrium, optional
-        Used to map initial flux coordinates to lab frame, if tracing particles in
-        lab frame.
     """
 
     def __init__(
@@ -561,7 +535,6 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         E: ArrayLike = 3.5e6,
         m: float = 4,
         q: float = 2,
-        eq: Optional[Equilibrium] = None,
     ):
         m = m * proton_mass
         q = q * elementary_charge
@@ -579,7 +552,12 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         self.zeta0 = zeta0
         self.v0 = jnp.sqrt(2 * E / self.m)
         self.vpar0 = xi0 * self.v0
-        self.eq = eq
+
+        errorif(
+            any(self.rho0 > 1.0),
+            ValueError,
+            "Flux coordinate rho must be between 0 and 1.",
+        )
 
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
@@ -587,19 +565,24 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         """Initialize particles for a given trajectory model."""
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         if model.frame == "flux":
+            if not isinstance(field, Equilibrium):
+                raise ValueError(
+                    "Mapping from lab to flux coordinates requires an Equilibrium. "
+                    "Please use Equilibrium object with the model!"
+                )
             x = x
         elif model.frame == "lab":
-            if self.eq is None:
-                raise ValueError(
-                    "Mapping flux coordinates to real space requires an Equilibrium. "
-                    "Please provide an Equilibrium object when constructing this class!"
+            if isinstance(field, Equilibrium):
+                raise NotImplementedError(
+                    "If you have an Equilibrium object, you should use the model "
+                    "in flux frame. Since trying to integrate in lab frame will "
+                    "require multiple coordinate mapping, it is not implemented."
                 )
-            warnings.warn(
-                "The input coordinates are in flux coordinates, but the model operates "
-                "in lab coordinates. Converting the given coordinates to lab frame."
-            )
-            grid = Grid(x)
-            x = self.eq.compute("x", grid=grid)["x"]
+            elif isinstance(field, _MagneticField):
+                raise NotImplementedError(
+                    "If you have a MagneticField object, you cannot use input with "
+                    "flux coordinates since there is no easy mapping between the two!"
+                )
         else:
             raise NotImplementedError
 
@@ -627,9 +610,6 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         Particle mass, in proton masses
     q : float
         Particle charge, in units of elementary charge.
-    eq : Equilibrium, optional
-        Used to map initial lab coordinates to flux frame, if tracing particles in
-        flux frame.
     """
 
     def __init__(
@@ -641,7 +621,6 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         E=3.5e6,
         m=4,
         q=2,
-        eq=None,
     ):
         m = m * proton_mass
         q = q * elementary_charge
@@ -655,7 +634,6 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         self.Z0 = Z0
         self.v0 = jnp.sqrt(2 * E / self.m)
         self.vpar0 = xi0 * self.v0
-        self.eq = eq
 
     def init_particles(
         self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
@@ -663,21 +641,27 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         """Initialize particles for a given trajectory model."""
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         if model.frame == "flux":
-            if self.eq is None:
+            if not isinstance(field, Equilibrium):
                 raise ValueError(
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please provide an Equilibrium object when constructing this class!"
+                    "Please use Equilibrium object with the model!"
                 )
             warnings.warn(
                 "The input coordinates are in lab coordinates, but the model operates "
                 "in flux coordinates. Converting the given coordinates to flux frame."
             )
-            x = self.eq.map_coordinates(
+            x = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
             )
         elif model.frame == "lab":
+            if isinstance(field, Equilibrium):
+                raise NotImplementedError(
+                    "If you have an Equilibrium object, you should use the model "
+                    "in flux frame. Since trying to integrate in lab frame will "
+                    "require smultiple coordinate mapping, it is not implemented."
+                )
             x = x
         else:
             raise NotImplementedError
@@ -747,8 +731,19 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         rho = jnp.zeros_like(zeta)
 
         if model.frame == "flux":
+            if not isinstance(field, Equilibrium):
+                raise ValueError(
+                    "Mapping from lab to flux coordinates requires an Equilibrium. "
+                    "Please use Equilibrium object with the model!"
+                )
             x = jnp.array([rho, theta, zeta]).T
         elif model.frame == "lab":
+            if isinstance(field, Equilibrium):
+                raise NotImplementedError(
+                    "If you have an Equilibrium object, you should use the model "
+                    "in flux frame. Since trying to integrate in lab frame will "
+                    "require multiple coordinate mapping, it is not implemented."
+                )
             x = jnp.array([rho, theta, zeta]).T
             grid = Grid(x)
             x = self.curve.compute("x", grid=grid)["x"]
@@ -821,8 +816,19 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         rho = self.surface.rho * jnp.ones_like(zeta)
 
         if model.frame == "flux":
+            if not isinstance(field, Equilibrium):
+                raise ValueError(
+                    "Mapping from lab to flux coordinates requires an Equilibrium. "
+                    "Please use Equilibrium object with the model!"
+                )
             x = jnp.array([rho, theta, zeta]).T
         elif model.frame == "lab":
+            if isinstance(field, Equilibrium):
+                raise NotImplementedError(
+                    "If you have an Equilibrium object, you should use the model "
+                    "in flux frame. Since trying to integrate in lab frame will "
+                    "require multiple coordinate mapping, it is not implemented."
+                )
             x = jnp.array([rho, theta, zeta]).T
             grid = Grid(x)
             x = self.surface.compute("x", grid=grid)["x"]

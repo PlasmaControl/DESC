@@ -13,6 +13,7 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
 )
 from desc.particles import (
+    ManualParticleInitializerFlux,
     ManualParticleInitializerLab,
     VacuumGuidingCenterTrajectory,
     trace_particles,
@@ -268,3 +269,104 @@ def test_tracing_vacuum_tokamak():
     assert np.allclose(vpar[0, :, 0], particles.vpar0, atol=1e-12)
     # The phi position should be given by the angular velocity
     assert np.allclose(rpz[:, 1], phi_exact, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_init_manual_lab():
+    """Test ManualParticleInitializerLab class."""
+    # some dummy field
+    field = ToroidalMagneticField(1.0, 3.0)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+
+    def test(R0):
+        particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
+        x0, args = particles.init_particles(model, field)
+        ms, qs, mus = args
+        assert x0.shape == (1, 4)
+        assert ms.shape == (1,)
+        assert qs.shape == (1,)
+        assert mus.shape == (1,)
+
+    # test different data formats initialize properly
+    test(1.0)
+    test(np.array([1.0]))
+    test([1.0])
+
+    # test multiple particle initialization
+    R0 = np.linspace(1, 3, 100)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
+    x0, args = particles.init_particles(model, field)
+    ms, qs, mus = args
+    assert x0.shape == (100, 4)
+    assert ms.shape == (100,)
+    assert qs.shape == (100,)
+    assert mus.shape == (100,)
+
+    # test using lab class to initialize in flux coordinates
+    eq = Equilibrium(M=4, N=0)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    with pytest.raises(NotImplementedError):
+        x0, args = particles.init_particles(model, eq)
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    R0 = [10.0, 10.1]
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
+    with pytest.warns(UserWarning, match="The input coordinates are in lab"):
+        x0, args = particles.init_particles(model, eq)
+
+    ms, qs, mus = args
+    assert x0.shape == (2, 4)
+    assert ms.shape == (2,)
+    assert qs.shape == (2,)
+    assert mus.shape == (2,)
+
+
+@pytest.mark.unit
+def test_init_manual_flux():
+    """Test ManualParticleInitializerFlux class."""
+    # some dummy equilibrium
+    eq = Equilibrium(M=4, N=0)
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+
+    def test(R0):
+        particles = ManualParticleInitializerFlux(
+            rho0=R0, theta0=0, zeta0=0, xi0=0.9, E=1e6
+        )
+        x0, args = particles.init_particles(model, eq)
+        ms, qs, mus = args
+        assert x0.shape == (1, 4)
+        assert ms.shape == (1,)
+        assert qs.shape == (1,)
+        assert mus.shape == (1,)
+
+    # test different data formats initialize properly
+    test(1.0)
+    test(np.array([1.0]))
+    test([0.8])
+    with pytest.raises(ValueError):
+        # rho is defined between 0 and 1
+        test([1.5])
+
+    # test multiple particle initialization
+    R0 = np.linspace(0.1, 1.0, 100)
+    particles = ManualParticleInitializerFlux(
+        rho0=R0, theta0=0, zeta0=0, xi0=0.9, E=1e6
+    )
+    x0, args = particles.init_particles(model, eq)
+    ms, qs, mus = args
+    assert x0.shape == (100, 4)
+    assert ms.shape == (100,)
+    assert qs.shape == (100,)
+    assert mus.shape == (100,)
+
+    # test using flux class to initialize in lab coordinates
+    eq = Equilibrium(M=4, N=0)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    # this is computational expensive, requires 2coordinate mapping
+    # user shouldn't use it
+    with pytest.raises(NotImplementedError):
+        x0, args = particles.init_particles(model, eq)
+
+    # we don't know how to go from flux input to lab frame with MagneticField
+    field = ToroidalMagneticField(1.0, 3.0)
+    with pytest.raises(NotImplementedError):
+        x0, args = particles.init_particles(model, field)

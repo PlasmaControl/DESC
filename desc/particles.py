@@ -2,7 +2,6 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Union
 
 import equinox as eqx
 import numpy as np
@@ -115,8 +114,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    # TODO: Is this correct? Check (m v∥² / q B²) term
-
     d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − (v⊥² / 2B) ( 𝐛 ⋅ ∇B )
@@ -228,7 +225,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         data = compute_fun(eq, data_keys, params, transforms, profiles)
 
         # derivative of the guiding center position in R, phi, Z coordinates
-        # TODO: Is this correct? Check
         Rdot = vpar * data["b"] + (
             (m / q / data["|B|"] ** 2)
             * ((mu * data["|B|"] / m) + vpar**2)
@@ -281,8 +277,6 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     Solves the following ODEs,
 
-    # TODO: Is this correct? Check (m v∥² / q B²) term
-
     d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
     dv∥/dt = − ((v² - v∥²) / 2B) ( 𝐛 ⋅ ∇B )
@@ -297,25 +291,15 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     τₛ and v_c are defined as follows:
 
           mᵢ (4πϵ₀)² 3mₑ¹ᐟ² Tₑ³ᐟ²
-    τₛ = ───────────────────────────
+    τₛ = ─────────────────────────
           mₑ 4√(2π) nₑ Zᵢ² e⁴ lnΛ
 
-    v_c = [ (3√π / 4) (mₑ / mᵢ) ]¹ᐟ³ v_{Tₑ}
+    v_c = [ (3√π / 4) (mₑ / mᵢ) ]¹ᐟ³ v_Tₑ
 
-    v_{Tₑ} = √(2 Tₑ / mₑ)
+    v_Tₑ = √(2 Tₑ / mₑ)
 
-    See ref [1] Eq. (1-4) for definitions, and other references for the details.
-
-    References
-    ----------
-    [1] McMillan M, Lazerson S A. "BEAMS3D neutral beam injection model"
-    Plasma Physics and Controlled Fusion (2014).
-    [2] Callen J D, "Fundamentals of Plasma Physics (Lecture Notes)" (Madison, WI:
-    University of Wisconsin Press) (2003)
-    [3] Fowler R H, Morris R N, Rome J A and Hanatani K, "Neutral beam injection
-    benchmark studies for stellarators/heliotrons", Nucl. Fusion 30 997–1010 (1990)
-    [4] Rosenbluth M N, MacDonald W M and Judd D L, "Fokker–Planck equation for an
-    inverse-square force", Phys.Rev. 107 1–6 (1957)
+    See ref [1]_ Eq. (1-4) for definitions, and other references [2]_ [3]_ [4]_
+    for the details.
 
     Works only in flux coordinates corresponding to {rho, theta, zeta}. Particle
     tracing can be performed with an Equilibrium object, which must have electron
@@ -329,6 +313,18 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     Z_eff : float
         Effective charge of the plasma main ions, in units of elementary charge.
         Default is 1, for H/D/T plasmas.
+
+    References
+    ----------
+    .. [1] McMillan M, Lazerson S A. "BEAMS3D neutral beam injection model"
+       Plasma Physics and Controlled Fusion (2014).
+    .. [2] Callen J D, "Fundamentals of Plasma Physics (Lecture Notes)" (Madison, WI:
+       University of Wisconsin Press) (2003)
+    .. [3] Fowler R H, Morris R N, Rome J A and Hanatani K, "Neutral beam injection
+       benchmark studies for stellarators/heliotrons", Nucl. Fusion 30 997–1010 (1990)
+    .. [4] Rosenbluth M N, MacDonald W M and Judd D L, "Fokker–Planck equation for an
+       inverse-square force", Phys.Rev. 107 1–6 (1957)
+
     """
 
     vcoords = ["vpar", "v"]
@@ -434,9 +430,7 @@ class AbstractParticleInitializer(IOAble, ABC):
     """
 
     @abstractmethod
-    def init_particles(
-        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
-    ) -> tuple[jnp.ndarray, tuple]:
+    def init_particles(self, model, field):
         """Initialize a distribution of particles.
 
         Should return two things:
@@ -473,9 +467,10 @@ class AbstractParticleInitializer(IOAble, ABC):
         x0 : jax.Array, shape(N,D)
             Initial particle positions and velocities, where D is the dimensionality of
             the trajectory model, which includes 3D spatial dimensions and depending on
-            the model parallel velocity and total velocity.
+            the model, parallel velocity and total velocity. The initial positions are
+            in the frame of the model.
         args : tuple
-            Additional arguments needed by the model, such as mass, charge, and
+            Additional arguments needed by the model, mass, charge, and
             magnetic moment (mv⊥²/2|B|) of each particle.
         """
         vs = []
@@ -569,10 +564,28 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             "Flux coordinate rho must be between 0 and 1.",
         )
 
-    def init_particles(
-        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
-    ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize particles for a given trajectory model."""
+    def init_particles(self, model, field):
+        """Initialize particles for a given trajectory model.
+
+        Parameters
+        ----------
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, which defines the frame and
+            velocity coordinates.
+        field : Equilibrium or _MagneticField
+            Source of magnetic field to use for tracing particles.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions and velocities, where D is the dimensionality of
+            the trajectory model, which includes 3D spatial dimensions and depending on
+            the model, parallel velocity and total velocity. The initial positions are
+            in the frame of the model.
+        args : tuple
+            Additional arguments needed by the model, mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle.
+        """
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
@@ -645,10 +658,28 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         self.v0 = jnp.sqrt(2 * E / self.m)
         self.vpar0 = xi0 * self.v0
 
-    def init_particles(
-        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
-    ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize particles for a given trajectory model."""
+    def init_particles(self, model, field):
+        """Initialize particles for a given trajectory model.
+
+        Parameters
+        ----------
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, which defines the frame and
+            velocity coordinates.
+        field : Equilibrium or _MagneticField
+            Source of magnetic field to use for tracing particles.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions and velocities, where D is the dimensionality of
+            the trajectory model, which includes 3D spatial dimensions and depending on
+            the model, parallel velocity and total velocity. The initial positions are
+            in the frame of the model.
+        args : tuple
+            Additional arguments needed by the model, mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle.
+        """
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
@@ -703,7 +734,6 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
-
     """
 
     def __init__(
@@ -728,10 +758,28 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
 
-    def init_particles(
-        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
-    ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize particles for a given trajectory model."""
+    def init_particles(self, model, field):
+        """Initialize particles for a given trajectory model.
+
+        Parameters
+        ----------
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, which defines the frame and
+            velocity coordinates.
+        field : Equilibrium or _MagneticField
+            Source of magnetic field to use for tracing particles.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions and velocities, where D is the dimensionality of
+            the trajectory model, which includes 3D spatial dimensions and depending on
+            the model, parallel velocity and total velocity. The initial positions are
+            in the frame of the model.
+        args : tuple
+            Additional arguments needed by the model, mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle.
+        """
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
         idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
@@ -786,7 +834,6 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
-
     """
 
     def __init__(
@@ -811,10 +858,28 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
 
-    def init_particles(
-        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
-    ) -> tuple[jnp.ndarray, tuple]:
-        """Initialize particles for a given trajectory model."""
+    def init_particles(self, model, field):
+        """Initialize particles for a given trajectory model.
+
+        Parameters
+        ----------
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, which defines the frame and
+            velocity coordinates.
+        field : Equilibrium or _MagneticField
+            Source of magnetic field to use for tracing particles.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions and velocities, where D is the dimensionality of
+            the trajectory model, which includes 3D spatial dimensions and depending on
+            the model, parallel velocity and total velocity. The initial positions are
+            in the frame of the model.
+        args : tuple
+            Additional arguments needed by the model, mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle.
+        """
         data = self.surface.compute(
             ["|e_theta x e_zeta|", "theta", "zeta"], grid=self.grid
         )
@@ -958,7 +1023,7 @@ def trace_particles(
         params = field.params_dict
 
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    # Euler method does not support adavtive step size controller
+    # Euler method does not support adaptive step size controller
     stepsize_controller = (
         ConstantStepSize()
         if solver.__class__.__name__ == "Euler"

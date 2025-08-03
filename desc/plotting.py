@@ -4069,7 +4069,7 @@ def plot_particle_trajectories(
         Figure being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
-        Contains keys ``["X","Y","Z","R", "phi]``, each entry in the dict is a list
+        Contains keys ``["X","Y","Z","R","phi]``, each entry in the dict is a list
         with length corresponding to the number of particles, and each
         element of that list is an array of size `ts.size` corresponding to the
         coordinate values along that particles trajectory.
@@ -4079,6 +4079,7 @@ def plot_particle_trajectories(
     We will give couple of examples of how to plot particle trajectories, and trace
     particles in general in DESC. First, we will trace particles using Equilibrium's
     magnetic field.
+
     .. code-block:: python
 
         import desc
@@ -4088,7 +4089,7 @@ def plot_particle_trajectories(
             VacuumGuidingCenterTrajectory,
         )
 
-        eq = desc.examples.get("precise_QA")
+        eq = desc.examples.get('precise_QA')
         rhos = [0.7]
 
         initializer = ManualParticleInitializerFlux(
@@ -4100,27 +4101,27 @@ def plot_particle_trajectories(
             m = 4.0,
             q = 1.0,
         )
-        model = VacuumGuidingCenterTrajectory(frame="flux")
+        model = VacuumGuidingCenterTrajectory(frame='flux')
         ts=np.linspace(0, 1e-2, 1000)
 
         # For visual purposes, we will plot the LCFS of the equilibrium
-        fig = plot_3d(eq, "|B|", alpha=0.5)
+        fig = plot_3d(eq, '|B|', alpha=0.5)
         # Plot the particle trajectories
         plot_particle_trajectories(
             eq, model, initializer, ts=ts, fig=fig
         )
 
     One can also compare above particle trajectories with the field created by
-    a coilset, or any MagneticField subclass. As opposed to previous case, we need
-    to trace particle in lab coordinates. Since having the same initial points
+    a ``Coilset``, or any ``MagneticField`` subclass. As opposed to previous case, we
+    need to trace particle in lab coordinates. Since having the same initial points
     will help for comparison, we will use same initializer and show how to use it with
-    model with frame set to "lab".
+    model with ``frame`` set to `lab`.
 
-    ...code-block:: python
+    .. code-block:: python
 
         # an example coilset for precise QA equilibrium. Note that it is not perfect
         # and trajectories might not match exactly.
-        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        field = desc.io.load('../tests/inputs/precise_QA_helical_coils.h5')
 
         # Initializer classes are named after their input format. But they return
         # the initial particle coordinates in whatever the model's frame is. One
@@ -4135,14 +4136,15 @@ def plot_particle_trajectories(
             q = 1.0,
             eq = eq, # needed for flux -> lab coordinate transformation
         )
-        model = VacuumGuidingCenterTrajectory(frame="lab")
+        model = VacuumGuidingCenterTrajectory(frame='lab')
 
         # For visual purposes, we will plot the LCFS of the equilibrium
-        fig = plot_3d(eq, "|B|", alpha=0.5)
+        fig = plot_3d(eq, '|B|', alpha=0.5)
         # Plot the particle trajectories
         plot_particle_trajectories(
             field, model, initializer, ts=ts, fig=fig
         )
+
     """
     from diffrax import diffeqsolve
 

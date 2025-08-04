@@ -22,6 +22,7 @@ from desc.integrals._interp_utils import (
     interp_dct,
     interp_rfft,
     interp_rfft2,
+    nufft2,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
@@ -242,7 +243,7 @@ class TestFastInterp:
             np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
         r = ifft_non_uniform(xq, a, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
-        r = ifft_non_uniform(xq, a, domain, nufft=True)
+        r = nufft2(xq, a, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
 
         try:

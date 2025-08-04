@@ -1140,6 +1140,7 @@ class DirectParticleTracing(_Objective):
 
         # rtz is shape [N_particles, N_time, 3], just index rho
         rhos = rtz[:, :, 0]
-        rho_dev = rhos - self._x0[:, 0]
+        rho0s = self._x0[:, 0]
+        rho_dev = rhos - rho0s[:, None]
 
         return jnp.nanmean(rho_dev**2, axis=1)

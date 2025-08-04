@@ -4009,7 +4009,7 @@ def plot_field_lines(
     return fig
 
 
-def plot_particle_trajectories(
+def plot_particle_trajectories(  # noqa: C901
     field,
     model,
     initializer,
@@ -4124,8 +4124,7 @@ def plot_particle_trajectories(
         field = desc.io.load('../tests/inputs/precise_QA_helical_coils.h5')
 
         # Initializer classes are named after their input format. But they return
-        # the initial particle coordinates in whatever the model's frame is. One
-        # needs to specify the equilibrium object for the conversion.
+        # the initial particle coordinates in whatever the model's frame is.
         initializer = ManualParticleInitializerFlux(
             rho0=rhos,
             theta0=0,
@@ -4134,7 +4133,6 @@ def plot_particle_trajectories(
             E = 1e-1,
             m = 4.0,
             q = 1.0,
-            eq = eq, # needed for flux -> lab coordinate transformation
         )
         model = VacuumGuidingCenterTrajectory(frame='lab')
 
@@ -4150,13 +4148,31 @@ def plot_particle_trajectories(
 
     from desc.equilibrium import Equilibrium
 
+    if "params" not in kwargs:
+        kwargs["params"] = field.params_dict
     trace_kwargs = {}
-    for key in inspect.signature(trace_particles).parameters:
+    trace_options = list(inspect.signature(trace_particles).parameters) + [
+        "iota",
+        "source_grid",
+    ]
+    for key in trace_options:
         if key in kwargs:
             trace_kwargs[key] = kwargs.pop(key)
     for key in inspect.signature(diffeqsolve).parameters:
         if key in kwargs:
             trace_kwargs[key] = kwargs.pop(key)
+
+    if isinstance(field, Equilibrium):
+        if field.iota is None:
+            if "iota" not in trace_kwargs:
+                warnings.warn(
+                    "Equilibrium doesn't have iota defined, this may lead to incorrect "
+                    "magnetic field computation for the particle tracing. Please give "
+                    "iota profile as keyword argument.",
+                    UserWarning,
+                )
+            else:
+                trace_kwargs["params"]["i_l"] = trace_kwargs["iota"].params
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")

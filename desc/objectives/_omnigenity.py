@@ -3,6 +3,7 @@
 import warnings
 
 import numpy as np
+from diffrax import Euler
 
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
@@ -1022,6 +1023,8 @@ class DirectParticleTracing(_Objective):
         particles,
         model,
         ts=None,
+        solver=Euler(),
+        iota_grid=None,
         max_steps=None,
         min_step_size=1e-8,
         target=None,
@@ -1031,7 +1034,6 @@ class DirectParticleTracing(_Objective):
         normalize_target=False,
         loss_function=None,
         deriv_mode="auto",
-        iota_grid=None,
         name="Particle Confinement",
         jac_chunk_size=None,
     ):
@@ -1039,7 +1041,7 @@ class DirectParticleTracing(_Objective):
             target = 0
         if ts is None:
             ts = np.arange(0, 0.2, 1000)
-        self._ts = np.asarray(ts)
+        self._ts = jnp.asarray(ts)
         if max_steps is None:
             max_steps = 1000
             max_steps = int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts))
@@ -1049,6 +1051,7 @@ class DirectParticleTracing(_Objective):
         assert model.frame == "flux", "can only trace in flux coordinates"
         self._model = model
         self._particles = particles
+        self._solver = solver
         self._has_iota_profile = eq.iota is not None
         super().__init__(
             things=eq,
@@ -1076,7 +1079,6 @@ class DirectParticleTracing(_Objective):
         """
         from desc.particles import trace_particles
 
-        self._trace_particles = trace_particles
         eq = self.things[0]
         if self._iota_grid is None:
             iota_grid = LinearGrid(
@@ -1085,12 +1087,19 @@ class DirectParticleTracing(_Objective):
         else:
             iota_grid = self._iota_grid
 
-        self._x0, self._initial_args = self._particles.init_particles(
-            model=self._model, field=eq
-        )
+        self._x0, args = self._particles.init_particles(model=self._model, field=eq)
+        self._ms, self._qs, self._mus = args[:3]
 
-        # one metric per trajectory
+        # one metric per particle
         self._dim_f = self._x0.shape[0]
+
+        # avoid circular import
+        self._trace_particles = trace_particles
+
+        if self._min_step_size == "auto":
+            # particle will move roughly 10cm each step
+            # TODO: the distance can be a parameter, or can be removed completely
+            self._min_step_size = 0.01 / max(self._particles.v0)
 
         timer = Timer()
         if verbose > 0:
@@ -1123,10 +1132,7 @@ class DirectParticleTracing(_Objective):
         -------
         f : ndarray
             Average deviation in rho from initial surface, for each particle.
-
         """
-        ms, qs, mus = self._initial_args[:3]
-
         if not self._has_iota_profile:
             # compute and fit iota profile beforehand, as
             # particle trace only computes things one point at a time
@@ -1151,23 +1157,24 @@ class DirectParticleTracing(_Objective):
             y0=self._x0,
             field=self.things[0],
             model=self._model,
+            solver=self._solver,
             params=params,
-            ms=ms,
-            qs=qs,
-            mus=mus,
+            ms=self._ms,
+            qs=self._qs,
+            mus=self._mus,
             ts=self._ts,
             max_steps=self._max_steps,
             min_step_size=self._min_step_size,
-            # bounds in rho
-            # TODO: better to have this be nan and ignore?
-            # or to let it trace outside but that is penalized?
             bounds_R=(0, 1),
             iota=iota_prof,
         )
 
         # rtz is shape [N_particles, N_time, 3], just index rho
-        rhos = rtz[:, :, 0]
+        rhos = rtz[:, -1, 0]
         rho0s = self._x0[:, 0]
-        rho_dev = rhos - rho0s[:, None]
+        rho_dev = rhos - rho0s
 
-        return jnp.nanmean(rho_dev**2, axis=1)
+        # TODO: better metric should penalize rho drift but also
+        # should reward the time spent in the device. Something like:
+        # f = <(rho drift at last non-NaN time)>/sum(time spent in device)
+        return jnp.nanmean(rho_dev**2)

@@ -1785,7 +1785,7 @@ class Equilibrium(Optimizable, _MagneticField):
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
-        [PHI, ZZ, RR] = np.meshgrid(phi, Z, R, indexing="ij")
+        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
         grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         B, data = self.compute_magnetic_field(

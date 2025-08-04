@@ -947,7 +947,7 @@ def trace_particles(
     params=None,
     rtol=1e-8,
     atol=1e-8,
-    max_steps=1000,
+    max_steps=None,
     min_step_size=1e-8,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
@@ -1035,6 +1035,10 @@ def trace_particles(
         Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
+    if max_steps is None:
+        max_steps = 1000
+        max_steps = int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts))
+
     event = DiscreteTerminatingEvent(default_terminating_event_fxn)
     intfun = lambda x, m, q, mu: diffeqsolve(
         model,
@@ -1044,7 +1048,7 @@ def trace_particles(
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
-        max_steps=int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts)),
+        max_steps=max_steps,
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,

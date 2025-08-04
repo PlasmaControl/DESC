@@ -2,6 +2,8 @@
 
 import warnings
 
+import numpy as np
+
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
@@ -976,3 +978,168 @@ class Isodynamicity(_Objective):
             profiles=constants["profiles"],
         )
         return data["isodynamicity"]
+
+
+class DirectParticleTracing(_Objective):
+    """Confinement metric for radial transport from direct tracing.
+
+    Traces particles in flux coordinates within the equilibrium, and
+    returns a confinement metric based off of the deviation of
+    the particle trajectory from its initial flux surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    iota_grid : Grid, optional
+        Grid to evaluate rotational transform profile on.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``.
+    particles : ParticleInitializer
+        should initialize them in flux coordinates, same seed
+        will be used each time.
+    model : TrajectoryModel
+        should be either Vacuum or SlowingDown
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + ["_trace_particles", "_max_steps"]
+
+    _coordinates = "rtz"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Particle Confinement error: "
+
+    def __init__(
+        self,
+        eq,
+        particles,
+        model,
+        ts=None,
+        max_steps=None,
+        min_step_size=1e-8,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        deriv_mode="auto",
+        iota_grid=None,
+        name="Particle Confinement",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        if ts is None:
+            ts = np.arange(0, 0.2, 1000)
+        self._ts = np.asarray(ts)
+        if max_steps is None:
+            max_steps = 1000
+            max_steps = int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts))
+        self._max_steps = max_steps
+        self._min_step_size = min_step_size
+        self._iota_grid = iota_grid
+        assert model.frame == "flux", "can only trace in flux coordinates"
+        self._model = model
+        self._particles = particles
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.particles import trace_particles
+
+        self._trace_particles = trace_particles
+        eq = self.things[0]
+        if self._iota_grid is None:
+            iota_grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+            )
+        else:
+            iota_grid = self._iota_grid
+
+        self._x0, self._initial_args = self._particles.init_particles(
+            model=self._model, field=eq
+        )
+
+        # one metric per trajectory
+        self._dim_f = self._x0.shape[0]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota_profiles = get_profiles(["iota"], obj=eq, grid=iota_grid)
+        self._iota_transforms = get_transforms(["iota"], obj=eq, grid=iota_grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute particle tracing metric errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Average deviation in rho from initial surface, for each particle.
+
+        """
+        ms, qs, mus = self._initial_args[:3]
+
+        # TODO: how to make iota be correct??
+
+        rtz, _ = self._trace_particles(
+            y0=self._x0,
+            field=self.things[0],
+            model=self._model,
+            params=params,
+            ms=ms,
+            qs=qs,
+            mus=mus,
+            ts=self._ts,
+            max_steps=self._max_steps,
+            min_step_size=self._min_step_size,
+            # bounds in rho
+            # TODO: better to have this be nan and ignore?
+            # or to let it trace outside but that is penalized?
+            bounds_R=(0, 1),
+        )
+
+        # rtz is shape [N_particles, N_time, 3], just index rho
+        rhos = rtz[:, :, 0]
+        rho_dev = rhos - self._x0[:, 0]
+
+        return jnp.nanmean(rho_dev**2, axis=1)

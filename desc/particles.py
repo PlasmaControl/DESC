@@ -201,9 +201,11 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         This function is written for vmap, so it expects x to be a coordinate of a
         single particle, and args to be a tuple of (m, q, mu, eq, params, kwargs) with
-        m, q and mu (mv⊥²/2|B|) being scalars.
+        m, q and mu (mv⊥²/2|B|) being scalars. If the Equilibrium does not have
+        iota profile, it must be passed as a keyword argument in kwargs.
         """
         rho, theta, zeta, vpar = x
+        iota = kwargs.get("iota", None)
         grid = Grid(
             jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
@@ -222,6 +224,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         transforms = get_transforms(data_keys, eq, grid, jitable=True)
         profiles = get_profiles(data_keys, eq, grid)
+        if iota is not None:
+            profiles["iota"] = iota
         data = compute_fun(eq, data_keys, params, transforms, profiles)
 
         # derivative of the guiding center position in R, phi, Z coordinates
@@ -325,14 +329,26 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     """
 
+    _Z_eff: float
+    _m_eff: float
     vcoords = ["vpar", "v"]
     args = ["m", "q"]
 
-    def __init__(self, frame="flux", m_eff=2.5, Z_eff=1):
+    def __init__(self, frame="flux", m_eff=2.5, Z_eff=1.0):
         assert frame == "flux"
         self._frame = frame
-        self.Z_eff = Z_eff
-        self.m_eff = m_eff
+        self._Z_eff = Z_eff
+        self._m_eff = m_eff
+
+    @property
+    def Z_eff(self):
+        """Coordinate frame of the model."""
+        return self._Z_eff
+
+    @property
+    def m_eff(self):
+        """Coordinate frame of the model."""
+        return self._m_eff
 
     @property
     def frame(self):
@@ -362,7 +378,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         rho, theta, zeta, vpar, v = x
-        m, q, _, eq, params, _ = args
+        m, q, _, eq, params, kwargs = args
+        iota = kwargs.get("iota", None)
 
         assert (
             eq.Te_l.size > 0
@@ -389,6 +406,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         transforms = get_transforms(data_keys, eq, grid, jitable=True)
         profiles = get_profiles(data_keys, eq, grid)
+        if iota is not None:
+            profiles["iota"] = iota
         data = compute_fun(
             eq,
             data_keys,
@@ -469,7 +488,8 @@ class AbstractParticleInitializer(IOAble, ABC):
             in the frame of the model.
         args : tuple
             Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+            magnetic moment (mv⊥²/2|B|) of each particle. Each initializer must return
+            these values in the same order, so that they are consistent.
         """
         vs = []
         for vcoord in model.vcoords:
@@ -491,6 +511,10 @@ class AbstractParticleInitializer(IOAble, ABC):
                 vperp2 = v**2 - vpar**2
                 modB = _compute_modB(x, field)
                 args += [self.m * vperp2 / (2 * modB)]
+
+        if "mu" not in model.args:
+            # we still need to give dummy value for consistency
+            args += [jnp.zeros_like(vpar)]
 
         return jnp.hstack([x, v0]), tuple(args)
 
@@ -953,6 +977,7 @@ def trace_particles(
     adjoint=RecursiveCheckpointAdjoint(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    event=None,
     **kwargs,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
@@ -1002,8 +1027,16 @@ def trace_particles(
         box will be stopped, and NaN returned for points outside the box. When tracing
         in flux coordinates, this corresponds to zeta bounds.
         Defaults to (-np.inf,np.inf).
+    event : diffrax.DiscreteTerminatingEvent, optional
+        Custom event function to stop integration. If not provided, the default
+        event function will be used, which stops integration when particles leave the
+        bounds defined by ``bounds_R`` and ``bounds_Z``. If integration is stopped
+        by the event, the output will contain NaN values for the points outside the
+        bounds.
     kwargs : dict, optional
         Additional keyword arguments to pass to the field computation, such as
+            - iota : Profile
+                Iota profile of the Equilibrium, if it does not have one.
             - source_grid: Grid
                 Source grid to use for field computation.
 
@@ -1035,7 +1068,11 @@ def trace_particles(
         Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
-    event = DiscreteTerminatingEvent(default_terminating_event_fxn)
+    event = (
+        DiscreteTerminatingEvent(default_terminating_event_fxn)
+        if event is None
+        else event
+    )
     intfun = lambda x, m, q, mu: diffeqsolve(
         model,
         solver,

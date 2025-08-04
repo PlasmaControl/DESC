@@ -9,6 +9,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.profiles import PowerSeriesProfile
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -1005,7 +1006,11 @@ class DirectParticleTracing(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
-    _static_attrs = _Objective._static_attrs + ["_trace_particles", "_max_steps"]
+    _static_attrs = _Objective._static_attrs + [
+        "_trace_particles",
+        "_max_steps",
+        "_has_iota_profile",
+    ]
 
     _coordinates = "rtz"
     _units = "(dimensionless)"
@@ -1044,6 +1049,7 @@ class DirectParticleTracing(_Objective):
         assert model.frame == "flux", "can only trace in flux coordinates"
         self._model = model
         self._particles = particles
+        self._has_iota_profile = eq.iota is not None
         super().__init__(
             things=eq,
             target=target,
@@ -1093,6 +1099,8 @@ class DirectParticleTracing(_Objective):
 
         self._iota_profiles = get_profiles(["iota"], obj=eq, grid=iota_grid)
         self._iota_transforms = get_transforms(["iota"], obj=eq, grid=iota_grid)
+        self._iota_power_series = PowerSeriesProfile(sym="even")
+        self._iota_power_series.change_resolution(L=eq.L)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1119,7 +1127,25 @@ class DirectParticleTracing(_Objective):
         """
         ms, qs, mus = self._initial_args[:3]
 
-        # TODO: how to make iota be correct??
+        if not self._has_iota_profile:
+            # compute and fit iota profile beforehand, as
+            # particle trace only computes things one point at a time
+            # and thus cannot do the flux surf averages required for iota
+            eq = self.things[0]
+            data = compute_fun(
+                eq, ["rho", "iota"], params, self._iota_transforms, self._iota_profiles
+            )
+            iota_values = self._iota_transforms["grid"].compress(data["iota"])
+            rho = self._iota_transforms["grid"].compress(data["rho"])
+            x = rho**2
+            iota_prof = self._iota_power_series
+            order = iota_prof.basis.L // 2
+            iota_params = jnp.polyfit(
+                x, iota_values, order, rcond=None, w=None, full=False
+            )[::-1]
+            params["i_l"] = iota_params
+        else:
+            iota_prof = None
 
         rtz, _ = self._trace_particles(
             y0=self._x0,
@@ -1136,6 +1162,7 @@ class DirectParticleTracing(_Objective):
             # TODO: better to have this be nan and ignore?
             # or to let it trace outside but that is penalized?
             bounds_R=(0, 1),
+            iota=iota_prof,
         )
 
         # rtz is shape [N_particles, N_time, 3], just index rho

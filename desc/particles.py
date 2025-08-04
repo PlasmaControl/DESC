@@ -1090,6 +1090,7 @@ def trace_particles(
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
         discrete_terminating_event=event,
+        throw=False,
     ).ys
 
     with warnings.catch_warnings():

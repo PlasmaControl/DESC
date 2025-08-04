@@ -1022,11 +1022,11 @@ class DirectParticleTracing(_Objective):
         eq,
         particles,
         model,
-        ts=None,
         solver=Euler(),
+        ts=None,
         iota_grid=None,
         max_steps=None,
-        min_step_size=1e-8,
+        min_step_size=1e-10,
         target=None,
         bounds=None,
         weight=1,
@@ -1040,7 +1040,7 @@ class DirectParticleTracing(_Objective):
         if target is None and bounds is None:
             target = 0
         if ts is None:
-            ts = np.arange(0, 0.2, 1000)
+            ts = np.arange(0, 1e-3, 100)
         self._ts = jnp.asarray(ts)
         if max_steps is None:
             max_steps = 1000
@@ -1084,6 +1084,9 @@ class DirectParticleTracing(_Objective):
             iota_grid = LinearGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
+
+        if eq.iota is None:
+            self._fixed_iota = False
         else:
             iota_grid = self._iota_grid
 

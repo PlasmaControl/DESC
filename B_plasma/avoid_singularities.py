@@ -41,7 +41,8 @@ source_grid = QuadratureGrid(L=res, M=res, zeta=zeta_lr, NFP=eq.NFP)
 # Calculate B on the grid using the three different methods
 method = 'biot-savart'
 save_name = save_path+method.replace(' ','_')+str(res)+'_grid.npy'
-if not os.path.exists(save_name):
+override = True
+if override or (not os.path.exists(save_name)):
     print('starting '+method+' and resolution'+str(res))
     timer.start(method+str(res))
     B = eq.compute_magnetic_field(out_coords, source_grid=source_grid, method=method)

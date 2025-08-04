@@ -32,7 +32,7 @@ out_coords = np.load(file_path+'bmw_coords_high_res.npy')
 
 # Grids on which to discretize the integral
 res = 64
-zeta = np.unique(out_coords[:,2])
+zeta = np.unique(out_coords[:,1])
 zeta_lr = zeta[::2]
 zeta_lr = zeta_lr + (zeta[1]-zeta[0])/2
 zeta_lr = zeta_lr % (2 * np.pi/eq.NFP)

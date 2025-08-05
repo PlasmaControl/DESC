@@ -861,7 +861,7 @@ class XPointDistanceBound(_Objective):
         if self._dim_f == None:
             self._dim_f = coil.num_coils * coil_grid.num_nodes
         self._eq_data_keys = ["R", "phi", "Z"]
-
+        self._num_coils = coil.num_coils
         eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
         eq_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=plasma_grid)
 
@@ -873,7 +873,6 @@ class XPointDistanceBound(_Objective):
             "eq_profiles": eq_profiles,
             "eq_transforms": eq_transforms,
             "quad_weights": 1.0,
-            "num_coils": coil.num_coils,
         }
 
         if self._eq_fixed:
@@ -974,7 +973,7 @@ class XPointDistanceBound(_Objective):
 
             return dist
 
-        k = jnp.arange(constants["num_coils"])
+        k = jnp.arange(self._num_coils)
 
         # shape: (n_coils,self._N)
         dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)

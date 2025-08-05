@@ -799,8 +799,8 @@ class XPointDistanceBound(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
-        M_grid=36,
-        N_grid=36,
+        M_grid=None,
+        N_grid=None,
         dim_f = None
     ):
         if target is None and bounds is None:
@@ -810,7 +810,7 @@ class XPointDistanceBound(_Objective):
         self._plasma_grid = LinearGrid(
             rho=[1.0], M=M_grid or eq.M_grid, N=N_grid or eq.N_grid, NFP=eq.NFP
         )
-        self._coil_grid = LinearGrid(N=N_grid, NFP=eq.NFP)
+        self._coil_grid = LinearGrid(N=N_grid or eq.N_grid, NFP=eq.NFP)
         self._eq_fixed = eq_fixed
         self._curve_fixed = curve_fixed
         self._use_softmin = use_softmin
@@ -1123,7 +1123,6 @@ class DisconnectedDoubleNull(XPointDistanceBound):
         dists = super().compute(params_1,params_2,constants).reshape(2,self.dim_f)
         return dists[1,:] - dists[0,:]
 
-
 class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
 
@@ -1288,6 +1287,226 @@ class CoilSetMinDistance(_Objective):
             # to the nth point on the ith coil
             coil_pts = pts[k]
             other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+
+            if self._normal_project_dist is not None:
+                # project coil points onto the plane defined by the coil normal
+                # and the distance to project is given by self._normal_project_dist
+                normal = coil_normals[k]
+                center = coil_centers[k]
+
+                rel_pts = other_pts - center[None, None, :]
+
+                # find normal component of the points
+                normal_component = jnp.sum(rel_pts * normal[None, None, :], axis=-1)
+                mask = jnp.abs(normal_component) < self._normal_project_dist
+
+                # project points onto the plane
+                proj_pts = (
+                    other_pts - normal[None, None, :] * normal_component[:, :, None]
+                )
+
+                # only project points that are within the projection distance
+                other_pts = jnp.where(mask[:, :, None], proj_pts, other_pts)
+
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
+
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
+        return min_dist_per_coil
+
+class CoilSetCoilSetDistance(_Objective):
+    """Target the minimum distance between coils in a coilset and coils in another coilset.
+
+    Will yield one value per coil in the coilset, which is the minimum distance to
+    another coil in that coilset.
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    normal_project_dist : float, optional
+        Distance within which the coil points are projected onto the coil
+        plane. Intersections are only checked for projected points, if projection is
+        enabled. Projection is only available for planar coilsets.
+        Defaults to None, which means no projection is done.
+    grid : Grid, list, optional
+        Collocation grid used to discretize each coil. Defaults to the default grid
+        for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "Minimum coil-coil distance: "
+
+    def __init__(
+        self,
+        coilset1,
+        coilset2,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        normal_project_dist=None,
+        grid=None,
+        name="coil-coil minimum distance",
+        jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
+        coilset2_fixed=False,
+    ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+        self._grid = grid
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
+        self._coilset2_fixed = coilset2_fixed
+
+        self._normal_project_dist = None
+        if normal_project_dist is not None:
+            try:
+                for coil in [coilset1, coilset2]:
+                    _ = coil[0].normal
+                    _ = coil[0].center
+            except AttributeError:
+                raise ValueError(
+                    "normal_project_dist can only be used with planar coils, "
+                    "which have a normal vector and center point."
+                )
+            self._normal_project_dist = normal_project_dist
+        
+        if coilset2_fixed:
+            things = [coilset1]
+            self._coilset2 = coilset2
+        else:
+            things = [coilset1, coilset2]
+            
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        grid = self._grid or None
+        coilset_1 = self.things[0]
+
+        self._dim_f = len(coilset_1)
+        self._constants = {"grid": grid, "quad_weights": 1.0}
+        if self._coilset2_fixed:
+            coilset_2 = self._coilset2
+            self._constants['coilset_2'] = coilset_2
+
+            self._constants['pts2'] = coilset_2._compute_position(
+                params=coilset_2.params_dict, grid=grid, basis="xyz"
+            )
+
+            if self._normal_project_dist is not None:
+                data = coilset_2.compute(
+                    ["normal", "center"], params=coilset_2.params_dict, grid=LinearGrid(N=0), basis="xyz"
+                )
+                self._constants['coil2_normals'] = jnp.stack([d["normal"][0] for d in data], axis=0)
+                self._constants['coil2_centers'] = jnp.stack([d["center"][0] for d in data], axis=0)
+
+        if self._normalize:
+            coils = tree_leaves(coilset_1, is_leaf=lambda x: not hasattr(x, "__len__"))
+            scales = [compute_scaling_factors(coil)["a"] for coil in coils]
+            self._normalization = np.mean(scales)  # mean length of coils
+
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
+
+    # KEEP WORKING HERE
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute minimum distances between coils.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Minimum distance to another coil for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        pts = []
+        params = [params_1,params_2]
+        for i, coil in enumerate(self._things):
+            pts.append(coil._compute_position(
+                params=params[i], grid=constants["grid"], basis="xyz"
+            ))
+        if self._coilset2_fixed:
+            pts.append(constants['pts2'])
+        if self._normal_project_dist is not None:
+            data = self._things[0].compute(
+                ["normal", "center"], params=params[i], grid=LinearGrid(N=0), basis="xyz"
+            )
+            coil_normals = jnp.stack([d["normal"][0] for d in data], axis=0)
+            coil_centers = jnp.stack([d["center"][0] for d in data], axis=0)
+        
+        def body(k):
+            # pts shape (ncoils, num_nodes, 3)
+            # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
+            # dist[i,j,n] is the distance from the jth point on the kth coil
+            # to the nth point on the ith coil
+            coil_pts = pts[0][k]
+            other_pts = pts[1]
 
             if self._normal_project_dist is not None:
                 # project coil points onto the plane defined by the coil normal

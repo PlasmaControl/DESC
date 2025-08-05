@@ -5,6 +5,7 @@ from ._coils import (
     Bxdl,
     CoilArclengthVariance,
     CoilCurrentLength,
+    CoilSetCoilSetDistance,
     CoilCurvature,
     CoilIntegratedCurvature,
     CoilLength,

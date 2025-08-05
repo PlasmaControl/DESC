@@ -8,7 +8,7 @@ import numpy as np
 from diffrax import (
     AbstractTerm,
     ConstantStepSize,
-    DiscreteTerminatingEvent,
+    Event,
     PIDController,
     RecursiveCheckpointAdjoint,
     SaveAt,
@@ -1063,16 +1063,12 @@ def trace_particles(
 
     saveat = SaveAt(ts=ts)
 
-    def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
-    event = (
-        DiscreteTerminatingEvent(default_terminating_event_fxn)
-        if event is None
-        else event
-    )
+    event = Event(default_terminating_event) if event is None else event
     intfun = lambda x, m, q, mu: diffeqsolve(
         model,
         solver,
@@ -1085,12 +1081,11 @@ def trace_particles(
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
-        discrete_terminating_event=event,
+        event=event,
     ).ys
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
         yt = vmap(intfun)(y0, ms, qs, mus)
 
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)

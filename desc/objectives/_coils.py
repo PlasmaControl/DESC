@@ -1000,11 +1000,8 @@ class DisconnectedDoubleNull(XPointDistanceBound):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium (or FourierRZToroidalSurface) that will be optimized
         to satisfy the Objective.
-    clo : FourierRZCoil
-        Coil object to be optimized. Must be of type FourierRZCoil. Probably a
-        dummy coil representing an X-point.
-    coil2 : FourierRZCoil
-        Coil object to be optimized. Must be of type FourierRZCoil. Probably a
+    coil : CoilSet of two FourierRZCoils
+        CoilSet object to be optimized. Must be exactly 2 FourierRZCoils. Probably a
         dummy coil representing an X-point.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.

@@ -3522,10 +3522,10 @@ class Bxdl(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
         if self._curve_fixed:
-            eval_data = curve.compute(self._data_keys, grid=eval_grid, basis="rpz")
+            eval_data = curve.compute(self._data_keys, grid=eval_grid, basis="rpz", params=curve.params_dict)
 
         else:
-            eval_data = curve.compute("ds", grid=eval_grid, basis="rpz")
+            eval_data = curve.compute("ds", grid=eval_grid, basis="rpz", params=curve.params_dict)
         self._dim_f = eval_grid.num_nodes
         eval_data = tree_leaves(eval_data, is_leaf=lambda x: isinstance(x, dict))
         eval_data = {key: jnp.concatenate([data[key] for data in eval_data],axis=0) for key in eval_data[0].keys()}

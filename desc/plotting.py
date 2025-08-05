@@ -4203,9 +4203,9 @@ def plot_particle_trajectories(  # noqa: C901
         field=field, y0=x0, ms=ms, qs=qs, mus=mus, model=model, ts=ts, **trace_kwargs
     )
 
-    rs = rpz[:, :, 0]
-    phis = rpz[:, :, 1]
-    zs = rpz[:, :, 2]
+    rs = rpz[:, :, 0]  # R or rho
+    phis = rpz[:, :, 1]  # phi or theta
+    zs = rpz[:, :, 2]  # Z or zeta
 
     if fig is None:
         fig = go.Figure()
@@ -4216,6 +4216,10 @@ def plot_particle_trajectories(  # noqa: C901
     plot_data["Z"] = []
     plot_data["R"] = []
     plot_data["phi"] = []
+    if isinstance(field, Equilibrium):
+        plot_data["rho"] = []
+        plot_data["theta"] = []
+
     for i in range(rs.shape[0]):  # iterate over each particle
         if model.frame == "flux":
             if isinstance(field, Equilibrium):
@@ -4247,6 +4251,9 @@ def plot_particle_trajectories(  # noqa: C901
             plot_data["Z"].append(z)
             plot_data["R"].append(r)
             plot_data["phi"].append(phi)
+            if isinstance(field, Equilibrium):
+                plot_data["rho"].append(rs[i, :])
+                plot_data["theta"].append(phis[i, :])
 
         fig.add_trace(
             go.Scatter3d(

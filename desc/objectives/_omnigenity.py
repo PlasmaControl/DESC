@@ -11,7 +11,7 @@ from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safediv, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -1084,9 +1084,6 @@ class DirectParticleTracing(_Objective):
             iota_grid = LinearGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
-
-        if eq.iota is None:
-            self._fixed_iota = False
         else:
             iota_grid = self._iota_grid
 
@@ -1102,7 +1099,7 @@ class DirectParticleTracing(_Objective):
         if self._min_step_size == "auto":
             # particle will move roughly 10cm each step
             # TODO: the distance can be a parameter, or can be removed completely
-            self._min_step_size = 0.01 / max(self._particles.v0)
+            self._min_step_size = 0.01 / max(self._particles.vpar0)
 
         timer = Timer()
         if verbose > 0:
@@ -1172,12 +1169,19 @@ class DirectParticleTracing(_Objective):
             iota=iota_prof,
         )
 
-        # rtz is shape [N_particles, N_time, 3], just index rho
-        rhos = rtz[:, -1, 0]
+        # rtz is shape [N_particles, N_time, 3], take just index rho
+        rhos = rtz[:, :, 0]
+        tmax_idx = jnp.where(jnp.isnan(rhos), -1, jnp.arange(0, self._ts.size))
+        # find the index of the last non-NaN time for each particle
+        tmax_idx = jnp.max(tmax_idx, axis=1)
         rho0s = self._x0[:, 0]
-        rho_dev = rhos - rho0s
+        # deviation from initial rho at the last non-NaN time for each particle
+        rho_dev = rhos[jnp.arange(self._dim_f), tmax_idx] - rho0s
+        tmax = self._ts[tmax_idx]
 
         # TODO: better metric should penalize rho drift but also
         # should reward the time spent in the device. Something like:
         # f = <(rho drift at last non-NaN time)>/sum(time spent in device)
-        return jnp.nanmean(rho_dev**2)
+        # Looking at average drift per toroidal transit could be better, since
+        # a particle can drift outward and come back inward
+        return safediv(rho_dev, tmax, fill=1e10)

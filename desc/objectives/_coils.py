@@ -3521,21 +3521,25 @@ class Bxdl(_Objective):
 
         eq = self._eq
         B_plasma = None
-        if self._eq is not None and self._curve_fixed:
-            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        if self._eq is not None:
             if self._eq_grid is None:
                 eq_grid = QuadratureGrid(
                     L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
                 )
             else:
                 eq_grid = self._eq_grid
-            B_plasma = eq.compute_magnetic_field(
-                coords=x,
-                chunk_size=self._bs_chunk_size,
-                source_grid=eq_grid,
-                basis="rpz",
-                **self._eq_kwargs,
-            )
+            eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
+            transforms = get_transforms(eq_data_keys, obj=eq, grid=eq_grid)
+            if self._eq_fixed and self._curve_fixed:
+                x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+                B_plasma = eq.compute_magnetic_field(
+                    coords=x,
+                    chunk_size=self._bs_chunk_size,
+                    source_grid=eq_grid,
+                    basis="rpz",
+                    transforms=transforms,
+                    **self._eq_kwargs,
+                )
         else:
             B_plasma = None
 
@@ -3565,7 +3569,8 @@ class Bxdl(_Objective):
         Parameters
         ----------
         field_params : dict
-            Dictionary of the external field's and/or the curve's degrees of freedom.
+            Dictionary of the external field's and/or the curve's and/or the
+            equilibrium's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -3602,7 +3607,7 @@ class Bxdl(_Objective):
             x,
             source_grid=constants["field_grid"],
             basis="rpz",
-            params=field_params,
+            params=field_params if not self._field_fixed else None,
             chunk_size=self._bs_chunk_size,
         )
         if constants["B_plasma"] is not None:
@@ -3620,6 +3625,7 @@ class Bxdl(_Objective):
                 coords=x,
                 chunk_size=self._bs_chunk_size,
                 source_grid=eq_grid,
+                params=eq_params if not self._eq_fixed else None,
                 basis="rpz",
                 **self._eq_kwargs,
             )

@@ -13,6 +13,7 @@ from ._coils import (
     CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
+    DisconnectedDoubleNull,
     LinkingCurrentConsistency,
     MinCoilSetPointDistance,
     PlasmaCoilSetDistanceBound,

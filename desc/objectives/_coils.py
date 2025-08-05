@@ -719,7 +719,8 @@ class CoilIntegratedCurvature(_CoilObjective):
 
 class XPointDistanceBound(_Objective):
     """
-
+    Computes distance from a FourierRZCoil (or CoilSet of FourierRZCoils) to the 
+    plasma at each toroidal cross-section.
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
     computed at every iteration, for example if the equilibrium is changing in a
     single-stage optimization.
@@ -748,7 +749,7 @@ class XPointDistanceBound(_Objective):
         during optimization, and self.things = [coil] only.
         If False, the surface coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
-    coils_fixed: bool, optional
+    curve_fixed: bool, optional
         Whether the coils are fixed or not. If True, the coils
         are fixed and their coordinates are precomputed, which saves on computation time
         during optimization, and self.things = [eq] only.
@@ -768,7 +769,6 @@ class XPointDistanceBound(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
-
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -793,35 +793,35 @@ class XPointDistanceBound(_Objective):
         loss_function=None,
         deriv_mode="auto",
         eq_fixed=False,
-        coils_fixed=False,
-        name="plasma-coil distance",
+        curve_fixed=False,
+        name="plasma-xpt distance",
         jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
-        M_grid=None,
-        N_grid=None,
+        M_grid=36,
+        N_grid=36,
+        dim_f = None
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
         self._eq = eq
         self._coil = coil
-        from desc.coils import FourierRZCoil
-
         self._plasma_grid = LinearGrid(
             rho=[1.0], M=M_grid or eq.M_grid, N=N_grid or eq.N_grid, NFP=eq.NFP
         )
         self._coil_grid = LinearGrid(N=N_grid, NFP=eq.NFP)
         self._eq_fixed = eq_fixed
-        self._coils_fixed = coils_fixed
+        self._curve_fixed = curve_fixed
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
-        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
+        self._dim_f = dim_f
+        errorif(eq_fixed and curve_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
             things.append(eq)
-        if not coils_fixed:
+        if not curve_fixed:
             things.append(coil)
         super().__init__(
             things=things,
@@ -850,7 +850,7 @@ class XPointDistanceBound(_Objective):
         if self._eq_fixed:
             eq = self._eq
             coil = self.things[0]
-        elif self._coils_fixed:
+        elif self._curve_fixed:
             eq = self.things[0]
             coil = self._coil
         else:
@@ -858,8 +858,8 @@ class XPointDistanceBound(_Objective):
             coil = self.things[1]
         plasma_grid = self._plasma_grid
         coil_grid = self._coil_grid
-
-        self._dim_f = coil.num_coils * coil_grid.num_nodes
+        if self._dim_f == None:
+            self._dim_f = coil.num_coils * coil_grid.num_nodes
         self._eq_data_keys = ["R", "phi", "Z"]
 
         eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
@@ -873,6 +873,7 @@ class XPointDistanceBound(_Objective):
             "eq_profiles": eq_profiles,
             "eq_transforms": eq_transforms,
             "quad_weights": 1.0,
+            "num_coils": coil.num_coils,
         }
 
         if self._eq_fixed:
@@ -890,7 +891,7 @@ class XPointDistanceBound(_Objective):
                 plasma_grid.num_zeta, plasma_grid.num_theta, 3
             )
 
-        if self._coils_fixed:
+        if self._curve_fixed:
             coils_pts = coil._compute_position(
                 params=coil.params_dict, grid=coil_grid, basis="rpz"
             )
@@ -902,13 +903,15 @@ class XPointDistanceBound(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params_1, params_2=None, constants=None):
-        """Compute minimum/maximum distance between coils and the plasma/surface.
+        """
+        Compute distance between coils and the plasma/surface at each toroidal
+            cross-section.
 
         Parameters
         ----------
         params_1 : dict
             Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
-            self._coils_fixed is False, else is the equilibrium or surface degrees of
+            self._curve_fixed is False, else is the equilibrium or surface degrees of
             freedom
         params_2 : dict
             Dictionary of equilibrium or surface degrees of freedom,
@@ -921,21 +924,22 @@ class XPointDistanceBound(_Objective):
         Returns
         -------
         f : array of floats
-            Minimum/maximum distance from coil to surface for each coil in the coilset.
+            Distance from coil to surface for each coil in the coilset, at each toroidal
+            cross-section. Flattened, but can be reshaped to (num_coils,2*N_grid+1).
 
         """
         if constants is None:
             constants = self.constants
         if self._eq_fixed:
             coils_params = params_1
-        elif self._coils_fixed:
+        elif self._curve_fixed:
             eq_params = params_1
         else:
             eq_params = params_1
             coils_params = params_2
 
         # coil pts; shape(ncoils,coils_grid.num_nodes,3)
-        if self._coils_fixed:
+        if self._curve_fixed:
             coils_pts = constants["coil_coords"]
         else:
             coils_pts = constants["coil"]._compute_position(
@@ -970,7 +974,7 @@ class XPointDistanceBound(_Objective):
 
             return dist
 
-        k = jnp.arange(self.dim_f // constants["coil_grid"].num_nodes)
+        k = jnp.arange(constants["num_coils"])
 
         # shape: (n_coils,self._N)
         dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
@@ -979,6 +983,146 @@ class XPointDistanceBound(_Objective):
         dist_per_coil = dist_per_coil.flatten()
 
         return dist_per_coil
+
+class DisconnectedDoubleNull(XPointDistanceBound):
+    """
+    Enforces that one FourierRZCoil is closer the plasma to the other FourierRZCoil
+    at each toroidal cross-section.
+
+    NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
+    computed at every iteration, for example if the equilibrium is changing in a
+    single-stage optimization.
+    If the plasma boundary is fixed, set eq_fixed=True to precompute the last closed
+    flux surface coordinates and improve the efficiency of the calculation.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium (or FourierRZToroidalSurface) that will be optimized
+        to satisfy the Objective.
+    clo : FourierRZCoil
+        Coil object to be optimized. Must be of type FourierRZCoil. Probably a
+        dummy coil representing an X-point.
+    coil2 : FourierRZCoil
+        Coil object to be optimized. Must be of type FourierRZCoil. Probably a
+        dummy coil representing an X-point.
+    plasma_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    coil_grid : Grid, list, optional
+        Collocation grid containing the nodes to evaluate coilset geometry at.
+        Defaults to the default grid for the given coil-type, see ``coils.py``
+        and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
+    eq_fixed: bool, optional
+        Whether the equilibrium is fixed or not. If True, the last closed flux surface
+        is fixed and its coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [coil] only.
+        If False, the surface coordinates are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    curve_fixed: bool, optional
+        Whether the coils are fixed or not. If True, the coils
+        are fixed and their coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [eq] only.
+        If False, the coil coordinates are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin (softmax) or hard min (max). Softmin is a smooth approximation to
+        the actual minimum distance that may give smoother gradients, at the expense of
+        being slightly more expensive and only an approximate extremum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin (softmax) approximates the hardmin (hardmax). softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
+    """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,1)``.",
+        bounds_default="``bounds=(0,1)``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "Disconnected double null offset difference: "
+
+    def __init__(
+        self,
+        eq,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        eq_fixed=False,
+        curve_fixed=False,
+        name="disconnected double null",
+        jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
+        M_grid=36,
+        N_grid=36,
+    ):
+        errorif(coil.num_coils != 2, "There must be exactly two coils in the Coilset.")
+        super().__init__(
+            eq,
+            coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            eq_fixed=eq_fixed,
+            curve_fixed=curve_fixed,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+            use_softmin=use_softmin,
+            softmin_alpha=softmin_alpha,
+            dist_chunk_size=dist_chunk_size,
+            M_grid=M_grid,
+            N_grid=N_grid,
+            dim_f=2*N_grid+1,
+        )
+    def compute(self, params_1, params_2=None, constants=None):
+        """
+        Compute difference between the first coil distance from the plasma and the
+        second coil distance from the plasma.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
+            self._curve_fixed is False, else is the equilibrium or surface degrees of
+            freedom
+        params_2 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg ``Equilibrium.params_dict``
+            Only required if ``self._eq_fixed = False``.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Difference between the distance from coil to surface for each coil in the coilset,
+            at each toroidal cross-section. Shape is (2*N_grid+1).
+
+        """
+        dists = super().compute(params_1,params_2,constants).reshape(2,self.dim_f)
+        return dists[1,:] - dists[0,:]
+
 
 class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.

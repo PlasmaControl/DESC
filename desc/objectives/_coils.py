@@ -3509,9 +3509,11 @@ class Bxdl(_Objective):
         from desc.magnetic_fields import SumMagneticField
 
         curve = self._curve
+        eq = self._eq
 
         if self._eval_grid is None:
-            eval_grid = LinearGrid(N=2 * curve.N + 5)
+            coils = tree_leaves(curve, is_leaf=lambda x: not hasattr(x, "__len__"))
+            eval_grid = LinearGrid(N=2 * coils[0].N + 5)
             self._eval_grid = eval_grid
         else:
             eval_grid = self._eval_grid
@@ -3524,12 +3526,15 @@ class Bxdl(_Objective):
         timer.start("Precomputing transforms")
         if self._curve_fixed:
             eval_data = curve.compute(self._data_keys, grid=eval_grid, basis="rpz")
+
         else:
             eval_data = curve.compute("ds", grid=eval_grid, basis="rpz")
         self._dim_f = eval_grid.num_nodes
+        eval_data = tree_leaves(eval_data, is_leaf=lambda x: isinstance(x, dict))
+        eval_data = {key: jnp.concatenate([data[key] for data in eval_data],axis=0) for key in eval_data[0].keys()}
         w = eval_data["ds"]
 
-        eq = self._eq
+        
         B_plasma = None
         B_plasma = None
         if self._eq is not None:
@@ -3542,6 +3547,7 @@ class Bxdl(_Objective):
             eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
             transforms = get_transforms(eq_data_keys, obj=eq, grid=eq_grid)
             if self._eq_fixed and self._curve_fixed:
+
                 x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
                 B_plasma = eq.compute_magnetic_field(
                     coords=x,
@@ -3595,6 +3601,9 @@ class Bxdl(_Objective):
             Bxdl error at points
 
         """
+        # Use an index to track the end of the main parameters
+        end_index = len(params)
+
         # Conditionally extract items from the end of the tuple
         if not self._eq_fixed:
             eq_params = params[end_index - 1]
@@ -3613,6 +3622,8 @@ class Bxdl(_Objective):
             eval_data = self._curve.compute(
                 self._data_keys, grid=self._eval_grid, basis="rpz", params=curve_params
             )
+            eval_data = tree_leaves(eval_data, is_leaf=lambda x: isinstance(x, dict))
+            eval_data = {key: jnp.concatenate([data[key] for data in eval_data],axis=0) for key in eval_data[0].keys()}
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
         # B_ext is not pre-computed because field is not fixed typically
@@ -3628,7 +3639,6 @@ class Bxdl(_Objective):
             B_ext = B_ext + constants["B_plasma"]
         elif self._eq is not None:
             eq = self._eq
-            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
             eq_grid = constants["eq_grid"]
             B_plasma = eq.compute_magnetic_field(
                 coords=x,

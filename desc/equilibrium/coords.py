@@ -394,7 +394,7 @@ def _L_partial_sum(L, L_lmn):
     """Convert FourierZernikeBasis to set of Fourier series.
 
     TODO(#1243) Do proper partial summation once the DESC
-    DESC basis are improved to store the padded tensor product basis.
+    basis are improved to store the padded tensor product modes.
     https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
 
     Parameters

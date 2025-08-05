@@ -12,6 +12,7 @@ from functools import partial
 import numpy as np
 from interpax import interp1d
 from jax_finufft import nufft2 as _nufft2
+from jax_finufft import options
 from orthax.chebyshev import chebroots
 
 from desc.backend import dct, jnp, rfft, rfft2, take
@@ -153,33 +154,8 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         n = a.shape[axis]
         _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
     a = jnp.moveaxis(a, axis, -1)
-    return jnp.linalg.vecdot(
-        jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis]), a
-    )
-
-
-_nufft2 = jnp.vectorize(_nufft2, signature="(n),(m)->(m)", excluded={"iflag"})
-
-
-def nufft2(xq, a, domain=(0, 2 * jnp.pi), modeord=1):
-    """Non-uniform fast transform of second type.
-
-    Parameters
-    ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-    a : jnp.ndarray
-        Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
-    domain : tuple[float]
-        Domain over which samples were taken.
-    modeord : int
-        Same flag as finufft.
-
-    """
-    scale = 2 * jnp.pi / (domain[1] - domain[0])
-    if modeord == 1:
-        a = jnp.fft.fftshift(a, axes=-1)
-    return _nufft2(a, (xq - domain[0]) * scale, iflag=1)
+    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    return (vander * a).sum(axis=-1)
 
 
 def interp_rfft2(
@@ -386,6 +362,47 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
         n_rfft, (domain_rfft[1] - domain_rfft[0]) / (2 * jnp.pi * n_rfft)
     )
     return modes_fft, modes_rfft
+
+
+def nufft2(a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi)):
+    """Non-uniform fast transform of second type.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients
+        e.g. ``a=fft(f,norm="forward")`` or ``a=fft2(f,norm="forward")``.
+    xq0 : jnp.ndarray
+        Real query points of coordinate in ``domain0`` where interpolation is desired.
+    xq1 : jnp.ndarray
+        Real query points of coordinate in ``domain1`` where interpolation is desired.
+        If not given, performs a one-dimensional transform.
+    domain0 : tuple[float]
+        Domain of coordinate specified by ``xq0`` over which samples were taken.
+    domain1 : tuple[float]
+        Domain of coordinate specified by ``xq1`` over which samples were taken.
+
+    Returns
+    -------
+    fq : jnp.ndarray
+        Function value at query points.
+
+    """
+    opts = options.Opts(modeord=1)
+    scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
+    xq0 = (xq0 - domain0[0]) * scale0
+    if xq1 is None:
+        return _nufft2(a, xq0, iflag=1, opts=opts)
+    scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
+    xq1 = (xq1 - domain1[0]) * scale1
+    return _nufft2(a, xq0, xq1, iflag=1, opts=opts)
+
+
+def _to_fft(a, n, axis=-1):
+    """Cast output to form expected for FFT."""
+    pad_width = [(0, 0)] * a.ndim
+    pad_width[axis] = (0, n - a.shape[axis])
+    return jnp.pad(a, pad_width)
 
 
 def cheb_from_dct(a, axis=-1):

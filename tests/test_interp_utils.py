@@ -15,6 +15,7 @@ from scipy.fft import idct as sidct
 
 from desc.backend import dct, idct, rfft
 from desc.integrals._interp_utils import (
+    _to_fft,
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -22,6 +23,7 @@ from desc.integrals._interp_utils import (
     interp_dct,
     interp_rfft,
     interp_rfft2,
+    irfft_non_uniform,
     nufft2,
     polyder_vec,
     polyroot_vec,
@@ -205,12 +207,13 @@ class TestFastInterp:
             (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7)),
         ],
     )
-    def test_interp_rfft(self, func, n, domain):
-        """Test non-uniform FFT interpolation."""
+    def test_non_uniform_real_FFT(self, func, n, domain):
+        """Test non-uniform real FFT interpolation."""
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         f = func(x)
         xq = np.array([7.34, 1.10134, 2.28])
         fq = func(xq)
+
         np.testing.assert_allclose(interp_rfft(xq, f, domain), fq)
         M = f.shape[-1]
         coef = rfft_to_trig(rfft(f, norm="forward"), M)
@@ -230,8 +233,8 @@ class TestFastInterp:
             (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7), False),
         ],
     )
-    def test_interp_fft_and_nufft(self, func, n, domain, imag_undersampled):
-        """Test fast non-uniform FFT interpolation."""
+    def test_non_uniform_FFT(self, func, n, domain, imag_undersampled):
+        """Test non-uniform FFT interpolation."""
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         f = func(x)
         xq = np.array([7.34, 1.10134, 2.28])
@@ -243,17 +246,13 @@ class TestFastInterp:
             np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
         r = ifft_non_uniform(xq, a, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
-        r = nufft2(xq, a, domain)
+        r = nufft2(a, xq, domain0=domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
 
-        try:
-            from finufft import nufft1d2
-
-            xq = (xq - domain[0]) * 2 * np.pi / (domain[1] - domain[0])
-            r = nufft1d2(xq, a, modeord=1, isign=1)
-            np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
-        except ImportError:
-            pass
+        a = np.fft.rfft(f, norm="forward")
+        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a = _to_fft(2 * a, f.shape[-1])
+        np.testing.assert_allclose(nufft2(a, xq, domain0=domain).real, fq)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -283,31 +282,43 @@ class TestFastInterp:
             ),
         ],
     )
-    def test_interp_rfft2(self, func, m, n, domain0, domain1):
-        """Test non-uniform FFT interpolation."""
-        theta = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
-        zeta = np.array([1.1, 3.78432, 8.542, 0])
+    def test_non_uniform_real_FFT_2D(self, func, m, n, domain0, domain1):
+        """Test non-uniform real FFT 2D interpolation."""
         x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
         y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
-        truth = func(theta, zeta)
         f = func(x, y).reshape(m, n)
+
+        xq = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
+        yq = np.array([1.1, 3.78432, 8.542, 0])
+        truth = func(xq, yq)
+
         np.testing.assert_allclose(
-            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-2, -1)),
-            truth,
+            interp_rfft2(xq, yq, f, domain0, domain1, axes=(-2, -1)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-1, -2)),
-            truth,
+            interp_rfft2(xq, yq, f, domain0, domain1, axes=(-1, -2)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-2, -1)),
-            truth,
+            interp_rfft2(yq, xq, f.T, domain1, domain0, axes=(-2, -1)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-1, -2)),
+            interp_rfft2(yq, xq, f.T, domain1, domain0, axes=(-1, -2)), truth
+        )
+
+        a = np.fft.rfft2(f, norm="forward")
+        np.testing.assert_allclose(
+            irfft_non_uniform(
+                yq,
+                ifft_non_uniform(xq[:, np.newaxis], a, domain0, axis=-2),
+                f.shape[-1],
+                domain1,
+            ),
             truth,
         )
+        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a = _to_fft(2 * a, f.shape[-1])
+        np.testing.assert_allclose(nufft2(a, xq, yq, domain0, domain1).real, truth)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

@@ -85,7 +85,7 @@ class VMECIO:
 
         """
         assert profile in ["iota", "current"]
-        file = Dataset(path, mode="r")
+        file = Dataset(os.path.expanduser(path), mode="r")
         inputs = {}
 
         version = file.variables["version_"][0]
@@ -256,7 +256,9 @@ class VMECIO:
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
             see lines 300+ for full list of included variables
         """
-        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+        file = Dataset(
+            os.path.expanduser(path), mode="w", format="NETCDF3_64BIT_OFFSET"
+        )
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -1578,7 +1580,7 @@ class VMECIO:
                         " {:+14.8E}".format(
                             0
                             if np.abs(r) < np.finfo(r.dtype).eps
-                            else float(current(r, dr=1) / (2 * r))
+                            else float(current(r, dr=1)[0] / (2 * r))
                         )
                     )
                 f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")

@@ -6,16 +6,24 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    Timer,
+    broadcast_tree,
+    copy_rpz_periods,
+    errorif,
+    rpz2xyz,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
-from .utils import softmin
+from .utils import softmax, softmin
 
 
 class _CoilObjective(_Objective):
@@ -600,8 +608,8 @@ class CoilIntegratedCurvature(_CoilObjective):
     """Coil integrated curvature.
 
     If a curve is convex, then the following condition must be true: ∫ κ ||∂ₛx|| ds = 2π
-    where κ is the scalar (unsigned) curvature, ∂ₛx is the first derivative of the
-    position vector along curve, and s is the curve parameter.
+    where κ is the scalar (unsigned) curvature, ∂ₛx is tangent to the curve,
+    and s is the curve parameter.
 
     Parameters
     ----------
@@ -739,6 +747,8 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
+    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+
     _scalar = False
     _units = "(m)"
     _print_value_fmt = "Minimum coil-coil distance: "
@@ -850,7 +860,307 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class PlasmaCoilSetMinDistance(_Objective):
+class PlasmaCoilSetDistanceBound(_Objective):
+    """Target the distance between the plasma and coilset.
+
+    Will yield one or two values per coil in the coilset, depending on the mode
+    variable, which is the minimum and/or maximum distance from that coil to the
+    plasma boundary surface. If ``max`` or ``min`` mode is selected, only one value
+    is returned. If ``bound`` mode is selected, two values are returned per coil,
+    which are the minimum and maximum distance from the coil to the plasma boundary
+    surface. The minima for all coils are returned first, then the maxima in a
+    flattened array as applicable.
+
+    NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
+    computed at every iteration, for example if the equilibrium is changing in a
+    single-stage optimization.
+    If the plasma boundary is fixed, set eq_fixed=True to precompute the last closed
+    flux surface coordinates and improve the efficiency of the calculation.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium (or FourierRZToroidalSurface) that will be optimized
+        to satisfy the Objective.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    mode: string, optional
+        One of ``bound``, ``min``, or ``max`` for bounding both min and max plasma-coil
+        distance or targeting only min or max plasma-coil distance.
+        Defaults to ``bound``.
+    plasma_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    coil_grid : Grid, list, optional
+        Collocation grid containing the nodes to evaluate coilset geometry at.
+        Defaults to the default grid for the given coil-type, see ``coils.py``
+        and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
+    eq_fixed: bool, optional
+        Whether the equilibrium is fixed or not. If True, the last closed flux surface
+        is fixed and its coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [coil] only.
+        If False, the surface coordinates are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    coils_fixed: bool, optional
+        Whether the coils are fixed or not. If True, the coils
+        are fixed and their coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [eq] only.
+        If False, the coil coordinates are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin (softmax) or hard min (max). Softmin is a smooth approximation to
+        the actual minimum distance that may give smoother gradients, at the expense of
+        being slightly more expensive and only an approximate extremum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin (softmax) approximates the hardmin (hardmax). softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,1)``.",
+        bounds_default="``bounds=(0,1)``.",
+        coil=True,
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_mode",
+        "_eq_fixed",
+        "_coils_fixed",
+        "_use_softmin",
+        "_dist_chunk_size",
+    ]
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "Plasma-coil distance: "
+
+    def __init__(
+        self,
+        eq,
+        coil,
+        mode="bound",
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        plasma_grid=None,
+        coil_grid=None,
+        eq_fixed=False,
+        coils_fixed=False,
+        name="plasma-coil distance",
+        jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            bounds = (0, 1)
+        errorif(
+            mode not in ["bound", "max", "min"],
+            ValueError,
+            "mode must be 'bound', 'max', or 'min'",
+        )
+        self._eq = eq
+        self._coil = coil
+        self._mode = mode
+        self._plasma_grid = plasma_grid
+        self._coil_grid = coil_grid
+        self._eq_fixed = eq_fixed
+        self._coils_fixed = coils_fixed
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
+        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not coils_fixed:
+            things.append(coil)
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._eq_fixed:
+            eq = self._eq
+            coil = self.things[0]
+        elif self._coils_fixed:
+            eq = self.things[0]
+            coil = self._coil
+        else:
+            eq = self.things[0]
+            coil = self.things[1]
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
+        coil_grid = self._coil_grid or None
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma/Surface grid includes interior points, should be rho=1.",
+        )
+
+        if self._mode == "bound":
+            self._dim_f = 2 * coil.num_coils
+        else:  # min or max mode
+            self._dim_f = coil.num_coils
+        self._data_keys = ["R", "phi", "Z"]
+
+        eq_profiles = get_profiles(self._data_keys, obj=eq, grid=plasma_grid)
+        eq_transforms = get_transforms(self._data_keys, obj=eq, grid=plasma_grid)
+
+        self._constants = {
+            "eq": eq,
+            "coil": coil,
+            "coil_grid": coil_grid,
+            "eq_profiles": eq_profiles,
+            "eq_transforms": eq_transforms,
+            "quad_weights": 1.0,
+        }
+
+        if self._eq_fixed:
+            # precompute the equilibrium surface coordinates
+            data = compute_fun(
+                eq,
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=eq_transforms,
+                profiles=eq_profiles,
+            )
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
+            self._constants["plasma_coords"] = plasma_pts
+        if self._coils_fixed:
+            coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
+            self._constants["coil_coords"] = coils_pts
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute minimum/maximum distance between coils and the plasma/surface.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
+            self._coils_fixed is False, else is the equilibrium or surface degrees of
+            freedom
+        params_2 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg ``Equilibrium.params_dict``
+            Only required if ``self._eq_fixed = False``.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Minimum/maximum distance from coil to surface for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+        if self._eq_fixed:
+            coils_params = params_1
+        elif self._coils_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_1
+            coils_params = params_2
+
+        # coil pts; shape(ncoils,coils_grid.num_nodes,3)
+        if self._coils_fixed:
+            coils_pts = constants["coil_coords"]
+        else:
+            coils_pts = constants["coil"]._compute_position(
+                params=coils_params, grid=constants["coil_grid"]
+            )
+
+        # plasma pts; shape(plasma_grid.num_nodes,3)
+        if self._eq_fixed:
+            plasma_pts = constants["plasma_coords"]
+        else:
+            data = compute_fun(
+                constants["eq"],
+                self._data_keys,
+                params=eq_params,
+                transforms=constants["eq_transforms"],
+                profiles=constants["eq_profiles"],
+            )
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_pts = rpz2xyz(rpz)
+
+        def body(k):
+            # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
+            dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
+            if self._use_softmin:
+                # minimum over plasma points, then max over coil points
+                max = softmax(
+                    softmin(dist, self._softmin_alpha, axis=0), self._softmin_alpha
+                )
+                # minimum over all points
+                min = softmin(dist, self._softmin_alpha)
+            else:
+                max = jnp.max(jnp.min(dist, axis=0))
+                min = jnp.min(dist)
+
+            if self._mode == "max":
+                return max
+            if self._mode == "min":
+                return min
+            return jnp.array([min, max])
+
+        if self._mode == "bound":
+            k = jnp.arange(self.dim_f // 2)
+        else:
+            k = jnp.arange(self.dim_f)
+
+        extreme_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
+
+        # if mode is bound, flatten the output
+        extreme_dist_per_coil = extreme_dist_per_coil.flatten()
+
+        return extreme_dist_per_coil
+
+
+class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
     """Target the minimum distance between the plasma and coilset.
 
     Will yield one value per coil in the coilset, which is the minimum distance from
@@ -912,6 +1222,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         coil=True,
     )
 
+    _static_attrs = PlasmaCoilSetDistanceBound._static_attrs
     _scalar = False
     _units = "(m)"
     _print_value_fmt = "Minimum plasma-coil distance: "
@@ -939,23 +1250,10 @@ class PlasmaCoilSetMinDistance(_Objective):
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
-        self._eq = eq
-        self._coil = coil
-        self._plasma_grid = plasma_grid
-        self._coil_grid = coil_grid
-        self._eq_fixed = eq_fixed
-        self._coils_fixed = coils_fixed
-        self._use_softmin = use_softmin
-        self._softmin_alpha = softmin_alpha
-        self._dist_chunk_size = dist_chunk_size
-        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
-        things = []
-        if not eq_fixed:
-            things.append(eq)
-        if not coils_fixed:
-            things.append(coil)
         super().__init__(
-            things=things,
+            eq=eq,
+            coil=coil,
+            mode="min",
             target=target,
             bounds=bounds,
             weight=weight,
@@ -963,144 +1261,16 @@ class PlasmaCoilSetMinDistance(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=eq_fixed,
+            coils_fixed=coils_fixed,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            use_softmin=use_softmin,
+            softmin_alpha=softmin_alpha,
+            dist_chunk_size=dist_chunk_size,
         )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._eq_fixed:
-            eq = self._eq
-            coil = self.things[0]
-        elif self._coils_fixed:
-            eq = self.things[0]
-            coil = self._coil
-        else:
-            eq = self.things[0]
-            coil = self.things[1]
-        plasma_grid = self._plasma_grid or LinearGrid(
-            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-        )
-        coil_grid = self._coil_grid or None
-        warnif(
-            not np.allclose(plasma_grid.nodes[:, 0], 1),
-            UserWarning,
-            "Plasma/Surface grid includes interior points, should be rho=1.",
-        )
-
-        self._dim_f = coil.num_coils
-        self._eq_data_keys = ["R", "phi", "Z"]
-
-        eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
-        eq_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=plasma_grid)
-
-        self._constants = {
-            "eq": eq,
-            "coil": coil,
-            "coil_grid": coil_grid,
-            "eq_profiles": eq_profiles,
-            "eq_transforms": eq_transforms,
-            "quad_weights": 1.0,
-        }
-
-        if self._eq_fixed:
-            # precompute the equilibrium surface coordinates
-            data = compute_fun(
-                eq,
-                self._eq_data_keys,
-                params=eq.params_dict,
-                transforms=eq_transforms,
-                profiles=eq_profiles,
-            )
-            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
-            plasma_pts = rpz2xyz(rpz)
-            self._constants["plasma_coords"] = plasma_pts
-        if self._coils_fixed:
-            coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
-            self._constants["coil_coords"] = coils_pts
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params_1, params_2=None, constants=None):
-        """Compute minimum distance between coils and the plasma/surface.
-
-        Parameters
-        ----------
-        params_1 : dict
-            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
-            self._coils_fixed is False, else is the equilibrium or surface degrees of
-            freedom
-        params_2 : dict
-            Dictionary of equilibrium or surface degrees of freedom,
-            eg ``Equilibrium.params_dict``
-            Only required if ``self._eq_fixed = False``.
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
-
-        Returns
-        -------
-        f : array of floats
-            Minimum distance from coil to surface for each coil in the coilset.
-
-        """
-        if constants is None:
-            constants = self.constants
-        if self._eq_fixed:
-            coils_params = params_1
-        elif self._coils_fixed:
-            eq_params = params_1
-        else:
-            eq_params = params_1
-            coils_params = params_2
-
-        # coil pts; shape(ncoils,coils_grid.num_nodes,3)
-        if self._coils_fixed:
-            coils_pts = constants["coil_coords"]
-        else:
-            coils_pts = constants["coil"]._compute_position(
-                params=coils_params, grid=constants["coil_grid"]
-            )
-
-        # plasma pts; shape(plasma_grid.num_nodes,3)
-        if self._eq_fixed:
-            plasma_pts = constants["plasma_coords"]
-        else:
-            data = compute_fun(
-                constants["eq"],
-                self._eq_data_keys,
-                params=eq_params,
-                transforms=constants["eq_transforms"],
-                profiles=constants["eq_profiles"],
-            )
-            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
-            plasma_pts = rpz2xyz(rpz)
-
-        def body(k):
-            # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
-            dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            if self._use_softmin:
-                return softmin(dist, self._softmin_alpha)
-            return jnp.min(dist)
-
-        k = jnp.arange(self.dim_f)
-        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
-        return min_dist_per_coil
 
 
 class CoilArclengthVariance(_CoilObjective):
@@ -1109,9 +1279,8 @@ class CoilArclengthVariance(_CoilObjective):
     This objective is meant to combat any issues corresponding to non-uniqueness of
     the representation of a curve, in that the same physical curve can be represented
     by different parametrizations by changing the curve parameter [1]_. Note that this
-    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have
-    a single unique parameterization (the objective will always return 0 for these
-    types).
+    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have a
+    single unique parameterization (the objective will always return 0 for these types).
 
     References
     ----------
@@ -1129,9 +1298,7 @@ class CoilArclengthVariance(_CoilObjective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.",
-        bounds_default="``target=0``.",
-        coil=True,
+        target_default="``target=0``.", bounds_default="``target=0``.", coil=True
     )
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
@@ -1186,14 +1353,23 @@ class CoilArclengthVariance(_CoilObjective):
 
         coilset = self.things[0]
         # local import to avoid circular import
-        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+        from desc.coils import (
+            CoilSet,
+            FourierXYCoil,
+            FourierXYZCoil,
+            SplineXYZCoil,
+            _Coil,
+        )
 
         def _is_single_coil(c):
             return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
         coils = tree_leaves(coilset, is_leaf=_is_single_coil)
         self._constants["mask"] = np.array(
-            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+            [
+                int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil, FourierXYCoil)))
+                for coil in coils
+            ]
         )
 
         if self._normalize:
@@ -1275,6 +1451,12 @@ class QuadraticFlux(_Objective):
         bounds_default="``target=0``.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_vacuum",
+    ]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary normal field error: "
@@ -1308,7 +1490,7 @@ class QuadraticFlux(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._vacuum = vacuum
         self._bs_chunk_size = bs_chunk_size
@@ -1320,9 +1502,8 @@ class QuadraticFlux(_Objective):
             "if attempting to find a QFM surface, please use "
             "SurfaceQuadraticFlux objective instead.",
         )
-        things = [field]
         super().__init__(
-            things=things,
+            things=self._field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1343,6 +1524,8 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self._eq
 
         if self._eval_grid is None:
@@ -1393,7 +1576,7 @@ class QuadraticFlux(_Objective):
         )
 
         self._constants = {
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
@@ -1412,7 +1595,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params, constants=None):
+    def compute(self, *field_params, constants=None):
         """Compute normal field error on boundary.
 
         Parameters
@@ -1494,6 +1677,8 @@ class SurfaceQuadraticFlux(_Objective):
         target_default="``target=0``.",
         bounds_default="``target=0``.",
     )
+
+    _static_attrs = _Objective._static_attrs + ["_bs_chunk_size", "_field_fixed"]
 
     _scalar = False
     _linear = False
@@ -1711,6 +1896,12 @@ class ToroidalFlux(_Objective):
         ),
         loss_detail=" Note: has no effect for this objective.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_field_fixed",
+        "_use_vector_potential",
+    ]
 
     _coordinates = "rtz"
     _units = "(Wb)"
@@ -1978,6 +2169,8 @@ class LinkingCurrentConsistency(_Objective):
         target_default="``target=0``.",
         bounds_default="``target=0``.",
     )
+
+    _static_attrs = _Objective._static_attrs + ["_eq_fixed"]
 
     _scalar = True
     _units = "(A)"
@@ -2261,6 +2454,8 @@ class CoilSetLinkingNumber(_Objective):
 class SurfaceCurrentRegularization(_Objective):
     """Target the surface current magnitude.
 
+    If ``regularization="K"``:
+
     compute::
 
         w * ||K|| * sqrt(||e_theta x e_zeta||)
@@ -2275,6 +2470,18 @@ class SurfaceCurrentRegularization(_Objective):
         K = n x ∇ Φ
 
     i.e. a CurrentPotentialField
+
+    If ``regularization="Phi"``:
+
+    compute::
+
+        w * |Φ| * sqrt(||e_theta x e_zeta||)
+
+    If ``regularization="sqrt(Phi)"``:
+
+    compute::
+
+        w * sqrt(|Φ|) * sqrt(||e_theta x e_zeta||)
 
     Intended to be used with a QuadraticFlux objective, to form
     a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
@@ -2291,6 +2498,8 @@ class SurfaceCurrentRegularization(_Objective):
     surface_current_field : CurrentPotentialField
         Surface current which is producing the magnetic field, the parameters
         of this will be optimized to minimize the objective.
+    regularization : str, optional
+        Regularization method. One of {'K', 'Phi', 'sqrt(Phi)'}. Default = 'K'.
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
@@ -2313,9 +2522,8 @@ class SurfaceCurrentRegularization(_Objective):
         bounds_default="``target=0``.",
         overwrite={"weight": weight_str},
     )
-
+    _static_attrs = _Objective._static_attrs + ["_regularization"]
     _coordinates = "tz"
-    _units = "A/m"
     _print_value_fmt = "Surface Current Regularization: "
 
     def __init__(
@@ -2328,6 +2536,8 @@ class SurfaceCurrentRegularization(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        jac_chunk_size=None,
+        regularization="K",
         source_grid=None,
         name="surface-current-regularization",
     ):
@@ -2336,6 +2546,12 @@ class SurfaceCurrentRegularization(_Objective):
             FourierCurrentPotentialField,
         )
 
+        errorif(
+            regularization not in ["K", "Phi", "sqrt(Phi)"],
+            ValueError,
+            "regularization must be one of ['K', 'Phi', 'sqrt(Phi)'], "
+            + f"got {regularization}.",
+        )
         if target is None and bounds is None:
             target = 0
         assert isinstance(
@@ -2344,8 +2560,14 @@ class SurfaceCurrentRegularization(_Objective):
             "surface_current_field must be a CurrentPotentialField or "
             + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
         )
+        self._regularization = regularization
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
+        self._units = (
+            "(A)"
+            if self._regularization == "K"
+            else "(A*m)" if self._regularization == "Phi" else "(sqrt(A)*m)"
+        )
 
         super().__init__(
             things=[surface_current_field],
@@ -2356,6 +2578,7 @@ class SurfaceCurrentRegularization(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
         )
 
@@ -2394,7 +2617,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
-        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
+        self._data_keys = ["Phi", "K", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -2402,7 +2625,7 @@ class SurfaceCurrentRegularization(_Objective):
         timer.start("Precomputing transforms")
 
         surface_transforms = get_transforms(
-            self._surface_data_keys,
+            self._data_keys,
             obj=surface_current_field,
             grid=source_grid,
             has_axis=source_grid.axis.size,
@@ -2450,11 +2673,16 @@ class SurfaceCurrentRegularization(_Objective):
 
         surface_data = compute_fun(
             self._surface_current_field,
-            self._surface_data_keys,
+            self._data_keys,
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},
         )
 
-        K_mag = safenorm(surface_data["K"], axis=-1)
-        return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        if self._regularization == "K":
+            K = safenorm(surface_data["K"], axis=-1)
+        elif self._regularization == "Phi":
+            K = jnp.abs(surface_data["Phi"])
+        elif self._regularization == "sqrt(Phi)":
+            K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
+        return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
@@ -63,6 +63,12 @@ class VacuumBoundaryError(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+    ]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: "
@@ -94,12 +100,15 @@ class VacuumBoundaryError(_Objective):
             target = 0
         self._eval_grid = eval_grid
         self._eq = eq
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
+        things = [eq]
+        if not field_fixed:
+            things.append(self._field)
         super().__init__(
-            things=[eq] if field_fixed else [eq, field],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -122,6 +131,8 @@ class VacuumBoundaryError(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
         if self._eval_grid is None:
             grid = LinearGrid(
@@ -171,7 +182,7 @@ class VacuumBoundaryError(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
         }
 
@@ -191,7 +202,7 @@ class VacuumBoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, field_params=None, constants=None):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -211,6 +222,8 @@ class VacuumBoundaryError(_Objective):
             √g[[B²]] in T^2*m^2.
 
         """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -243,7 +256,8 @@ class VacuumBoundaryError(_Objective):
         return jnp.concatenate([Bn_err, Bsq_err])
 
     def print_value(self, args, args0=None, **kwargs):
-        """Print the value of the objective."""
+        """Print the value of the objective and return a dict of values."""
+        out = {}
         # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
@@ -306,7 +320,7 @@ class VacuumBoundaryError(_Objective):
         units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, units) in enumerate(zip(formats, norms, units)):
+        for i, (fmti, norm, units) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -321,12 +335,28 @@ class VacuumBoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            out[fmti] = {
+                "f_max": fmax,
+                "f_min": fmin,
+                "f_mean": fmean,
+                "f_max_norm": fmax / norm,
+                "f_min_norm": fmin / norm,
+                "f_mean_norm": fmean / norm,
+            }
+            if args0 is not None:
+                out[fmti]["f0_max"] = f0max
+                out[fmti]["f0_min"] = f0min
+                out[fmti]["f0_mean"] = f0mean
+                out[fmti]["f0_max_norm"] = f0max / norm
+                out[fmti]["f0_min_norm"] = f0min / norm
+                out[fmti]["f0_mean_norm"] = f0mean / norm
             fmt = (
-                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                else f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
+        return out
 
 
 class BoundaryError(_Objective):
@@ -335,7 +365,7 @@ class BoundaryError(_Objective):
     Computes the residual of the following:
 
     𝐁ₒᵤₜ ⋅ 𝐧 = 0
-    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - p = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - 2μ₀p = 0
     μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
 
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
@@ -413,6 +443,17 @@ class BoundaryError(_Objective):
 
     """
 
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+        "_q",
+        "_sheet_current",
+        "_sheet_data_keys",
+        "_use_same_grid",
+    ]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: "
@@ -450,7 +491,7 @@ class BoundaryError(_Objective):
         self._eval_grid = eval_grid
         self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
@@ -460,11 +501,9 @@ class BoundaryError(_Objective):
             B_plasma_chunk_size = None
         self._B_plasma_chunk_size = B_plasma_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
-
+        things = [eq]
+        if not field_fixed:
+            things.append(self._field)
         super().__init__(
             things=things,
             target=target,
@@ -489,6 +528,8 @@ class BoundaryError(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
 
         if self._source_grid is None:
@@ -593,7 +634,7 @@ class BoundaryError(_Objective):
             "source_transforms": source_transforms,
             "source_profiles": source_profiles,
             "interpolator": interpolator,
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
         }
 
@@ -633,7 +674,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, field_params=None, constants=None):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -654,6 +695,8 @@ class BoundaryError(_Objective):
             √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
         if constants is None:
             constants = self.constants
         source_data = compute_fun(
@@ -730,7 +773,11 @@ class BoundaryError(_Objective):
 
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
-        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
             Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
@@ -740,7 +787,8 @@ class BoundaryError(_Objective):
             return jnp.concatenate([Bn_err, Bsq_err])
 
     def print_value(self, args, args0=None, **kwargs):
-        """Print the value of the objective."""
+        """Print the value of the objective and return a dict of values."""
+        out = {}
         # this objective is really 3 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
@@ -814,7 +862,7 @@ class BoundaryError(_Objective):
             formats = formats[:-1]
             units = units[:-1]
             norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
+        for i, (fmti, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -829,12 +877,28 @@ class BoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            out[fmti] = {
+                "f_max": fmax,
+                "f_min": fmin,
+                "f_mean": fmean,
+                "f_max_norm": fmax / norm,
+                "f_min_norm": fmin / norm,
+                "f_mean_norm": fmean / norm,
+            }
+            if args0 is not None:
+                out[fmti]["f0_max"] = f0max
+                out[fmti]["f0_min"] = f0min
+                out[fmti]["f0_mean"] = f0mean
+                out[fmti]["f0_max_norm"] = f0max / norm
+                out[fmti]["f0_min_norm"] = f0min / norm
+                out[fmti]["f0_mean_norm"] = f0mean / norm
             fmt = (
-                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                else f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
+        return out
 
 
 class BoundaryErrorNESTOR(_Objective):
@@ -896,12 +960,12 @@ class BoundaryErrorNESTOR(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self.mf = mf
-        self.nf = nf
-        self.ntheta = ntheta
-        self.nzeta = nzeta
-        self.field = field
-        self.field_grid = field_grid
+        self._mf = mf
+        self._nf = nf
+        self._ntheta = ntheta
+        self._nzeta = nzeta
+        self._field = [field] if not isinstance(field, list) else field
+        self._field_grid = field_grid
         super().__init__(
             things=eq,
             target=target,
@@ -926,41 +990,37 @@ class BoundaryErrorNESTOR(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
-        self.mf = eq.M + 1 if self.mf is None else self.mf
-        self.nf = eq.N if self.nf is None else self.nf
-        self.ntheta = 4 * eq.M + 1 if self.ntheta is None else self.ntheta
-        self.nzeta = 4 * eq.N + 1 if self.nzeta is None else self.nzeta
+        self._mf = eq.M + 1 if self._mf is None else self._mf
+        self._nf = eq.N if self._nf is None else self._nf
+        self._ntheta = 4 * eq.M + 1 if self._ntheta is None else self._ntheta
+        self._nzeta = 4 * eq.N + 1 if self._nzeta is None else self._nzeta
 
         nest = Nestor(
             eq,
-            self.field,
-            self.mf,
-            self.nf,
-            self.ntheta,
-            self.nzeta,
-            self.field_grid,
+            SumMagneticField(self._field),
+            self._mf,
+            self._nf,
+            self._ntheta,
+            self._nzeta,
+            self._field_grid,
         )
-        self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
+        grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "profiles": profiles,
             "transforms": transforms,
-            "field": self.field,
+            "profiles": profiles,
             "nestor": nest,
             "quad_weights": np.sqrt(transforms["grid"].weights),
         }
@@ -969,7 +1029,7 @@ class BoundaryErrorNESTOR(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

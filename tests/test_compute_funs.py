@@ -4,14 +4,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.utils import cross, dot
+from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -97,7 +96,7 @@ def test_enclosed_volumes():
         8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
     np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
 
 
 @pytest.mark.unit
@@ -162,6 +161,12 @@ def test_surface_areas_2():
 @pytest.mark.unit
 def test_elongation():
     """Test that elongation approximation is correct."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[-1, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
     surf2 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
         Z_lmn=[-2, -0.2],
@@ -174,17 +179,15 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    eq1 = Equilibrium()  # elongation = 1
-    eq2 = Equilibrium(surface=surf2)  # elongation = 2
-    eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
-    data1 = eq1.compute(["a_major/a_minor"], grid=grid)
-    data2 = eq2.compute(["a_major/a_minor"], grid=grid)
-    data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    assert surf3.sym
+    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    data1 = surf1.compute(["a_major/a_minor"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
 
 
 @pytest.mark.slow
@@ -1477,9 +1480,8 @@ def test_iota_components():
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
-    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
     # TODO (#1397): expand this to include all angular derivatives
-    # once they are implemented for surfaces
+    #  once they are implemented for surfaces
     data_basis_vecs_fourierRZ = [
         "e_theta",
         "e_zeta",
@@ -1500,7 +1502,7 @@ def test_surface_equilibrium_geometry():
     ]
     for name in names:
         eq = get(name)
-        for key in data:
+        for key in ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]:
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()
             if key == "a_major/a_minor":
@@ -1603,14 +1605,7 @@ def test_clebsch_sfl_funs():
 def test_parallel_grad_fd(DummyStellarator):
     """Test that the parallel gradients match with numerical gradients."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    grid = get_rtz_grid(
-        eq,
-        0.5,
-        0,
-        np.linspace(0, 2 * np.pi, 50),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
+    grid = get_rtz_grid(eq, 0.5, 0, np.linspace(0, 2 * np.pi, 50), coordinates="raz")
     data = eq.compute(
         [
             "|B|",

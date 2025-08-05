@@ -51,6 +51,44 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
+**Or using uv instead of pip**
+
+One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
+For a project that modifies DESC and also uses it to perform analysis,
+it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
+This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
+and with the ability to use DESC in a jupyter notebook.
+
+.. code-block:: sh
+
+    # download UV; it installs into .local/bin
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    # the depth=1 option reduces the quantity of older data downloaded
+    git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+
+    # initialize a project
+    uv init myproject
+    cd myproject
+
+    # add dependencies
+    uv add --editable "../DESC"
+
+    # test the installation
+    uv run python
+
+    >>> from desc.backend import print_backend_info
+    >>> print_backend_info()
+
+    # Jupyter Notebooks
+    # ----------------
+    # install a jupyter kernel
+    uv add --dev ipykernel
+    uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
+
+    # run jupyter
+    uv run --with jupyter jupyter lab
+
 
 On Most Linux Computing Clusters
 ********************************
@@ -103,15 +141,15 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on December 17, 2024.
+            These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on July 3, 2025.
 
             Set up the correct cuda environment for jax installation
 
             .. code-block:: sh
 
                 module load cudatoolkit/12.4
-                module load cudnn/8.9.3_cuda12
-                module load python/3.11
+                module load cudnn/9.5.0
+                module load conda
 
             Check that you have loaded these modules
 
@@ -123,7 +161,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
             .. code-block:: sh
 
-                conda create -n desc-env python=3.11
+                conda create -n desc-env python=3.12
                 conda activate desc-env
                 pip install --upgrade "jax[cuda12]"
 
@@ -138,15 +176,16 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 # optionally install developer requirements (if you want to run tests)
                 pip install -r devtools/dev-requirements.txt
 
+            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initalization to work properly.
+
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
-
-            First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
 
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please check the link to install JAX with the most up-to-date recommendations from the Princeton computing services. We first will install DESC as usual, then we will install the version of the gpu-compatible JAX.
 
             .. code-block:: sh
 
+                module load anaconda3/2024.10
                 conda create --name desc-env python=3.12 -y
                 conda activate desc-env
                 git clone https://github.com/PlasmaControl/DESC.git
@@ -159,12 +198,12 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 # It is important to NOT use the --upgrade or -U flag here! otherwise you may get incompatible JAX versions
                 pip install "jax[cuda12]"
 
-            Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 30, 2025.
+            Tested and confirmed to work on the Della and Stellar clusters at Princeton as of June 4, 2025.
 
 
         .. dropdown:: RAVEN (IPP, Germany)
 
-            These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024
+            These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024.
 
             Create a conda environment for DESC
 
@@ -224,6 +263,12 @@ You can also try running an example input file (filepath shown here is from the 
 
     python -m desc -vv desc/examples/SOLOVEV
 
+For GPU, one can use,
+
+.. code-block:: console
+
+    python -m desc -vv desc/examples/SOLOVEV -g
+
 
 Troubleshooting
 ***************
@@ -260,3 +305,17 @@ If you encounter issues during installation, please `leave us an issue on Github
     This may be caused by a version of DESC already having been installed in your base conda environment.
 
     Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.
+
+.. tip::
+
+    **Problem**: I am getting errors when using JAX version 0.6.1 like ``XlaRuntimeError: INTERNAL: cuSolver internal error``
+
+    **Solution**:
+    JAX version 0.6.1 may cause silent installation failures on GPU where the installation appears to succeed, but when running DESC, you will get an error like ``XlaRuntimeError: INTERNAL: cuSolver internal error``.
+    To solve this problem, it is recommended to upgrade the JAX version to a newer version than 0.6.1. If you for some reason must use version 0.6.1, then to avoid these errors you need to run
+
+    .. code-block:: sh
+
+        pip install nvidia-cublas-cu12==12.9.0.13
+
+    in addition to the recommended install instructions.

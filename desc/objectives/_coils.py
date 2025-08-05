@@ -3450,6 +3450,7 @@ class Bxdl(_Objective):
         eq_kwargs={},
         field_fixed=False,
         curve_fixed=True,
+        eq_fixed=True,
         b_hat=False,
         **kwargs,
     ):
@@ -3468,11 +3469,20 @@ class Bxdl(_Objective):
         things = []
         self._field_fixed = field_fixed
         self._curve_fixed = curve_fixed
+        self._eq_fixed = eq_fixed
         self._b_hat = b_hat
         if not field_fixed:
             things += self._field
         if not curve_fixed:
             things += [self._curve]
+        if not eq_fixed and eq is not None:
+            things += [self._eq]
+        errorif(
+            curve_fixed and eq_fixed and field_fixed,
+            ValueError,
+            "Cannot have all `curve_fixed`, `eq_fixed` and `field_fixed` set to True. "
+            "At least one of them must be False.",
+        )
 
         super().__init__(
             things=things,
@@ -3521,6 +3531,7 @@ class Bxdl(_Objective):
 
         eq = self._eq
         B_plasma = None
+        B_plasma = None
         if self._eq is not None:
             if self._eq_grid is None:
                 eq_grid = QuadratureGrid(
@@ -3541,7 +3552,8 @@ class Bxdl(_Objective):
                     **self._eq_kwargs,
                 )
         else:
-            B_plasma = None
+            eq_grid = None
+            transforms = None
 
         self._constants = {
             "field": SumMagneticField(self._field),
@@ -3549,6 +3561,8 @@ class Bxdl(_Objective):
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": B_plasma,
+            "eq_transforms": transforms,
+            "eq_grid": eq_grid,
         }
 
         timer.stop("Precomputing transforms")
@@ -3581,27 +3595,27 @@ class Bxdl(_Objective):
             Bxdl error at points
 
         """
-        if self._curve_fixed:
-            field_params = params
-        else:
-            curve_params = params[-1]
-            if not self._field_fixed:
-                field_params = params[:-1]
-            else:
-                field_params = constants["field"].params_dict
+        # Conditionally extract items from the end of the tuple
+        if not self._eq_fixed:
+            eq_params = params[end_index - 1]
+            end_index -= 1
+        if not self._curve_fixed:
+            curve_params = params[end_index - 1]
+            end_index -= 1
+        if not self._field_fixed:
+            field_params = params[:end_index]
 
         if constants is None:
             constants = self.constants
         if self._curve_fixed:
             eval_data = constants["eval_data"]
         else:
-            curve = self._things[-1]
-            eval_data = curve.compute(
+            eval_data = self._curve.compute(
                 self._data_keys, grid=self._eval_grid, basis="rpz", params=curve_params
             )
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        # B_ext is not pre-computed because field is not fixed
+        # B_ext is not pre-computed because field is not fixed typically
 
         B_ext = constants["field"].compute_magnetic_field(
             x,
@@ -3615,18 +3629,14 @@ class Bxdl(_Objective):
         elif self._eq is not None:
             eq = self._eq
             x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-            if self._eq_grid is None:
-                eq_grid = QuadratureGrid(
-                    L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
-                )
-            else:
-                eq_grid = self._eq_grid
+            eq_grid = constants["eq_grid"]
             B_plasma = eq.compute_magnetic_field(
                 coords=x,
                 chunk_size=self._bs_chunk_size,
                 source_grid=eq_grid,
                 params=eq_params if not self._eq_fixed else None,
                 basis="rpz",
+                transforms=constants["eq_transforms"],
                 **self._eq_kwargs,
             )
             B_ext = B_ext + B_plasma

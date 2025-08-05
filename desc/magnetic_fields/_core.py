@@ -8,7 +8,7 @@ from collections.abc import MutableSequence
 import numpy as np
 from diffrax import (
     ConstantStepSize,
-    DiscreteTerminatingEvent,
+    Event,
     ODETerm,
     PIDController,
     SaveAt,
@@ -19,7 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign
+from desc.backend import jit, jnp, sign, vmap
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -2663,17 +2663,17 @@ def field_line_integrate(
 
     # diffrax parameters
 
-    def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
     kwargs.setdefault(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
     )
     kwargs.setdefault(
-        "discrete_terminating_event",
-        DiscreteTerminatingEvent(default_terminating_event_fxn),
+        "event",
+        Event(default_terminating_event),
     )
     # Euler method does not support adaptive step size controller
     kwargs["stepsize_controller"] = (
@@ -2700,11 +2700,9 @@ def field_line_integrate(
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
-    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
-        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+        x = vmap(intfun)(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))

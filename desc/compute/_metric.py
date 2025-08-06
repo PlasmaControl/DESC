@@ -2240,7 +2240,8 @@ def _g_sup_rv_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial/Radial element of covariant metric tensor"
+    + "derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2258,7 +2259,8 @@ def _g_sub_rr_v_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\phi} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial/Radial element of covariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2276,7 +2278,8 @@ def _g_sub_rr_z_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Poloidal/Poloidal element of covariant metric tensor"
+    + "derivative w.r.t radial PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2294,7 +2297,8 @@ def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta_PEST} g_{\\vartheta\\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Poloidal/Poloidal element of covariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2312,7 +2316,8 @@ def _g_sub_vv_z_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta_PEST} g_{\\zeta\\zeta}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial/Radial element of covariant metric tensor"
+    + "derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2330,7 +2335,8 @@ def _g_sub_zz_v_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} g_{\\zeta\\zeta}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor",
+    description="Radial/Radial element of covariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2341,6 +2347,128 @@ def _g_sub_zz_v_PEST(params, transforms, profiles, data, **kwargs):
 def _g_sub_rv_z_PEST(params, transforms, profiles, data, **kwargs):
     data["g_rv_z|PEST"] = dot(data["e_rho|v,p"], data["e_vartheta_z|PEST"]) + dot(
         data["e_rho_z|PEST"], data["e_vartheta|r,p"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_z|PEST",
+    label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of contravariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_z|PEST"],
+)
+def _g_sup_rr_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rr_z|PEST"] = 2 * dot(data["e^rho"], data["e^rho_z|PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_v|PEST",
+    label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of contravariant metric tensor"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_v|PEST"],
+)
+def _g_sup_rr_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rr_v|PEST"] = 2 * dot(data["e^rho"], data["e^rho_v|PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="g^rv_z|PEST",
+    label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Radial element of contravariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta_PEST", "e^rho_z|PEST", "e^theta_PEST_z|PEST"],
+)
+def _g_sup_rv_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rv_z|PEST"] = dot(data["e^rho"], data["e^theta_PEST_z|PEST"]) + dot(
+        data["e^rho_z|PEST"], data["e^theta_PEST"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rv_v|PEST",
+    label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Poloidal element of contrvariant metric tensor"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta_PEST", "e^rho_v|PEST", "e^theta_PEST_v|PEST"],
+)
+def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rv_v|PEST"] = dot(data["e^rho"], data["e^theta_PEST_v|PEST"]) + dot(
+        data["e^rho_v|PEST"], data["e^theta_PEST"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rz_z|PEST",
+    label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Toroidal element of contravariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^zeta", "e^rho_z|PEST", "e^zeta_z|PEST"],
+)
+def _g_sup_rz_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rz_z|PEST"] = dot(data["e^rho"], data["e^zeta_z|PEST"]) + dot(
+        data["e^rho_z|PEST"], data["e^zeta"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rz_v|PEST",
+    label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
+    units="m^{2}",
+    units_long="square meters",
+    description="Radial/Toroidal element of contrvariant metric tensor"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_v|PEST", "e^zeta_v|PEST", "e^zeta"],
+)
+def _g_sup_rz_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rz_v|PEST"] = dot(data["e^rho"], data["e^zeta_v|PEST"]) + dot(
+        data["e^rho_v|PEST"], data["e^zeta"]
     )
     return data
 

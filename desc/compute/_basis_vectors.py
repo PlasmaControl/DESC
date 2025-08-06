@@ -589,6 +589,7 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_tt",
     ],
+    aliases=["e^theta_PEST_v|PEST"],
 )
 def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     data["e^vartheta_v|PEST"] = (
@@ -623,6 +624,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_zz",
     ],
+    aliases=["e^theta_PEST_z|PEST"],
 )
 def _e_sup_vartheta_z_PEST(params, transforms, profiles, data, **kwargs):
     data["e^vartheta_z|PEST"] = (

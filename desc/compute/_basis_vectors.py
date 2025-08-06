@@ -1330,7 +1330,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data=["e^zeta_t", "theta_PEST_t"],
 )
 def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^zeta_v"] = data["e^zeta_t"] / data["theta_PEST_t"][:, None]
+    data["e^zeta_v|PEST"] = data["e^zeta_t"] / data["theta_PEST_t"][:, None]
     return data
 
 

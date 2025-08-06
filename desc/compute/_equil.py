@@ -104,6 +104,115 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta_PEST_v|PEST",
+    label="\\partial_{\\vartheta} J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST poloidal component of plasma current density"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J^theta_t",
+        "J^theta",
+        "J^zeta",
+        "J^zeta_t",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_tt",
+    ],
+)
+def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST_v|PEST"] = (
+        data["J^theta_t"] * data["theta_PEST_t"][:, None]
+        + data["J^theta"] * data["theta_PEST_tt"][:, None]
+        + data["J^zeta_t"] * data["theta_PEST_z"]
+        + data["J^zeta"] * data["theta_PEST_tz"][:, None]
+    ) / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_PEST_z|PEST",
+    label="\\partial_{\\zeta} J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST poloidal component of plasma current density"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J^theta_z",
+        "J^zeta_z",
+        "J^theta",
+        "J^zeta",
+        "J^theta_PEST_v|PEST",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_zz",
+    ],
+)
+def _J_sup_theta_PEST_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST_z|PEST"] = data["J^theta_z"] * data["theta_PEST_t"][:, None]
+    (
+        +data["J^theta"] * data["theta_PEST_tz"][:, None]
+        + data["J^zeta_z"] * data["theta_PEST_z"][:, None]
+    )
+    +data["J^zeta"] * data["theta_PEST_zz"][:, None]
+    -data["J^theta_PEST_v|PEST"] * data["theta_PEST_z"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_v|PEST",
+    label="\\partial_{\\vartheta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST toroidal component of plasma current density"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^zeta_t", "theta_PEST_t"],
+)
+def _J_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_v|PEST"] = data["J^zeta_t"] / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_z|PEST",
+    label="\\partial_{\\vartheta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST toroidal component of plasma current density"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^zeta_t", "J^zeta_z", "theta_PEST_t", "theta_PEST_z"],
+)
+def _J_sup_zeta_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_z|PEST"] = (
+        data["J^zeta_z"]
+        - data["J^zeta_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
+    )
+    return data
+
+
+@register_compute_fun(
     name="J^theta_t",
     label="\\partial_{\\theta} J^{\\theta} \\sqrt{g}",
     units="A",

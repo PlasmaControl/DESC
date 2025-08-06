@@ -187,7 +187,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "sqrt(g)_t", "B_theta_r", "B_rho_t", "B_theta_rt", "B_theta_tt"],
+    data=["sqrt(g)", "sqrt(g)_t", "B_theta_r", "B_rho_t", "B_rho_tt", "B_theta_rt"],
     # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rt",
     # "B_theta_rr", "B_rho_rt", "B_theta_rrt", "B_rho_rtt"],
 )
@@ -195,7 +195,7 @@ def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["J^zeta_t"] = (
         safediv(data["B_theta_rt"] - data["B_rho_tt"], data["sqrt(g)"])
         - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
-        * data["sqrt(g)_t"],
+        * data["sqrt(g)_t"]
     ) / mu_0
     return data
 
@@ -212,7 +212,7 @@ def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "sqrt(g)_z", "B_theta_r", "B_rho_t", "B_theta_rz", "B_theta_tz"],
+    data=["sqrt(g)", "sqrt(g)_z", "B_theta_r", "B_rho_t", "B_theta_rz", "B_rho_tz"],
     # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rz", "B_theta_rr",
     # --no-verify "B_rho_rt", "B_theta_rrz", "B_rho_rtz"],
 )
@@ -220,7 +220,7 @@ def _J_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["J^zeta_z"] = (
         safediv(data["B_theta_rz"] - data["B_rho_tz"], data["sqrt(g)"])
         - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
-        * data["sqrt(g)_z"],
+        * data["sqrt(g)_z"]
     ) / mu_0
     return data
 

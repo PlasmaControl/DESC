@@ -272,6 +272,7 @@ class FourierChebyshevSeries(IOAble):
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         # Add axis to broadcast against multiple x values.
         cheb = cheb_from_dct(
+            # TODO: Benchmark replacing this with nufft. Prediction: Small improvement
             irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
         )
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)
@@ -464,7 +465,7 @@ class PiecewiseChebyshevSeries(IOAble):
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        # TODO: Fast multipoint method to evaluate exactly. Reduces to FFT. Cost is
+        # Fast multipoint method would be better. Reduces to FFT. Cost is
         # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
         # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
         df_dy_sign = jnp.sign(
@@ -476,7 +477,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, mask, df_dy_sign
 
-    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples
@@ -499,9 +500,7 @@ class PiecewiseChebyshevSeries(IOAble):
 
             If not specified, then all intersects are returned. If there were fewer
             intersects detected than the size of the last axis of the returned arrays,
-            then that axis is padded with ``pad_value``.
-        pad_value : float
-            Value with which to pad array. Default 0.
+            then that axis is padded with zero.
 
         Returns
         -------
@@ -545,9 +544,10 @@ class PiecewiseChebyshevSeries(IOAble):
         z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
 
         mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set outside mask to same value so integration is over set of measure zero.
-        z1 = jnp.where(mask, z1, pad_value)
-        z2 = jnp.where(mask, z2, pad_value)
+        # Set outside mask to 0 so integration is over set of measure zero
+        # and basis functions are faster to evaluate in downstream routines.
+        z1 = jnp.where(mask, z1, 0.0)
+        z2 = jnp.where(mask, z2, 0.0)
         return z1, z2
 
     def _check_shape(self, z1, z2, k):

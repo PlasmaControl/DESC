@@ -302,7 +302,7 @@ class Bounce2D(Bounce):
         Y_B=None,
         alpha=jnp.array([0.0]),
         num_transit=20,
-        quad=default_quad,
+        quad=None,
         *,
         automorphism=None,
         Bref=1.0,
@@ -315,13 +315,16 @@ class Bounce2D(Bounce):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
-        self._NFP = grid.NFP
-        self._m = grid.num_theta
-        self._n = grid.num_zeta
-        self._n_modes, self._m_modes = rfft2_modes(
-            self._n, self._m, domain_fft=(0, 2 * jnp.pi / grid.NFP)
-        )
+        quad = setdefault(quad, default_quad)
+
         self._x, self._w = get_quadrature(quad, automorphism)
+        self._NFP = grid.NFP
+        self._num_theta = grid.num_theta
+        self._n_modes, self._m_modes = rfft2_modes(
+            grid.num_zeta, grid.num_theta, domain_fft=(0, 2 * jnp.pi / grid.NFP)
+        )
+        self._flq_vander = None
+        self._flq_theta_vander = None
 
         self._c = {
             "|B|": data["|B|"] / Bref,
@@ -346,7 +349,7 @@ class Bounce2D(Bounce):
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
-                self._m,
+                self._num_theta,
                 self._m_modes,
                 self._n_modes,
                 self._NFP,
@@ -357,7 +360,7 @@ class Bounce2D(Bounce):
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
-                self._m,
+                self._num_theta,
                 self._m_modes,
                 self._n_modes,
                 self._NFP,
@@ -466,6 +469,10 @@ class Bounce2D(Bounce):
             **kwargs,
         )[:, 1].reshape(-1, X, Y)
 
+    @property
+    def _num_zeta(self):
+        return self._n_modes.size
+
     def _swap_pitch(self, pitch_inv):
         # Move num pitch axis to front so that the num rho axis broadcasts with
         # the spectral coefficients of the Fourier series defined on that surface.
@@ -530,7 +537,7 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO after (#1243): One application of Newton on Fourier series B - 1/λ.
+        # TODO after (#1243): One application of Newton on Fourier series |B|-1/λ.
         #  Need Fourier coefficients of lambda, but that is already known.
         #  Then can use less resolution for the global root finding algorithm
         #  and rely on the local one once good neighbourhood is found.
@@ -787,7 +794,7 @@ class Bounce2D(Bounce):
         errorif(
             isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
             NotImplementedError,
-            msg="Set spline to true until implemented.",
+            "Set spline to true until implemented.",
         )
         return _swap_shape(
             interp_fft_to_argmin(
@@ -797,9 +804,9 @@ class Bounce2D(Bounce):
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
-                m=self._m,
-                n=self._n,
-                NFP=self._NFP,
+                self._num_theta,
+                self._num_zeta,
+                self._NFP,
             )
         )
 
@@ -823,47 +830,68 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
+        dz_dx = jnp.pi
         # Integrating an analytic oscillatory map so a high order quadrature is ideal.
         # Difficult to pick the right frequency for Filon quadrature in general, which
         # would work best, especially at high NFP. Gauss-Legendre is superior to
         # Clenshaw-Curtis for smooth oscillatory maps. Prolate spheroidal wave
         # function quadrature would be an improvement.
-        deg = (
-            self._c["B(z)"].Y
-            if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
-            else self._c["knots"].size // self._c["T(z)"].X
-        ) // 2
-        x, w = leggauss(deg) if quad is None else quad
-        dz_dx = jnp.pi
+        if quad is None:
+            deg = (
+                self._c["B(z)"].Y
+                if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
+                else self._c["knots"].size // self._c["T(z)"].X
+            ) // 2
+            x, w = leggauss(deg)
+        else:
+            x, w = quad
 
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
         # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| is quadrature
         # resolution. Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
-
-        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
-        # Shape broadcasts with (num rho, num zeta, m)
-        par_sum = ifft_non_uniform(
-            zeta[:, jnp.newaxis],
-            self._c["B^zeta"],  # Shape broadcasts with (num rho, 1, n, m).
-            domain=(0, 2 * jnp.pi / self._NFP),
-            axis=-2,
-            _modes=self._n_modes,
-        )
-        # θ at roots of Legendre polynomial in ζ
-        theta = idct_non_uniform(
-            x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
-        )
-        par_sum = irfft_non_uniform(
-            theta, par_sum[..., jnp.newaxis, :, :], self._m, _modes=self._m_modes
+        B_sup_zeta = irfft_non_uniform(
+            # θ at ζ = 2π x along field line
+            idct_non_uniform(
+                x,
+                self._c["T(z)"].cheb[..., jnp.newaxis, :],
+                self._c["T(z)"].Y,
+                vander=self._flq_theta_vander,
+            ),
+            # shape broadcasts with (num rho, 1, |𝛇|, m)
+            self._flq_partial_sum(x)[..., jnp.newaxis, :, :],
+            self._num_theta,
+            _modes=self._m_modes,
         )
         # B⋅∇ζ never vanishes, and hence has the same sign on a flux surface,
         # so we may take absolute value after the reduction.
-        return jnp.abs(jnp.reciprocal(par_sum).dot(w).sum(-1).mean(0)) * dz_dx
+        return jnp.abs(jnp.reciprocal(B_sup_zeta).dot(w).sum(-1).mean(0)) * dz_dx
         # Simple mean over α because when the toroidal angle extends
         # beyond one transit we need to weight all field lines uniformly,
         # regardless of their area wrt α.
+
+    def _flq_partial_sum(self, x):
+        return ifft_non_uniform(
+            (
+                bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
+                if self._flq_vander is None
+                else None
+            ),
+            self._c["B^zeta"],
+            domain=(0, 2 * jnp.pi / self._NFP),
+            axis=-2,
+            vander=self._flq_vander,
+        )
+
+    @staticmethod
+    def _build_flq_vander(x, n_modes):
+        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
+        return jnp.exp(1j * n_modes * zeta)[..., jnp.newaxis]
+
+    @staticmethod
+    def _build_flq_theta_vander(x, num_cheb_modes):
+        return jnp.cos(jnp.arange(num_cheb_modes) * jnp.arccos(x)[:, jnp.newaxis])
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.
@@ -1000,7 +1028,9 @@ class Bounce1D(Bounce):
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
         as knots to construct splines. A reference knot density is 100 knots per
-        toroidal transit.
+        toroidal transit. Also, the minimum value of the zeta coordinate must be
+        greater than the sentinel value of ``-1e5``. If this requirement is limiting
+        make a GitHub issue requesting to lower this value.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce1D.required_names``.
@@ -1034,7 +1064,7 @@ class Bounce1D(Bounce):
         self,
         grid,
         data,
-        quad=default_quad,
+        quad=None,
         *,
         automorphism=None,
         Bref=1.0,
@@ -1044,6 +1074,9 @@ class Bounce1D(Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
+        quad = setdefault(quad, default_quad)
+
+        self._x, self._w = get_quadrature(quad, automorphism)
         self._data = {
             # Strictly increasing zeta knots enforces dζ > 0.
             # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
@@ -1060,7 +1093,6 @@ class Bounce1D(Bounce):
         if not is_reshaped:
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
-        self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
         # Note it is simple to do FFT across field line axis, and spline

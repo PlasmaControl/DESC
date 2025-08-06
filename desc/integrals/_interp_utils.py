@@ -127,7 +127,7 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None)
     return (vander * a).real.sum(axis=-1)
 
 
-def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
+def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, vander=None):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -141,8 +141,9 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
-    _modes : jnp.ndarray
-        Supply to avoid computing the modes.
+    vander : jnp.ndarray
+        Precomputed transform matrix.
+        If given returns ``(vander*a).sum(axis)``.
 
     Returns
     -------
@@ -150,12 +151,13 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         Function value at query points.
 
     """
-    if _modes is None:
+    if vander is None:
         n = a.shape[axis]
-        _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-    a = jnp.moveaxis(a, axis, -1)
-    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
-    return (vander * a).sum(axis=-1)
+        n = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+        vander = jnp.exp(1j * n * (xq - domain[0])[..., jnp.newaxis])
+        a = jnp.moveaxis(a, axis, -1)
+        axis = -1
+    return (vander * a).sum(axis)
 
 
 def interp_rfft2(
@@ -476,7 +478,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     )
 
 
-def idct_non_uniform(xq, a, n, axis=-1):
+def idct_non_uniform(xq, a, n, axis=-1, vander=None):
     """Evaluate discrete Chebyshev transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
 
     Parameters
@@ -490,6 +492,9 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Spectral resolution of ``a``.
     axis : int
         Axis along which to transform.
+    vander : jnp.ndarray
+        Precomputed transform matrix.
+        If given returns ``(vander*a).sum(axis)``.
 
     Returns
     -------
@@ -497,13 +502,12 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
-    # TODO: Fast multipoint method to evaluate exactly. Reduces to FFT. Cost
-    # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
-    # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-    n = jnp.arange(n)
-    a = jnp.moveaxis(a, axis, -1)
-    # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
-    return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
+    if vander is None:
+        vander = jnp.cos(jnp.arange(n) * jnp.arccos(xq)[..., jnp.newaxis])
+        a = jnp.moveaxis(a, axis, -1)
+        axis = -1
+    # Better than Clenshaw recursion ``chebval(xq,a,tensor=False)`` on GPU.
+    return (vander * a).sum(axis)
 
 
 # Warning: method must be specified as keyword argument.

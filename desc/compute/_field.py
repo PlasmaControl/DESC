@@ -19,9 +19,16 @@ from ..integrals.surface_integral import (
     surface_max,
     surface_min,
 )
-from ..utils import cross, dot, safediv, safenorm
+from ..utils import (
+    cross,
+    dot,
+    safediv,
+    safenorm,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz,
+)
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
 
 @register_compute_fun(

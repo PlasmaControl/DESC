@@ -10,6 +10,7 @@ New Features
 - Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
 - Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
+- Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
 - Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
 - `desc.magnetic_fields.field_line_integrate` now integrates the field line always in the given `phis` direction, and `phis` will always correspond to the physical toroidal angle (instead of time like coordinate previously). Previous implementation might have caused confusion about the output positions, especially when the magnetic field has negative toroidal component.
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
@@ -23,6 +24,8 @@ Bug Fixes
 - Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
 - Fixes bugs in ideal ballooning stability and Newcomb ballooning metrics where the computation mixed data between field lines.
 
+Backend
+- Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
 
 v0.14.2
 -------

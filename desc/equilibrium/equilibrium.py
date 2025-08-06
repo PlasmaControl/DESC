@@ -20,7 +20,6 @@ from desc.basis import (
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -29,7 +28,8 @@ from desc.compute.utils import (
     get_transforms,
 )
 from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
-#from desc.compute.extend_flux_coords import build_extended_coords, metric
+
+# from desc.compute.extend_flux_coords import build_extended_coords, metric
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -37,7 +37,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
-from desc.io import IOAble
+from desc.io import IOAble, save_bmw_format
 from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
 from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
@@ -65,6 +65,9 @@ from desc.utils import (
     only1,
     setdefault,
     warnif,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz_vec
 )
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
@@ -177,7 +180,23 @@ class Equilibrium(Optimizable, _MagneticField):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
+    _static_attrs = Optimizable._static_attrs + [
+        "_sym",
+        "_R_sym",
+        "_Z_sym",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_spectral_indexing",
+        "_bdry_mode",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -982,43 +1001,27 @@ class Equilibrium(Optimizable, _MagneticField):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        deps_after_0d = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d
+            )
+            + names
         )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep
-            for dep in deps
-            if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d
+            if is_1dr_rad_grid(dep) and dep not in need_src_deps
         }
+        deps_after_0d_1dr = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d | dep1dr
+            )
+            + names
+        )
         dep1dz = {
             dep
-            for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
-            if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d_1dr
+            if is_1dz_tor_grid(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -1031,9 +1034,11 @@ class Equilibrium(Optimizable, _MagneticField):
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1dr = calc1dz = False
+                calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1dr = calc1dz = False
+                calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
         else:
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
@@ -1069,13 +1074,14 @@ class Equilibrium(Optimizable, _MagneticField):
                 )
                 warnif(
                     # if need more toroidal resolution
-                    "z" in req and grid.N < self.N_grid
+                    "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
                     and not (
                         override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
                     ),
                     ResolutionWarning,
-                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
+                    f"< {self._N_grid}*{self.NFP}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -1238,16 +1244,14 @@ class Equilibrium(Optimizable, _MagneticField):
         transforms=None,
         chunk_size=50,
         method="biot-savart",
-        L=None,
-        M=8,
-        N=None,
         out_grid=None,
         A_grid=None,
         R_bounds=[5, 11],
         phi_bounds=None,
         Z_bounds=[-5, 5],
         return_A=False,
-        support=1E-5
+        support=1e-5,
+        return_data=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1261,18 +1265,20 @@ class Equilibrium(Optimizable, _MagneticField):
             "biot-savart", "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates  the magnetic field directly from the
             current density, whereas "vector potential" first calculates A, and then
-            takes curl(A) to ensure a divergence-free field.
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
+            fastest method and accurate at high resolution, but doesn't work inside the 
+            plasma.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating B from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+            Grid used to discretize MagneticField object. Should NOT include
+            endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
         L, M, N: int
             Only used if method == "vector potential".
             Spectral resolution to use when taking the curl of the vector potential
@@ -1339,9 +1345,15 @@ class Equilibrium(Optimizable, _MagneticField):
                 # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
                 source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
                 source_xyz = rpz2xyz(source_rpz)
+
                 J = rpz2xyz_vec(data["J"], phi=phi)
                 fj = biot_savart_general(
-                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
+                    eval_xyz,
+                    source_xyz,
+                    J=J,
+                    dV=dV,
+                    chunk_size=chunk_size,
+                    support=support,
                 )
                 f += fj
                 return f
@@ -1360,14 +1372,15 @@ class Equilibrium(Optimizable, _MagneticField):
                 )
             kernel = _kernel_biot_savart
 
-            source_data = self.compute(kernel.keys,
-                        grid=source_grid,
-                        params=params,
-                        transforms=transforms,
-                        override_grid=False
+            data = self.compute(
+                kernel.keys,
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                override_grid=False,
             )
             B = integrate_surface(
-                coords, source_data, source_grid, kernel, chunk_size=chunk_size
+                coords, data, source_grid, kernel, chunk_size=chunk_size
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
@@ -1392,8 +1405,9 @@ class Equilibrium(Optimizable, _MagneticField):
                     params=params,
                     basis=basis,
                     transforms=transforms,
-                    support=support
+                    support=support,
                 )
+
                 if source_grid is None:
                     self.A_grid = A_grid
                     self.A_coords = A_coords
@@ -1402,22 +1416,28 @@ class Equilibrium(Optimizable, _MagneticField):
                 A = self.vector_potential
 
             # Default spectral resolution parameters
-            if L is None:
-                L = A_grid.L
-            if M is None:
-                M = A_grid.M
-            if N is None:
-                N = A_grid.N
+            L = A_grid.L
+            M = A_grid.M
+            N = A_grid.N
 
             # Build spectral transforms
-            basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
-            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False, method="rpz")
+            basis_obj = DoubleChebyshevFourierBasis(L, M, N, self.NFP)
+            in_transform = Transform(
+                A_grid, basis_obj, build_pinv=True, build=False, method="rpz"
+            )
             if out_grid is None:
                 out_grid = Grid((coords - shifts) / scales)
-            if coords is None:
+                method = "direct1"
+            if coords is None and out_grid.is_meshgrid:
                 coords = out_grid.nodes * scales + shifts
+                method = "directrpz"
             out_transform = Transform(
-                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
+                out_grid,
+                basis_obj,
+                build_pinv=False,
+                build=True,
+                derivs=1,
+                method=method,
             )
 
             A = self.compute_magnetic_vector_potential(
@@ -1427,7 +1447,10 @@ class Equilibrium(Optimizable, _MagneticField):
                 params=params,
                 basis=basis,
                 transforms=transforms,
+                return_data=return_data,
             )
+            if return_data:
+                A, data = A
             if basis.lower == "xyz":
                 A_rpz = xyz2rpz_vec(A, phi=coords[:, 1])
             else:
@@ -1439,10 +1462,16 @@ class Equilibrium(Optimizable, _MagneticField):
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
             if return_A:
-                B = (B, A)
-        return B
+                if not return_data:
+                    data = {}
+                data["A_coords_rpz"] = A_coords
+                data["A"] = A
+                return B, data
+        if return_data:
+            return B, data
+        else:
+            return B
 
-    
     def compute_magnetic_vector_potential(
         self,
         coords,
@@ -1451,7 +1480,8 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
-        support=1E-5
+        support=1e-5,
+        return_data=False,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1464,8 +1494,7 @@ class Equilibrium(Optimizable, _MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating A from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+            Grid used to discretize MagneticField object. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
@@ -1507,9 +1536,11 @@ class Equilibrium(Optimizable, _MagneticField):
             # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
             source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
             source_xyz = rpz2xyz(source_rpz)
+            if return_data:
+                data["xyz"] = source_xyz
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,support=support
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
             )
             f += fj
             return f
@@ -1517,84 +1548,10 @@ class Equilibrium(Optimizable, _MagneticField):
         A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
-        return A
-    
-    def map_coordinates(
-        self,
-        coords,
-        inbasis,
-        outbasis=("rho", "theta", "zeta"),
-        guess=None,
-        params=None,
-        period=None,
-        tol=1e-6,
-        maxiter=30,
-        full_output=False,
-        **kwargs,
-    ):
-        """Transform coordinates given in ``inbasis`` to ``outbasis``.
-
-        Solves for the computational coordinates that correspond to ``inbasis``,
-        then evaluates ``outbasis`` at those locations.
-
-        Performance can often improve significantly given a reasonable initial guess.
-
-        Parameters
-        ----------
-        coords : ndarray
-            Shape (k, 3).
-            2D array of input coordinates. Each row is a different point in space.
-        inbasis, outbasis : tuple of str
-            Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
-            ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
-            same as the compute function data key.
-        guess : jnp.ndarray
-            Shape (k, 3).
-            Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
-            based on ``inbasis`` or a nearest neighbor search on a grid may be used.
-            In general, this must be given to be compatible with JIT.
-        params : dict
-            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
-        period : tuple of float
-            Assumed periodicity for each quantity in ``inbasis``.
-            Use ``np.inf`` to denote no periodicity.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
-            ``alpha``.
-
-        Returns
-        -------
-        out : jnp.ndarray
-            Shape (k, 3).
-            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
-            returned for coordinates where root finding did not succeed, possibly
-            because the coordinate is not in the plasma volume.
-        info : tuple
-            2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True.
-
-        """
-        return map_coordinates(
-            self,
-            coords,
-            inbasis,
-            outbasis,
-            guess,
-            params,
-            period,
-            tol,
-            maxiter,
-            full_output,
-            **kwargs,
-        )
+        if return_data:
+            return A, data
+        else:
+            return A
 
     def _get_rtz_grid(
         self,
@@ -1767,6 +1724,106 @@ class Equilibrium(Optimizable, _MagneticField):
 
         """
         return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+
+    def save_bmw_format(
+        self,
+        path,
+        Rmin=5,
+        Rmax=11,
+        Zmin=-5,
+        Zmax=5,
+        nR=101,
+        nZ=101,
+        nphi=90,
+        save_vector_potential=True,
+        chunk_size=50,
+        source_grid=None,
+        A_source_grid=None,
+        method="biot-savart",
+        curl_A_grid=None,
+        series=3,
+    ):
+        """
+        Save the magnetic field produced by the plasma current in the same file format as BMW.
+
+        Parameters
+        ----------
+        Rmin, Rmax, Zmin, Zmax : float, optional
+            Bounds for the R and Z coordinates of the desired evaluation points
+        nR, nZ, nphi : int, optional
+            Desired number of evaluation points in the radial, vertical, and toroidal
+            directions.
+        save_vector_potential : bool, optional
+            Whether to also calculate the vector potential and save it as well
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object. Should NOT include 
+            endpoint at 2pi.
+        A_source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object for calculating A.
+            Defaults to the source_grid unless method == 'virtual casing'.
+            Should NOT include endpoint at 2pi.
+        method: string
+            "biot-savart", "virtual casing" or "vector potential". "biot-savart"
+            and "virtual casing" calculates the magnetic field directly from the
+            current density, whereas "vector potential" first calculates A, and then
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
+            fastest method and accurate at high resolution, but doesn't work inside the 
+            plasma.
+            if passing method='virtual casing' and save_vector_potential=False, the
+            final dataset will not contain the source current density values (which BMW 
+            normally contains) since the current density is not directly computed in the
+            virtual casing method.
+        curl_A_grid : Grid
+            If using method='vector potential', the grid that A will be evaluated on in 
+            order to take B=curl(A). Does not affect the grid on which the vector potential 
+            is evaluated to be saved.
+        """
+        R = np.linspace(Rmin, Rmax, nR)
+        Z = np.linspace(Zmin, Zmax, nZ)
+        phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
+        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
+        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+
+        B, data = self.compute_magnetic_field(
+            grid,
+            source_grid=source_grid,
+            chunk_size=chunk_size,
+            method=method,
+            A_grid=curl_A_grid,
+            return_data=True,
+        )
+
+        if save_vector_potential:
+            if method != "virtual casing" and A_source_grid is None:
+                A_source_grid = source_grid
+            A, data = self.compute_magnetic_vector_potential(
+                grid,
+                chunk_size=chunk_size,
+                source_grid=A_source_grid,
+                return_data=True,
+            )
+        else:
+            A = None
+        save_bmw_format(
+            path,
+            B=B,
+            Rmin=Rmin,
+            Rmax=Rmax,
+            Zmin=Zmin,
+            Zmax=Zmax,
+            source_data=data,
+            source_grid=source_grid,
+            nR=nR,
+            nZ=nZ,
+            nphi=nphi,
+            NFP=self.NFP,
+            A=A,
+            series=series,
+        )
 
     @property
     def surface(self):

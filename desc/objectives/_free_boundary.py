@@ -63,6 +63,12 @@ class VacuumBoundaryError(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+    ]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: "
@@ -436,6 +442,17 @@ class BoundaryError(_Objective):
         objective = BoundaryError(eq, field)
 
     """
+
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+        "_q",
+        "_sheet_current",
+        "_sheet_data_keys",
+        "_use_same_grid",
+    ]
 
     _scalar = False
     _linear = False

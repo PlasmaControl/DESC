@@ -1340,6 +1340,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
@@ -1351,7 +1352,7 @@ class Equilibrium(IOAble, Optimizable):
         alpha,
         zeta,
         L_lmn,
-        L,
+        lmbda,
         theta0=None,
         period=np.inf,
         tol=1e-6,
@@ -1359,7 +1360,7 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         return _map_clebsch_coordinates(
-            iota, alpha, zeta, L_lmn, L, theta0, period, tol, maxiter, **kwargs
+            iota, alpha, zeta, L_lmn, lmbda, theta0, period, tol, maxiter, **kwargs
         )
 
     @execute_on_cpu

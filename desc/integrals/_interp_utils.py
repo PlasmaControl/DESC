@@ -848,7 +848,6 @@ def rfft_to_trig(a, n, axis=-1):
 
     """
     is_even = (n % 2) == 0
-    # sin(nx) coefficients
     an = -2 * jnp.flip(
         take(
             a.imag,
@@ -863,7 +862,6 @@ def rfft_to_trig(a, n, axis=-1):
         i = (0, -1)
     else:
         i = 0
-    # cos(nx) coefficients
     bn = a.real.at[Index.get(i, axis, a.ndim)].divide(2) * 2
     h = jnp.concatenate([an, bn], axis=axis)
     assert h.shape[axis] == n

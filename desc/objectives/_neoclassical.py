@@ -275,7 +275,7 @@ class EffectiveRipple(_Objective):
             alpha=constants["X"],
             zeta=constants["Y"],
             L_lmn=params["L_lmn"],
-            L=constants["lambda"],
+            lmbda=constants["lambda"],
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
         )[..., ::-1]
@@ -346,7 +346,7 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
         )
         # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
+        #  the note in coords._partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

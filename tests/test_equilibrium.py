@@ -99,15 +99,15 @@ def test_map_clebsch_coordinates():
     )
     with warnings.catch_warnings():
         warnings.filterwarnings("default", "Unequal number of field periods")
-        L = get_transforms(
+        lmbda = get_transforms(
             "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
         )["L"]
-    assert L.basis.NFP == eq.NFP
+    assert lmbda.basis.NFP == eq.NFP
     np.testing.assert_allclose(
-        L.grid.meshgrid_reshape(L.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
     )
     np.testing.assert_allclose(
-        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, L)[..., ::-1],
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
         grid.meshgrid_reshape(out[:, 1], "raz"),
     )
 

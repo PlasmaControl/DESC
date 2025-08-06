@@ -455,7 +455,7 @@ class Bounce2D(Bounce):
 
         """
         # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
+        #  the note in coords._partial_sum is resolved.
         if clebsch is None:
             clebsch = FourierChebyshevSeries.nodes(X, Y, rho, domain=(0, 2 * jnp.pi))
         if iota is not None:
@@ -724,7 +724,7 @@ class Bounce2D(Bounce):
     def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
-        # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
+        # ζ,θ ∈ ℝ coordinates of quadrature points
         zeta = flatten_matrix(
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
@@ -852,14 +852,12 @@ class Bounce2D(Bounce):
         # resolution. Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
         B_sup_zeta = irfft_non_uniform(
-            # θ at ζ = 2π x along field line
             idct_non_uniform(
                 x,
                 self._c["T(z)"].cheb[..., jnp.newaxis, :],
                 self._c["T(z)"].Y,
                 vander=self._flq_theta_vander,
             ),
-            # shape broadcasts with (num rho, 1, |𝛇|, m)
             self._flq_partial_sum(x)[..., jnp.newaxis, :, :],
             self._num_theta,
             _modes=self._m_modes,
@@ -1094,11 +1092,6 @@ class Bounce1D(Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        # Compute local splines.
-        # Note it is simple to do FFT across field line axis, and spline
-        # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
-        # The point of Bounce2D is to do such a 2D interpolation without
-        # rebuilding DESC transforms each time an objective is computed.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
         # Shape is (num rho, num alpha, N - 1, -1).
         self._B = jnp.moveaxis(
@@ -1173,8 +1166,8 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        # if rho axis exists, then add alpha axis
         if jnp.ndim(pitch_inv) == 2:
+            # if rho axis exists, then add alpha axis
             pitch_inv = pitch_inv[:, jnp.newaxis]
         return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
 
@@ -1288,8 +1281,8 @@ class Bounce1D(Bounce):
             names = [names]
         x, w = self._x, self._w if quad is None else quad
 
-        # if rho axis exists, then add alpha axis
         if jnp.ndim(pitch_inv) == 2:
+            # if rho axis exists, then add alpha axis
             pitch_inv = pitch_inv[:, jnp.newaxis]
         # add axis to broadcast against quadrature points
         pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
@@ -1312,8 +1305,9 @@ class Bounce1D(Bounce):
                 batch=True,
             )
         else:
-            # Perform integrals for a particular field line and pitch one at a time.
-            def loop(points):  # over num well axis
+
+            def loop(points):
+                """Integrate one well at a time."""
                 return self._integrate(
                     x,
                     w,
@@ -1358,8 +1352,6 @@ class Bounce1D(Bounce):
             self._data["|B|_z|r,a"][..., jnp.newaxis, :],
         )
 
-        # Spline each function separately so that operations in the integrand
-        # that do not preserve smoothness can be captured.
         data = {
             name: interp1d_vec(
                 zeta, self._zeta, data[name][..., jnp.newaxis, :], method=method

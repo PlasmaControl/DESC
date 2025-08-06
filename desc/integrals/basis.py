@@ -61,14 +61,12 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     This is used there to ensure the domains of integration are magnetic wells.
 
     """
-    # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
-    # For the integrals to be over wells, it is required that the first intersect
-    # has a non-positive derivative. Now, by continuity,
-    # ``df_dy_sign[...,k]<=0`` implies ``df_dy_sign[...,k+1]>=0``,
-    # so there can be at most one inversion, and if it exists, the inversion
-    # must be at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under an edge case of a series of
-    # inflection points.
+    # The pairs y1 and y2 are boundaries of an integral only if y1 <= y2. For the
+    # to be over wells, it is required that the first intersect has a non-positive
+    # derivative. Now, by continuity, df_dy[...,k]<=0 implies df_dy[...,k+1]>=0, so
+    # there can be at most one inversion, and if it exists, it must be at the first
+    # pair. To correct the inversion, it suffices to disqualify the first intersect
+    # as a right boundary, except under an edge case of a series of inflection points.
     idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
         (df_dy_sign[idx[0]] == 0)
@@ -76,8 +74,8 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
         & is_intersect[idx[0]]
         & is_intersect[idx[1]]
         # In theory, we need to keep propagating this edge case, e.g.
-        # (df_dy_sign[..., 1] < 0) | (
-        #     (df_dy_sign[..., 1] == 0) & (df_dy_sign[..., 2] < 0)...
+        # (df_dy[..., 1] < 0) | (
+        #     (df_dy[..., 1] == 0) & (df_dy[..., 2] < 0)...
         # ).
         # At each step, the likelihood that an intersection has already been lost
         # due to floating point errors grows, so the real solution is to pick a less
@@ -148,7 +146,7 @@ class FourierChebyshevSeries(IOAble):
     def __init__(self, f, domain=(-1, 1), lobatto=False):
         """Interpolate Fourier-Chebyshev series to ``f``."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
+        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
         self.X = f.shape[-2]
         self.Y = f.shape[-1]
         self.domain = domain
@@ -544,7 +542,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
 
         mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set outside mask to 0 so integration is over set of measure zero
+        # Set to zero so integration is over set of measure zero
         # and basis functions are faster to evaluate in downstream routines.
         z1 = jnp.where(mask, z1, 0.0)
         z2 = jnp.where(mask, z2, 0.0)
@@ -604,7 +602,6 @@ class PiecewiseChebyshevSeries(IOAble):
         if not (plot or jnp.any(err_1 | err_2 | err_3)):
             return plots
 
-        # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
         mask, z1, z2, f_midpoint = map(atleast_3d_mid, (mask, z1, z2, f_midpoint))
         err_1, err_2, err_3 = map(atleast_2d_end, (err_1, err_2, err_3))

@@ -390,7 +390,7 @@ def _map_PEST_coordinates(
     return out
 
 
-def _partial_sum(L, L_lmn, W, W_lmn, iota):
+def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
     TODO(#1243) Do proper partial summation once the DESC
@@ -399,16 +399,16 @@ def _partial_sum(L, L_lmn, W, W_lmn, iota):
 
     Parameters
     ----------
-    L : Transform
+    lmbda : Transform
         FourierZernikeBasis
     L_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for λ.
-    W : Transform
+    omega : Transform
         FourierZernikeBasis
     W_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for ω.
     iota : jnp.ndarray
-        Shape (L.grid.num_rho, )
+        Shape (lmbda.grid.num_rho, )
 
     Returns
     -------
@@ -417,20 +417,20 @@ def _partial_sum(L, L_lmn, W, W_lmn, iota):
         Shape (num rho, num zeta, num modes).
 
     """
-    grid = L.grid
+    grid = lmbda.grid
     errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
     # TODO: (#568)
     warnif(
-        grid.M > L.basis.M,
+        grid.M > lmbda.basis.M,
         ResolutionWarning,
         msg="Poloidal grid resolution is higher than necessary for coordinate mapping.",
     )
     warnif(
-        grid.M < L.basis.M,
+        grid.M < lmbda.basis.M,
         ResolutionWarning,
         msg="High frequency lambda modes will be truncated in coordinate mapping.",
     )
-    lmbda_minus_iota_omega = L.transform(L_lmn)
+    lmbda_minus_iota_omega = lmbda.transform(L_lmn)
     lmbda_minus_iota_omega = (
         rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
         .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
@@ -445,7 +445,7 @@ def _map_clebsch_coordinates(
     alpha,
     zeta,
     L_lmn,
-    L,
+    lmbda,
     theta0=None,
     period=np.inf,
     tol=1e-6,
@@ -518,7 +518,7 @@ def _map_clebsch_coordinates(
             **kwargs,
         )
 
-    c_m, modes = _partial_sum(L, L_lmn, None, None, iota)
+    c_m, modes = _partial_sum(lmbda, L_lmn, None, None, iota)
     c_m = c_m[:, jnp.newaxis]
     alpha = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
     # Assume λ − ι ω = 0 for default initial guess.

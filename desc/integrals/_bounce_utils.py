@@ -26,8 +26,7 @@ from desc.integrals.basis import (
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_matrix, setdefault, take_mask
 
-# New versions of JAX only like static sentinels.
-_sentinel = -1e5  # instead of knots[0] - 1
+_sentinel = -1e5
 
 
 def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
@@ -106,7 +105,7 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     z2 = take_mask(intersect, is_z2, size=num_well, fill_value=_sentinel)
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
-    # Set outside mask to 0 so integration is over set of measure zero
+    # Set to zero so integration is over set of measure zero
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
@@ -149,8 +148,8 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
-    # if rho axis exists, then add alpha axis
     if jnp.ndim(pitch_inv) == 2:
+        # if rho axis exists, then add alpha axis
         pitch_inv = pitch_inv[:, jnp.newaxis]
         # do not need to broadcast to full size because
         # https://jax.readthedocs.io/en/latest/notebooks/
@@ -237,7 +236,6 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
         jnp.isclose(B, 0).any() or jnp.isclose(b_sup_z, 0).any()
     ), "|B| has vanished, violating the hairy ball theorem."
 
-    # Integrals that we should be computing.
     marked = jnp.any(zeta.reshape(shape) != 0.0, axis=-1)
     goal = marked.sum()
 
@@ -255,7 +253,6 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
         for i, f_i in enumerate(f):
             _plot_check_interp(zeta, f_i.reshape(shape), name=f"f_{i}")
 
-    # Number of those integrals that were computed.
     for res in result:
         actual = jnp.sum(marked & jnp.isfinite(res))
         assert goal == actual, (
@@ -432,12 +429,6 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     assert ext.shape == g_ext.shape
     assert ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
     return ext, g_ext
-
-
-# We can use the non-differentiable argmin because we actually want the gradients
-# to accumulate through only the minimum since we are differentiating how our
-# physics objective changes wrt equilibrium perturbations not wrt which of the
-# extrema get interpolated to.
 
 
 def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
@@ -681,9 +672,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     if theta.ndim == 2:
         # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)
-    # Evaluating set of single variable maps is more efficient than evaluating
-    # multivariable map, so we project θ to a set of Chebyshev series. This is
-    # a partial summation technique.
+    # Project θ to a set of Chebyshev series. This is a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
     T.stitch()
     assert T.X == num_transit
@@ -735,11 +724,9 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander_f=None):
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     zeta = cheb_pts(Y, domain=T.domain)
-    # Shape broadcasts with (num rho, Y, m).
     f = ifft_non_uniform(
         zeta[:, jnp.newaxis], f, domain=(0, 2 * jnp.pi / NFP), axis=-2, vander=vander_f
     )
-    # f at Chebyshev points in ζ on field lines
     f = irfft_non_uniform(
         T.evaluate(Y), f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes
     )

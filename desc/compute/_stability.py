@@ -1606,6 +1606,9 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     #    eps = 1e-5
     #    return eps + (1 - eps) * (x+1)/2
 
+    # \int d\rho_s (\partialX/\partial\rho_{s}) = int d\rho f'(\rho) (\partial\rho/\partial\rho_{s}) (\partial X/\partial\rho)
+    # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
+
     dx_f = jax.grad(_f)
 
     x = legendre_lobatto_nodes(len(x0) - 1)

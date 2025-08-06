@@ -1360,7 +1360,16 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         return _map_clebsch_coordinates(
-            iota, alpha, zeta, L_lmn, lmbda, theta0, period, tol, maxiter, **kwargs
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            theta0,
+            period=period,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
         )
 
     @execute_on_cpu

@@ -607,9 +607,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     ----------
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     iota : jnp.ndarray
         Shape (num rho, ).
@@ -680,7 +678,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander_f=None):
+def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -705,7 +703,7 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander_f=None):
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
-    vander_f : jnp.ndarray
+    vander : jnp.ndarray
         Precomputed transform matrix.
 
     Returns
@@ -723,9 +721,13 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander_f=None):
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
-    zeta = cheb_pts(Y, domain=T.domain)
     f = ifft_non_uniform(
-        zeta[:, jnp.newaxis], f, domain=(0, 2 * jnp.pi / NFP), axis=-2, vander=vander_f
+        cheb_pts(Y, domain=T.domain)[:, jnp.newaxis] if vander is None else None,
+        f,
+        domain=(0, 2 * jnp.pi / NFP),
+        axis=-2,
+        modes=n_modes,
+        vander=vander,
     )
     f = irfft_non_uniform(
         T.evaluate(Y), f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes
@@ -743,7 +745,7 @@ def cubic_spline(
     n_modes,
     NFP=1,
     *,
-    vander_f=None,
+    vander_fft=None,
     vander_theta=None,
     check=False,
 ):
@@ -770,7 +772,7 @@ def cubic_spline(
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
-    vander_f : jnp.ndarray
+    vander_fft : jnp.ndarray
         Precomputed transform matrix.
     vander_theta : jnp.ndarray
         Precomputed transform matrix.
@@ -813,7 +815,8 @@ def cubic_spline(
             f,
             domain=(0, 2 * jnp.pi / NFP),
             axis=-2,
-            vander=vander_f,
+            modes=n_modes,
+            vander=vander_fft,
         )[..., jnp.newaxis, :, :]
 
     # θ at uniform ζ on field lines

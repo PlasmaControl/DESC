@@ -127,7 +127,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None)
     return (vander * a).real.sum(axis=-1)
 
 
-def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, vander=None):
+def ifft_non_uniform(
+    xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None
+):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -144,6 +146,8 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, vander=None):
     vander : jnp.ndarray
         Precomputed transform matrix.
         If given returns ``(vander*a).sum(axis)``.
+    modes : jnp.ndarray
+        Precomputed modes.
 
     Returns
     -------
@@ -152,9 +156,10 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, vander=None):
 
     """
     if vander is None:
-        n = a.shape[axis]
-        n = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-        vander = jnp.exp(1j * n * (xq - domain[0])[..., jnp.newaxis])
+        if modes is None:
+            n = a.shape[axis]
+            modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+        vander = jnp.exp(1j * modes * (xq - domain[0])[..., jnp.newaxis])
         a = jnp.moveaxis(a, axis, -1)
         axis = -1
     return (vander * a).sum(axis)

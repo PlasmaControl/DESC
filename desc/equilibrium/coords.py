@@ -440,6 +440,7 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
+@partial(jit, static_argnames=["period", "tol", "maxiter"])
 def _map_clebsch_coordinates(
     iota,
     alpha,
@@ -447,6 +448,7 @@ def _map_clebsch_coordinates(
     L_lmn,
     lmbda,
     theta0=None,
+    *,
     period=np.inf,
     tol=1e-6,
     maxiter=30,

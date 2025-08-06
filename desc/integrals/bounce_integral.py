@@ -1,5 +1,6 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
+import warnings
 from abc import ABC, abstractmethod
 
 from interpax import CubicHermiteSpline, PPoly
@@ -7,6 +8,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
 from desc.batching import batch_map
+from desc.grid import Grid, LinearGrid
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
@@ -20,6 +22,8 @@ from desc.integrals._bounce_utils import (
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
+    cheb_pts,
+    fourier_pts,
     idct_non_uniform,
     ifft_non_uniform,
     interp1d_Hermite_vec,
@@ -29,7 +33,7 @@ from desc.integrals._interp_utils import (
     rfft2_modes,
     rfft2_vander,
 )
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
+from desc.integrals.basis import PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -193,9 +197,7 @@ class Bounce2D(Bounce):
         Must include names in ``Bounce2D.required_names``.
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
@@ -311,6 +313,7 @@ class Bounce2D(Bounce):
         is_fourier=False,
         check=False,
         spline=True,
+        **kwargs,
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
@@ -323,8 +326,6 @@ class Bounce2D(Bounce):
         self._n_modes, self._m_modes = rfft2_modes(
             grid.num_zeta, grid.num_theta, domain_fft=(0, 2 * jnp.pi / grid.NFP)
         )
-        self._flq_vander = None
-        self._flq_theta_vander = None
 
         self._c = {
             "|B|": data["|B|"] / Bref,
@@ -418,7 +419,16 @@ class Bounce2D(Bounce):
         return f[..., jnp.newaxis, :, :]
 
     @staticmethod
-    def compute_theta(eq, X=16, Y=32, rho=1.0, iota=None, clebsch=None, **kwargs):
+    def compute_theta(
+        eq,
+        X=16,
+        Y=32,
+        rho=jnp.array([1.0]),
+        iota=None,
+        params=None,
+        tol=1e-7,
+        **kwargs,
+    ):
         """Return DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.
 
         Parameters
@@ -437,11 +447,12 @@ class Bounce2D(Bounce):
         iota : float or jnp.ndarray
             Shape (num rho, ).
             Optional, rotational transform on the flux surfaces to compute on.
-        clebsch : jnp.ndarray
-            Shape (num rho * X * Y, 3).
-            Optional, precomputed Clebsch coordinate tensor-product grid (ρ, α, ζ).
-            ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-            If supplied ``rho`` is ignored.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        tol : float
+            Stopping tolerance for root finding.
+            Default is ``1e-7``.
         kwargs
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
@@ -450,24 +461,47 @@ class Bounce2D(Bounce):
         -------
         theta : jnp.ndarray
             Shape (num rho, X, Y).
-            DESC coordinates θ sourced from the Clebsch coordinates
-            ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+            DESC coordinates θ.
 
         """
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in coords._partial_sum is resolved.
-        if clebsch is None:
-            clebsch = FourierChebyshevSeries.nodes(X, Y, rho, domain=(0, 2 * jnp.pi))
-        if iota is not None:
-            iota = jnp.atleast_1d(iota)
-            kwargs["iota"] = jnp.broadcast_to(iota, shape=(X * Y, iota.size)).T.ravel()
-        return eq.map_coordinates(
-            coords=clebsch,
-            inbasis=("rho", "alpha", "zeta"),
-            period=(jnp.inf, jnp.inf, jnp.inf),
-            tol=kwargs.pop("tol", 1e-7),
-            **kwargs,
-        )[:, 1].reshape(-1, X, Y)
+        from desc.compute.utils import get_profiles, get_transforms
+
+        params = setdefault(params, eq.params_dict)
+
+        if iota is None:
+            profiles = (
+                kwargs["profiles"] if "profiles" in kwargs else get_profiles("iota", eq)
+            )
+            if profiles["iota"] is None:
+                profiles["iota"] = eq.get_profile(
+                    ["iota", "iota_r"], params=params, **kwargs
+                )
+            zero = jnp.zeros_like(rho)
+            iota = profiles["iota"].compute(
+                Grid(jnp.column_stack([rho, zero, zero]), jitable=True)
+            )
+            assert iota.ndim == 1 and iota.size == rho.size
+        iota = jnp.atleast_1d(iota)
+
+        Y = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
+        lmbda = kwargs.get("lmbda", None)
+        if lmbda is None:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", "Unequal number of field periods")
+                lmbda = get_transforms(
+                    "lambda", eq, grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=Y)
+                )["L"]
+        assert lmbda.basis.NFP == eq.NFP
+
+        return eq._map_clebsch_coordinates(
+            iota=iota,
+            alpha=fourier_pts(X),
+            zeta=Y,
+            L_lmn=params["L_lmn"],
+            lmbda=lmbda,
+            period=jnp.inf,
+            tol=tol,
+        )[..., ::-1]
 
     @property
     def _num_zeta(self):
@@ -853,12 +887,9 @@ class Bounce2D(Bounce):
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
         B_sup_zeta = irfft_non_uniform(
             idct_non_uniform(
-                x,
-                self._c["T(z)"].cheb[..., jnp.newaxis, :],
-                self._c["T(z)"].Y,
-                vander=self._flq_theta_vander,
+                x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
             ),
-            self._flq_partial_sum(x)[..., jnp.newaxis, :, :],
+            self._partial_sum(x)[..., jnp.newaxis, :, :],
             self._num_theta,
             _modes=self._m_modes,
         )
@@ -869,27 +900,14 @@ class Bounce2D(Bounce):
         # beyond one transit we need to weight all field lines uniformly,
         # regardless of their area wrt α.
 
-    def _flq_partial_sum(self, x):
+    def _partial_sum(self, x):
         return ifft_non_uniform(
-            (
-                bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
-                if self._flq_vander is None
-                else None
-            ),
+            bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis],
             self._c["B^zeta"],
             domain=(0, 2 * jnp.pi / self._NFP),
             axis=-2,
-            vander=self._flq_vander,
+            modes=self._n_modes,
         )
-
-    @staticmethod
-    def _build_flq_vander(x, n_modes):
-        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
-        return jnp.exp(1j * n_modes * zeta)[..., jnp.newaxis]
-
-    @staticmethod
-    def _build_flq_theta_vander(x, num_cheb_modes):
-        return jnp.cos(jnp.arange(num_cheb_modes) * jnp.arccos(x)[:, jnp.newaxis])
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.

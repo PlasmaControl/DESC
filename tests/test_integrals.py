@@ -1548,8 +1548,7 @@ class TestBounce2D:
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         # 3. Compute input data.
         data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz", "1"],
-            grid=grid,
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)

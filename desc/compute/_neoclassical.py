@@ -15,9 +15,7 @@ from .data_index import register_compute_fun
 _bounce_doc = {
     "theta": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
         """,
     "Y_B": """int :
@@ -97,9 +95,7 @@ def _compute(
         DESC data dict.
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     grid : Grid
         Grid that can expand and compress.

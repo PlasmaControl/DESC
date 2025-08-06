@@ -605,7 +605,7 @@ def get_fieldline(alpha, iota, num_transit):
     # Select the next branch such that ϑ is continuous.
     #      αᵢ = ϑ − ιϕᵢ
     #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
-    # αᵢ₊₁−αᵢ = ι(ϕᵢ₊₁−ϕᵢ) = ι(ζᵢ₊₁−ζᵢ) = ι 2π
+    # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
     return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota
 
 

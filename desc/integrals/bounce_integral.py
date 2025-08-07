@@ -242,8 +242,7 @@ class Bounce2D(Bounce):
         Flag for debugging. Must be false for JAX transformations.
     spline : bool
         Whether to use cubic splines to compute bounce points.
-        Default is true, because the algorithm for efficient root-finding on
-        Chebyshev series is not yet implemented.
+        Default is true, which is the recommended setting.
 
     """
 
@@ -313,13 +312,14 @@ class Bounce2D(Bounce):
         is_fourier=False,
         check=False,
         spline=True,
-        **kwargs,
+        _precompute_vander=None,
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
         quad = setdefault(quad, default_quad)
 
+        self._precompute = setdefault(_precompute_vander, {})
         self._x, self._w = get_quadrature(quad, automorphism)
         self._NFP = grid.NFP
         self._num_theta = grid.num_theta
@@ -865,11 +865,6 @@ class Bounce2D(Bounce):
 
         """
         dz_dx = jnp.pi
-        # Integrating an analytic oscillatory map so a high order quadrature is ideal.
-        # Difficult to pick the right frequency for Filon quadrature in general, which
-        # would work best, especially at high NFP. Gauss-Legendre is superior to
-        # Clenshaw-Curtis for smooth oscillatory maps. Prolate spheroidal wave
-        # function quadrature would be an improvement.
         if quad is None:
             deg = (
                 self._c["B(z)"].Y
@@ -877,6 +872,11 @@ class Bounce2D(Bounce):
                 else self._c["knots"].size // self._c["T(z)"].X
             ) // 2
             x, w = leggauss(deg)
+            # Integrating an analytic oscillatory map so a high order quadrature
+            # is ideal. Difficult to pick the right frequency for Filon quadrature
+            # in general, which would work best at high NFP. Gauss-Legendre is
+            # superior to Clenshaw-Curtis for smooth oscillatory maps. Prolate
+            # spheroidal wave function quadrature would be an improvement.
         else:
             x, w = quad
 
@@ -887,26 +887,35 @@ class Bounce2D(Bounce):
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
         B_sup_zeta = irfft_non_uniform(
             idct_non_uniform(
-                x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
+                x,
+                self._c["T(z)"].cheb[..., jnp.newaxis, :],
+                self._c["T(z)"].Y,
+                vander=self._precompute.get("vander_dct_cfl", None),
             ),
             self._partial_sum(x)[..., jnp.newaxis, :, :],
             self._num_theta,
             _modes=self._m_modes,
         )
-        # B⋅∇ζ never vanishes, and hence has the same sign on a flux surface,
-        # so we may take absolute value after the reduction.
+        # B⋅∇ζ has the same sign on a flux surface, so we take absolute
+        # value after the reduction.
         return jnp.abs(jnp.reciprocal(B_sup_zeta).dot(w).sum(-1).mean(0)) * dz_dx
         # Simple mean over α because when the toroidal angle extends
         # beyond one transit we need to weight all field lines uniformly,
         # regardless of their area wrt α.
 
     def _partial_sum(self, x):
+        v = self._precompute.get("vander_dft_cfl", None)
         return ifft_non_uniform(
-            bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis],
+            (
+                bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
+                if v is None
+                else None
+            ),
             self._c["B^zeta"],
             domain=(0, 2 * jnp.pi / self._NFP),
             axis=-2,
             modes=self._n_modes,
+            vander=v,
         )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):

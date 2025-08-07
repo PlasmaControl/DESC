@@ -745,7 +745,7 @@ def cubic_spline(
     n_modes,
     NFP=1,
     *,
-    vander_fft=None,
+    vander_zeta=None,
     vander_theta=None,
     check=False,
 ):
@@ -772,7 +772,7 @@ def cubic_spline(
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
-    vander_fft : jnp.ndarray
+    vander_zeta : jnp.ndarray
         Precomputed transform matrix.
     vander_theta : jnp.ndarray
         Precomputed transform matrix.
@@ -816,7 +816,7 @@ def cubic_spline(
             domain=(0, 2 * jnp.pi / NFP),
             axis=-2,
             modes=n_modes,
-            vander=vander_fft,
+            vander=vander_zeta,
         )[..., jnp.newaxis, :, :]
 
     # θ at uniform ζ on field lines

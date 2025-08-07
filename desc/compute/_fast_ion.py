@@ -147,6 +147,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    _precompute_vander = kwargs.get("_precompute_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -159,6 +160,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
+            _precompute_vander=_precompute_vander,
         )
 
         def fun(pitch_inv):
@@ -305,6 +307,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    _precompute_vander = kwargs.get("_precompute_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -317,6 +320,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
+            _precompute_vander=_precompute_vander,
         )
 
         def fun(pitch_inv):

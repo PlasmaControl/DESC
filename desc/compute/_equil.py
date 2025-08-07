@@ -97,6 +97,7 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["J", "e^theta_PEST"],
+    aliases=["J^vartheta"],
 )
 def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     data["J^theta_PEST"] = dot(data["J"], data["e^theta_PEST"])
@@ -125,6 +126,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_tt",
     ],
+    aliases=["J^vartheta_v|PEST"],
 )
 def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
     data["J^theta_PEST_v|PEST"] = (
@@ -159,6 +161,7 @@ def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_zz",
     ],
+    aliases=["J^vartheta_z|PEST"],
 )
 def _J_sup_theta_PEST_z_PEST(params, transforms, profiles, data, **kwargs):
     data["J^theta_PEST_z|PEST"] = data["J^theta_z"] * data["theta_PEST_t"][:, None]

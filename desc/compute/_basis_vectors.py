@@ -607,7 +607,7 @@ def _e_sup_vartheta_t(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
-    " coordinate",
+    " PEST coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -629,7 +629,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta}\\lvert_{PEST} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    description="Contravariant toroidal basis vector, derivative wrt theta toroidal"
     " coordinate",
     dim=3,
     params=[],
@@ -1347,7 +1347,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
-    " coordinate",
+    " PEST coordinate",
     dim=3,
     params=[],
     transforms={},

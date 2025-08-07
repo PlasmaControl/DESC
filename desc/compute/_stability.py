@@ -2317,3 +2317,677 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     data["finite-n eigenfunction2"] = v
 
     return data
+
+
+@register_compute_fun(
+    name="finite-n lambda3",
+    label="low-\\n \\lambda = \\gamma^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared growth rate"
+    + "using the most compact representation of diffmatrices",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rp|PEST",
+        "g_vv|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
+        "g^rr",
+        "g^rv",
+        "g^rz",
+        "J^theta_PEST",
+        "J^zeta",
+        "|J|",
+        "sqrt(g)_PEST",
+        "finite-n instability drive",
+        "iota",
+        "iota_r",
+        "psi_r",
+        "p",
+        "a",
+    ],
+    n_rho_max="int: 2 x maximum radial mode number",
+    n_theta_max="int: 2 x maximum radial mode number",
+    n_zeta_max="int: 2 x maximum toroidal mode number",
+    axisym="bool: if the equilibrium is axisymmetric",
+)
+def _AGNI3(params, transforms, profiles, data, **kwargs):
+    """
+    AGNI: Analysis of Global Normal-modes in Ideal MHD.
+
+    Based on the original source here:
+    https://github.com/rahulgaur104/AGNI/tree/master
+
+    A finite-n stability eigenvalue solver.
+    Currenly only finds fixed boundary unstable modes at
+    low to medium resolution.
+    """
+    a_N = data["a"]
+    B_N = params["Psi"] / (jnp.pi * a_N**2)
+
+    iota = data["iota"][:, None]
+    iota_r = data["iota_r"][:, None]
+
+    psi_r = data["psi_r"][:, None] / (0.5 * a_N**2 * B_N)
+    psi_rr = data["psi_rr"][:, None] / (0.5 * a_N**2 * B_N)
+
+    psi_r2 = psi_r**2
+    psi_r3 = psi_r**3
+
+    iota_psi_r = iota * psi_r
+    iota_psi_r2 = iota * psi_r2
+
+    dpsi_r2_drho = 2 * psi_r * psi_rr
+    diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
+
+    p = data["p"] / B_N**2
+
+    n0 = p ** (1 / 3) + 1 / (psi_r2.flatten())
+    # --no-verify n0 = p ** (1 / 3) + 10
+
+    axisym = kwargs.get("axisym", False)
+
+    n_rho_max = kwargs.get("n_rho_max", 8)
+    n_theta_max = kwargs.get("n_theta_max", 8)
+
+    if axisym:
+        # Each componenet of xi can be written as the Fourier sum of two modes in
+        # the toroidal direction
+        n_mode = 1
+        # --no-verify D_zeta0 = 1j * n_mode * jnp.array([[0, -1], [1, 0]])
+        D_zeta0 = 1j * n_mode * jnp.array([[1]])
+        n_zeta_max = 1
+        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+    else:
+        n_zeta_max = kwargs.get("n_zeta_max", 4)
+        D_zeta0 = fourier_diffmat(n_zeta_max)
+        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+
+    def _eval_1D(f, x):
+        return jax.vmap(lambda x_val: f(x_val))(x)
+
+    def _f(x):
+        x_0 = 0.75
+        m_1 = 3.0
+        m_2 = 2.0
+        lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
+        upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
+        eps = 1.0e-3
+        return eps + (1 - eps) * (lower + upper)
+
+    # def _f(x):
+    #    eps = 1e-5
+    #    return eps + (1 - eps) * (x+1)/2
+
+    # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
+
+    dx_f = jax.grad(_f)
+
+    x = legendre_lobatto_nodes(len(x0) - 1)
+
+    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
+    # scale_vector1 = jnp.ones_like(x0) * (2 * jnp.pi-1e-3)
+
+    # scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
+    # h = (1-1e-3)/(n_rho_max-1)
+
+    scale_x1 = scale_vector1[:, None]
+
+    # Get differentiation matrices
+    # RG: setting the gradient to 0 to save some memory?
+    D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
+    # D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
+    # D_rho0, W0 = D1_FD_4(n_rho_max, h)
+    # D_rho0 = D_rho0 * scale_x1
+
+    D_theta0 = fourier_diffmat(n_theta_max)
+
+    w0 = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
+    w0 = w0.at[jnp.abs(w0) < 1e-12].set(0.0)
+    # w0 = jnp.diag((2*jnp.pi-1e-3)/n_rho_max * jnp.ones_like(x0))
+
+    # w0 = jnp.diag(1 / scale_vector1 * W0.flatten())
+    # w1 = jnp.diag(legendre_lobatto_weights(n_rho_max - 1))
+
+    I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
+    I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
+    I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
+
+    D_rho = jax.lax.stop_gradient(jnp.kron(D_rho0, jnp.kron(I_theta0, I_zeta0)))
+    D_theta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
+    D_zeta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
+
+    # D_rho1 = jax.lax.stop_gradient(jnp.kron(D_rho1, jnp.kron(I_theta0, I_zeta0)))
+
+    D_rhoT = jax.lax.stop_gradient(jnp.kron(D_rho0.T, jnp.kron(I_theta0, I_zeta0)))
+    D_thetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0.T, I_zeta0)))
+    D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0.T)))
+
+    n_total = n_rho_max * n_theta_max * n_zeta_max
+    ## Create the full matrix
+
+    if axisym:
+        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.complex128)
+        B = jnp.zeros((3 * n_total, 3 * n_total))
+    else:
+        A = jnp.zeros((3 * n_total, 3 * n_total))
+        B = jnp.zeros((3 * n_total, 3 * n_total))
+
+    # Define field component indices
+    rho_idx = slice(0, n_total)
+    theta_idx = slice(n_total, 2 * n_total)
+    zeta_idx = slice(2 * n_total, 3 * n_total)
+    all_idx = slice(0, 3 * n_total)
+
+    ### assuming uniform spacing in and θ and ζ
+    dtheta = 2 * jnp.pi / n_theta_max
+    dzeta = 2 * jnp.pi / n_zeta_max
+
+    W = jnp.diag(jnp.kron(w0 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
+    # W1 = jnp.diag(jnp.kron(w1 * dtheta * dzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
+
+    # pdb.set_trace()
+
+    def nan_to_zero(x):
+        return jnp.where(jnp.isnan(x), 0.0, x)
+
+    sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
+
+    psi_r_over_sqrtg = nan_to_zero(psi_r / sqrtg)
+
+    g_rr = data["g_rr|PEST"][:, None] * 1 / a_N**2
+    g_vv = data["g_vv|PEST"][:, None] * 1 / a_N**2
+    g_pp = data["g_pp|PEST"][:, None] * 1 / a_N**2  # finite on-axis
+
+    g_rv = data["g_rv|PEST"][:, None] * 1 / a_N**2
+    g_rp = data["g_rp|PEST"][:, None] * 1 / a_N**2
+    g_vp = data["g_vp|PEST"][:, None] * 1 / a_N**2
+
+    g_sup_rr = data["g^rr"][:, None] * a_N**2
+    g_sup_rv = data["g^rv"][:, None] * a_N**2
+    g_sup_rp = data["g^rz"][:, None] * a_N**2
+
+    J2 = ((mu_0 * data["|J|"]) ** 2)[:, None] * (a_N / B_N) ** 2
+    j_sup_theta = mu_0 * data["J^theta_PEST"][:, None] * a_N**2 / B_N
+    j_sup_zeta = mu_0 * data["J^zeta"][:, None] * a_N**2 / B_N
+
+    # manually set the instability drive to 0
+    F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N / B_N) ** 2
+
+    def _stab_fix(mat, safety=1e-17):
+        """
+        Using Gershgorin circle idea to ensure the spectrum is positive
+        definite.
+        """
+        diag = jnp.real(jnp.diag(mat))
+        row_sum = jnp.sum(jnp.abs(mat), axis=1) - jnp.abs(diag)
+        # eigenvalue >= diag - row_sum  (Gershgorin)
+        gap = -(diag - row_sum) + safety * diag.max()
+        pad = jnp.clip(gap, 0.0)  # only add if gap>0
+        return mat + jnp.diag(pad)
+
+    def force_psd(M, floor=-1e-20):
+        w, V = jnp.linalg.eigh(M, UPLO="U")
+        w = jnp.clip(w, floor * w.max(), None)
+        return (V * w) @ V.T
+
+    ####################
+    ####----Q_11----####
+    ####################
+    A = A.at[rho_idx, rho_idx].add(
+        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+        + ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta).T @ D_theta
+    )
+
+    ####################
+    ####----Q_22----####
+    ####################
+    # enforcing symmetry exactly
+    A = A.at[theta_idx, theta_idx].add(
+        0.5
+        * (
+            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+            + ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta).T @ D_zeta
+        )
+    )
+    A = A.at[zeta_idx, zeta_idx].add(
+        0.5
+        * (
+            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+            + ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta).T @ D_zeta
+        )
+    )
+
+    A = A.at[theta_idx, zeta_idx].add(
+        -1.0 * (D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta))
+    )
+
+    A = A.at[rho_idx, rho_idx].add(
+        +(D_rho * iota_psi_r2.T).T
+        @ ((psi_r_over_sqrtg * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        -1 * (D_rho * iota_psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
+    )
+
+    A = A.at[rho_idx, zeta_idx].add(
+        1 * (D_rho * iota_psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
+    )
+
+    # C = A.copy()
+    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
+    # keep_2 = jnp.arange(n_total, 3 * n_total)
+    # keep = jnp.concatenate([keep_1, keep_2])
+
+    # w, _ = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
+
+    # print(w)
+    # from matplotlib import pyplot as plt
+
+    # plt.yscale("symlog", linthresh=1e-20);
+    # plt.plot(w);
+    # pdb.set_trace()
+
+    ####################
+    ####----Q_33----####
+    ####################
+    A = A.at[theta_idx, theta_idx].add(
+        0.5
+        * (
+            D_theta.T @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
+            + ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta).T @ D_theta
+        )
+    )
+    A = A.at[zeta_idx, zeta_idx].add(
+        0.5
+        * (
+            D_theta.T @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
+            + ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta).T @ D_theta
+        )
+    )
+
+    A = A.at[theta_idx, zeta_idx].add(
+        -1 * D_theta.T @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
+    )
+
+    A = A.at[rho_idx, rho_idx].add(
+        +(D_rho * psi_r2.T).T
+        @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * psi_r2.T))
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        1 * (D_rho * psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
+    )
+
+    A = A.at[rho_idx, zeta_idx].add(
+        -1 * (D_rho * psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
+    )
+
+    # C = A.copy()
+    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # print("symmetry check1", jnp.max(jnp.abs(C-C.T)))
+
+    # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
+    # keep_2 = jnp.arange(n_total, 3 * n_total)
+    # keep = jnp.concatenate([keep_1, keep_2])
+
+    # w, _ = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
+
+    # print(w)
+    # from matplotlib import pyplot as plt
+
+    # plt.yscale("symlog", linthresh=1e-20);
+    # plt.plot(w);
+    # pdb.set_trace()
+
+    ####################
+    ####----Q_12----####
+    ####################
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            D_theta.T
+            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+            + D_zeta.T
+            @ ((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+        )
+    )
+
+    ## transposed part of the mixed term along the ρ-ρ block diagonal
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            ((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T)).T
+            @ D_theta
+            + ((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T)).T
+            @ D_zeta
+        )
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        D_theta.T @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        + D_zeta.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        -1
+        * (
+            D_theta.T @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+            + D_zeta.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        )
+    )
+
+    # C = A.copy()
+    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # print("symmetry check2", jnp.max(jnp.abs(C-C.T)))
+
+    ######################
+    ####-----Q_13-----####
+    ######################
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            D_theta.T
+            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+            + D_zeta.T @ ((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+        )
+    )
+
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            ((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T)).T
+            @ D_theta
+            + ((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T)).T @ D_zeta
+        )
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        -1
+        * (
+            D_theta.T @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            + D_zeta.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+        )
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        1
+        * (
+            D_theta.T @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            + D_zeta.T @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+        )
+    )
+
+    # C = A.copy()
+    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # print("symmetry check3", jnp.max(jnp.abs(C-C.T)))
+
+    # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
+    # keep_2 = jnp.arange(n_total, 3 * n_total)
+    # keep = jnp.concatenate([keep_1, keep_2])
+
+    # w, _ = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
+
+    # print(w)
+    # from matplotlib import pyplot as plt
+
+    # plt.yscale("symlog", linthresh=1e-20);
+    # plt.plot(w);
+    # pdb.set_trace()
+
+    ##########################
+    #######-----Q_23-----#####
+    ##########################
+    A = A.at[theta_idx, theta_idx].add(
+        -1
+        * (
+            D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
+            + ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta).T @ D_zeta
+        )
+    )
+
+    A = A.at[zeta_idx, zeta_idx].add(
+        -1
+        * (
+            D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
+            + ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta).T @ D_zeta
+        )
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        -1
+        * (
+            (D_rho * psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
+            - (D_rho * iota_psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
+        )
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        1
+        * (
+            (D_rho * psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
+            - (D_rho * iota_psi_r2.T).T @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
+        )
+    )
+
+    A = A.at[theta_idx, zeta_idx].add(
+        D_zeta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
+        + ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta).T @ D_zeta
+        # D_theta.T @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_zeta)
+    )
+
+    A = A.at[rho_idx, rho_idx].add(
+        1
+        * (
+            (D_rho * iota_psi_r2.T).T
+            @ ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
+        )
+    )
+    # ρ-ρ symmetrizing term
+    A = A.at[rho_idx, rho_idx].add(
+        1
+        * (
+            ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T)).T
+            @ (D_rho * iota_psi_r2.T)
+        )
+    )
+
+    ## diagonal |J|^2 term
+    A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
+
+    # C = A.copy()
+    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # print("symmetry check4", jnp.max(jnp.abs(C-C.T)))
+    # C = (C + C.T)/2
+
+    # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
+    # keep_2 = jnp.arange(n_total, 3 * n_total)
+    # keep = jnp.concatenate([keep_1, keep_2])
+
+    # w, _ = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
+
+    # print(w)
+    # from matplotlib import pyplot as plt
+
+    # plt.yscale("symlog", linthresh=1e-20);
+    # plt.plot(w);
+    # pdb.set_trace()
+
+    # Mixed Q-J term
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            (
+                W
+                * psi_r3
+                * sqrtg
+                * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            )
+            * (D_theta + iota * D_zeta)
+            + jnp.diag(
+                (
+                    -W * psi_r * sqrtg * j_sup_theta * diota_psi_r2_drho
+                    + W * psi_r * sqrtg * j_sup_zeta * dpsi_r2_drho
+                ).flatten()
+            )
+            - (W * iota * sqrtg * psi_r3) * D_rho
+            + (W * sqrtg * psi_r3) * D_rho
+        )
+    )
+
+    # ρ-ρ block transposed for symmetry
+    A = A.at[rho_idx, rho_idx].add(
+        -1
+        * (
+            (
+                (
+                    W
+                    * psi_r3
+                    * sqrtg
+                    * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
+                    / g_sup_rr
+                )
+                * (D_theta + iota * D_zeta)
+            )
+            .conj()
+            .T
+            + jnp.diag(
+                (
+                    -W * psi_r * sqrtg * j_sup_theta * diota_psi_r2_drho
+                    + W * psi_r * sqrtg * j_sup_zeta * dpsi_r2_drho
+                ).flatten()
+            )
+            - ((W * iota * sqrtg * psi_r3) * D_rho).T
+            + ((W * sqrtg * psi_r3) * D_rho).T
+        )
+    )
+
+    A = A.at[rho_idx, theta_idx].add(
+        (W * psi_r2 * sqrtg * j_sup_theta) * D_zeta
+        - (W * psi_r2 * sqrtg * j_sup_zeta) * D_theta
+    )
+    A = A.at[rho_idx, zeta_idx].add(
+        -(W * psi_r2 * sqrtg * j_sup_theta) * D_zeta
+        + (W * psi_r2 * sqrtg * j_sup_zeta) * D_theta
+    )
+
+    C = A.copy()
+    C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+
+    # apply dirichlet BC to ξ^ρ
+    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    w, v = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
+    # w, v = jnp.linalg.eigh(C[n_theta_max*n_zeta_max:, n_theta_max*n_zeta_max:])
+    print(w)
+
+    # from jax.experimental.sparse import linalg as linalg
+    # linalg.lobpcg_standard(C, v[:, :100].T, m=100)
+
+    from matplotlib import pyplot as plt
+
+    plt.yscale("symlog", linthresh=1e-20)
+    plt.plot(w)
+    plt.show()
+
+    pdb.set_trace()
+
+    # Mass matrix (must be symmetric positive definite)
+    B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
+    B = B.at[theta_idx, theta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
+    B = B.at[zeta_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
+    )
+    B = B.at[rho_idx, theta_idx].add(
+        jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
+    )
+    B = B.at[rho_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
+    )
+    B = B.at[theta_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
+    )
+
+    # symmetrizing the matrix
+    if axisym:
+        A = A.at[theta_idx, rho_idx].set(jnp.conjugate(A[rho_idx, theta_idx]).T)
+        A = A.at[zeta_idx, rho_idx].set(jnp.conjugate(A[rho_idx, zeta_idx]).T)
+        A = A.at[zeta_idx, theta_idx].set(jnp.conjugate(A[theta_idx, zeta_idx]).T)
+
+        B = B.at[theta_idx, rho_idx].set(jnp.conjugate(B[rho_idx, theta_idx]).T)
+        B = B.at[zeta_idx, rho_idx].set(jnp.conjugate(B[rho_idx, zeta_idx]).T)
+        B = B.at[zeta_idx, theta_idx].set(jnp.conjugate(B[theta_idx, zeta_idx]).T)
+    else:
+        A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+        A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
+        A = A.at[zeta_idx, theta_idx].set(A[theta_idx, zeta_idx].T)
+
+        B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+        B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
+        B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
+
+    # Force all the
+    A = A.at[all_idx, all_idx].set(force_psd(A))
+
+    # Finally add the only instability drive term
+    A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
+    y = A - A.conj().T
+    print(jnp.max(jnp.abs(y)))
+
+    y = B - B.conj().T
+    print(jnp.max(jnp.abs(y)))
+
+    # pdb.set_trace()
+
+    # apply dirichlet BC to ξ^ρ
+    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    # --no-verify w, _ = jnp.linalg.eigh(B[jnp.ix_(keep, keep)])
+    # --no-verify w, v = jnp.linalg.eigh(A[jnp.ix_(keep, keep)])
+    # --no-verify w, v = jax.scipy.linalg.eigh(A[jnp.ix_(keep, keep)], B[jnp.ix_(keep, keep)])
+    # --no-verify w, v =  eigh(jax.numpy.asarray(A[jnp.ix_(keep, keep)]), jax.numpy.asarray(B[jnp.ix_(keep, keep)]), subset_by_index=[0, 2])
+    w, v = eigh(
+        jax.numpy.asarray(A[jnp.ix_(keep, keep)]),
+        jax.numpy.asarray(B[jnp.ix_(keep, keep)]),
+    )
+
+    ## This will be the most expensive but easiest automatically differentiable way.
+    ## TODO: Multiply B with a permutation matrix P so that it becomes block diagonal
+    ## That will make cholesky ~ 20 x faster
+    # L = jnp.linalg.cholesky(B[jnp.ix_(keep, keep)])
+    # w, v = jnp.linalg.eigh(L.T @ A[jnp.ix_(keep, keep)] @ L)
+
+    data["finite-n lambda3"] = w
+    data["finite-n eigenfunction3"] = v
+
+    return data

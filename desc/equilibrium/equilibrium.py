@@ -1797,6 +1797,19 @@ class Equilibrium(Optimizable, _MagneticField):
             return_data=True,
         )
 
+        if source_grid is None:
+            if method == 'virtual casing':
+                source_grid = LinearGrid(
+                    rho=jnp.array([1.0]),
+                    M=256,
+                    N=256,
+                    NFP=self.NFP if self.N > 0 else 64,
+                    sym=False,
+                )
+            else:
+                source_grid = QuadratureGrid(
+                        L=64, M=64, N=64, NFP=self.NFP
+                    )
         if save_vector_potential:
             if method != "virtual casing" and A_source_grid is None:
                 A_source_grid = source_grid

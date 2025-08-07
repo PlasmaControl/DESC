@@ -568,8 +568,8 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^vartheta_v|PEST",
-    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    name="e^vartheta_t",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\vartheta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
@@ -589,15 +589,38 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_tt",
     ],
-    aliases=["e^theta_PEST_v|PEST"],
+    aliases=["e^theta_PEST_t"],
 )
-def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^vartheta_v|PEST"] = (
+def _e_sup_vartheta_t(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_t"] = (
         data["e^theta_t"] * data["theta_PEST_t"][:, None]
         + data["e^zeta_t"] * data["theta_PEST_z"][:, None]
         + data["e^theta"] * data["theta_PEST_tt"][:, None]
         + data["e^zeta"] * data["theta_PEST_tz"][:, None]
-    ) / (data["theta_PEST_t"])[:, None]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^vartheta_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^vartheta_t",
+        "theta_PEST_t",
+    ],
+    aliases=["e^theta_PEST_v|PEST"],
+)
+def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_v|PEST"] = data["e^vartheta_t"] / (data["theta_PEST_t"])[:, None]
     return data
 
 
@@ -618,6 +641,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
         "e^zeta",
         "e^theta_z",
         "e^theta_t",
+        "e^vartheta_t",
         "e^zeta_z",
         "theta_PEST_t",
         "theta_PEST_z",
@@ -633,7 +657,7 @@ def _e_sup_vartheta_z_PEST(params, transforms, profiles, data, **kwargs):
         + data["e^theta"] * data["theta_PEST_tz"][:, None]
         + data["e^zeta"] * data["theta_PEST_zz"][:, None]
     )
-    -(data["theta_PEST_z"] / data["theta_PEST_t"])[:, None] * data["e^theta_t"]
+    -(data["theta_PEST_z"] / data["theta_PEST_t"])[:, None] * data["e^vartheta_t"]
     return data
 
 

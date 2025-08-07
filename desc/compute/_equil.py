@@ -97,9 +97,165 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["J", "e^theta_PEST"],
+    aliases=["J^vartheta"],
 )
 def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     data["J^theta_PEST"] = dot(data["J"], data["e^theta_PEST"])
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_PEST_v|PEST",
+    label="\\partial_{\\vartheta} J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST poloidal component of plasma current density"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J^theta_t",
+        "J^theta",
+        "J^zeta",
+        "J^zeta_t",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_tt",
+    ],
+    aliases=["J^vartheta_v|PEST"],
+)
+def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST_v|PEST"] = (
+        data["J^theta_t"] * data["theta_PEST_t"][:, None]
+        + data["J^theta"] * data["theta_PEST_tt"][:, None]
+        + data["J^zeta_t"] * data["theta_PEST_z"]
+        + data["J^zeta"] * data["theta_PEST_tz"][:, None]
+    ) / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_PEST_z|PEST",
+    label="\\partial_{\\zeta} J^{\\theta_{PEST}}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST poloidal component of plasma current density"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J^theta_z",
+        "J^zeta_z",
+        "J^theta",
+        "J^zeta",
+        "J^theta_PEST_v|PEST",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_zz",
+    ],
+    aliases=["J^vartheta_z|PEST"],
+)
+def _J_sup_theta_PEST_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^theta_PEST_z|PEST"] = data["J^theta_z"] * data["theta_PEST_t"][:, None]
+    (
+        +data["J^theta"] * data["theta_PEST_tz"][:, None]
+        + data["J^zeta_z"] * data["theta_PEST_z"][:, None]
+    )
+    +data["J^zeta"] * data["theta_PEST_zz"][:, None]
+    -data["J^theta_PEST_v|PEST"] * data["theta_PEST_z"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_v|PEST",
+    label="\\partial_{\\vartheta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST toroidal component of plasma current density"
+    + "derivative w.r.t poloidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^zeta_t", "theta_PEST_t"],
+)
+def _J_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_v|PEST"] = data["J^zeta_t"] / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_z|PEST",
+    label="\\partial_{\\vartheta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant PEST toroidal component of plasma current density"
+    + "derivative w.r.t toroidal PEST coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^zeta_t", "J^zeta_z", "theta_PEST_t", "theta_PEST_z"],
+)
+def _J_sup_zeta_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_z|PEST"] = (
+        data["J^zeta_z"]
+        - data["J^zeta_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_t",
+    label="\\partial_{\\theta} J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Derivative of Contravariant poloidal component of plasma current"
+    "density w.r.t the poloidal coorindate, weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_zt", "B_zeta_rt", "B_rho_z", "B_zeta_r", "sqrt(g)", "sqrt(g)_t"],
+)
+def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
+    data["J^theta_t"] = (
+        (data["B_rho_zt"] - data["B_zeta_rt"]) / data["sqrt(g)"]
+        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_t"] / data["sqrt(g)"]
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^theta_z",
+    label="\\partial_{\\theta} J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Derivative of Contravariant poloidal component of plasma current"
+    "density w.r.t the toroidal coorindate, weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_zz", "B_zeta_rz", "B_rho_z", "B_zeta_r", "sqrt(g)", "sqrt(g)_z"],
+)
+def _J_sup_theta_z(params, transforms, profiles, data, **kwargs):
+    data["J^theta_z"] = (
+        (data["B_rho_zz"] - data["B_zeta_rz"]) / data["sqrt(g)"]
+        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_z"] / data["sqrt(g)"]
+    ) / mu_0
     return data
 
 
@@ -132,6 +288,56 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^zeta_t",
+    label="\\partial_{\\theta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Derivative of the contravariant toroidal component of plasma"
+    "current density w.r.t the poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "sqrt(g)_t", "B_theta_r", "B_rho_t", "B_rho_tt", "B_theta_rt"],
+    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rt",
+    # "B_theta_rr", "B_rho_rt", "B_theta_rrt", "B_rho_rtt"],
+)
+def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_t"] = (
+        safediv(data["B_theta_rt"] - data["B_rho_tt"], data["sqrt(g)"])
+        - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
+        * data["sqrt(g)_t"]
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^zeta_z",
+    label="\\partial_{\\zeta} J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Derivative of the contravariant toroidal component of plasma"
+    "current density w.r.t the toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "sqrt(g)_z", "B_theta_r", "B_rho_t", "B_theta_rz", "B_rho_tz"],
+    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rz", "B_theta_rr",
+    # --no-verify "B_rho_rt", "B_theta_rrz", "B_rho_rtz"],
+)
+def _J_sup_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["J^zeta_z"] = (
+        safediv(data["B_theta_rz"] - data["B_rho_tz"], data["sqrt(g)"])
+        - safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"] ** 2)
+        * data["sqrt(g)_z"]
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
     name="J",
     label="\\mathbf{J}",
     units="A \\cdot m^{-2}",
@@ -157,6 +363,27 @@ def _J(params, transforms, profiles, data, **kwargs):
         + data["J^theta*sqrt(g)"] * data["e_theta/sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="J x grad(rho)",
+    label="\\mathbf{J} \\times (\\nabla \\rho)",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubed meter",
+    description="Plasma current density cross with grad(rho)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "J",
+        "e^rho",
+    ],
+)
+def _J_cross_gradrho(params, transforms, profiles, data, **kwargs):
+    data["J x grad(rho)"] = cross(data["J"], data["e^rho"])
     return data
 
 
@@ -540,6 +767,26 @@ def _F(params, transforms, profiles, data, **kwargs):
 )
 def _Fmag(params, transforms, profiles, data, **kwargs):
     data["|F|"] = safenorm(data["F"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="|F|_normalized",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
+    + "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Magnitude of force balance error normalized by volume averaged "
+    + "magnetic pressure gradient",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|F|", "<|grad(|B|^2)|/2mu0>_vol"],
+)
+def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
+    data["|F|_normalized"] = data["|F|"] / data["<|grad(|B|^2)|/2mu0>_vol"]
     return data
 
 

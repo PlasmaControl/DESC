@@ -162,7 +162,10 @@ def register_compute_fun(  # noqa: C901
     if (
         len(splits) > 1
         # Only look for permutations of partial derivatives of same coordinate system.
-        and {"r", "t", "z"}.issuperset(splits[-1])
+        and (
+            {"r", "t", "z"}.issuperset(splits[-1])
+            or {"r", "t", "z"}.issuperset(splits[-1])
+        )
     ):
         aliases_temp = np.append(np.array(aliases), find_permutations(name))
         for alias in aliases:
@@ -316,7 +319,7 @@ def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
 
 
 def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    """Is name constant over toroidal sections and needs full section to compute?."""
     return (
         data_index[p][name]["coordinates"] == "z"
         and data_index[p][name]["resolution_requirement"] == "rt"

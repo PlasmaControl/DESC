@@ -291,6 +291,45 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^rho_v|PEST",  # ∇ρ is the same in any coordinate system.
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector"
+    + "derivative w.r.t the poloidal PEST coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho_t", "theta_PEST_t"],
+)
+def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^rho_v|PEST"] = data["e^rho_t"] / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_z|PEST",  # ∇ρ is the same in any coordinate system.
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector"
+    + "derivative w.r.t the toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho_t", "e^rho_z", "theta_PEST_t", "theta_PEST_z"],
+)
+def _e_sup_rho_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^rho_z|PEST"] = data["e^rho_z"]
+    -data["e^rho_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
+    return data
+
+
+@register_compute_fun(
     name="e^rho_tt",
     label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
@@ -525,6 +564,99 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
         + data["theta_PEST_t"][:, jnp.newaxis] * data["e^theta"]
         + data["theta_PEST_z"][:, jnp.newaxis] * data["e^zeta"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="e^vartheta_t",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\vartheta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta_t",
+        "e^theta",
+        "e^zeta",
+        "e^zeta_t",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_tt",
+    ],
+    aliases=["e^theta_PEST_t"],
+)
+def _e_sup_vartheta_t(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_t"] = (
+        data["e^theta_t"] * data["theta_PEST_t"][:, None]
+        + data["e^zeta_t"] * data["theta_PEST_z"][:, None]
+        + data["e^theta"] * data["theta_PEST_tt"][:, None]
+        + data["e^zeta"] * data["theta_PEST_tz"][:, None]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^vartheta_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " PEST coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^vartheta_t",
+        "theta_PEST_t",
+    ],
+    aliases=["e^theta_PEST_v|PEST"],
+)
+def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_v|PEST"] = data["e^vartheta_t"] / (data["theta_PEST_t"])[:, None]
+    return data
+
+
+@register_compute_fun(
+    name="e^vartheta_z|PEST",
+    label="\\partial_{\\zeta}\\lvert_{PEST} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta toroidal"
+    " coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "e^zeta",
+        "e^theta_z",
+        "e^vartheta_t",
+        "e^zeta_z",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+        "theta_PEST_zz",
+    ],
+    aliases=["e^theta_PEST_z|PEST"],
+)
+def _e_sup_vartheta_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_z|PEST"] = (
+        data["e^theta_z"] * data["theta_PEST_t"][:, None]
+        + data["e^zeta_z"] * data["theta_PEST_z"][:, None]
+        + data["e^theta"] * data["theta_PEST_tz"][:, None]
+        + data["e^zeta"] * data["theta_PEST_zz"][:, None]
+    )
+    -(data["theta_PEST_z"] / data["theta_PEST_t"])[:, None] * data["e^vartheta_t"]
     return data
 
 
@@ -1204,6 +1336,47 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
             - cross(data["e_rho"], data["e_theta_r"]).T
             * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt theta poloidal"
+    " PEST coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^zeta_t", "theta_PEST_t"],
+)
+def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_v|PEST"] = data["e^zeta_t"] / data["theta_PEST_t"][:, None]
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_z|PEST",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt zeta poloidal"
+    " coordinate at constnat rho and vartheta",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^zeta_t", "e^zeta_z", "theta_PEST_t", "theta_PEST_z"],
+)
+def _e_sup_zeta_z_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_z|PEST"] = (
+        data["e^zeta_z"]
+        - data["e^zeta_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
     )
     return data
 
@@ -3795,3 +3968,226 @@ def _e_alpha_rp(params, transforms, profiles, data, **kwargs):
 def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     data["|e_alpha|r,p|"] = jnp.linalg.norm(data["e_alpha|r,p"], axis=-1)
     return data
+
+
+################################################################################
+##########-----------------HIGHER-ORDER DERIVATIVES------------------###########
+################################################################################
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_theta_PEST_v|PEST",
+    label="\\partial_{\\vartheta} \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
+    "= \\mathbf{e}_{\\theta_{PEST} \\theta_{PEST}}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t straight field"
+    "line PEST coordinate. ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_t", "e_theta_PEST", "theta_PEST_t", "theta_PEST_tt"],
+    aliases=["e_vartheta_v|PEST", "e_theta_PEST_t|PEST", "e_vartheta_t|PEST"],
+)
+def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ϕ
+    data["e_theta_PEST_v|PEST"] = (
+        data["e_theta_t"] - data["e_theta_PEST"] * data["theta_PEST_tt"][:, jnp.newaxis]
+    ) / (data["theta_PEST_t"] ** 2)[:, jnp.newaxis]
+    return data
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_theta_PEST_z|PEST",
+    label="\\partial_{\\phi} |_{\\rho, \\vartheta}"
+    " \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
+    "= \\mathbf{e}_{\\theta_{PEST} \\phi}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t the cylindrical"
+    "toroidal angle. ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta_z",
+        "e_theta_PEST",
+        "e_theta_PEST_v|PEST",
+        "theta_PEST_t",
+        "theta_PEST_z",
+        "theta_PEST_tz",
+    ],
+    aliases=["e_vartheta_z|PEST", "e_phi_v|PEST", "e_phi_t|PEST"],
+)
+def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwargs):
+    data["e_theta_PEST_z|PEST"] = (
+        data["e_theta_z"]
+        - data["e_theta_PEST_v|PEST"]
+        * data["theta_PEST_t"][:, jnp.newaxis]
+        * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
+    ) / data["theta_PEST_t"][:, jnp.newaxis]
+    return data
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_phi_z|PEST",
+    label="\\partial_{\\phi} |_{\\rho, \\vartheta}"
+    " \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
+    "= \\mathbf{e}_{\\theta_{PEST} \\phi}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t the cylindrical"
+    "toroidal angle. ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_zeta_z",  # TODO: 568
+        "e_theta_PEST",
+        "e_theta_PEST_v|PEST",
+        "e_theta_PEST_z|PEST",
+        "theta_PEST_z",
+        "theta_PEST_zz",
+    ],
+)
+def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
+    data["e_phi_z|PEST"] = (
+        data["e_zeta_z"]
+        - 2 * data["e_theta_PEST_z|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta_PEST"] * (data["theta_PEST_zz"])[:, jnp.newaxis]
+        - data["e_theta_PEST_v|PEST"] * (data["theta_PEST_z"] ** 2)[:, jnp.newaxis]
+    )
+    return data
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_theta_PEST_r|PEST",
+    label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
+    " \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
+    "= \\mathbf{e}_{\\theta_{PEST} \\rho}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t rho."
+    "ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta_r",  # in DESC coordinates
+        "e_theta_PEST",
+        "e_theta_PEST_v|PEST",
+        "theta_PEST_t",
+        "theta_PEST_r",
+        "theta_PEST_rt",
+    ],
+    aliases=["e_vartheta_r|PEST", "e_rho_v|PEST", "e_rho_t|PEST"],
+)
+def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    data["e_theta_PEST_r|PEST"] = (
+        data["e_theta_r"]
+        - data["e_theta_PEST"] * (data["theta_PEST_rt"])[:, jnp.newaxis]
+        - data["e_theta_PEST_v|PEST"]
+        * (data["theta_PEST_r"] * data["theta_PEST_t"])[:, jnp.newaxis]
+    ) / data["theta_PEST_t"][:, jnp.newaxis]
+    return data
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_phi_r|PEST",
+    label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
+    " \\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}"
+    "= \\mathbf{e}_{\\phi \\rho}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t rho."
+    "ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_zeta_r",  # in native coordinates
+        "e_phi_v|PEST",
+        "e_theta_PEST_v|PEST",
+        "e_theta_PEST",
+        "e_rho_v|PEST",
+        "theta_PEST_r",
+        "theta_PEST_z",
+        "theta_PEST_rz",
+    ],
+    aliases=["e_rho_z|PEST"],
+)
+def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    data["e_phi_r|PEST"] = (
+        data["e_zeta_r"]
+        - data["e_phi_v|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_theta_PEST_v|PEST"]
+        * (data["theta_PEST_r"] * data["theta_PEST_z"])[:, jnp.newaxis]
+        - data["e_theta_PEST"] * (data["theta_PEST_rz"])[:, jnp.newaxis]
+        - data["e_rho_v|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+    )
+    return data
+
+
+# TODO: Generalize for a general phi before #568
+@register_compute_fun(
+    name="e_rho_r|PEST",
+    label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
+    " \\mathbf{e}_{\\rho} |_{\\phi, \\vartheta}"
+    "= \\mathbf{e}_{\\rho \\rho}",
+    units="m",
+    units_long="meters",
+    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    "coordinates or straight field line PEST coordinates w.r.t rho."
+    "ϕ increases counterclockwise when viewed from above"
+    "(cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho_r",
+        "e_rho_v|PEST",
+        "e_theta_PEST",
+        "e_theta_PEST_v|PEST",
+        "theta_PEST_r",
+        "theta_PEST_rr",
+    ],
+)
+def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    data["e_rho_r|PEST"] = (
+        data["e_rho_r"]
+        - data["e_rho_v|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_theta_PEST"] * data["theta_PEST_rr"][:, jnp.newaxis]
+        - data["e_theta_PEST_v|PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
+    )
+    return data
+
+
+################################################################################

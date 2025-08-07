@@ -52,7 +52,6 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1294`` Nonuniform fast transforms
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
@@ -352,8 +351,6 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in coords._partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

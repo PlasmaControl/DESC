@@ -95,7 +95,15 @@ class Bounce(IOAble, ABC):
 
     @abstractmethod
     def integrate(
-        self, integrand, pitch_inv, data=None, names=None, points=None, *, quad=None
+        self,
+        integrand,
+        pitch_inv,
+        data=None,
+        names=None,
+        points=None,
+        *,
+        quad=None,
+        num_well=None,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ."""
 
@@ -643,6 +651,7 @@ class Bounce2D(Bounce):
         check=False,
         plot=False,
         quad=None,
+        num_well=None,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -712,7 +721,7 @@ class Bounce2D(Bounce):
             data = {name: Bounce2D.fourier(data[name]) for name in names}
 
         if points is None:
-            points = self.points(pitch_inv)
+            points = self.points(pitch_inv, num_well)
 
         result = self._integrate(
             x,
@@ -1247,6 +1256,7 @@ class Bounce1D(Bounce):
         check=False,
         plot=False,
         quad=None,
+        num_well=None,
         **kwargs,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
@@ -1315,7 +1325,9 @@ class Bounce1D(Bounce):
         pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
 
         if points is None:
-            points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
+            points = bounce_points(
+                pitch_inv, self._zeta, self._B, self._dB_dz, num_well
+            )
 
         if kwargs.get("batch", True):
             result = self._integrate(

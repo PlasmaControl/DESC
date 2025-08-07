@@ -127,7 +127,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             data["pitch_inv"],
             data,
             "|grad(rho)|*kappa_g",
-            bounce.points(data["pitch_inv"], num_well),
+            num_well=num_well,
         )
         return jnp.sum(
             safediv(H**2, I).sum(axis=-1).mean(axis=-2)
@@ -358,7 +358,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             data["pitch_inv"],
             data,
             ["cvdrift0", "gbdrift"],
-            bounce.points(data["pitch_inv"], num_well),
+            num_well=num_well,
         )
         # This is γ_c π/2.
         gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))

@@ -231,8 +231,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 "|grad(rho)|*kappa_g",
-                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
+                num_well=num_well,
             )
             return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 

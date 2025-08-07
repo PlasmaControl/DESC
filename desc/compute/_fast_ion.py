@@ -329,8 +329,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
+                num_well=num_well,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))

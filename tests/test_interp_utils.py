@@ -254,32 +254,20 @@ class TestFastInterp:
         np.testing.assert_allclose(nufft2(a, xq, domain0=domain).real, fq)
 
     @pytest.mark.unit
-    @pytest.mark.xfail(reason="Bug in jax-finufft API.")
     def test_non_uniform_real_FFT_vec(self):
         """Test vectorized non-uniform real FFT interpolation."""
-        from desc.backend import jnp
-
         func, n, domain = _test_inputs_1D[1]
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         f = func(x)
         xq = np.array([7.34, 1.10134, 2.28])
-        xq = np.stack([xq, -xq, np.e * xq], axis=0)
         fq = func(xq)
 
-        a = np.fft.rfft(f, norm="forward")
+        a = np.fft.rfft(np.stack([f, 2 * f, -f], axis=0), norm="forward")
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
         a = _to_fft(2 * a, f.shape[-1])
-
-        # This works as expected.
         np.testing.assert_allclose(
-            jnp.vectorize(nufft2, signature="(n),(m)->(m)", excluded={"domain0"})(
-                a, xq, domain0=domain
-            ).real,
-            fq,
-        )
-        # This does not work.
-        np.testing.assert_allclose(
-            nufft2(a, xq, domain0=domain).real, fq, msg="Bug in jax-finufft API"
+            nufft2(a, xq, domain0=domain).real,
+            np.stack([fq, 2 * fq, -fq], axis=0),
         )
 
     @pytest.mark.unit

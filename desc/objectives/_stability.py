@@ -541,8 +541,6 @@ class BallooningStability(_Objective):
             return x[:-1] if self._add_lcfs else x
 
         iota = get("iota")
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in coords._partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

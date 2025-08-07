@@ -2,12 +2,23 @@
 
 import warnings
 
+import numpy as np
+from diffrax import (
+    ConstantStepSize,
+    Euler,
+    Event,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    diffeqsolve,
+)
+
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, errorif, warnif
+from desc.profiles import PowerSeriesProfile
+from desc.utils import Timer, errorif, safediv, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -976,3 +987,237 @@ class Isodynamicity(_Objective):
             profiles=constants["profiles"],
         )
         return data["isodynamicity"]
+
+
+class DirectParticleTracing(_Objective):
+    """Confinement metric for radial transport from direct tracing.
+
+    Traces particles in flux coordinates within the equilibrium, and
+    returns a confinement metric based off of the deviation of
+    the particle trajectory from its initial flux surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    iota_grid : Grid, optional
+        Grid to evaluate rotational transform profile on.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``.
+    particles : ParticleInitializer
+        should initialize them in flux coordinates, same seed
+        will be used each time.
+    model : TrajectoryModel
+        should be either Vacuum or SlowingDown
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_trace_particles",
+        "_max_steps",
+        "_has_iota_profile",
+        "_saveat",
+        "_stepsize_controller",
+        "_adjoint",
+    ]
+
+    _coordinates = "rtz"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Particle Confinement error: "
+
+    def __init__(
+        self,
+        eq,
+        particles,
+        model,
+        solver=Euler(),
+        ts=None,
+        iota_grid=None,
+        saveat=None,
+        stepsize_controller=ConstantStepSize(),
+        adjoint=RecursiveCheckpointAdjoint(),
+        max_steps=None,
+        min_step_size=1e-10,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        deriv_mode="auto",
+        name="Particle Confinement",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        if ts is None:
+            ts = np.arange(0, 1e-3, 100)
+        self._ts = jnp.asarray(ts)
+        self._saveat = saveat if saveat is not None else SaveAt(ts=ts)
+        self._adjoint = adjoint
+        if max_steps is None:
+            max_steps = 1000
+            max_steps = int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts))
+        self._max_steps = max_steps
+        self._min_step_size = min_step_size
+        self._stepsize_controller = stepsize_controller
+        self._iota_grid = iota_grid
+        assert model.frame == "flux", "can only trace in flux coordinates"
+        self._model = model
+        self._particles = particles
+        self._solver = solver
+        self._has_iota_profile = eq.iota is not None
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._iota_grid is None:
+            iota_grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+            )
+        else:
+            iota_grid = self._iota_grid
+
+        self._x0, args = self._particles.init_particles(model=self._model, field=eq)
+        self._ms, self._qs, self._mus = args[:3]
+
+        # one metric per particle
+        self._dim_f = self._x0.shape[0]
+
+        def default_terminating_event(t, y, args, **kwargs):
+            return jnp.logical_or(y[0] < 0, y[0] > 1)
+
+        event = Event(default_terminating_event)
+
+        def intfun(field, params, **kwargs):
+            intfun = lambda x, m, q, mu: diffeqsolve(
+                terms=self._model,
+                solver=self._solver,
+                y0=x,
+                args=[m, q, mu, field, params, kwargs],
+                t0=self._ts[0],
+                t1=self._ts[-1],
+                saveat=self._saveat,
+                max_steps=self._max_steps,
+                dt0=self._min_step_size,
+                stepsize_controller=self._stepsize_controller,
+                adjoint=self._adjoint,
+                event=event,
+            ).ys
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="unhashable type")
+                yt = vmap(intfun)(self._x0, self._ms, self._qs, self._mus)
+
+            yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
+
+            x = yt[:, :, :3]
+            v = yt[:, :, 3:]
+
+            return x, v
+
+        # avoid circular import
+        self._trace_particles = intfun
+
+        if self._min_step_size == "auto":
+            # particle will move roughly 10cm each step
+            # TODO: the distance can be a parameter, or can be removed completely
+            self._min_step_size = 0.01 / max(self._particles.vpar0)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota_profiles = get_profiles(["iota"], obj=eq, grid=iota_grid)
+        self._iota_transforms = get_transforms(["iota"], obj=eq, grid=iota_grid)
+        self._iota_power_series = PowerSeriesProfile(sym="even")
+        self._iota_power_series.change_resolution(L=eq.L)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute particle tracing metric errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Average deviation in rho from initial surface, for each particle.
+        """
+        if not self._has_iota_profile:
+            # compute and fit iota profile beforehand, as
+            # particle trace only computes things one point at a time
+            # and thus cannot do the flux surf averages required for iota
+            eq = self.things[0]
+            data = compute_fun(
+                eq, ["rho", "iota"], params, self._iota_transforms, self._iota_profiles
+            )
+            iota_values = self._iota_transforms["grid"].compress(data["iota"])
+            rho = self._iota_transforms["grid"].compress(data["rho"])
+            x = rho**2
+            iota_prof = self._iota_power_series
+            order = iota_prof.basis.L // 2
+            iota_params = jnp.polyfit(
+                x, iota_values, order, rcond=None, w=None, full=False
+            )[::-1]
+            params["i_l"] = iota_params
+        else:
+            iota_prof = None
+
+        rtz, _ = self._trace_particles(
+            field=self.things[0],
+            params=params,
+            iota=iota_prof,
+        )
+
+        # rtz is shape [N_particles, N_time, 3], take just index rho
+        rhos = rtz[:, :, 0]
+        tmax_idx = jnp.where(jnp.isnan(rhos), -1, jnp.arange(0, self._ts.size))
+        # find the index of the last non-NaN time for each particle
+        tmax_idx = jnp.max(tmax_idx, axis=1)
+        rho0s = self._x0[:, 0]
+        # deviation from initial rho at the last non-NaN time for each particle
+        rho_dev = rhos[jnp.arange(self._dim_f), tmax_idx] - rho0s
+        tmax = self._ts[tmax_idx]
+
+        # TODO: better metric should penalize rho drift but also
+        # should reward the time spent in the device. Something like:
+        # f = <(rho drift at last non-NaN time)>/sum(time spent in device)
+        # Looking at average drift per toroidal transit could be better, since
+        # a particle can drift outward and come back inward
+        return safediv(rho_dev, tmax, fill=1e10)

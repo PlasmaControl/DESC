@@ -4259,7 +4259,7 @@ def plot_gammac(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``: int,
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_transit``, ``pitch_batch_size``: int,
         hyperparameters for bounce integration. See ``Bounce2D``
 
     Returns

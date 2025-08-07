@@ -640,7 +640,6 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
         "e^theta",
         "e^zeta",
         "e^theta_z",
-        "e^theta_t",
         "e^vartheta_t",
         "e^zeta_z",
         "theta_PEST_t",

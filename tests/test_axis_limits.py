@@ -101,6 +101,7 @@ not_implemented_limits = {
     "e^zeta_tz",
     "e^zeta_zz",
     "e^vartheta",
+    "e^vartheta_t",
     "e^vartheta_v|PEST",
     "e^vartheta_z|PEST",
     "e^zeta_v|PEST",

@@ -173,6 +173,23 @@ Magnetic Fields
     desc.magnetic_fields.read_BNORM_file
     desc.magnetic_fields.solve_regularized_surface_current
 
+
+Particles
+*********
+
+.. autosummary::
+    :toctree: _api/particles
+    :recursive:
+    :template: class.rst
+
+    desc.particles.CurveParticleInitializer
+    desc.particles.ManualParticleInitializerFlux
+    desc.particles.ManualParticleInitializerLab
+    desc.particles.SurfaceParticleInitializer
+    desc.particles.SlowingDownGuidingCenterTrajectory
+    desc.particles.VacuumGuidingCenterTrajectory
+
+
 Objective Functions
 *******************
 
@@ -321,6 +338,7 @@ Plotting
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces
+    desc.plotting.plot_particle_trajectories
     desc.plotting.poincare_plot
 
 Profiles

@@ -13,7 +13,6 @@ New Features
 - Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
 - `desc.magnetic_fields.field_line_integrate` now integrates the field line always in the given `phis` direction, and `phis` will always correspond to the physical toroidal angle (instead of time like coordinate previously). Previous implementation might have caused confusion about the output positions, especially when the magnetic field has negative toroidal component.
 - Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
-- Ability to obtain the top eigenvalues and the corresponding eigenfunctions using the ``ideal ballooning lambda`` and ``ideal ballooning eigenfunction`` compute functions by specifying the variable ``Neigvals``.
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.

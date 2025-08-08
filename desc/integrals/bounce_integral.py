@@ -108,7 +108,6 @@ class Bounce(IOAble, ABC):
         num_well=None,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ."""
-        # TODO (#1303).
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
@@ -740,7 +739,7 @@ class Bounce2D(Bounce):
         )
         return result[0] if len(result) == 1 else result
 
-    # TODO: Singularity subtraction quadrature enables more efficient algorithms.
+    # TODO(#1303): Singularity subtraction quadrature enables more efficient algorithms.
     #  for weakly singular integrals. To compute
     #    ∫ fh dζ where e.g. h = (1−λ|B|)⁰ᐧ⁵
     #  Taylor expand the singular part. For example, to first order

@@ -321,6 +321,7 @@ Plotting
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces
+    desc.plotting.plot_gammac
     desc.plotting.poincare_plot
 
 Profiles

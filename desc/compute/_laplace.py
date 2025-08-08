@@ -498,6 +498,7 @@ def _Phi_scalar_potential(params, transforms, profiles, data, **kwargs):
     public=False,
 )
 def _Phi_error(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
     return data
 
 
@@ -517,6 +518,7 @@ def _Phi_error(params, transforms, profiles, data, **kwargs):
     public=False,
 )
 def _Phi_num_iter(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
     return data
 
 

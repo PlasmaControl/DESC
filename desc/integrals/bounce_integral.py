@@ -108,10 +108,6 @@ class Bounce(IOAble, ABC):
         num_well=None,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ."""
-        # Strictly increasing zeta knots enforces dζ > 0.
-        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
-        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
-        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         # TODO (#1303).
 
     @abstractmethod
@@ -787,6 +783,10 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         data["theta"] = theta
 
+        # Strictly increasing zeta knots enforces dζ > 0.
+        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
+        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
+        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         result = [
             (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).dot(w) * cov
             for f in integrand
@@ -839,6 +839,10 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         data["theta"] = theta
 
+        # Strictly increasing zeta knots enforces dζ > 0.
+        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
+        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
+        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         result = [
             _swap(
                 (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"])
@@ -1459,6 +1463,11 @@ class Bounce1D(Bounce):
             n: interp1d_vec(zeta, self._zeta, data[n][..., None, :], method=method)
             for n in names
         }
+
+        # Strictly increasing zeta knots enforces dζ > 0.
+        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
+        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
+        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         result = [
             (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
         ]

@@ -713,13 +713,11 @@ class Bounce2D(Bounce):
         x, w = self._x, self._w if quad is None else quad
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
-        data = setdefault(data, {})
-        if names is None:
-            names = data.keys()
-        elif isinstance(names, str):
+        if isinstance(names, str):
             names = [names]
 
-        exclude = ("|B|", "|B^zeta|", "|e_zeta|r,a|")
+        exclude = ("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta")
+        data = setdefault(data, {})
         if is_fourier:
             data = apply(data, subset=names, exclude=exclude)
         else:
@@ -975,7 +973,7 @@ class Bounce2D(Bounce):
                 self._c["T(z)"].Y,
                 vander=_vander.get("dct cfl", None),
             ),
-            self._partial_sum(x, _vander.get("dft cfl", None)),
+            self._partial_sum_cfl(x, _vander.get("dft cfl", None)),
             self._num_theta,
             _modes=self._m_modes,
         )
@@ -985,8 +983,7 @@ class Bounce2D(Bounce):
         # Simple mean over α because when ζ extends beyond one transit we need
         # to weight all field lines uniformly regardless of their area wrt α.
 
-    def _partial_sum(self, x, vander=None):
-        # Same comment inside _bounce_utils.chebyshev; now |𝛇| is quadrature resolution.
+    def _partial_sum_cfl(self, x, vander=None):
         x = (
             bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
             if vander is None
@@ -1381,12 +1378,10 @@ class Bounce1D(Bounce):
         x, w = self._x, self._w if quad is None else quad
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
-        data = setdefault(data, {})
-        if names is None:
-            names = data.keys()
-        elif isinstance(names, str):
+        if isinstance(names, str):
             names = [names]
-        names = [n for n in names if n != "|B|"]
+
+        data = apply(setdefault(data, {}), subset=names, exclude=("|B|",))
 
         if jnp.ndim(pitch_inv) == 2:
             # if rho axis exists, then add alpha axis
@@ -1405,7 +1400,6 @@ class Bounce1D(Bounce):
                 integrand,
                 pitch,
                 data,
-                names,
                 points,
                 method,
                 check,
@@ -1422,7 +1416,6 @@ class Bounce1D(Bounce):
                     integrand,
                     pitch,
                     data,
-                    names,
                     points,
                     method,
                     check=False,
@@ -1436,7 +1429,7 @@ class Bounce1D(Bounce):
         return result[0] if len(result) == 1 else result
 
     def _integrate(
-        self, x, w, integrand, pitch, data, names, points, method, check, plot, batch
+        self, x, w, integrand, pitch, data, points, method, check, plot, batch
     ):
         z1, z2 = points
         # (..., num pitch, num well, num quad)
@@ -1460,8 +1453,8 @@ class Bounce1D(Bounce):
             self._data["|B|_z|r,a"][..., None, :],
         )
         data = {
-            n: interp1d_vec(zeta, self._zeta, data[n][..., None, :], method=method)
-            for n in names
+            k: interp1d_vec(zeta, self._zeta, v[..., None, :], method=method)
+            for k, v in data.items()
         }
 
         # Strictly increasing zeta knots enforces dζ > 0.
@@ -1473,15 +1466,7 @@ class Bounce1D(Bounce):
         ]
 
         if check:
-            _check_interp(
-                shape,
-                zeta,
-                b_sup_z,
-                B,
-                [data[name] for name in names],
-                result,
-                plot=plot,
-            )
+            _check_interp(shape, zeta, b_sup_z, B, data.values(), result, plot=plot)
 
         return result
 

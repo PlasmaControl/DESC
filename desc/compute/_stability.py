@@ -400,7 +400,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     where
 
-      λ = a² / v_A² * γ²
+    λ = a² / v_A² * γ²
     v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
 
     Returns

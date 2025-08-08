@@ -376,6 +376,12 @@ def nufft2(
 ):
     """Non-uniform fast transform of second type.
 
+    Notes
+    -----
+    Vectorization with the following signatures are supported for 1D, 2D transforms.
+     - ``(f,c0),(x)->(f,x)``
+     - ``(f,c0,c1),(x),(x)->(f,x)``
+
     Parameters
     ----------
     a : jnp.ndarray
@@ -383,9 +389,13 @@ def nufft2(
         e.g. ``a=fft(f,norm="forward")`` or ``a=fft2(f,norm="forward")``.
     xq0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
+        For a 2D transform, the coordinates stored here must be the same coordinate
+        enumerated across axis ``-2`` of ``a``.
     xq1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         If not given, performs a one-dimensional transform.
+        For a 2D transform, the coordinates stored here must be the same coordinate
+        enumerated across axis ``-1`` of ``a``.
     domain0 : tuple[float]
         Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
@@ -415,9 +425,10 @@ def pad_for_fft(a, n, axis=-1):
     Parameters
     ----------
     a : jnp.ndarray
-        Fourier coefficients of positive frequencies.
+        Fourier coefficients of positive frequencies along ``axis``.
     n : int
-        Number of positive frequencies + negative frequencies.
+        Number of positive frequencies + negative frequencies in
+        the output along ``axis``.
     axis : int
         Axis to pad with zeros.
 

@@ -237,6 +237,7 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
         jnp.isclose(B, 0).any() or jnp.isclose(b_sup_z, 0).any()
     ), "|B| has vanished, violating the hairy ball theorem."
 
+    # Integrals that we should be computing.
     marked = jnp.any(zeta.reshape(shape) != 0.0, axis=-1)
     goal = marked.sum()
 
@@ -255,6 +256,7 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
             _plot_check_interp(zeta, f_i.reshape(shape), name=f"f_{i}")
 
     for res in result:
+        # Number of those integrals that were computed.
         actual = jnp.sum(marked & jnp.isfinite(res))
         assert goal == actual, (
             f"Lost {goal - actual} integrals from NaN generation in the integrand."
@@ -671,7 +673,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     if theta.ndim == 2:
         # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)
-    # Project θ to a set of Chebyshev series. This is a partial summation technique.
+    # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
     T.stitch()
     assert T.X == num_transit

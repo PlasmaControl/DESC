@@ -275,22 +275,9 @@ def _poloidal_drift(data, B, pitch):
 def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
-
-    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
-    radial drift of trapped particles. The energetic particle confinement
-    metric γ_c quantifies whether the contours of the second adiabatic invariant
-    close on the flux surfaces. In the limit where the poloidal drift velocity
-    majorizes the radial drift velocity, the contours lie parallel to flux
-    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
-    of trapped particles on each flux surface.
-
-    The radial electric field has a negligible effect, since fast particles
-    have high energy with collisionless orbits, so it is assumed to be zero.
+    Defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
+    The variable γ_c is needed for all the Γs so we calculate it
+    in this compute function separately.
     """
     # noqa: unused dependency
     theta = kwargs["theta"]

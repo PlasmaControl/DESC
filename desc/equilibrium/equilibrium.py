@@ -1231,7 +1231,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1264,6 +1264,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1354,7 +1355,6 @@ class Equilibrium(IOAble, Optimizable):
         L_lmn,
         lmbda,
         theta0=None,
-        period=np.inf,
         tol=1e-6,
         maxiter=30,
         **kwargs,
@@ -1366,7 +1366,6 @@ class Equilibrium(IOAble, Optimizable):
             L_lmn,
             lmbda,
             theta0,
-            period=period,
             tol=tol,
             maxiter=maxiter,
             **kwargs,

@@ -236,9 +236,9 @@ class GammaC(_Objective):
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["fieldline quad"] = (x, w)
-        self._constants["precompute_vander"] = {
-            "vander_dft_cfl": _vander_dft_cfl(x, self._grid),
-            "vander_dct_cfl": _vander_dct_cfl(x, self._constants["Y"].size),
+        self._constants["_vander"] = {
+            "dct cfl": _vander_dct_cfl(x, self._constants["Y"].size),
+            "dft cfl": _vander_dft_cfl(x, self._grid),
         }
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparam.pop("num_quad")),
@@ -312,7 +312,7 @@ class GammaC(_Objective):
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
-            _precompute_vander=constants["precompute_vander"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])

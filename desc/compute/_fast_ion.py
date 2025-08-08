@@ -147,7 +147,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
-    _precompute_vander = kwargs.get("_precompute_vander", None)
+    _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -160,7 +160,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
-            _precompute_vander=_precompute_vander,
         )
 
         def fun(pitch_inv):
@@ -190,7 +189,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, _vander) * 2**1.5 * jnp.pi)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -307,7 +306,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
-    _precompute_vander = kwargs.get("_precompute_vander", None)
+    _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -320,7 +319,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
-            _precompute_vander=_precompute_vander,
         )
 
         def fun(pitch_inv):
@@ -341,7 +339,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, _vander) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
     data["Gamma_c Velasco"] = _compute(

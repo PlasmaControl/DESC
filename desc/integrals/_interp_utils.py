@@ -371,7 +371,9 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2(a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi)):
+def nufft2(
+    a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), eps=1e-6
+):
     """Non-uniform fast transform of second type.
 
     Parameters
@@ -388,6 +390,8 @@ def nufft2(a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi)):
         Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by ``xq1`` over which samples were taken.
+    eps : float
+        Precision requested. Default is ``1e-6``.
 
     Returns
     -------
@@ -399,14 +403,30 @@ def nufft2(a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi)):
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     xq0 = (xq0 - domain0[0]) * scale0
     if xq1 is None:
-        return _nufft2(a, xq0, iflag=1, opts=opts)
+        return _nufft2(a, xq0, iflag=1, eps=eps, opts=opts)
     scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
     xq1 = (xq1 - domain1[0]) * scale1
-    return _nufft2(a, xq0, xq1, iflag=1, opts=opts)
+    return _nufft2(a, xq0, xq1, iflag=1, eps=eps, opts=opts)
 
 
-def _to_fft(a, n, axis=-1):
-    """Cast output to form expected for FFT."""
+def pad_for_fft(a, n, axis=-1):
+    """Pad output to form expected for FFT.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients of positive frequencies.
+    n : int
+        Number of positive frequencies + negative frequencies.
+    axis : int
+        Axis to pad with zeros.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Fourier coefficients for use with FFT.
+
+    """
     pad_width = [(0, 0)] * a.ndim
     pad_width[axis] = (0, n - a.shape[axis])
     return jnp.pad(a, pad_width)

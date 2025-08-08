@@ -98,7 +98,7 @@ def test_map_clebsch_coordinates():
         grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
     )
     with warnings.catch_warnings():
-        warnings.filterwarnings("default", "Unequal number of field periods")
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
         lmbda = get_transforms(
             "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
         )["L"]

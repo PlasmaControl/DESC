@@ -77,7 +77,7 @@ _bounce_doc = {
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
     "spline": "bool : Whether to use cubic splines to compute bounce points.",
-    "_precompute_vander": "dict[str,jnp.ndarray] Precomputed transform matrices.",
+    "_vander": "dict[str,jnp.ndarray] : Precomputed transform matrices.",
 }
 
 
@@ -205,7 +205,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
-    _precompute_vander = kwargs.get("_precompute_vander", None)
+    _vander = kwargs.get("_vander", None)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
@@ -222,7 +222,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
-            _precompute_vander=_precompute_vander,
         )
 
         def fun(pitch_inv):
@@ -241,7 +240,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        ) / bounce.compute_fieldline_length(fl_quad, _vander)
 
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]

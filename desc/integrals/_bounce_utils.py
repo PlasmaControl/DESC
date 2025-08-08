@@ -215,7 +215,8 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
     Parameters
     ----------
     shape : tuple
-        Shape is (num rho, num alpha, num pitch, num well, num quad).
+        Shape that broadcasts with
+        (num rho, num alpha, num pitch, num well, num quad).
     zeta : jnp.ndarray
         Quadrature points in ζ coordinates.
     b_sup_z : jnp.ndarray

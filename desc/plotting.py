@@ -40,6 +40,8 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_boozer_surface_LCForm",
+    "plot_boozer_surface_OOPS",
     "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",
@@ -4222,5 +4224,299 @@ def plot_logo(save_path=None, **kwargs):
 
     if save_path is not None:
         fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
+
+    return fig, ax
+
+
+def plot_boozer_surface_OOPS(
+    thing,
+    iota=0,
+    grid_plot=None,
+    fill=False,
+    ncontours=30,
+    fieldlines=0,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    thing : OmnigenousFieldOOPS
+        Object from which to plot.
+    iota : float
+        Rotational transform, used when `thing` is an OmnigenousField.
+    grid_plot : Grid, optional
+        Grid to plot on.
+    fill : bool, optional
+        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
+    ncontours : int, optional
+        Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+        matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(field, iota=0.32)
+
+    """
+    # default grids
+    if grid_plot is None:
+        grid_kwargs = {
+            "rho": 1,
+            "theta": 91,
+            "zeta": 91,
+            "NFP": thing.NFP,
+            "endpoint": True,
+        }
+        grid_plot = _get_grid(**grid_kwargs)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = thing.compute(
+            ["theta_B_OOPS", "zeta_B_OOPS", "|B|_OOPS"],
+            grid=grid_plot,
+            helicity=thing.helicity,
+            iota=iota,
+        )
+
+    B = data["|B|_OOPS"]
+    theta_B = np.mod(data["theta_B_OOPS"].flatten(order="F"), 2 * np.pi)
+    zeta_B = np.mod(data["zeta_B_OOPS"].flatten(order="F"), 2 * np.pi / thing.NFP)
+
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    divider = make_axes_locatable(ax)
+
+    contourf_kwargs = {
+        "norm": matplotlib.colors.Normalize(),
+        "levels": kwargs.pop(
+            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
+        ),
+        "cmap": kwargs.pop("cmap", "jet"),
+        "extend": "both",
+    }
+
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
+
+    # plot
+    op = ("tri") + "contour" + ("f" if fill else "")
+    im = getattr(ax, op)(zeta_B, theta_B, B, **contourf_kwargs)
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
+
+    ax.set_xlim([0, 2 * np.pi / thing.NFP])
+    ax.set_ylim([0, 2 * np.pi])
+
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
+
+    _set_tight_layout(fig)
+
+    if return_data:
+        plot_data = {"theta_B": theta_B, "zeta_B": zeta_B, "|B|": B}
+        return fig, ax, plot_data
+
+    return fig, ax
+
+
+def plot_boozer_surface_LCForm(
+    thing,
+    iota=0,
+    S_func=None,
+    D_func=None,
+    grid_plot=None,
+    fill=False,
+    ncontours=30,
+    fieldlines=0,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    thing : OmnigenousFieldOOPS
+        Object from which to plot.
+    iota : float
+        Rotational transform, used when `thing` is an OmnigenousField.
+    grid_plot : Grid, optional
+        Grid to plot on.
+    fill : bool, optional
+        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
+    ncontours : int, optional
+        Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+        matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(field, iota=0.32)
+
+    """
+    # default grids
+    if grid_plot is None:
+        grid_kwargs = {
+            "rho": 1,
+            "theta": 91,
+            "zeta": 91,
+            "NFP": thing.NFP,
+            "endpoint": True,
+        }
+        grid_plot = _get_grid(**grid_kwargs)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = thing.compute(
+            ["theta_B_LCForm", "zeta_B_LCForm", "|B|_LCForm"],
+            grid=grid_plot,
+            helicity=thing.helicity,
+            iota=iota,
+            S_func=S_func,
+            D_func=D_func,
+        )
+
+    B = data["|B|_LCForm"]
+    theta_B = np.mod(data["theta_B_LCForm"].flatten(order="F"), 2 * np.pi)
+    zeta_B = np.mod(data["zeta_B_LCForm"].flatten(order="F"), 2 * np.pi / thing.NFP)
+
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    divider = make_axes_locatable(ax)
+
+    contourf_kwargs = {
+        "norm": matplotlib.colors.Normalize(),
+        "levels": kwargs.pop(
+            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
+        ),
+        "cmap": kwargs.pop("cmap", "jet"),
+        "extend": "both",
+    }
+
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
+
+    # plot
+    op = ("tri") + "contour" + ("f" if fill else "")
+    im = getattr(ax, op)(zeta_B, theta_B, B, **contourf_kwargs)
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
+
+    ax.set_xlim([0, 2 * np.pi / thing.NFP])
+    ax.set_ylim([0, 2 * np.pi])
+
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
+
+    _set_tight_layout(fig)
+
+    if return_data:
+        plot_data = {"theta_B": theta_B, "zeta_B": zeta_B, "|B|": B}
+        return fig, ax, plot_data
 
     return fig, ax

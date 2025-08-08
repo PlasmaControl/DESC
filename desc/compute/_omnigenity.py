@@ -13,7 +13,8 @@ import functools
 
 from interpax import interp1d
 
-from desc.backend import jnp, sign, vmap
+from desc.backend import jnp, sign, vmap, switch, cond
+from jax.lax import dynamic_slice
 
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
@@ -938,3 +939,509 @@ def _isodynamicity(params, transforms, profiles, data, **kwargs):
         dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|^2"]
     )
     return data
+
+
+@register_compute_fun(
+    name="S_list",
+    label="S_{n}",
+    units="~",
+    units_long="None",
+    description="Omnigenity S coefficients, used in OOPS",
+    dim=1,
+    params=["S_list"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _S_list(params, transforms, profiles, data, **kwargs):
+    """
+    S_list is a list of coefficients for the omnigenity S shape.
+    It is used in OOPS to define the omnigenity symmetry angle.
+    """
+    if "S_list" not in params:
+        raise ValueError("S_list parameter is required for OOPS")
+    data["S_list"] = jnp.array(params["S_list"])
+    return data
+
+
+@register_compute_fun(
+    name="D_list",
+    label="D_{n}",
+    units="~",
+    units_long="None",
+    description="Omnigenity D coefficients, used in OOPS",
+    dim=1,
+    params=["D_list"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _D_list(params, transforms, profiles, data, **kwargs):
+    """
+    D_list is a list of coefficients for the omnigenity D shape.
+    It is used in OOPS to define the omnigenity symmetry angle.
+    """
+    if "D_list" not in params:
+        raise ValueError("D_list parameter is required for OOPS")
+    data["D_list"] = jnp.array(params["D_list"])
+    return data
+
+
+@register_compute_fun(
+    name="alpha_OOPS",
+    label="\\alpha_OOPS",
+    units="rad",
+    units_long="radians",
+    description="Field line label, defined on [0, 2pi)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _alpha_OOPS(params, transforms, profiles, data, **kwargs):
+    data["alpha_OOPS"] = transforms["grid"].nodes[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="eta_OOPS",
+    label="\\eta_OOPS",
+    units="rad",
+    units_long="radians",
+    description="Intermediate omnigenity coordinate along field lines",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _eta_OOPS(params, transforms, profiles, data, **kwargs):
+    # we need rescale to [-pi,pi], nodes is divided by NFP, so we multiply by NFP
+    data["eta_OOPS"] = transforms["grid"].nodes[:, 2] * transforms["grid"].NFP - jnp.pi
+    return data
+
+
+@register_compute_fun(
+    name="zeta_B_OOPS",
+    label="\\zeta_{B}_OOPS",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angle",
+    dim=1,
+    params=["S_list", "D_list"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
+    iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
+)
+def _omni_map_zeta_B_OOPS(params, transforms, profiles, data, **kwargs):
+    M = kwargs.get("helicity", (1, 0))[0]
+    N = kwargs.get("helicity", (1, 0))[1]
+    iota = kwargs.get("iota", jnp.ones(transforms["grid"].num_rho))
+    S_list = params["S_list"]
+    D_list = params["D_list"]
+
+    theta_B, zeta_B = _omnigenity_mapping_OOPS(
+        M, N, iota, S_list, D_list, transforms["grid"]
+    )
+
+    data["theta_B_OOPS"] = theta_B
+    data["zeta_B_OOPS"] = zeta_B
+    return data
+
+
+def _generate_S_shape(S_list, y):
+    n = S_list.size
+    i = jnp.arange(1, n + 1, dtype=y.dtype).reshape((n,) + (1,) * y.ndim)
+    return jnp.einsum("i...,i->...", jnp.sin(i * y[None, ...]), S_list)
+
+
+def _generate_D_shape(D_list, x):
+    n = D_list.size
+    i = jnp.arange(n, dtype=x.dtype)
+    k = ((2 * i + 1) / 2).reshape((n,) + (1,) * x.ndim)
+    return jnp.einsum("i...,i->...", jnp.cos(k * x[None, ...]), D_list)
+
+
+def _map_toroidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
+    S = _generate_S_shape(S_list, (alp2d - eta2d / iota) * nfp)
+    D = _generate_D_shape(D_list, eta2d)
+    h_o = eta2d - S * D
+    theta2d_trans_real = h_o
+    zeta2d_trans_real = alp2d
+    return theta2d_trans_real, zeta2d_trans_real
+
+
+def _map_poloidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
+    S = _generate_S_shape(S_list, alp2d - iota / nfp * eta2d)
+    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
+    h_o = eta2d - S * D
+    theta2d_trans_real = alp2d
+    zeta2d_trans_real = h_o / nfp + jnp.pi / nfp
+    return theta2d_trans_real, zeta2d_trans_real
+
+
+def _map_helical_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
+    S = _generate_S_shape(S_list, (alp2d + 1 / (1 + nfp / iota) * eta2d))
+    D = _generate_D_shape(D_list, eta2d)
+    h_o = eta2d - S * D
+    theta2d_trans_real = alp2d
+    zeta2d_trans_real = -(h_o + alp2d) / nfp  # + jnp.pi/nfp
+    return theta2d_trans_real, zeta2d_trans_real
+
+
+OOPS_branches = (_map_poloidal_OOPS, _map_toroidal_OOPS, _map_helical_OOPS)
+
+
+def _omnigenity_mapping_OOPS(M, N, iota, S_list, D_list, grid):
+    # iota is a vector of length grid.num_rho
+    iota = jnp.atleast_1d(iota)
+    assert (
+        len(iota) == grid.num_rho
+    ), f"got ({len(iota)}) iota values for grid with {grid.num_rho} surfaces"
+
+    NFP = grid.NFP
+
+    # we need rescale to [-pi,pi], nodes is divided by NFP, so we multiply by NFP
+    eta2d = grid.nodes[:, 2].reshape(grid.num_theta, grid.num_zeta).T * NFP - jnp.pi
+    alp2d = grid.nodes[:, 1].reshape(grid.num_theta, grid.num_zeta).T
+
+    index = jnp.where(M == 0, 0, jnp.where(N == 0, 1, 2))
+
+    operands = (eta2d, alp2d, iota[0], NFP, S_list, D_list)
+    theta_B, zeta_B = switch(index, OOPS_branches, *operands)
+
+    return theta_B, zeta_B
+
+
+@register_compute_fun(
+    name="theta_B_OOPS",
+    label="\\theta_{B}_OOPS",
+    units="rad",
+    units_long="radians",
+    description="Boozer poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["zeta_B_OOPS"],
+    coordinates="rtz",
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _omni_map_theta_B_OOPS(params, transforms, profiles, data, **kwargs):
+    return data
+
+
+@register_compute_fun(
+    name="|B|_OOPS",
+    label="|\\mathbf{B}|_OOPS",
+    units="T",
+    units_long="Tesla",
+    description="Ideal Magnitude of omnigenous magnetic field",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["eta_OOPS"],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+)
+def _B_omni_OOPS(params, transforms, profiles, data, **kwargs):
+    def fake_B_target(eta):
+        return 1 + 0.25 + 0.25 * jnp.cos(eta - jnp.pi)
+
+    eta = transforms["grid"].meshgrid_reshape(data["eta_OOPS"], "rtz")
+    B = fake_B_target(eta)
+    # Here B is 2d
+    B = jnp.moveaxis(B, 0, 1)
+    data["|B|_OOPS"] = B.flatten(order="F")
+    return data
+
+
+@register_compute_fun(
+    name="S_list",
+    label="S_{n}",
+    units="~",
+    units_long="None",
+    description="Omnigenity S coefficients, used in Landreman Form",
+    dim=1,
+    params=["S_list"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+)
+def _S_list(params, transforms, profiles, data, **kwargs):
+    """
+    S_list is a list of coefficients for the omnigenity S shape.
+    It is used in OOPS to define the omnigenity symmetry angle.
+    """
+    if "S_list" not in params:
+        raise ValueError("S_list parameter is required for Landreman Form")
+    data["S_list"] = jnp.array(params["S_list"])
+    return data
+
+
+@register_compute_fun(
+    name="D_list",
+    label="D_{n}",
+    units="~",
+    units_long="None",
+    description="Omnigenity D coefficients, used in Landreman Form",
+    dim=1,
+    params=["D_list"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+)
+def _D_list(params, transforms, profiles, data, **kwargs):
+    """
+    D_list is a list of coefficients for the omnigenity D shape.
+    It is used in Landreman Form to define the omnigenity symmetry angle.
+    """
+    if "D_list" not in params:
+        raise ValueError("D_list parameter is required for OOPS")
+    data["D_list"] = jnp.array(params["D_list"])
+    return data
+
+
+@register_compute_fun(
+    name="eta_LCForm",
+    label="\\eta_LCForm",
+    units="rad",
+    units_long="radians",
+    description="Intermediate omnigenity coordinate along field lines",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+)
+def _eta_OOPS(params, transforms, profiles, data, **kwargs):
+    # we need rescale to [-pi,pi], nodes is divided by NFP, so we multiply by NFP
+    data["eta_LCForm"] = transforms["grid"].nodes[:, 2] * transforms["grid"].NFP
+    return data
+
+
+def _omnigenity_mapping_LandremanForm(M, N, iota, S_list, D_list, S_func, D_func, grid):
+    """
+    Landreman-like mapping zeta(eta, theta) with per-element branching at eta = pi,
+    written in a JAX/JIT-safe, AD-friendly style.
+
+    Returns
+    -------
+    theta2d, zeta2d : (num_zeta, num_theta) arrays
+        Boozer angles on the evaluation surface (theta set to alpha here).
+    """
+    TWOPI = jnp.pi * 2.0
+    iota = jnp.atleast_1d(iota)
+    assert (
+        len(iota) == grid.num_rho
+    ), f"got ({len(iota)}) iota values for grid with {grid.num_rho} surfaces"
+    iota0 = iota[-1]
+    NFP = grid.NFP
+
+    # Safe effective-iota per your formula, with guards to avoid NaNs in the inactive branch
+    denom1 = jnp.where(iota0 == 0.0, 1.0, iota0)  # for 1/iota
+    val1 = 1.0 / denom1
+    denom2 = jnp.where(
+        (N - iota0 * M) == 0.0, 1.0, (N - iota0 * M)
+    )  # for iota/((N-iota*M)*NFP)
+    val2 = iota0 / (denom2 * NFP)
+    iota_eff = jnp.where(N == 0, val1, val2)
+
+    # Build 2D coordinates (zeta, theta) = (num_zeta, num_theta)
+    # Keep eta in [0, 2pi) to match your split at pi
+    eta2d = grid.nodes[:, 2].reshape(grid.num_theta, grid.num_zeta).T * NFP
+    theta2d = (
+        grid.nodes[:, 1].reshape(grid.num_theta, grid.num_zeta).T
+    )  # use alpha as "theta" input
+
+    theta_1d = grid.nodes[grid.unique_theta_idx, 1]
+    zeta_1d = grid.nodes[grid.unique_zeta_idx, 2]
+
+    eta_1d = zeta_1d * NFP
+
+    theta2d, eta2d = jnp.meshgrid(theta_1d, eta_1d, indexing="ij")
+
+    # Evaluate D on eta and on its "mirror"
+    D_eta = D_func(eta2d, D_list)  # shape (nz, nt)
+    D_mirror = D_func(TWOPI - eta2d, D_list)
+
+    # Evaluate S on the two branches
+    # low-π branch:  zeta = π - S(η, θ + iota_eff * D(η)) - D(η)
+    S_low = S_func(eta2d, theta2d + iota_eff * D_eta, S_list)
+    zeta_low = jnp.pi - S_low - D_eta
+
+    # up-π branch:   zeta = π + S(2π-η, -θ + iota_eff * D(2π-η)) + D(2π-η)
+    S_up = S_func(TWOPI - eta2d, -theta2d + iota_eff * D_mirror, S_list)
+    zeta_up = jnp.pi + S_up + D_mirror
+
+    # Elementwise selection at η < π (no dynamic slicing)
+    condition = eta2d < jnp.pi
+    zeta2d = jnp.where(condition, zeta_low, zeta_up)
+
+    # For this mapping, Boozer theta can be taken as alpha
+
+    # Here in [0,2pi) range
+    thetaB2d = theta2d
+    zetaB2d = zeta2d
+
+    # Here we trans it to real Boozer angles
+    def _branch_N0(_):
+        # N == 0: force M=1 convention; set nfp_eff=1 per your comment
+        theta_real = zetaB2d
+        zeta_real = thetaB2d  # / nfp_eff where nfp_eff = 1
+        return zeta_real, theta_real
+
+    def _branch_else(_):
+        # N != 0:
+        # zeta_real = zeta_calc/(nfp*N) + (M/N)*theta_real
+        # theta_real = theta_calc
+        N_change = jnp.where(N * M != 0, NFP, N)
+        NFP_change = jnp.where(N * M != 0, N, NFP)
+
+        theta_real = thetaB2d
+        zeta_real = zetaB2d / (NFP_change * N_change) + (M / N_change) * theta_real
+        return zeta_real, theta_real
+
+    zeta2d, theta2d = cond(N == 0, _branch_N0, _branch_else, operand=None)
+
+    return theta2d, zeta2d
+
+
+@register_compute_fun(
+    name="zeta_B_LCForm",
+    label="\\zeta_{B}_LCForm",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angle using Landreman-like mapping",
+    dim=1,
+    params=["S_list", "D_list"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
+    iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
+    S_func="function: Function to compute S(eta,theta) given S_list",
+    D_func="function: Function to compute D(eta) given D_list",
+)
+def _omni_map_zeta_B_LCForm(params, transforms, profiles, data, **kwargs):
+    M = kwargs.get("helicity", (1, 0))[0]
+    N = kwargs.get("helicity", (1, 0))[1]
+    iota = kwargs.get("iota", jnp.ones(transforms["grid"].num_rho))
+    S_list = params["S_list"]
+    D_list = params["D_list"]
+    S_func = kwargs.get("S_func", None)
+    D_func = kwargs.get("D_func", None)
+    if S_func is None or D_func is None:
+        raise ValueError(
+            "S_func and D_func must be provided in params for LandremanLCForm"
+        )
+
+    theta_B, zeta_B = _omnigenity_mapping_LandremanForm(
+        M, N, iota, S_list, D_list, S_func, D_func, transforms["grid"]
+    )
+
+    data["theta_B_LCForm"] = theta_B
+    data["zeta_B_LCForm"] = zeta_B
+    return data
+
+
+@register_compute_fun(
+    name="theta_B_LCForm",
+    label="\\theta_{B}_LCForm",
+    units="rad",
+    units_long="radians",
+    description="Boozer poloidal angle using Landreman-like mapping",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["zeta_B_LCForm"],
+    coordinates="rtz",
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+)
+def _omni_map_theta_B_LCForm(params, transforms, profiles, data, **kwargs):
+    return data
+
+
+@register_compute_fun(
+    name="|B|_LCForm",
+    label="|\\mathbf{B}|_LCForm",
+    units="T",
+    units_long="Tesla",
+    description="Ideal Magnitude of omnigenous magnetic field using Landreman-like mapping",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["eta_LCForm"],
+    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+)
+def _B_omni_LCForm(params, transforms, profiles, data, **kwargs):
+    def fake_B_target(eta):
+        return 1 + 0.25 + 0.25 * jnp.cos(eta)
+
+    eta = transforms["grid"].meshgrid_reshape(data["eta_LCForm"], "rtz")
+    B = fake_B_target(eta)
+    # Here B is 2d
+    B = jnp.moveaxis(B, 0, 1)
+    data["|B|_LCForm"] = B.flatten(order="F")
+    return data
+
+
+def _B_omni_nonsymmetric(
+    B_eta_alpha, M_harmonics, N_harmonics, field_grid, is_imag=True
+):
+    # Normalized by B00
+    n_theta, n_zeta = B_eta_alpha.shape
+
+    B_mn = jnp.fft.fft2(B_eta_alpha / (field_grid.num_theta * field_grid.num_zeta))
+
+    b00 = B_mn[0, 0]
+    bnorm = jnp.where(b00 == 0, 1.0, b00)
+    B_mn_normalized = B_mn / bnorm
+
+    B_mn_shifted = jnp.fft.fftshift(B_mn_normalized)
+
+    center_theta = n_theta // 2
+    center_zeta = n_zeta // 2
+
+    # m ∈ [1, M_harmonics], n ∈ [-N_harmonics, N_harmonics]
+    r0 = center_theta + 1
+    r1 = r0 + M_harmonics
+    c0 = center_zeta - N_harmonics
+    c1 = center_zeta + N_harmonics + 1
+
+    nonsymmetric_block_complex = B_mn_shifted[r0:r1, c0:c1]
+
+    error_coeffs_complex = nonsymmetric_block_complex.reshape(-1)
+
+    if is_imag:
+        error_coeffs = jnp.concatenate(
+            [error_coeffs_complex.real, error_coeffs_complex.imag], axis=0
+        )
+    else:
+        error_coeffs = error_coeffs_complex.real
+    return error_coeffs

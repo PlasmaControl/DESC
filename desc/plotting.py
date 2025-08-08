@@ -4276,7 +4276,7 @@ def plot_gammac(
     --------
     .. image:: ../../_static/images/plotting/plot_gammac.png
 
-    .. code-bloack:: python
+    .. code-block:: python
 
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)

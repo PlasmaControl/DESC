@@ -111,7 +111,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """
@@ -436,7 +436,7 @@ class Surface(IOAble, Optimizable, ABC):
 
     @property
     def sym(self):
-        """bool: Whether or not the surface is stellarator symmetric."""
+        """bool: Whether the surface is stellarator symmetric."""
         return self._sym
 
     def _compute_orientation(self):
@@ -495,12 +495,16 @@ class Surface(IOAble, Optimizable, ABC):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
             rho surfaces or a Quadrature grid for constant zeta surfaces.
-        params : dict of ndarray
-            Parameters from the equilibrium. Defaults to attributes of self.
+        params : dict[str, jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
-        data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+        data : dict[str, jnp.ndarray]
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -509,10 +513,12 @@ class Surface(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """
+        RpZ_data = kwargs.pop("RpZ_data", None)
+
         if isinstance(names, str):
             names = [names]
         if grid is None:
@@ -532,8 +538,9 @@ class Surface(IOAble, Optimizable, ABC):
                 f" instead got type {type(grid)}"
             )
 
-        if params is None:
-            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+        params = get_params(
+            names, obj=self, basis=kwargs.get("basis", "rpz"), params=params
+        )
         if transforms is None:
             transforms = get_transforms(
                 names,
@@ -609,6 +616,7 @@ class Surface(IOAble, Optimizable, ABC):
             transforms=transforms,
             profiles=profiles,
             data=data,
+            RpZ_data=RpZ_data,
             **kwargs,
         )
         return data

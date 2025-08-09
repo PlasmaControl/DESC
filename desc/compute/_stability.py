@@ -848,10 +848,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     dpsi_r2_drho = 2 * psi_r * psi_rr
     diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
 
-    p = data["p"] / B_N**2
+    p0 = data["p"] / B_N**2
+    p0 = p0.at[p0 < 0].set(1e-8)
 
-    n0 = p ** (1 / 3) + 1 / (psi_r2.flatten())
-    # --no-verify n0 = p ** (1 / 3) + 10
+    n0 = p0 ** (1 / 3) + 1e-4 / (psi_r2.flatten())
+    # n0 = 1e-4
 
     axisym = kwargs.get("axisym", False)
 
@@ -2386,10 +2387,11 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     dpsi_r2_drho = 2 * psi_r * psi_rr
     diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
 
-    p = data["p"] / B_N**2
+    p0 = data["p"] / B_N**2
+    p0 = p0.at[p0 < 0].set(1e-8)
 
-    n0 = p ** (1 / 3) + 1 / (psi_r2.flatten())
-    # --no-verify n0 = p ** (1 / 3) + 10
+    # n0 = (p0 ** (1 / 3) + 1e-4 / (psi_r2.flatten()))
+    n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
 
@@ -2423,7 +2425,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         m_2 = 2.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-3
+        eps = 5.0e-3
         return eps + (1 - eps) * (lower + upper)
 
     # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
@@ -2772,6 +2774,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, zeta_idx].add(
         jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
     )
+
     B = B.at[rho_idx, theta_idx].add(
         jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
     )
@@ -2803,10 +2806,40 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ## Shift the diagon of A to ensure positive definiteness
     ## The estimate must be accurate. If A is diagonally dominant
     ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-    # A = A.at[jnp.diag_indices_from(A)].add(1e-13)
+    # A = 0.5 * (A + A.T)
+    # B = 0.5 * (B + B.T)
 
-    # Finally add the only instability drive term
-    A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+    A = A.at[jnp.diag_indices_from(A)].add(1e-12)
+    # LAinv = jnp.linalg.inv(jnp.linalg.cholesky(A))
+
+    ## Similarity transform to
+    # A = LAinv @ A @ LAinv.T
+    # B = LAinv @ B @ LAinv.T
+
+    # B = B.at[jnp.diag_indices_from(B)].add(1e-11)
+
+    ## Finally add the only instability drive term
+    # A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
+    w1, _ = jnp.linalg.eigh(A)
+    print(w1)
+
+    # D = 1.0 /jnp.tile((W * sqrtg).flatten(), 3)[:, None]
+    D = jnp.diag(jnp.sqrt(jnp.diag(B)))
+
+    A = D @ (A @ D.T)
+    B = D @ (B @ D.T)
+
+    w2, _ = jnp.linalg.eigh(A)
+    print(w2)
+    w4, _ = jnp.linalg.eigh(B)
+    print(w4)
+
+    pdb.set_trace()
+    # from jax.scipy.linalg import solve_triangular
+    # L = jnp.linalg.cholesky(B)
+    # Y = solve_triangular(L, A, lower=True)
+    # A_std = solve_triangular(L.T, Y.T, lower=False).T
 
     # y = A - A.conj().T
     # assert jnp.abs(y) < 1e-12, "matrix is asymmetric"
@@ -2819,11 +2852,20 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
 
+    from jax.scipy.linalg import solve_triangular
+
     ## This will be the most expensive but easiest automatically differentiable way.
     ## TODO: Multiply B with a permutation matrix P so that it becomes block diagonal
     ## then Cholesky factorize each block. That will make cholesky ~ 3**3 x faster
-    Linv = jnp.linalg.inv(jnp.linalg.cholesky(B[jnp.ix_(keep, keep)]))
-    w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
+    L = jnp.linalg.cholesky(B)
+    Linv = jnp.linalg.inv(L)
+    ## Right-multiply by L^{-T}:  ALt = A L^{-T}
+    # ALt = solve_triangular(L, A.T, lower=True).T
+    ## Left-multiply by L^{-1}:   C = L^{-1} (A L^{-T})
+    # A   = solve_triangular(L, ALt, lower=True)
+
+    # w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
+    w, v = jnp.linalg.eigh(A[jnp.ix_(keep, keep)])
 
     print(w)
     pdb.set_trace()

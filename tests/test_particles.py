@@ -41,8 +41,7 @@ def test_constant_field_cases():
     )
 
     x0, args = particles.init_particles(model=model, field=field)
-    ms, qs, mus = args[:3]
-    rpz, _ = trace_particles(field, x0, ms, qs, mus, model=model, ts=ts)
+    rpz, _ = trace_particles(field, x0, model_args=args, model=model, ts=ts)
     p1r = rpz[0, :, 0]
     p1z = rpz[0, :, 2]
     p2r = rpz[1, :, 0]
@@ -66,8 +65,7 @@ def test_constant_field_cases():
     )
 
     x0, args = particles.init_particles(model=model, field=field)
-    ms, qs, mus = args[:3]
-    rpz, _ = trace_particles(field, x0, ms, qs, mus, model=model, ts=ts)
+    rpz, _ = trace_particles(field, x0, model_args=args, model=model, ts=ts)
     p1r = rpz[0, :, 0]
     p1z = rpz[0, :, 2]
     p2r = rpz[1, :, 0]
@@ -111,24 +109,22 @@ def test_mirror_force_drift():
     model = VacuumGuidingCenterTrajectory(frame="lab")
     ts = np.linspace(0, 1e-6, 10)
     x0, args = particles.init_particles(model=model, field=field)
-    ms, qs, mus = args[:3]
     rpz, vpar = trace_particles(
         field=field,
         y0=x0,
-        ms=ms,
-        qs=qs,
-        mus=mus,
+        model_args=args,
         model=model,
         ts=ts,
     )
+    m, _, mu = args[0, :]
     # The time derivative of drift velocity due to the mirror force is:
     # vpardot = - (mu / m) (𝐛 ⋅ ∇B)   # noqa : E800
     # For the given field, this is -dB * mu / m. So, the exact Z position
     # should be: z(t) = z0 + v0 * t - (dB * mu / m) * t^2 / 2
     # where v0 is the initial parallel velocity and z0 is the initial Z position.
-    z_exact = x0[0, 2] + x0[0, 3] * ts - dB * mus[0] / ms[0] * ts**2 / 2
+    z_exact = x0[0, 2] + x0[0, 3] * ts - dB * mu / m * ts**2 / 2
     # The parallel velocity should be vpar(t) = v0 - (dB * mu / m) * t
-    vpar_exact = x0[0, 3] - dB * mus[0] / ms[0] * ts
+    vpar_exact = x0[0, 3] - dB * mu / m * ts
 
     assert np.allclose(rpz[0, :, 2], z_exact, atol=1e-10)
     assert np.allclose(vpar[0, :, 0], vpar_exact, atol=1e-10)
@@ -146,13 +142,11 @@ def test_tracing_purely_toroidal_magnetic_field():
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e8)
     model = VacuumGuidingCenterTrajectory(frame="lab")
     x0, args = particles.init_particles(model=model, field=field)
-    ms, qs, mus = args[:3]
+    m, q, _ = args[0, :]
     rpz, vpar = trace_particles(
         field=field,
         y0=x0,
-        ms=ms,
-        qs=qs,
-        mus=mus,
+        model_args=args,
         model=model,
         ts=ts,
     )
@@ -164,12 +158,7 @@ def test_tracing_purely_toroidal_magnetic_field():
     # B = B0*Rmajor/r   # noqa : E800
     # So, the drift velocity in Z direction is:
     # vd = m / (qB0*Rmajor) * (vpar^2 + vperp^2/2)   # noqa : E800
-    vd = (
-        ms[0]
-        / (qs[0] * B0 * Rmajor)
-        * (particles.vpar0[0] ** 2 + particles.v0[0] ** 2)
-        / 2
-    )
+    vd = m / (q * B0 * Rmajor) * (particles.vpar0[0] ** 2 + particles.v0[0] ** 2) / 2
     z_exact = vd * ts
     # Angular velocity is constant and given by vpar0 / R0 in radians per second
     # So, the exact phi position is given by phi(t) = vpar0 / R0 * t
@@ -217,10 +206,8 @@ def test_tracing_vacuum_tokamak():
         eq.iota = eq.get_profile("iota")
 
     # Initialize particles
-    with pytest.warns(UserWarning, match="The input coordinates are in lab"):
-        x0, args = particles.init_particles(model=model, field=eq)
-    ms, qs, mus = args[:3]
-
+    x0, args = particles.init_particles(model=model, field=eq)
+    m, q, _ = args[0, :]
     # Ensure particles stay within the surface by bounds_R (not actually
     # needed here since the tracing time is chosen accordingly, but this
     # is the intended use case).
@@ -228,9 +215,7 @@ def test_tracing_vacuum_tokamak():
         y0=x0,
         field=eq,
         model=model,
-        ms=ms,
-        qs=qs,
-        mus=mus,
+        model_args=args,
         ts=ts,
         bounds_R=(0, 1),
     )
@@ -248,12 +233,7 @@ def test_tracing_vacuum_tokamak():
     data = eq.compute(["|B|", "x"], grid=grid)
     B0 = grid.compress(data["|B|"])[0]
     r00 = grid.compress(data["x"])[0, 0]
-    vd = (
-        ms[0]
-        / (qs[0] * B0 * r00)
-        * (particles.vpar0[0] ** 2 + particles.v0[0] ** 2)
-        / 2
-    )
+    vd = m / (q * B0 * r00) * (particles.vpar0[0] ** 2 + particles.v0[0] ** 2) / 2
     z_exact = vd * ts
     # Angular velocity is constant and given by vpar0 / R0 in radians per second
     # So, the exact phi position is given by phi(t) = vpar0 / R0 * t
@@ -308,8 +288,7 @@ def test_init_manual_lab():
     model = VacuumGuidingCenterTrajectory(frame="flux")
     R0 = [10.0, 10.1]
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
-    with pytest.warns(UserWarning, match="The input coordinates are in lab"):
-        x0, args = particles.init_particles(model, eq)
+    x0, args = particles.init_particles(model, eq)
 
     ms, qs, mus = args
     assert x0.shape == (2, 4)

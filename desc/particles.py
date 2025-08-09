@@ -7,7 +7,6 @@ import equinox as eqx
 import numpy as np
 from diffrax import (
     AbstractTerm,
-    ConstantStepSize,
     Event,
     PIDController,
     RecursiveCheckpointAdjoint,
@@ -15,7 +14,6 @@ from diffrax import (
     Tsit5,
     diffeqsolve,
 )
-from numpy.typing import ArrayLike
 from scipy.constants import (
     Boltzmann,
     electron_mass,
@@ -163,9 +161,10 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             Position of particle in phase space [rho, theta, zeta, vpar] or
             [R, phi, Z, vpar].
         args : tuple
-            Additional arguments needed by model, (m, q, mu, eq_or_field, params,
-            kwargs). kwargs will be passed to the field.compute_magnetic_field method.
-            mu is the mv⊥²/2|B|.
+            Should include the arguments needed by the model, (m, q, mu) as
+            an array, Equilibrium or MagneticField object, params and any additional
+            keyword arguments needed for magnetic field computation, such as iota
+            profile for the Equilibrium, and source_grid for the MagneticField.
 
         Returns
         -------
@@ -173,25 +172,24 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         x = x.squeeze()
-        m, q, mu, eq_or_field, params, kwargs = args
+        model_args, eq_or_field, params, kwargs = args
+        m, q, mu = model_args
         if self.frame == "flux":
-            eq_or_field = eqx.error_if(
-                eq_or_field,
-                not isinstance(eq_or_field, Equilibrium),
-                "Integration in flux coordinates requires a MagneticField.",
-            )
+            assert isinstance(
+                eq_or_field, Equilibrium
+            ), "Integration in flux coordinates requires an Equilibrium."
+
             return self._compute_flux_coordinates(
                 x, eq_or_field, params, m, q, mu, **kwargs
             )
         elif self.frame == "lab":
-            eq_or_field = eqx.error_if(
-                eq_or_field,
-                not isinstance(eq_or_field, _MagneticField),
+            assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
                 "Equilibrium, we recommend setting frame='flux' and converting the "
                 "output to lab coordinates only at the end by the helper function "
-                "Equilibrium.map_coordinates.",
+                "Equilibrium.map_coordinates."
             )
+
             return self._compute_lab_coordinates(
                 x, eq_or_field, params, m, q, mu, **kwargs
             )
@@ -202,7 +200,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         This function is written for vmap, so it expects x to be a coordinate of a
         single particle, and args to be a tuple of (m, q, mu, eq, params, kwargs) with
         m, q and mu (mv⊥²/2|B|) being scalars. If the Equilibrium does not have
-        iota profile, it must be passed as a keyword argument in kwargs.
+        iota profile, it must be passed as a keyword argument in kwargs. In that case,
+        params should also contain i_l, which is the iota profile parameters.
         """
         rho, theta, zeta, vpar = x
         iota = kwargs.get("iota", None)
@@ -248,6 +247,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         This function is written for vmap, so it expects x to be a coordinate of a
         single particle, and args to be a tuple of (m, q, mu, field, params, kwargs)
         with m, q and mu (mv⊥²/2|B|) being scalars.
+
+        kwargs can contain source_grid for the magnetic field computation.
         """
         vpar = x[-1]
         coord = x[:-1]
@@ -369,8 +370,11 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         x : jax.Array, shape(N,5)
             Position of particle in phase space (rho, theta, zeta, vpar, v).
         args : tuple
-            Additional arguments needed by model, ( m, q, mu, eq, kwargs).
-            mu and kwargs are not used for this model.
+            Should include the arguments needed by the model, (m, q) as
+            an array, Equilibrium object, params and any additional keyword
+            arguments needed for magnetic field computation, i.e. iota profile for
+            the Equilibrium. Note: if Equilibrium does not have iota profile,
+            params dictionary must contain i_l, which is the iota profile parameters.
 
         Returns
         -------
@@ -378,7 +382,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         rho, theta, zeta, vpar, v = x
-        m, q, _, eq, params, kwargs = args
+        model_args, eq, params, kwargs = args
+        m, q = model_args
         iota = kwargs.get("iota", None)
 
         assert (
@@ -486,10 +491,11 @@ class AbstractParticleInitializer(IOAble, ABC):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle. Each initializer must return
-            these values in the same order, so that they are consistent.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         vs = []
         for vcoord in model.vcoords:
@@ -512,24 +518,25 @@ class AbstractParticleInitializer(IOAble, ABC):
                 modB = _compute_modB(x, field)
                 args += [self.m * vperp2 / (2 * modB)]
 
-        if "mu" not in model.args:
-            # we still need to give dummy value for consistency
-            args += [jnp.zeros_like(vpar)]
-
-        return jnp.hstack([x, v0]), tuple(args)
+        args = jnp.array(args).T
+        return jnp.hstack([x, v0]), args
 
 
-def _compute_modB(x, field, **kwargs):
+def _compute_modB(x, field, params, **kwargs):
     if isinstance(field, Equilibrium):
-        # if Equilibrium doesn't have an iota profile, this will give bad results
         grid = Grid(
             x.T,
             spacing=jnp.zeros_like(x),
             sort=False,
             NFP=field.NFP,
         )
-        return field.compute("|B|", grid=grid)["|B|"]
-    return jnp.linalg.norm(field.compute_magnetic_field(x, **kwargs), axis=-1)
+        profiles = get_profiles("|B|", field, grid)
+        if "iota" in kwargs:
+            profiles["iota"] = kwargs["iota"]
+        return field.compute("|B|", params=params, grid=grid, profiles=profiles)["|B|"]
+    return jnp.linalg.norm(
+        field.compute_magnetic_field(x, params=params, **kwargs), axis=-1
+    )
 
 
 class ManualParticleInitializerFlux(AbstractParticleInitializer):
@@ -555,13 +562,13 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
 
     def __init__(
         self,
-        rho0: ArrayLike,
-        theta0: ArrayLike,
-        zeta0: ArrayLike,
-        xi0: ArrayLike,
-        E: ArrayLike = 3.5e6,
-        m: float = 4,
-        q: float = 2,
+        rho0,
+        theta0,
+        zeta0,
+        xi0,
+        E=3.5e6,
+        m=4,
+        q=2,
     ):
         m = m * proton_mass
         q = q * elementary_charge
@@ -581,12 +588,12 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
 
         errorif(
-            any(self.rho0 > 1.0),
+            any(self.rho0 > 1.0 or self.rho0 < 0.0),
             ValueError,
             "Flux coordinate rho must be between 0 and 1.",
         )
 
-    def init_particles(self, model, field):
+    def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
 
         Parameters
@@ -596,6 +603,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             velocity coordinates.
         field : Equilibrium or _MagneticField
             Source of magnetic field to use for tracing particles.
+        kwargs : dict, optional
+            source_grid for the magnetic field computation, if using a MagneticField
+            object, can be passed as a keyword argument.
 
         Returns
         -------
@@ -609,13 +619,18 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             magnetic moment (mv⊥²/2|B|) of each particle.
         """
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
+        params = field.params_dict
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model!"
+                    "Please use Equilibrium object with the model."
                 )
             x = x
+            if field.iota is None:
+                iota = field.get_profile("iota")
+                params["i_l"] = iota.params
+                kwargs["iota"] = iota
         elif model.frame == "lab":
             if isinstance(field, Equilibrium):
                 raise NotImplementedError(
@@ -626,13 +641,19 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             elif isinstance(field, _MagneticField):
                 raise NotImplementedError(
                     "If you have a MagneticField object, you cannot use input with "
-                    "flux coordinates since there is no easy mapping between the two!"
+                    "flux coordinates since there is no easy mapping between the two."
                 )
         else:
             raise NotImplementedError
 
         return super()._return_particles(
-            x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+            x=x,
+            v=self.v0,
+            vpar=self.vpar0,
+            model=model,
+            field=field,
+            params=params,
+            **kwargs
         )
 
 
@@ -680,7 +701,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         self.v0 = jnp.sqrt(2 * E / self.m)
         self.vpar0 = xi0 * self.v0
 
-    def init_particles(self, model, field):
+    def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
 
         Parameters
@@ -690,6 +711,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             velocity coordinates.
         field : Equilibrium or _MagneticField
             Source of magnetic field to use for tracing particles.
+        kwargs : dict, optional
+            source_grid for the magnetic field computation, if using a MagneticField
+            object, can be passed as a keyword argument.
 
         Returns
         -------
@@ -703,21 +727,22 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             magnetic moment (mv⊥²/2|B|) of each particle.
         """
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
+        params = field.params_dict
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model!"
+                    "Please use Equilibrium object with the model."
                 )
-            warnings.warn(
-                "The input coordinates are in lab coordinates, but the model operates "
-                "in flux coordinates. Converting the given coordinates to flux frame."
-            )
             x = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
             )
+            if field.iota is None:
+                iota = field.get_profile("iota")
+                params["i_l"] = iota.params
+                kwargs["iota"] = iota
         elif model.frame == "lab":
             if isinstance(field, Equilibrium):
                 raise NotImplementedError(
@@ -730,7 +755,13 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             raise NotImplementedError
 
         return super()._return_particles(
-            x=x, v=self.v0, vpar=self.vpar0, model=model, field=field
+            x=x,
+            v=self.v0,
+            vpar=self.vpar0,
+            model=model,
+            field=field,
+            params=params,
+            **kwargs
         )
 
 
@@ -780,7 +811,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
 
-    def init_particles(self, model, field):
+    def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
 
         Parameters
@@ -790,6 +821,9 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             velocity coordinates.
         field : Equilibrium or _MagneticField
             Source of magnetic field to use for tracing particles.
+        kwargs : dict, optional
+            source_grid for the magnetic field computation, if using a MagneticField
+            object, can be passed as a keyword argument.
 
         Returns
         -------
@@ -809,14 +843,19 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         zeta = data["s"][idxs]
         theta = jnp.zeros_like(zeta)
         rho = jnp.zeros_like(zeta)
+        params = field.params_dict
 
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model!"
+                    "Please use Equilibrium object with the model."
                 )
             x = jnp.array([rho, theta, zeta]).T
+            if field.iota is None:
+                iota = field.get_profile("iota")
+                params["i_l"] = iota.params
+                kwargs["iota"] = iota
         elif model.frame == "lab":
             if isinstance(field, Equilibrium):
                 raise NotImplementedError(
@@ -831,7 +870,9 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
-        return super()._return_particles(x=x, v=v, vpar=vpar, model=model, field=field)
+        return super()._return_particles(
+            x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
+        )
 
 
 class SurfaceParticleInitializer(AbstractParticleInitializer):
@@ -880,7 +921,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
 
-    def init_particles(self, model, field):
+    def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
 
         Parameters
@@ -890,6 +931,9 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             velocity coordinates.
         field : Equilibrium or _MagneticField
             Source of magnetic field to use for tracing particles.
+        kwargs : dict, optional
+            source_grid for the magnetic field computation, if using a MagneticField
+            object, can be passed as a keyword argument.
 
         Returns
         -------
@@ -911,14 +955,19 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         zeta = data["zeta"][idxs]
         theta = data["theta"][idxs]
         rho = self.surface.rho * jnp.ones_like(zeta)
+        params = field.params_dict
 
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model!"
+                    "Please use Equilibrium object with the model."
                 )
             x = jnp.array([rho, theta, zeta]).T
+            if field.iota is None:
+                iota = field.get_profile("iota")
+                params["i_l"] = iota.params
+                kwargs["iota"] = iota
         elif model.frame == "lab":
             if isinstance(field, Equilibrium):
                 raise NotImplementedError(
@@ -933,7 +982,9 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
-        return super()._return_particles(x=x, v=v, vpar=vpar, model=model, field=field)
+        return super()._return_particles(
+            x=x, v=v, vpar=vpar, model=model, field=field, parmas=params, **kwargs
+        )
 
 
 def _find_random_indices(sqrtg, N, seed):
@@ -942,7 +993,7 @@ def _find_random_indices(sqrtg, N, seed):
     # its volume/area/length, which is sqrtg. Normalize sqrtg for random number
     # generation limit of 1
     sqrtg /= sqrtg.max()
-    nattempts = 5 * N
+    nattempts = 10 * N
     rng = np.random.default_rng(seed=seed)
     accept = None
     # loop until choosing exactly N distinct indices
@@ -953,8 +1004,6 @@ def _find_random_indices(sqrtg, N, seed):
         accept = np.where(rng.uniform(0, 1, size=(idxs.shape[0],)) < sqrtg[idxs])[0]
         # choose random N of the accepted indices (might end up choosing less)
         accept = accept[np.unique(rng.integers(0, accept.shape[0], size=(N,)))]
-        # increase the attempt count if not enough particles were accepted
-        nattempts = int((nattempts / N + 5) * N)
         idxs = idxs[accept]
 
     return np.sort(idxs)
@@ -963,22 +1012,22 @@ def _find_random_indices(sqrtg, N, seed):
 def trace_particles(
     field,
     y0,
-    ms,
-    qs,
-    mus,
-    ts,
     model,
+    model_args,
+    ts,
     params=None,
+    stepsize_controller=None,
+    saveat=None,
     rtol=1e-8,
     atol=1e-8,
     max_steps=1000,
-    min_step_size=1e-8,
+    min_step_size=1e-10,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     event=None,
-    **kwargs,
+    options={},
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -989,14 +1038,10 @@ def trace_particles(
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
         The first output of ``ParticleInitializer.init_particles``.
-    ms : array-like
-        Particle masses, must be broadcastable to the shape of y0.
-    qs : array-like
-        Particle charges, must be broadcastable to the shape of y0.
-    mus : array-like
-        Particle magnetic moments (mv⊥²/2B), must be broadcastable to the shape of
-        y0. For the slowndown model, it won't be used, but must be provided for
-        consistency.
+    model_args : array-like
+        Additional arguments needed by the model, such as mass, charge, and
+        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
+        ``ParticleInitializer.init_particles``.
     ts : array-like
         Strictly increasing array of time values where output is desired.
     model : AbstractTrajectoryModel
@@ -1053,15 +1098,13 @@ def trace_particles(
     if not params:
         params = field.params_dict
 
-    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    # Euler method does not support adaptive step size controller
     stepsize_controller = (
-        ConstantStepSize()
-        if solver.__class__.__name__ == "Euler"
-        else stepsize_controller
+        stepsize_controller
+        if stepsize_controller is not None
+        else PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
     )
 
-    saveat = SaveAt(ts=ts)
+    saveat = saveat if saveat is not None else SaveAt(ts=ts)
 
     def default_terminating_event(t, y, args, **kwargs):
         R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
@@ -1069,11 +1112,64 @@ def trace_particles(
         return jnp.logical_or(R_out, Z_out)
 
     event = Event(default_terminating_event) if event is None else event
-    intfun = lambda x, m, q, mu: diffeqsolve(
-        model,
-        solver,
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="unhashable type")
+        # we only want to map over initial positions and particle arguments,
+        # other arguments are there to prevent closing over them, and hence
+        # reduce the number of recompilations in, for example, an optimization
+        # loop. Note: vmap with keyword arguments is weird, not using it for now
+        yt = vmap(_intfun_wrapper, in_axes=(0, 0) + 12 * (None,))(
+            y0,
+            model_args,
+            field,
+            params,
+            ts,
+            max_steps,
+            min_step_size,
+            solver,
+            stepsize_controller,
+            adjoint,
+            event,
+            model,
+            saveat,
+            options,
+        )
+
+    yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
+
+    x = yt[:, :, :3]
+    v = yt[:, :, 3:]
+
+    return x, v
+
+
+def _intfun_wrapper(
+    x,
+    model_args,
+    field,
+    params,
+    ts,
+    max_steps,
+    min_step_size,
+    solver,
+    stepsize_controller,
+    adjoint,
+    event,
+    model,
+    saveat,
+    options,
+):
+    """Wrapper for the integration function for vectorized inputs.
+
+    Defining a lambda function inside the ``trace_particles`` function leads
+    to multiple recompilations.
+    """
+    return diffeqsolve(
+        terms=model,
+        solver=solver,
         y0=x,
-        args=[m, q, mu, field, params, kwargs],
+        args=[model_args, field, params, options],
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
@@ -1083,17 +1179,6 @@ def trace_particles(
         adjoint=adjoint,
         event=event,
     ).ys
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="unhashable type")
-        yt = vmap(intfun)(y0, ms, qs, mus)
-
-    yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
-
-    x = yt[:, :, :3]
-    v = yt[:, :, 3:]
-
-    return x, v
 
 
 def gc_radius(vperp, modB, m, q):

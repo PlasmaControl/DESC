@@ -46,14 +46,14 @@ __all__ = [
     "plot_coefficients",
     "plot_coils",
     "plot_comparison",
+    "plot_field_lines",
     "plot_fsa",
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_particle_trajectories",
     "plot_section",
     "plot_surfaces",
-    "plot_field_lines",
-    "plot_particle_trajectories",
     "poincare_plot",
 ]
 

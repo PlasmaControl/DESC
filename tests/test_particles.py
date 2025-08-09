@@ -259,7 +259,7 @@ def test_init_manual_lab():
     def test(R0):
         particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
         x0, args = particles.init_particles(model, field)
-        ms, qs, mus = args
+        ms, qs, mus = args.T
         assert x0.shape == (1, 4)
         assert ms.shape == (1,)
         assert qs.shape == (1,)
@@ -274,7 +274,7 @@ def test_init_manual_lab():
     R0 = np.linspace(1, 3, 100)
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
     x0, args = particles.init_particles(model, field)
-    ms, qs, mus = args
+    ms, qs, mus = args.T
     assert x0.shape == (100, 4)
     assert ms.shape == (100,)
     assert qs.shape == (100,)
@@ -290,7 +290,7 @@ def test_init_manual_lab():
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
     x0, args = particles.init_particles(model, eq)
 
-    ms, qs, mus = args
+    ms, qs, mus = args.T
     assert x0.shape == (2, 4)
     assert ms.shape == (2,)
     assert qs.shape == (2,)
@@ -309,7 +309,7 @@ def test_init_manual_flux():
             rho0=R0, theta0=0, zeta0=0, xi0=0.9, E=1e6
         )
         x0, args = particles.init_particles(model, eq)
-        ms, qs, mus = args
+        ms, qs, mus = args.T
         assert x0.shape == (1, 4)
         assert ms.shape == (1,)
         assert qs.shape == (1,)
@@ -329,7 +329,7 @@ def test_init_manual_flux():
         rho0=R0, theta0=0, zeta0=0, xi0=0.9, E=1e6
     )
     x0, args = particles.init_particles(model, eq)
-    ms, qs, mus = args
+    ms, qs, mus = args.T
     assert x0.shape == (100, 4)
     assert ms.shape == (100,)
     assert qs.shape == (100,)

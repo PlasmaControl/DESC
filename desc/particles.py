@@ -464,7 +464,7 @@ class AbstractParticleInitializer(IOAble, ABC):
         """
         pass
 
-    def _return_particles(self, x, v, vpar, model, field):
+    def _return_particles(self, x, v, vpar, model, field, params=None, **kwargs):
         """Return the particles in a common format.
 
         Parameters
@@ -515,7 +515,7 @@ class AbstractParticleInitializer(IOAble, ABC):
                 args += [self.q]
             elif arg == "mu":
                 vperp2 = v**2 - vpar**2
-                modB = _compute_modB(x, field)
+                modB = _compute_modB(x, field, params, **kwargs)
                 args += [self.m * vperp2 / (2 * modB)]
 
         args = jnp.array(args).T
@@ -588,7 +588,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
 
         errorif(
-            any(self.rho0 > 1.0 or self.rho0 < 0.0),
+            any(jnp.logical_or(self.rho0 > 1.0, self.rho0 < 0.0)),
             ValueError,
             "Flux coordinate rho must be between 0 and 1.",
         )

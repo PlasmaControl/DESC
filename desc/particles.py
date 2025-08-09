@@ -1024,8 +1024,7 @@ def trace_particles(
     min_step_size=1e-10,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
-    bounds_R=(0, np.inf),
-    bounds_Z=(-np.inf, np.inf),
+    bounds=None,
     event=None,
     options={},
 ):
@@ -1049,8 +1048,15 @@ def trace_particles(
     params : dict, optional
         Parameters of the field object, needed for automatic differentiation.
         Defaults to field.params_dict.
-    rtol, atol : float
-        relative and absolute tolerances for ode integration
+    rtol, atol : float, optional
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        stepsize_controller is provided.
+    stepsize_controller : diffrax.AbstractStepsizeController, optional
+        Stepsize controller to use for the integration. If not provided, a
+        PIDController with the given rtol and atol will be used.
+    saveat : diffrax.SaveAt, optional
+        SaveAt object to specify where to save the output. If not provided, will
+        save at the specified times in ts.
     max_steps : int
         maximum number of steps between different output times
     min_step_size: float
@@ -1062,23 +1068,19 @@ def trace_particles(
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
-    bounds_R : tuple of (float,float), optional
-        R bounds for particle tracing bounding box. Trajectories that leave this
+    bounds : array of shape(3, 2), optional
+        Bounds for particle tracing bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box. When tracing
-        in flux coordinates, this corresponds to rho bounds and the upper value must
-        be 1. Defaults to (0,np.inf)
-    bounds_Z : tuple of (float,float), optional
-        Z bounds for particle tracing bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box. When tracing
-        in flux coordinates, this corresponds to zeta bounds.
-        Defaults to (-np.inf,np.inf).
-    event : diffrax.DiscreteTerminatingEvent, optional
+        an Equilibrium, the default bounds are set to
+        [[0, 1], [-inf, inf], [-inf, inf]] for rho, theta, zeta coordinates.
+        When tracing a MagneticField, the default bounds are set to
+        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates.
+    event : diffrax.Event, optional
         Custom event function to stop integration. If not provided, the default
         event function will be used, which stops integration when particles leave the
-        bounds defined by ``bounds_R`` and ``bounds_Z``. If integration is stopped
-        by the event, the output will contain NaN values for the points outside the
-        bounds.
-    kwargs : dict, optional
+        bounds. If integration is stopped by the event, the output will contain NaN
+        values for the points outside the bounds.
+    options : dict, optional
         Additional keyword arguments to pass to the field computation, such as
             - iota : Profile
                 Iota profile of the Equilibrium, if it does not have one.
@@ -1105,11 +1107,16 @@ def trace_particles(
     )
 
     saveat = saveat if saveat is not None else SaveAt(ts=ts)
+    if bounds is None:
+        bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
+        if isinstance(field, Equilibrium):
+            bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_terminating_event(t, y, args, **kwargs):
-        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
-        return jnp.logical_or(R_out, Z_out)
+        i_out = jnp.logical_or(y[0] < bounds[0, 0], y[0] > bounds[0, 1])
+        j_out = jnp.logical_or(y[1] < bounds[1, 0], y[1] > bounds[1, 1])
+        k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
+        return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
     event = Event(default_terminating_event) if event is None else event
 
@@ -1163,7 +1170,7 @@ def _intfun_wrapper(
     """Wrapper for the integration function for vectorized inputs.
 
     Defining a lambda function inside the ``trace_particles`` function leads
-    to multiple recompilations.
+    to recompilations.
     """
     return diffeqsolve(
         terms=model,

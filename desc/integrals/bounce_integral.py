@@ -765,11 +765,11 @@ class Bounce2D(Bounce):
     #     expensive JAX limitation in GitHub issue #1303 is avoided.
 
     def _integrate_nufft(self, x, w, integrand, pitch, data, z1, z2, check, plot):
-        shape = (*z1.shape, x.size)
-        if len(shape) < 5:
+        if jnp.ndim(pitch) <= 1:
             pitch = pitch[..., None, None]
-        else:
+        elif pitch.ndim > 1:
             pitch = pitch[:, None, ..., None, None]
+        shape = (*z1.shape, x.size)
         cov = grad_bijection_from_disc(z1, z2)
 
         zeta = flatten_matrix(bijection_from_disc(x, z1[..., None], z2[..., None]))
@@ -818,15 +818,15 @@ class Bounce2D(Bounce):
         theta = flatten_matrix(theta, 4)
         c = jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3)
         c = pad_for_fft(c, self._num_theta)
-        c = nufft2(c, zeta, theta, (0, 2 * jnp.pi / self._NFP))
+        c = nufft2(c, zeta, theta, (0, 2 * jnp.pi / self._NFP)).real
         c = jnp.swapaxes(c, 0, -2).reshape(len(data) + 2, *shape)
-        return dict(zip(data.keys() + ["B^zeta", "|B|"], c))
+        return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _integrate_nummt(self, x, w, integrand, pitch, data, z1, z2, check, plot):
+        pitch = self._swap_pitch(pitch)[..., None]
         z1 = _swap(z1)
         z2 = _swap(z2)
         shape = [*z1.shape, x.size]
-        pitch = self._swap_pitch(pitch)[..., None]
         cov = grad_bijection_from_disc(z1, z2)
 
         zeta = flatten_matrix(bijection_from_disc(x, z1[..., None], z2[..., None]))

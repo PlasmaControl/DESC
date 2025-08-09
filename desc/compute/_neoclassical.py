@@ -76,8 +76,15 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
-    "_vander": "dict[str,jnp.ndarray] : Precomputed transform matrices.",
+    "spline": """bool :
+        Whether to use cubic splines to compute bounce points.
+        """,
+    "nufft": """bool :
+        Whether to use non-uniform fast Fourier transforms for interpolation.
+        """,
+    "_vander": """dict[str,jnp.ndarray] :
+        Precomputed transform matrices.
+        """,
 }
 
 
@@ -176,6 +183,7 @@ def _dI_ripple(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
@@ -205,6 +213,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
+    nufft = kwargs.get("nufft", False)
     _vander = kwargs.get("_vander", None)
 
     def eps_32(data):
@@ -232,6 +241,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 "|grad(rho)|*kappa_g",
                 is_fourier=True,
                 num_well=num_well,
+                nufft=nufft,
             )
             return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 

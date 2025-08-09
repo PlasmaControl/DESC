@@ -101,6 +101,7 @@ def _drift2(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
@@ -147,6 +148,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft = kwargs.get("nufft", False)
     _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
@@ -171,6 +173,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
                 is_fourier=True,
+                nufft=nufft,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(
@@ -265,6 +268,7 @@ def _poloidal_drift(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
@@ -306,6 +310,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft = kwargs.get("nufft", False)
     _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
@@ -329,6 +334,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 is_fourier=True,
                 num_well=num_well,
+                nufft=nufft,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))

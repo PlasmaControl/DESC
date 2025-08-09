@@ -16,7 +16,8 @@ from desc.vmec import VMECIO
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_effective_ripple_2D():
+@pytest.mark.parametrize("nufft", [False, True])
+def test_effective_ripple_2D(nufft):
     """Test effective ripple with W7-X against NEO.
 
     If this test has a peak memory consumption of more than 4.4 GB,
@@ -35,6 +36,7 @@ def test_effective_ripple_2D():
         num_transit=num_transit,
         num_well=20 * num_transit,
         surf_batch_size=2,
+        nufft=nufft,
     )
 
     assert np.isfinite(data["effective ripple 3/2"]).all()

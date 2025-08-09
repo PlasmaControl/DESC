@@ -406,7 +406,7 @@ def nufft2(
     Returns
     -------
     fq : jnp.ndarray
-        Function value at query points.
+        Complex function value at query points.
 
     """
     opts = options.Opts(modeord=1)

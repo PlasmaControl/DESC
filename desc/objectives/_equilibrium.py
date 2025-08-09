@@ -166,6 +166,173 @@ class ForceBalance(_Objective):
         return jnp.concatenate([fr, fb])
 
 
+class ForceBalanceDeflated(_Objective):
+    r"""Radial and helical MHD force balance.
+
+    Given force densities:
+
+    Fᵨ = √g (J^θ B^ζ - J^ζ B^θ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = B^ζ ∇ θ - B^θ ∇ ζ
+
+    Minimizes the magnitude of the forces:
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _equilibrium = True
+    _coordinates = "rtz"
+    _units = "(N)"
+    _print_value_fmt = "Force error: "
+
+    def __init__(
+        self,
+        eq,
+        eqs,
+        sigma=0.05,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="force",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._eqs = eqs
+        self._sigma = sigma
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = 2 * grid.num_nodes
+        self._data_keys = [
+            "F_rho",
+            "|grad(rho)|",
+            "sqrt(g)",
+            "F_helical",
+            "|e^helical*sqrt(g)|",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["f"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
+        diffs = [
+            jnp.concatenate(
+                [params[key] - eq.params_dict[key] for key in params.keys()]
+            )
+            for eq in self._eqs
+        ]
+        diffs = jnp.vstack(diffs)
+        deflation_parameter = jnp.prod(1 / jnp.linalg.norm(diffs, axis=1) + self._sigma)
+        return jnp.concatenate([fr, fb]) * deflation_parameter
+
+
 class ForceBalanceAnisotropic(_Objective):
     """Force balance for anisotropic pressure equilibria.
 

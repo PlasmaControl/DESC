@@ -252,7 +252,7 @@ class Bounce2D(Bounce):
         Flag for debugging. Must be false for JAX transformations.
     spline : bool
         Whether to use cubic splines to compute bounce points.
-        Default is true, which is the recommended setting.
+        Default is true.
 
     """
 
@@ -652,6 +652,7 @@ class Bounce2D(Bounce):
         quad=None,
         num_well=None,
         nufft=False,
+        eps=1e-6,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -736,6 +737,7 @@ class Bounce2D(Bounce):
             points[1],
             check,
             plot,
+            eps,
         )
         return result[0] if len(result) == 1 else result
 
@@ -764,8 +766,8 @@ class Bounce2D(Bounce):
     #     and θ, rather than the apriori unknown number of bounce points, the
     #     expensive JAX limitation in GitHub issue #1303 is avoided.
 
-    def _integrate_nufft(self, x, w, integrand, pitch, data, z1, z2, check, plot):
-        if jnp.ndim(pitch) <= 1:
+    def _integrate_nufft(self, x, w, integrand, pitch, data, z1, z2, check, plot, eps):
+        if jnp.ndim(pitch) == 1:
             pitch = pitch[..., None, None]
         elif pitch.ndim > 1:
             pitch = pitch[:, None, ..., None, None]
@@ -775,7 +777,7 @@ class Bounce2D(Bounce):
         zeta = flatten_matrix(bijection_from_disc(x, z1[..., None], z2[..., None]))
         theta = _swap(self._c["T(z)"].eval1d(_swap(zeta))).reshape(shape)
         zeta = zeta.reshape(shape)
-        data = self._nufft(zeta, theta, data)
+        data = self._nufft(zeta, theta, data, eps)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = zeta
         data["theta"] = theta
@@ -802,7 +804,7 @@ class Bounce2D(Bounce):
 
         return result
 
-    def _nufft(self, zeta, theta, data):
+    def _nufft(self, zeta, theta, data, eps):
         """Non-uniform fast Fourier transform.
 
         Parameters
@@ -818,11 +820,11 @@ class Bounce2D(Bounce):
         theta = flatten_matrix(theta, 4)
         c = jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3)
         c = pad_for_fft(c, self._num_theta)
-        c = nufft2(c, zeta, theta, (0, 2 * jnp.pi / self._NFP)).real
+        c = nufft2(c, zeta, theta, (0, 2 * jnp.pi / self._NFP), eps=eps).real
         c = jnp.swapaxes(c, 0, -2).reshape(len(data) + 2, *shape)
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
-    def _integrate_nummt(self, x, w, integrand, pitch, data, z1, z2, check, plot):
+    def _integrate_nummt(self, x, w, integrand, pitch, data, z1, z2, check, plot, eps):
         pitch = self._swap_pitch(pitch)[..., None]
         z1 = _swap(z1)
         z2 = _swap(z2)
@@ -836,10 +838,6 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         data["theta"] = theta
 
-        # Strictly increasing zeta knots enforces dζ > 0.
-        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
-        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
-        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         result = [
             _swap(
                 (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"])

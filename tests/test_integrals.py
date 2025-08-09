@@ -1120,32 +1120,26 @@ class TestBounce:
         # coordinates. This is defined as
         # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces, field lines, and how far to follow the field
-        #    line in Clebsch coordinates ρ, α, ζ.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
         eq = get("HELIOTRON")
 
-        # 3. Convert above coordinates to DESC computational coordinates.
         grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-        # 4. Compute input data.
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 5. Make the bounce integration operator.
         bounce = Bounce1D(grid.source_grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 6. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 7. Optionally check for correctness of bounce points.
+
+        # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
-        # 8. Integrate.
+
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
@@ -1169,10 +1163,10 @@ class TestBounce:
             "to see if this is expected.",
         )
 
-        # 9. Example manipulation of the output
-        # Sum all bounce averages on a particular field line, for every field line.
+        # Example manipulation of the output:
+        # sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
-        # The result stored at
+        # the result stored at
         l, m, p = 1, 0, 3
         print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
@@ -1181,7 +1175,6 @@ class TestBounce:
         nodes = bounce.reshape(grid.source_grid, grid.source_grid.nodes[:, :2])
         print("(ρ, α):", nodes[l, m, 0])
 
-        # 10. Plotting
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
         return fig
 
@@ -1536,11 +1529,9 @@ class TestBounce2D:
             rtol=1e-6,
         )
 
-    @pytest.mark.slow
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
-    @pytest.mark.parametrize("nufft", [False, True])
-    def test_bounce2d_checks(self, nufft):
+    def test_bounce2d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202
         # Suppose we want to compute a bounce average of the function
@@ -1549,19 +1540,14 @@ class TestBounce2D:
         # coordinates. This is defined as
         # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         eq = get("HELIOTRON")
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        # 3. Compute input data.
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
-        # 5. Make the bounce integration operator.
         bounce = Bounce2D(
             grid,
             data,
@@ -1576,25 +1562,25 @@ class TestBounce2D:
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 6. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 7. Optionally check for correctness of bounce points.
+
+        # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
-        # 8. Integrate.
+
+        _data = {"g_zz": Bounce2D.reshape(grid, data["g_zz"])}
+
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
+            data=_data,
             points=points,
             check=True,
-            nufft=nufft,
         )
         den = bounce.integrate(
             integrand=TestBounce._example_denominator,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
-            nufft=nufft,
         )
         avg = safediv(num, den)
         errorif(not np.isfinite(avg).all())
@@ -1605,10 +1591,10 @@ class TestBounce2D:
             "to see if this is expected.",
         )
 
-        # 9. Example manipulation of the output
-        # Sum all bounce averages on a particular field line, for every field line.
+        # Example manipulation of the output:
+        # sum all bounce averages on a particular field line, for every field line
         result = avg.sum(axis=-1)
-        # The result stored at
+        # the result stored at
         l, m, p = 1, 0, 3
         print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
@@ -1630,11 +1616,23 @@ class TestBounce2D:
             rtol=1e-2,
         )
 
-        # 10. Plotting
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
         _, _ = bounce.plot_theta(l, m, show=False)
 
-        # make sure tests pass when spline=True
+        # check for consistency with different options
+        np.testing.assert_allclose(
+            bounce.integrate(
+                integrand=TestBounce._example_numerator,
+                pitch_inv=pitch_inv,
+                data=_data,
+                points=points,
+                check=True,
+                nufft=True,
+                eps=1e-11,
+            ),
+            num,
+            rtol=1e-3,
+        )
         b = Bounce2D(
             grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
         )

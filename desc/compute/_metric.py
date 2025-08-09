@@ -2572,7 +2572,7 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_dot_grad(grad(rho))",
-    label="\\nabla(\\nabla(\\rho))",
+    label="\\mathbf{B}\\cdot\\nabla(\\nabla(\\rho))",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Gradient of gradient of rho tensor",
@@ -2591,8 +2591,8 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_t",
         "sqrt(g)_z",
-        "B_theta",
-        "B_zeta",
+        "B^theta",
+        "B^zeta",
     ],
 )
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
@@ -2602,16 +2602,17 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B_theta"][:, jnp.newaxis]
+    ) * data["B^theta"][:, jnp.newaxis]
     +(
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B_zeta"][:, jnp.newaxis]
+    ) * data["B^zeta"][:, jnp.newaxis]
 
     return data
+
 
 
 @register_compute_fun(
@@ -2636,3 +2637,5 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     )
 
     return data
+
+

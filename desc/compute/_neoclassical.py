@@ -15,9 +15,7 @@ from .data_index import register_compute_fun
 _bounce_doc = {
     "theta": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
         """,
     "Y_B": """int :
@@ -78,7 +76,15 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
+    "spline": """bool :
+        Whether to use cubic splines to compute bounce points.
+        """,
+    "nufft": """bool :
+        Whether to use non-uniform fast Fourier transforms for interpolation.
+        """,
+    "_vander": """dict[str,jnp.ndarray] :
+        Precomputed transform matrices.
+        """,
 }
 
 
@@ -97,9 +103,7 @@ def _compute(
         DESC data dict.
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     grid : Grid
         Grid that can expand and compress.
@@ -179,6 +183,7 @@ def _dI_ripple(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
@@ -208,6 +213,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
+    nufft = kwargs.get("nufft", False)
+    _vander = kwargs.get("_vander", None)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
@@ -232,8 +239,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 "|grad(rho)|*kappa_g",
-                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
+                num_well=num_well,
+                nufft=nufft,
             )
             return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 
@@ -242,7 +250,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        ) / bounce.compute_fieldline_length(fl_quad, _vander)
 
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]

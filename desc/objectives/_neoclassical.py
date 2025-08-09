@@ -5,10 +5,11 @@ import warnings
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import cheb_pts, fourier_pts
+from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
 from desc.utils import setdefault
 
 from ..integrals.quad_utils import chebgauss2
@@ -51,8 +52,6 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
@@ -218,8 +217,14 @@ class EffectiveRipple(_Objective):
         assert self._grid.can_fft2
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["fieldline quad"] = (x, w)
+        self._constants["_vander"] = {
+            "dct cfl": _vander_dct_cfl(x, self._constants["Y"].size),
+            "dft cfl": _vander_dft_cfl(x, self._grid),
+        }
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
@@ -227,7 +232,7 @@ class EffectiveRipple(_Objective):
             "effective ripple", eq, grid=self._grid
         )
         with warnings.catch_warnings():
-            warnings.filterwarnings("default", "Unequal number of field periods")
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
             # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
             self._constants["lambda"] = get_transforms(
                 "lambda",
@@ -275,7 +280,7 @@ class EffectiveRipple(_Objective):
             alpha=constants["X"],
             zeta=constants["Y"],
             L_lmn=params["L_lmn"],
-            L=constants["lambda"],
+            lmbda=constants["lambda"],
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
         )[..., ::-1]
@@ -291,6 +296,7 @@ class EffectiveRipple(_Objective):
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
@@ -345,8 +351,6 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
@@ -374,3 +378,13 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
+
+
+def _vander_dft_cfl(x, grid):
+    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
+    zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
+    return jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis]
+
+
+def _vander_dct_cfl(x, Y):
+    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[:, jnp.newaxis])

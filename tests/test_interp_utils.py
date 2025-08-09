@@ -18,9 +18,13 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
+    ifft_non_uniform,
     interp_dct,
     interp_rfft,
     interp_rfft2,
+    irfft_non_uniform,
+    nufft2,
+    pad_for_fft,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
@@ -29,6 +33,7 @@ from desc.integrals._interp_utils import (
 )
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
+from desc.utils import identity
 
 
 class TestPolyUtils:
@@ -158,16 +163,23 @@ def _f_2d_nyquist_freq():
     return x_freq_nyquist, y_freq_nyquist
 
 
-def _identity(x):
-    return x
-
-
 def _f_non_periodic(z):
     return np.sin(np.sqrt(2) * z) * np.cos(1 / (2 + z)) * np.cos(z**2) * z
 
 
 def _f_algebraic(z):
     return z**3 - 10 * z**6 - z - np.e + z**4
+
+
+_test_inputs_1D = [
+    # Test cases chosen with purpose, do not remove any.
+    (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi)),
+    (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi)),
+    (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi)),
+    (_f_1d, 2 * _f_1d_nyquist_freq(), (-np.pi, np.pi)),
+    (lambda x: np.cos(7 * x), 2, (-np.pi / 7, np.pi / 7)),
+    (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7)),
+]
 
 
 class TestFastInterp:
@@ -192,28 +204,85 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "func, n, domain",
+        "func, n, domain, imag_undersampled",
         [
-            # Test cases chosen with purpose, don't remove any.
-            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi)),
-            (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi)),
-            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi)),
-            (_f_1d, 2 * _f_1d_nyquist_freq(), (-np.pi, np.pi)),
-            (lambda x: np.cos(7 * x), 2, (-np.pi / 7, np.pi / 7)),
-            (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7)),
+            (*_test_inputs_1D[0], False),
+            (*_test_inputs_1D[1], True),
+            (*_test_inputs_1D[2], False),
+            (*_test_inputs_1D[3], True),
+            (*_test_inputs_1D[4], True),
+            (*_test_inputs_1D[5], False),
         ],
     )
-    def test_interp_rfft(self, func, n, domain):
+    def test_non_uniform_FFT(self, func, n, domain, imag_undersampled):
         """Test non-uniform FFT interpolation."""
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         f = func(x)
         xq = np.array([7.34, 1.10134, 2.28])
         fq = func(xq)
+
+        a = np.fft.fft(f, norm="forward")
+        np.testing.assert_allclose(a[0].imag, 0, atol=1e-12)
+        if n % 2 == 0:
+            np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
+        r = ifft_non_uniform(xq, a, domain)
+        np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
+        r = nufft2(a, xq, domain0=domain)
+        np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
+    def test_non_uniform_real_FFT(self, func, n, domain):
+        """Test non-uniform real FFT interpolation."""
+        x = np.linspace(domain[0], domain[1], n, endpoint=False)
+        f = func(x)
+        xq = np.array([7.34, 1.10134, 2.28])
+        fq = func(xq)
+
         np.testing.assert_allclose(interp_rfft(xq, f, domain), fq)
         M = f.shape[-1]
         coef = rfft_to_trig(rfft(f, norm="forward"), M)
         vander = trig_vander(xq, M, domain)
         np.testing.assert_allclose((vander * coef).sum(axis=-1), fq)
+
+        a = np.fft.rfft(f, norm="forward")
+        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a = pad_for_fft(2 * a, f.shape[-1])
+        np.testing.assert_allclose(nufft2(a, xq, domain0=domain).real, fq)
+
+    @pytest.mark.unit
+    def test_nufft_vec(self):
+        """Test vectorized JAX-finufft interpolation.
+
+        JAX-finufft has different vectorization logic than numpy.
+        https://github.com/flatironinstitute/jax-finufft/issues/155.
+        """
+        func_1, n, domain = _test_inputs_1D[0]
+        func_2 = lambda x: -77 * np.sin(7 * x) + 18 * np.cos(x) + 100  # noqa: E731
+        x = np.linspace(domain[0], domain[1], n, endpoint=False)
+        f = np.stack([func_2(x), func_2(x)])
+
+        xq = np.array([7.34, 1.10134, 2.28])
+        fq = np.stack([func_2(xq), func_2(xq)])
+
+        a = np.fft.rfft(f, norm="forward")
+        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a = pad_for_fft(2 * a, f.shape[-1])
+
+        def _nufft2(a, xq):
+            return nufft2(a, xq, domain0=domain, eps=1e-7).real
+
+        # multiple fourier series evaluated at the same points,
+        # so much more efficient than naive vectorization
+        np.testing.assert_allclose(_nufft2(a, xq), fq)
+
+        # Below we confirm this is the vectorization style supported.
+        nufft2_vec = np.vectorize(_nufft2, signature="(f,c),(x)->(f,x)")
+
+        xq = np.stack([xq, xq**2, xq**3, xq**4])
+        a = np.stack([a, -a, 2 * a, 3 * a])
+
+        np.testing.assert_allclose(_nufft2(a, xq), nufft2_vec(a, xq))
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -243,31 +312,43 @@ class TestFastInterp:
             ),
         ],
     )
-    def test_interp_rfft2(self, func, m, n, domain0, domain1):
-        """Test non-uniform FFT interpolation."""
-        theta = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
-        zeta = np.array([1.1, 3.78432, 8.542, 0])
+    def test_non_uniform_real_FFT_2D(self, func, m, n, domain0, domain1):
+        """Test non-uniform real FFT 2D interpolation."""
         x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
         y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
-        truth = func(theta, zeta)
         f = func(x, y).reshape(m, n)
+
+        xq = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
+        yq = np.array([1.1, 3.78432, 8.542, 0])
+        truth = func(xq, yq)
+
         np.testing.assert_allclose(
-            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-2, -1)),
-            truth,
+            interp_rfft2(xq, yq, f, domain0, domain1, axes=(-2, -1)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-1, -2)),
-            truth,
+            interp_rfft2(xq, yq, f, domain0, domain1, axes=(-1, -2)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-2, -1)),
-            truth,
+            interp_rfft2(yq, xq, f.T, domain1, domain0, axes=(-2, -1)), truth
         )
         np.testing.assert_allclose(
-            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-1, -2)),
+            interp_rfft2(yq, xq, f.T, domain1, domain0, axes=(-1, -2)), truth
+        )
+
+        a = np.fft.rfft2(f, norm="forward")
+        np.testing.assert_allclose(
+            irfft_non_uniform(
+                yq,
+                ifft_non_uniform(xq[:, np.newaxis], a, domain0, axis=-2),
+                f.shape[-1],
+                domain1,
+            ),
             truth,
         )
+        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a = pad_for_fft(2 * a, f.shape[-1])
+        np.testing.assert_allclose(nufft2(a, xq, yq, domain0, domain1).real, truth)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -275,10 +356,10 @@ class TestFastInterp:
         [
             # Identity map known for bad Gibbs; if discrete Chebyshev transform
             # implemented correctly then won't see Gibbs.
-            (_identity, 2, False),
-            (_identity, 3, False),
-            (_identity, 3, True),
-            (_identity, 4, True),
+            (identity, 2, False),
+            (identity, 3, False),
+            (identity, 3, True),
+            (identity, 4, True),
         ],
     )
     def test_dct(self, f, M, lobatto):
@@ -295,10 +376,11 @@ class TestFastInterp:
             or interior roots grid for Chebyshev points.
 
         """
-        # Need to test fft used in Fourier Chebyshev interpolation due to issues like
+        # Need to test interpolation due to issues like
         # https://github.com/scipy/scipy/issues/15033
         # https://github.com/scipy/scipy/issues/21198
-        # https://github.com/google/jax/issues/22466.
+        # https://github.com/google/jax/issues/22466
+        # https://github.com/google/jax/issues/23895.
         domain = (0, 2 * np.pi)
         m = cheb_pts(M, domain, lobatto)
         n = cheb_pts(m.size * 10, domain, lobatto)
@@ -318,8 +400,7 @@ class TestFastInterp:
         else:
             fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
-        # Resolved by https://github.com/google/jax/issues/23895.
-        np.testing.assert_allclose(fq_2, f(n), atol=1e-6)
+        np.testing.assert_allclose(fq_2, f(n), atol=1e-14)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

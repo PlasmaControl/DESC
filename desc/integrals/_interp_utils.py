@@ -11,29 +11,13 @@ from functools import partial
 
 import numpy as np
 from interpax import interp1d
+from jax_finufft import nufft2 as _nufft2
+from jax_finufft import options
 from orthax.chebyshev import chebroots
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
-
-# TODO (#1154):
-#  We use the spline method to compute roots right now, but with the following
-#  algorithm, the Chebyshev method will be more efficient except when NFP is high.
-#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64.
-#  2. Then to find roots of bounce points use the closed formula in Boyd's
-#  spectral methods section 19.6. Can isolate interval to search for root by
-#  observing whether B - 1/pitch changes sign at extrema. Only need to do
-#  evaluate Chebyshev series at quadrature points once, and can use that to
-#  compute the integral for every pitch. The integral will converge rapidly
-#  since a low order polynomial approximates |B| well in between adjacent
-#  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
-#  Implementing 1 and 2 will remove all eigenvalue solves from computation.
-#  2 is a larger improvement than 1.
-chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 def cheb_pts(n, domain=(-1, 1), lobatto=False):
@@ -79,22 +63,6 @@ def fourier_pts(n):
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
-# TODO (#1294): For inverse transforms, use non-uniform fast transforms (NFFT).
-#   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
-#   and number of points (non-uniform) to evaluate be Q. A non-uniform
-#   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
-#   interpolation error term (depending on implementation how ε appears
-#   may change, but it is always logarithmic). Direct evaluation is 𝒪(F Q).
-#   Note that for the inverse Chebyshev transforms, we can also use fast
-#   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
-#   The cost is 𝒪([F+Q] log²[F + Q]). This might be useful to evaluating
-#   |B|, since the integrands are not smooth functions of |B|, which we know
-#   as a Chebyshev series, and the nodes are packed more tightly near the
-#   singular regions.
-
-
 def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     """Interpolate real-valued ``f`` to ``xq`` with FFT.
 
@@ -121,7 +89,7 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     )
 
 
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -159,7 +127,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
     return (vander * a).real.sum(axis=-1)
 
 
-def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+def ifft_non_uniform(
+    xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None
+):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -173,8 +143,11 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
-    _modes : jnp.ndarray
-        Supply to avoid computing the modes.
+    vander : jnp.ndarray
+        Precomputed transform matrix.
+        If given returns ``(vander*a).sum(axis)``.
+    modes : jnp.ndarray
+        Precomputed modes.
 
     Returns
     -------
@@ -182,12 +155,14 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Function value at query points.
 
     """
-    if _modes is None:
-        n = a.shape[axis]
-        _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-    a = jnp.moveaxis(a, axis, -1)
-    vander = jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis])
-    return jnp.linalg.vecdot(vander, a)
+    if vander is None:
+        if modes is None:
+            n = a.shape[axis]
+            modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+        vander = jnp.exp(1j * modes * (xq - domain[0])[..., jnp.newaxis])
+        a = jnp.moveaxis(a, axis, -1)
+        axis = -1
+    return (vander * a).sum(axis)
 
 
 def interp_rfft2(
@@ -396,6 +371,78 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
+def nufft2(
+    a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), eps=1e-6
+):
+    """Non-uniform fast transform of second type.
+
+    Notes
+    -----
+    Vectorization with the following signatures are supported for 1D, 2D transforms.
+     - ``(f,c0),(x)->(f,x)``
+     - ``(f,c0,c1),(x),(x)->(f,x)``
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients
+        e.g. ``a=fft(f,norm="forward")`` or ``a=fft2(f,norm="forward")``.
+    xq0 : jnp.ndarray
+        Real query points of coordinate in ``domain0`` where interpolation is desired.
+        For a 2D transform, the coordinates stored here must be the same coordinate
+        enumerated across axis ``-2`` of ``a``.
+    xq1 : jnp.ndarray
+        Real query points of coordinate in ``domain1`` where interpolation is desired.
+        If not given, performs a one-dimensional transform.
+        For a 2D transform, the coordinates stored here must be the same coordinate
+        enumerated across axis ``-1`` of ``a``.
+    domain0 : tuple[float]
+        Domain of coordinate specified by ``xq0`` over which samples were taken.
+    domain1 : tuple[float]
+        Domain of coordinate specified by ``xq1`` over which samples were taken.
+    eps : float
+        Precision requested. Default is ``1e-6``.
+
+    Returns
+    -------
+    fq : jnp.ndarray
+        Complex function value at query points.
+
+    """
+    opts = options.Opts(modeord=1)
+    scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
+    xq0 = (xq0 - domain0[0]) * scale0
+    if xq1 is None:
+        return _nufft2(a, xq0, iflag=1, eps=eps, opts=opts)
+    scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
+    xq1 = (xq1 - domain1[0]) * scale1
+    return _nufft2(a, xq0, xq1, iflag=1, eps=eps, opts=opts)
+
+
+def pad_for_fft(a, n, axis=-1):
+    """Pad output to form expected for FFT.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients of positive frequencies along ``axis``.
+    n : int
+        Number of positive frequencies + negative frequencies in
+        the output along ``axis``.
+    axis : int
+        Axis to pad with zeros.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Fourier coefficients for use with FFT.
+
+    """
+    pad_width = [(0, 0)] * a.ndim
+    pad_width[axis] = (0, n - a.shape[axis])
+    return jnp.pad(a, pad_width)
+
+
 def cheb_from_dct(a, axis=-1):
     """Get discrete Chebyshev transform from discrete cosine transform.
 
@@ -467,7 +514,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     )
 
 
-def idct_non_uniform(xq, a, n, axis=-1):
+def idct_non_uniform(xq, a, n, axis=-1, vander=None):
     """Evaluate discrete Chebyshev transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
 
     Parameters
@@ -481,6 +528,9 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Spectral resolution of ``a``.
     axis : int
         Axis along which to transform.
+    vander : jnp.ndarray
+        Precomputed transform matrix.
+        If given returns ``(vander*a).sum(axis)``.
 
     Returns
     -------
@@ -488,10 +538,12 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
-    n = jnp.arange(n)
-    a = jnp.moveaxis(a, axis, -1)
-    # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
-    return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
+    if vander is None:
+        vander = jnp.cos(jnp.arange(n) * jnp.arccos(xq)[..., jnp.newaxis])
+        a = jnp.moveaxis(a, axis, -1)
+        axis = -1
+    # Better than Clenshaw recursion ``chebval(xq,a,tensor=False)`` on GPU.
+    return (vander * a).sum(axis)
 
 
 # Warning: method must be specified as keyword argument.
@@ -791,6 +843,23 @@ def _concat_sentinel(r, sentinel, num=1):
     return jnp.append(r, sent, axis=-1)
 
 
+#  The default method for root finding for bounce points is to use splines
+#  then polish with Newton. If the root finding is selected to be done with
+#  the Chebyshev series, the following changes would make that more efficient.
+#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
+#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+#  Use that once to find extrema of |B| if Y_B > 64.
+#  2. Then to find roots of bounce points use the closed formula in Boyd's
+#  spectral methods section 19.6. Can isolate interval to search for root by
+#  observing whether |B|-1/λ changes sign at extrema. Only need to do
+#  evaluate Chebyshev series at quadrature points once, and can use that to
+#  compute the integral for every λ. The integral will converge rapidly
+#  since a low order polynomial approximates |B| well in between adjacent
+#  extrema. 2 is a larger improvement than 1.
+chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
+
+
 def rfft_to_trig(a, n, axis=-1):
     """Spectral coefficients of the Nyquist trigonometric interpolant.
 
@@ -815,7 +884,6 @@ def rfft_to_trig(a, n, axis=-1):
 
     """
     is_even = (n % 2) == 0
-    # sin(nx) coefficients
     an = -2 * jnp.flip(
         take(
             a.imag,
@@ -830,7 +898,6 @@ def rfft_to_trig(a, n, axis=-1):
         i = (0, -1)
     else:
         i = 0
-    # cos(nx) coefficients
     bn = a.real.at[Index.get(i, axis, a.ndim)].divide(2) * 2
     h = jnp.concatenate([an, bn], axis=axis)
     assert h.shape[axis] == n

@@ -26,8 +26,7 @@ from desc.integrals.basis import (
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_matrix, setdefault, take_mask
 
-# New versions of JAX only like static sentinels.
-_sentinel = -100000.0  # instead of knots[0] - 1
+_sentinel = -1e5
 
 
 def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
@@ -106,7 +105,8 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     z2 = take_mask(intersect, is_z2, size=num_well, fill_value=_sentinel)
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
-    # Set outside mask to same value so integration is over set of measure zero.
+    # Set to zero so integration is over set of measure zero
+    # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
     return z1, z2
@@ -148,8 +148,8 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
-    # if rho axis exists, then add alpha axis
     if jnp.ndim(pitch_inv) == 2:
+        # if rho axis exists, then add alpha axis
         pitch_inv = pitch_inv[:, jnp.newaxis]
         # do not need to broadcast to full size because
         # https://jax.readthedocs.io/en/latest/notebooks/
@@ -215,7 +215,8 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
     Parameters
     ----------
     shape : tuple
-        Shape is (num rho, num alpha, num pitch, num well, num quad).
+        Shape that broadcasts with
+        (num rho, num alpha, num pitch, num well, num quad).
     zeta : jnp.ndarray
         Quadrature points in ζ coordinates.
     b_sup_z : jnp.ndarray
@@ -254,8 +255,8 @@ def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
         for i, f_i in enumerate(f):
             _plot_check_interp(zeta, f_i.reshape(shape), name=f"f_{i}")
 
-    # Number of those integrals that were computed.
     for res in result:
+        # Number of those integrals that were computed.
         actual = jnp.sum(marked & jnp.isfinite(res))
         assert goal == actual, (
             f"Lost {goal - actual} integrals from NaN generation in the integrand."
@@ -433,12 +434,6 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     return ext, g_ext
 
 
-# We can use the non-differentiable argmin because we actually want the gradients
-# to accumulate through only the minimum since we are differentiating how our
-# physics objective changes wrt equilibrium perturbations not wrt which of the
-# extrema get interpolated to.
-
-
 def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -504,7 +499,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
     ).squeeze(axis=-1)
 
 
-def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
+def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP=1):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
@@ -536,10 +531,10 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
         Polynomial coefficients of the spline of ∂g/∂z in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    m : int
-        Fourier resolution in poloidal direction; num theta.
-    n : int
-        Fourier resolution in toroidal direction; num zeta.
+    num_theta : int
+        Fourier resolution in poloidal direction.
+    num_zeta : int
+        Fourier resolution in toroidal direction.
     NFP : int
         Number of field periods.
 
@@ -568,8 +563,9 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
     # shape is (..., num well, 1)
     where = jnp.argmin(where, axis=-1, keepdims=True)
 
+    # TODO: Benchmark replacing this irfft2 with nufft. Prediction: Big improvement
     h = _irfft2_non_uniform(
-        ext, T.eval1d(ext), h, n0=n, n1=m, domain0=(0, 2 * jnp.pi / NFP)
+        ext, T.eval1d(ext), h, n0=num_zeta, n1=num_theta, domain0=(0, 2 * jnp.pi / NFP)
     )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
@@ -577,7 +573,6 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
     return jnp.take_along_axis(h[..., jnp.newaxis, :], where, axis=-1).squeeze(axis=-1)
 
 
-# TODO (#568): Generalize this beyond ζ = ϕ
 def get_fieldline(alpha, iota, num_transit):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
@@ -601,7 +596,10 @@ def get_fieldline(alpha, iota, num_transit):
     """
     iota = jnp.atleast_1d(iota)[:, jnp.newaxis]
     alpha = alpha[:, jnp.newaxis, jnp.newaxis]
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    # Select the next branch such that ϑ is continuous.
+    #      αᵢ = ϑ − ιϕᵢ
+    #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
+    # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
     return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota
 
 
@@ -612,9 +610,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     ----------
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     iota : jnp.ndarray
         Shape (num rho, ).
@@ -677,9 +673,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     if theta.ndim == 2:
         # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)
-    # Evaluating set of single variable maps is more efficient than evaluating
-    # multivariable map, so we project θ to a set of Chebyshev series. This is
-    # a partial summation technique.
+    # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
     T.stitch()
     assert T.X == num_transit
@@ -687,7 +681,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
+def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -704,14 +698,16 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
         Usually the spectrum of ``f`` is wider than θ, so one can upsample
         to about double the resolution of θ. (This is function dependent).
-    m : int
-        Fourier resolution in poloidal direction; num theta.
+    num_theta : int
+        Fourier resolution in poloidal direction.
     m_modes : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     n_modes : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
+    vander : jnp.ndarray
+        Precomputed transform matrix.
 
     Returns
     -------
@@ -728,22 +724,34 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
-    zeta = cheb_pts(Y, domain=T.domain)
-    # Shape broadcasts with (num rho, Y, m_modes.size).
     f = ifft_non_uniform(
-        zeta[:, jnp.newaxis],
+        cheb_pts(Y, domain=T.domain)[:, jnp.newaxis] if vander is None else None,
         f,
-        _modes=n_modes,
         domain=(0, 2 * jnp.pi / NFP),
         axis=-2,
+        modes=n_modes,
+        vander=vander,
     )
-    # f at Chebyshev points in ζ on field lines
-    f = irfft_non_uniform(T.evaluate(Y), f[..., jnp.newaxis, :, :], m, _modes=m_modes)
+    f = irfft_non_uniform(
+        T.evaluate(Y), f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes
+    )
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 
 
-def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
+def cubic_spline(
+    T,
+    f,
+    Y,
+    num_theta,
+    m_modes,
+    n_modes,
+    NFP=1,
+    *,
+    vander_zeta=None,
+    vander_theta=None,
+    check=False,
+):
     """Compute cubic spline of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -759,14 +767,18 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
         This number will be rounded down to an integer multiple of NFP.
-    m : int
-        Fourier resolution in poloidal direction; num theta.
+    num_theta : int
+        Fourier resolution in poloidal direction.
     m_modes : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     n_modes : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
+    vander_zeta : jnp.ndarray
+        Precomputed transform matrix.
+    vander_theta : jnp.ndarray
+        Precomputed transform matrix.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
@@ -797,23 +809,25 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
     if num_zeta >= f.shape[-2] and num_zeta == f.shape[-2]:
-        # TODO (1574): This does not work unless num_zeta == f.shape[-2],
-        #  but it should as long as num_zeta >= f.shape[-2].
+        # TODO (1574): This does not work unless second condition is met,
+        #  but it should as long as first condition is met.
         f = ifft(f, num_zeta, axis=-2, norm="forward")
     else:
         f = ifft_non_uniform(
             zeta[:num_zeta, jnp.newaxis],
             f,
-            _modes=n_modes,
             domain=(0, 2 * jnp.pi / NFP),
             axis=-2,
+            modes=n_modes,
+            vander=vander_zeta,
         )[..., jnp.newaxis, :, :]
 
     # θ at uniform ζ on field lines
-    theta = idct_non_uniform(x, T.cheb[..., jnp.newaxis, :], T.Y)
+    theta = idct_non_uniform(x, T.cheb[..., jnp.newaxis, :], T.Y, vander=vander_theta)
     theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
-    # Shape broadcasts with (num alpha, num rho, num transit, NFP, num_zeta).
-    f = irfft_non_uniform(theta, f[..., jnp.newaxis, :, :], m, _modes=m_modes)
+    # Shape broadcasts with (num alpha, num rho, num transit, NFP, num zeta).
+    f = irfft_non_uniform(theta, f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes)
+    # TODO: Benchmark replacing this irfft with nufft. Prediction: Small improvement
 
     zeta = jnp.ravel(
         zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]

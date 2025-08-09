@@ -1231,7 +1231,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1264,6 +1264,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1340,6 +1341,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
@@ -1351,15 +1353,22 @@ class Equilibrium(IOAble, Optimizable):
         alpha,
         zeta,
         L_lmn,
-        L,
+        lmbda,
         theta0=None,
-        period=np.inf,
         tol=1e-6,
         maxiter=30,
         **kwargs,
     ):
         return _map_clebsch_coordinates(
-            iota, alpha, zeta, L_lmn, L, theta0, period, tol, maxiter, **kwargs
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            theta0,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
         )
 
     @execute_on_cpu

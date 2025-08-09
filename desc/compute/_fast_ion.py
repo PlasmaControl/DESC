@@ -101,6 +101,7 @@ def _drift2(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
@@ -147,6 +148,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft = kwargs.get("nufft", False)
+    _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -170,6 +173,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
                 is_fourier=True,
+                nufft=nufft,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(
@@ -188,7 +192,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, _vander) * 2**1.5 * jnp.pi)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -264,6 +268,7 @@ def _poloidal_drift(data, B, pitch):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
+        "nufft",
     ],
 )
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
@@ -305,6 +310,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft = kwargs.get("nufft", False)
+    _vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -325,8 +332,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
+                num_well=num_well,
+                nufft=nufft,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
@@ -337,7 +345,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, _vander) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
     data["Gamma_c Velasco"] = _compute(

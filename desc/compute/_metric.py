@@ -2614,7 +2614,6 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
     return data
 
 
-
 @register_compute_fun(
     name="finite-n instability drive",
     label="(\\mathbf{J} \\times (\\nabla \\rho))/g^{\\rho \\rho} \\mathbf{B}"
@@ -2637,5 +2636,3 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     )
 
     return data
-
-

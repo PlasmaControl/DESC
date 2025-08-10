@@ -476,24 +476,21 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
 
     z1, z2 = points
     assert z1.ndim > 1 and z2.ndim > 1
-    # Given
-    #      z1 and z2 with shape (..., num pitch, num well)
-    # and ext, g_ext with shape (..., num extrema),
-    # add dims to broadcast
-    #      z1 and z2 with shape (..., num pitch, num well, 1).
-    # and ext, g_ext with shape (...,         1,        1, num extrema).
+    #      z1 and z2 shape (..., num pitch, num well)
+    # and ext, g_ext shape (..., num extrema),
+    # add axes to broadcast
+    #      z1 and z2 shape (..., num pitch, num well, 1).
+    # and ext, g_ext shape (...,         1,        1, num extrema).
     where = jnp.where(
-        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, jnp.newaxis, :])
-        & (ext[..., jnp.newaxis, jnp.newaxis, :] < z2[..., jnp.newaxis]),
-        g_ext[..., jnp.newaxis, jnp.newaxis, :],
+        (z1[..., None] < ext[..., None, None, :])
+        & (ext[..., None, None, :] < z2[..., None]),
+        g_ext[..., None, None, :],
         jnp.inf,
     )
-    # shape is (..., num pitch, num well, 1)
     where = jnp.argmin(where, axis=-1, keepdims=True)
 
     return jnp.take_along_axis(
-        # adding axes to broadcast with num pitch and num well axes
-        interp1d_vec(ext, knots, h, method=method)[..., jnp.newaxis, jnp.newaxis, :],
+        interp1d_vec(ext, knots, h, method=method)[..., None, None, :],
         where,
         axis=-1,
     ).squeeze(axis=-1)
@@ -548,19 +545,16 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP
 
     z1, z2 = points
     assert z1.ndim >= 1 and z2.ndim >= 1
-    # Given
-    #      z1 and z2 with shape (..., num well)
-    # and ext, g_ext with shape (..., num extrema),
-    # add dims to broadcast
-    #      z1 and z2 with shape (..., num well, 1).
-    # and ext, g_ext with shape (...,        1, num extrema).
+    #      z1 and z2 shape (..., num well)
+    # and ext, g_ext shape (..., num extrema),
+    # add axes to broadcast
+    #      z1 and z2 shape (..., num well, 1).
+    # and ext, g_ext shape (...,        1, num extrema).
     where = jnp.where(
-        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
-        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
-        g_ext[..., jnp.newaxis, :],
+        (z1[..., None] < ext[..., None, :]) & (ext[..., None, :] < z2[..., None]),
+        g_ext[..., None, :],
         jnp.inf,
     )
-    # shape is (..., num well, 1)
     where = jnp.argmin(where, axis=-1, keepdims=True)
 
     # TODO: Benchmark replacing this irfft2 with nufft. Prediction: Big improvement
@@ -568,9 +562,9 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP
         ext, T.eval1d(ext), h, n0=num_zeta, n1=num_theta, domain0=(0, 2 * jnp.pi / NFP)
     )
     if z1.ndim == h.ndim + 1:
-        h = h[jnp.newaxis]  # to broadcast with num pitch axis
+        h = h[None]  # to broadcast with num pitch axis
     # add axis to broadcast with num well axis
-    return jnp.take_along_axis(h[..., jnp.newaxis, :], where, axis=-1).squeeze(axis=-1)
+    return jnp.take_along_axis(h[..., None, :], where, axis=-1).squeeze(axis=-1)
 
 
 def get_fieldline(alpha, iota, num_transit):
@@ -725,16 +719,14 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     f = ifft_non_uniform(
-        cheb_pts(Y, domain=T.domain)[:, jnp.newaxis] if vander is None else None,
+        cheb_pts(Y, domain=T.domain)[:, None] if vander is None else None,
         f,
         domain=(0, 2 * jnp.pi / NFP),
         axis=-2,
         modes=n_modes,
         vander=vander,
     )
-    f = irfft_non_uniform(
-        T.evaluate(Y), f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes
-    )
+    f = irfft_non_uniform(T.evaluate(Y), f[..., None, :, :], num_theta, _modes=m_modes)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 
@@ -766,7 +758,7 @@ def cubic_spline(
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
-        This number will be rounded down to an integer multiple of NFP.
+        This number will be rounded up to an integer multiple of NFP.
     num_theta : int
         Fourier resolution in poloidal direction.
     m_modes : jnp.ndarray
@@ -796,7 +788,7 @@ def cubic_spline(
         Knots of spline ``f``.
 
     """
-    num_zeta = max(1, Y // NFP)
+    num_zeta = (Y + NFP - 1) // NFP
     Y = num_zeta * NFP
     x = jnp.linspace(-1, 1, Y, endpoint=False)
     zeta = bijection_from_disc(x, T.domain[0], T.domain[1])
@@ -814,24 +806,22 @@ def cubic_spline(
         f = ifft(f, num_zeta, axis=-2, norm="forward")
     else:
         f = ifft_non_uniform(
-            zeta[:num_zeta, jnp.newaxis],
+            zeta[:num_zeta, None],
             f,
             domain=(0, 2 * jnp.pi / NFP),
             axis=-2,
             modes=n_modes,
             vander=vander_zeta,
-        )[..., jnp.newaxis, :, :]
+        )[..., None, :, :]
 
     # θ at uniform ζ on field lines
-    theta = idct_non_uniform(x, T.cheb[..., jnp.newaxis, :], T.Y, vander=vander_theta)
+    theta = idct_non_uniform(x, T.cheb[..., None, :], T.Y, vander=vander_theta)
     theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
     # Shape broadcasts with (num alpha, num rho, num transit, NFP, num zeta).
-    f = irfft_non_uniform(theta, f[..., jnp.newaxis, :, :], num_theta, _modes=m_modes)
+    f = irfft_non_uniform(theta, f[..., None, :, :], num_theta, _modes=m_modes)
     # TODO: Benchmark replacing this irfft with nufft. Prediction: Small improvement
 
-    zeta = jnp.ravel(
-        zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
-    )
+    zeta = jnp.ravel(zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, None])
     f = CubicSpline(x=zeta, y=f.reshape(*f.shape[:-3], -1), axis=-1, check=check).c
     f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
     assert f.shape[-2:] == (T.X * Y - 1, 4)

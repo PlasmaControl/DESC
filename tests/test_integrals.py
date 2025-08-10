@@ -1423,7 +1423,7 @@ class TestBounce:
         return fig
 
     @staticmethod
-    def _test_bounce_autodiff(bounce, integrand, data, nufft=False):
+    def _test_bounce_autodiff(bounce, integrand, data, nufft_eps=0):
         """Make sure reverse mode AD works correctly on this algorithm.
 
         Non-differentiable operations (e.g. ``take_mask``) are used in computation.
@@ -1475,8 +1475,8 @@ class TestBounce:
                 integrand=integrand,
                 pitch_inv=1 / pitch,
                 data=data,
+                nufft_eps=nufft_eps,
                 check=False,
-                nufft=nufft,
             ).sum()
 
         def fun2(pitch):
@@ -1484,8 +1484,8 @@ class TestBounce:
                 integrand=integrand_grad,
                 pitch_inv=1 / pitch,
                 data=data,
+                nufft_eps=nufft_eps,
                 check=True,
-                nufft=nufft,
             ).sum()
 
         pitch = 1.0
@@ -1574,12 +1574,14 @@ class TestBounce2D:
             pitch_inv=pitch_inv,
             data=_data,
             points=points,
+            nufft_eps=0,
             check=True,
         )
         den = bounce.integrate(
             integrand=TestBounce._example_denominator,
             pitch_inv=pitch_inv,
             points=points,
+            nufft_eps=0,
             check=True,
         )
         avg = safediv(num, den)
@@ -1620,19 +1622,25 @@ class TestBounce2D:
         _, _ = bounce.plot_theta(l, m, show=False)
 
         # check for consistency with different options
-        np.testing.assert_allclose(
-            bounce.integrate(
-                integrand=TestBounce._example_numerator,
-                pitch_inv=pitch_inv,
-                data=_data,
-                points=points,
-                check=True,
-                nufft=True,
-                eps=1e-11,
-            ),
-            num,
-            rtol=1e-3,
+        num_nufft = bounce.integrate(
+            integrand=TestBounce._example_numerator,
+            pitch_inv=pitch_inv,
+            data=_data,
+            points=points,
+            # ~1% of the integrals differ significantly at lower epsilon.
+            nufft_eps=1e-12,
+            check=True,
         )
+        near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
+        near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
+        np.testing.assert_array_equal(near_zero_nufft, near_zero)
+        np.testing.assert_allclose(
+            num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
+        )
+        np.testing.assert_allclose(
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2e-4
+        )
+
         b = Bounce2D(
             grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
         )
@@ -1656,18 +1664,18 @@ class TestBounce2D:
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
-        "nufft",
+        "nufft_eps",
         [
-            False,
+            0,
             pytest.param(
-                True,
+                1e-6,
                 marks=pytest.mark.xfail(
-                    strict=False, reason="jax-finufft AD is wrong."
+                    strict=False, reason="jax-finufft AD is completely wrong."
                 ),
             ),
         ],
     )
-    def test_binormal_drift_bounce2d(self, nufft):
+    def test_binormal_drift_bounce2d(self, nufft_eps):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytic_data()
         drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
@@ -1700,15 +1708,15 @@ class TestBounce2D:
             pitch_inv=pitch_inv,
             data=interp_data,
             points=points,
+            nufft_eps=nufft_eps,
             check=True,
-            nufft=nufft,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce.drift_den_integrand,
             pitch_inv=pitch_inv,
             points=points,
+            nufft_eps=nufft_eps,
             check=True,
-            nufft=nufft,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
@@ -1719,7 +1727,7 @@ class TestBounce2D:
         )
 
         TestBounce._test_bounce_autodiff(
-            bounce, TestBounce2D.drift_num_integrand, interp_data, nufft
+            bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
         )
 
         fig, ax = plt.subplots()

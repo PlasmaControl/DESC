@@ -2036,7 +2036,10 @@ class TestObjectiveFunction:
         )
         obj.build()
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+            obj.compute(eq.params_dict),
+            grid.compress(data["Gamma_c"]),
+            # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
+            rtol=2e-5,
         )
 
         obj = desc.objectives.BallooningStability(eq=eq)

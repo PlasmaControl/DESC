@@ -76,11 +76,13 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
+    "nufft_eps": """float :
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        """,
     "spline": """bool :
         Whether to use cubic splines to compute bounce points.
-        """,
-    "nufft": """bool :
-        Whether to use non-uniform fast Fourier transforms for interpolation.
+        The recommended setting is ``True``.
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrices.
@@ -182,8 +184,8 @@ def _dI_ripple(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
-        "nufft",
     ],
 )
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
@@ -206,15 +208,15 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
-    nufft = kwargs.get("nufft", False)
-    _vander = kwargs.get("_vander", None)
+    nufft_eps = kwargs.get("nufft_eps", 1e-6)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
@@ -241,7 +243,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 "|grad(rho)|*kappa_g",
                 is_fourier=True,
                 num_well=num_well,
-                nufft=nufft,
+                nufft_eps=nufft_eps,
             )
             return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 
@@ -250,7 +252,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad, _vander)
+        ) / bounce.compute_fieldline_length(fl_quad, vander)
 
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]

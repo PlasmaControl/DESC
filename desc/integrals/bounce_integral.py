@@ -104,8 +104,8 @@ class Bounce(IOAble, ABC):
         names=None,
         points=None,
         *,
-        quad=None,
         num_well=None,
+        quad=None,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ."""
 
@@ -252,7 +252,7 @@ class Bounce2D(Bounce):
         Flag for debugging. Must be false for JAX transformations.
     spline : bool
         Whether to use cubic splines to compute bounce points.
-        Default is true.
+        The recommended setting is ``True``.
 
     """
 
@@ -646,13 +646,12 @@ class Bounce2D(Bounce):
         names=None,
         points=None,
         *,
+        num_well=None,
+        nufft_eps=1e-6,
         is_fourier=False,
+        quad=None,
         check=False,
         plot=False,
-        quad=None,
-        num_well=None,
-        nufft=False,
-        eps=1e-6,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -688,19 +687,22 @@ class Bounce2D(Bounce):
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
+        num_well : int or None
+            See ``self.points`` for the description of this parameter.
+        nufft_eps : float
+            Precision requested for interpolation with non-uniform fast Fourier
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         is_fourier : bool
             If true, then it is assumed that ``data`` holds Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
+        quad : tuple[jnp.ndarray]
+            Optional quadrature points and weights. If given this overrides
+            the quadrature chosen when this object was made.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         plot : bool
             Whether to plot the quantities in the integrand interpolated to the
             quadrature points of each integral. Ignored if ``check`` is false.
-        quad : tuple[jnp.ndarray]
-            Optional quadrature points and weights. If given this overrides
-            the quadrature chosen when this object was made.
-        nufft : bool
-            Whether to use non-uniform fast Fourier transforms for interpolation.
 
         Returns
         -------
@@ -726,7 +728,7 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv, num_well)
 
-        fun = self._integrate_nufft if nufft else self._integrate_nummt
+        fun = self._integrate_nufft if (nufft_eps >= 1e-14) else self._integrate_nummt
         result = fun(
             x,
             w,
@@ -737,7 +739,7 @@ class Bounce2D(Bounce):
             points[1],
             check,
             plot,
-            eps,
+            nufft_eps,
         )
         return result[0] if len(result) == 1 else result
 
@@ -927,7 +929,7 @@ class Bounce2D(Bounce):
             )
         )
 
-    def compute_fieldline_length(self, quad=None, _vander=None):
+    def compute_fieldline_length(self, quad=None, vander=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
 
         Computes mean_A ∫ dℓ / B where A is the set of field line labels
@@ -940,6 +942,8 @@ class Bounce2D(Bounce):
             approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
             Default is Gauss-Legendre quadrature at resolution ``Y_B//2``
             on each toroidal transit.
+        vander : dict[str,jnp.ndarray]
+            Optional precomputed Vandermonde matrices for interpolation.
 
         Returns
         -------
@@ -947,14 +951,14 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
-        _vander = setdefault(_vander, {})
+        vander = setdefault(vander, {})
         if quad is None:
-            deg = (
-                self._c["B(z)"].Y
-                if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
-                else self._c["knots"].size // self._c["T(z)"].X
-            ) // 2
-            x, w = leggauss(deg)
+            if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+                deg = self._c["B(z)"].Y
+            else:
+                num_transit = self._c["T(z)"].X
+                deg = self._c["knots"].size // num_transit
+            x, w = leggauss(deg // 2)
             # Integrating an analytic oscillatory map so a high order quadrature
             # is ideal. Difficult to pick the right frequency for Filon quadrature
             # in general, which would work best at high NFP. Gauss-Legendre is
@@ -968,9 +972,9 @@ class Bounce2D(Bounce):
                 x,
                 self._c["T(z)"].cheb[..., jnp.newaxis, :],
                 self._c["T(z)"].Y,
-                vander=_vander.get("dct cfl", None),
+                vander=vander.get("dct cfl", None),
             ),
-            self._partial_sum_cfl(x, _vander.get("dft cfl", None)),
+            self._partial_sum_cfl(x, vander.get("dft cfl", None)),
             self._num_theta,
             _modes=self._m_modes,
         )
@@ -1316,11 +1320,11 @@ class Bounce1D(Bounce):
         names=None,
         points=None,
         *,
+        num_well=None,
         method="cubic",
+        quad=None,
         check=False,
         plot=False,
-        quad=None,
-        num_well=None,
         **kwargs,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
@@ -1351,18 +1355,20 @@ class Bounce1D(Bounce):
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
+        num_well : int or None
+            See ``self.points`` for the description of this parameter.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
             Default is cubic C1 local spline.
+        quad : tuple[jnp.ndarray]
+            Optional quadrature points and weights. If given this overrides
+            the quadrature chosen when this object was made.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         plot : bool
             Whether to plot the quantities in the integrand interpolated to the
             quadrature points of each integral. Ignored if ``check`` is false.
-        quad : tuple[jnp.ndarray]
-            Optional quadrature points and weights. If given this overrides
-            the quadrature chosen when this object was made.
 
         Returns
         -------

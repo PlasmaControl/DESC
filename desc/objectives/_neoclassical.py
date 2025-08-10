@@ -113,11 +113,14 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Set to ``True`` to replace pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
+        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
 
     """
 
@@ -160,6 +163,7 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
+        nufft_eps=0,  # TODO: Set to 1e-6 once JAX-finufft fixes AD.
         spline=False,
     ):
         if target is None and bounds is None:
@@ -182,6 +186,7 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
         }
 
         super().__init__(
@@ -305,6 +310,7 @@ class EffectiveRipple(_Objective):
         Y_B = self._hyperparam.pop("Y_B")
         num_transit = self._hyperparam.pop("num_transit")
         num_quad = self._hyperparam.pop("num_quad")
+        self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
         self._constants["Y"] = np.linspace(
             0, 2 * np.pi * num_transit, Y_B * num_transit

@@ -130,12 +130,10 @@ def map_coordinates(  # noqa: C901
             )
             if "iota" in kwargs:
                 iota = kwargs.pop("iota")
+            elif "profiles" in kwargs:
+                iota = eq._compute_iota_under_jit(coords, params, **kwargs)
             else:
-                if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(
-                        ["iota", "iota_r"], params=params, **kwargs
-                    )
-                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
+                iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
             rho, alpha, zeta = coords.T
             coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
             inbasis = ("rho", "theta_PEST", "zeta")

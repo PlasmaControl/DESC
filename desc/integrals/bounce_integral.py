@@ -8,7 +8,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
 from desc.batching import batch_map
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
@@ -455,7 +455,7 @@ class Bounce2D(Bounce):
         iota : float or jnp.ndarray
             Shape (num rho, ).
             Optional, rotational transform on the flux surfaces to compute on.
-        params : dict of ndarray
+        params : dict[str,jnp.ndarray]
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to ``eq.params_dict``.
         tol : float
@@ -472,23 +472,11 @@ class Bounce2D(Bounce):
             DESC coordinates θ.
 
         """
-        from desc.compute.utils import get_profiles, get_transforms
+        from desc.compute.utils import get_transforms
 
         params = setdefault(params, eq.params_dict)
-
         if iota is None:
-            profiles = (
-                kwargs["profiles"] if "profiles" in kwargs else get_profiles("iota", eq)
-            )
-            if profiles["iota"] is None:
-                profiles["iota"] = eq.get_profile(
-                    ["iota", "iota_r"], params=params, **kwargs
-                )
-            zero = jnp.zeros_like(rho)
-            iota = profiles["iota"].compute(
-                Grid(jnp.column_stack([rho, zero, zero]), jitable=True)
-            )
-            assert iota.ndim == 1 and iota.size == rho.size
+            iota = eq._compute_iota_under_jit(rho, params, **kwargs)
         iota = jnp.atleast_1d(iota)
 
         zeta = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]

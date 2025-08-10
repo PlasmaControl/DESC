@@ -4150,6 +4150,8 @@ def plot_particle_trajectories(  # noqa: C901
 
     if "params" not in kwargs:
         kwargs["params"] = field.params_dict
+    if "options" not in kwargs:
+        kwargs["options"] = {}
     trace_kwargs = {}
     for key in inspect.signature(trace_particles).parameters:
         if key in kwargs:

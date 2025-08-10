@@ -56,6 +56,14 @@ class EffectiveRipple(_Objective):
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 
+    Warnings
+    --------
+    Selecting the option to use non-uniform Fast Fourier transforms (NUFFT)
+    significantly improves speed and reduces the memory consumption. However
+    due to bugs in upstream libraries, the automatic differentiation tool fails
+    to compute the objective derivative correctly. Therefore it is currently
+    not recommended to use the NUFFT option.
+
     Parameters
     ----------
     eq : Equilibrium

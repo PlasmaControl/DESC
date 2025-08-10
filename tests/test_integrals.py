@@ -1663,18 +1663,7 @@ class TestBounce2D:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    @pytest.mark.parametrize(
-        "nufft_eps",
-        [
-            0,
-            pytest.param(
-                1e-6,
-                marks=pytest.mark.xfail(
-                    strict=False, reason="jax-finufft AD is completely wrong."
-                ),
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("nufft_eps", [0, 1e-6])
     def test_binormal_drift_bounce2d(self, nufft_eps):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytic_data()
@@ -1726,9 +1715,17 @@ class TestBounce2D:
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
-        )
+        if nufft_eps == 0:
+            TestBounce._test_bounce_autodiff(
+                bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
+            )
+        else:
+            with pytest.raises(AssertionError):
+                # TODO: Change default objective setting to use nuffts
+                #       Once JAX-finufft fixes their AD.
+                TestBounce._test_bounce_autodiff(
+                    bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
+                )
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)

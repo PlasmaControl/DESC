@@ -3968,10 +3968,25 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
+
+        obj_0 = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=0)
+        )
+        obj_0.build(verbose=0)
+        g_0 = obj_0.grad(obj_0.x())
+        assert not np.any(np.isnan(g_0))
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        with pytest.raises(AssertionError):
+            # TODO: Change default objective setting to use nuffts
+            #       Once JAX-finufft fixes their AD.
+            np.testing.assert_allclose(g, g_0)
+
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
         )
@@ -3985,10 +4000,24 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj_0 = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=0)
+        )
+        obj_0.build(verbose=0)
+        g_0 = obj_0.grad(obj_0.x())
+        assert not np.any(np.isnan(g_0))
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-7)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        with pytest.raises(AssertionError):
+            # TODO: Change default objective setting to use nuffts
+            #       Once JAX-finufft fixes their AD.
+            np.testing.assert_allclose(g, g_0)
+
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
         obj.build(verbose=0)
         g = obj.grad(obj.x())

@@ -1201,17 +1201,27 @@ class TestMagneticFields:
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
-    def test_field_line_integrate_jax_transforms(self):
+    def test_field_line_integrate_jax_transforms(self, capsys):
         """Test field line integration JAX transformable."""
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi]
+
+        def fun0(r0, z0, field):
+            return field_line_integrate(r0, z0, phis, field, max_steps=1000)
+
         # check if it is jittable
-        r, z = jit(field_line_integrate)(r0, z0, phis, field)
+        r, z = jit(fun0)(r0, z0, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
+        # make sure that the function is not recompiled
+        with jax.log_compiles():
+            r, z = jit(fun0)([10.002], z0, field)
+
+        out = capsys.readouterr()
+        assert out.out == ""
         # check the grad works
         # For toroidal field, r doesn't change with integration f(r) = r
         # so the derivative of the field line with respect to r should be 1
@@ -1219,7 +1229,7 @@ class TestMagneticFields:
 
         def fun(r0):
             r0 = [r0]
-            r, _ = field_line_integrate(r0, z0, phis, fieldT)
+            r, _ = field_line_integrate(r0, z0, phis, fieldT, max_steps=1000)
             return jnp.squeeze(r[-1])
 
         df_dr = jax.grad(jit(fun))(10.1)

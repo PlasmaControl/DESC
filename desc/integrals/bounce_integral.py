@@ -491,20 +491,20 @@ class Bounce2D(Bounce):
             assert iota.ndim == 1 and iota.size == rho.size
         iota = jnp.atleast_1d(iota)
 
-        Y = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
+        zeta = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
         lmbda = kwargs.get("lmbda", None)
         if lmbda is None:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", "Unequal number of field periods")
                 lmbda = get_transforms(
-                    "lambda", eq, grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=Y)
+                    "lambda", eq, grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
                 )["L"]
         assert lmbda.basis.NFP == eq.NFP
 
         return eq._map_clebsch_coordinates(
             iota=iota,
             alpha=fourier_pts(X),
-            zeta=Y,
+            zeta=zeta,
             L_lmn=params["L_lmn"],
             lmbda=lmbda,
             tol=tol,
@@ -980,7 +980,7 @@ class Bounce2D(Bounce):
         )
         dz_dx = jnp.pi
         return jnp.abs(jnp.reciprocal(B_sup_zeta).dot(w).sum(-1).mean(0)) * dz_dx
-        # B⋅∇ζ has the same sign on a flux surface.
+        # B⋅∇ζ never vanishes, so it has the same sign over a surface.
         # Simple mean over α because when ζ extends beyond one transit we need
         # to weight all field lines uniformly regardless of their area wrt α.
 

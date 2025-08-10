@@ -46,14 +46,14 @@ __all__ = [
     "plot_coefficients",
     "plot_coils",
     "plot_comparison",
+    "plot_field_lines",
     "plot_fsa",
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_particle_trajectories",
     "plot_section",
     "plot_surfaces",
-    "plot_field_lines",
-    "plot_particle_trajectories",
     "poincare_plot",
 ]
 
@@ -4150,12 +4150,10 @@ def plot_particle_trajectories(  # noqa: C901
 
     if "params" not in kwargs:
         kwargs["params"] = field.params_dict
+    if "options" not in kwargs:
+        kwargs["options"] = {}
     trace_kwargs = {}
-    trace_options = list(inspect.signature(trace_particles).parameters) + [
-        "iota",
-        "source_grid",
-    ]
-    for key in trace_options:
+    for key in inspect.signature(trace_particles).parameters:
         if key in kwargs:
             trace_kwargs[key] = kwargs.pop(key)
     for key in inspect.signature(diffeqsolve).parameters:
@@ -4164,15 +4162,12 @@ def plot_particle_trajectories(  # noqa: C901
 
     if isinstance(field, Equilibrium):
         if field.iota is None:
-            if "iota" not in trace_kwargs:
-                warnings.warn(
-                    "Equilibrium doesn't have iota defined, this may lead to incorrect "
-                    "magnetic field computation for the particle tracing. Please give "
-                    "iota profile as keyword argument.",
-                    UserWarning,
-                )
+            if "iota" not in trace_kwargs["options"]:
+                iota = field.get_profile("iota")
+                trace_kwargs["options"]["iota"] = iota
+                trace_kwargs["params"]["i_l"] = iota.params
             else:
-                trace_kwargs["params"]["i_l"] = trace_kwargs["iota"].params
+                trace_kwargs["params"]["i_l"] = trace_kwargs["options"]["iota"].params
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -4198,9 +4193,13 @@ def plot_particle_trajectories(  # noqa: C901
 
     # prepare arguments for partile tracing
     x0, args = initializer.init_particles(model=model, field=field)
-    ms, qs, mus = args[:3]
     rpz, _ = trace_particles(
-        field=field, y0=x0, ms=ms, qs=qs, mus=mus, model=model, ts=ts, **trace_kwargs
+        field=field,
+        y0=x0,
+        model_args=args,
+        model=model,
+        ts=ts,
+        **trace_kwargs,
     )
 
     rs = rpz[:, :, 0]  # R or rho

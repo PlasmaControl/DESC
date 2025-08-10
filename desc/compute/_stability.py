@@ -2420,12 +2420,12 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
-        x_0 = 0.75
+        x_0 = 0.4
         m_1 = 3.0
-        m_2 = 2.0
+        m_2 = 3.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-2
+        eps = 1.0e-3
         # eps1 = 1.5e-2
         # return eps + (1 - eps1) * (lower + upper)
         return eps + (1 - eps) * (lower + upper)
@@ -2859,9 +2859,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     # w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
     w, v = jnp.linalg.eigh(A3)
 
-    print(w)
-    pdb.set_trace()
-
     data["finite-n lambda3"] = w
     data["finite-n eigenfunction3"] = v
 
@@ -2968,9 +2965,9 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
         return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
-        x_0 = 0.75
+        x_0 = 0.4
         m_1 = 3.0
-        m_2 = 2.0
+        m_2 = 3.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
         eps = 5.0e-3

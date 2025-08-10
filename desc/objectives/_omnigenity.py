@@ -2,15 +2,7 @@
 
 import warnings
 
-import numpy as np
-from diffrax import (
-    ConstantStepSize,
-    Euler,
-    Event,
-    RecursiveCheckpointAdjoint,
-    SaveAt,
-    diffeqsolve,
-)
+from diffrax import Event, PIDController, RecursiveCheckpointAdjoint, SaveAt, Tsit5
 
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
@@ -1021,6 +1013,7 @@ class DirectParticleTracing(_Objective):
         "_saveat",
         "_stepsize_controller",
         "_adjoint",
+        "_event",
     ]
 
     _coordinates = "rtz"
@@ -1032,11 +1025,11 @@ class DirectParticleTracing(_Objective):
         eq,
         particles,
         model,
-        solver=Euler(),
-        ts=None,
+        solver=Tsit5(),
+        ts=jnp.arange(0, 1e-3, 100),
         iota_grid=None,
         saveat=None,
-        stepsize_controller=ConstantStepSize(),
+        stepsize_controller=None,
         adjoint=RecursiveCheckpointAdjoint(),
         max_steps=None,
         min_step_size=1e-10,
@@ -1052,17 +1045,19 @@ class DirectParticleTracing(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        if ts is None:
-            ts = np.arange(0, 1e-3, 100)
         self._ts = jnp.asarray(ts)
         self._saveat = saveat if saveat is not None else SaveAt(ts=ts)
         self._adjoint = adjoint
         if max_steps is None:
             max_steps = 1000
-            max_steps = int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts))
+            max_steps = int((ts[1] - ts[0]) / min_step_size * max_steps)
         self._max_steps = max_steps
         self._min_step_size = min_step_size
-        self._stepsize_controller = stepsize_controller
+        self._stepsize_controller = (
+            stepsize_controller
+            if stepsize_controller is not None
+            else PIDController(rtol=1e-8, atol=1e-8, dtmin=min_step_size)
+        )
         self._iota_grid = iota_grid
         assert model.frame == "flux", "can only trace in flux coordinates"
         self._model = model
@@ -1093,6 +1088,8 @@ class DirectParticleTracing(_Objective):
             Level of output.
 
         """
+        from desc.particles import trace_particles
+
         eq = self.things[0]
         if self._iota_grid is None:
             iota_grid = LinearGrid(
@@ -1101,8 +1098,9 @@ class DirectParticleTracing(_Objective):
         else:
             iota_grid = self._iota_grid
 
-        self._x0, args = self._particles.init_particles(model=self._model, field=eq)
-        self._ms, self._qs, self._mus = args[:3]
+        self._x0, self._model_args = self._particles.init_particles(
+            model=self._model, field=eq
+        )
 
         # one metric per particle
         self._dim_f = self._x0.shape[0]
@@ -1110,42 +1108,10 @@ class DirectParticleTracing(_Objective):
         def default_terminating_event(t, y, args, **kwargs):
             return jnp.logical_or(y[0] < 0, y[0] > 1)
 
-        event = Event(default_terminating_event)
-
-        def intfun(field, params, **kwargs):
-            intfun = lambda x, m, q, mu: diffeqsolve(
-                terms=self._model,
-                solver=self._solver,
-                y0=x,
-                args=[m, q, mu, field, params, kwargs],
-                t0=self._ts[0],
-                t1=self._ts[-1],
-                saveat=self._saveat,
-                max_steps=self._max_steps,
-                dt0=self._min_step_size,
-                stepsize_controller=self._stepsize_controller,
-                adjoint=self._adjoint,
-                event=event,
-            ).ys
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message="unhashable type")
-                yt = vmap(intfun)(self._x0, self._ms, self._qs, self._mus)
-
-            yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
-
-            x = yt[:, :, :3]
-            v = yt[:, :, 3:]
-
-            return x, v
+        self._event = Event(default_terminating_event)
 
         # avoid circular import
-        self._trace_particles = intfun
-
-        if self._min_step_size == "auto":
-            # particle will move roughly 10cm each step
-            # TODO: the distance can be a parameter, or can be removed completely
-            self._min_step_size = 0.01 / max(self._particles.vpar0)
+        self._trace_particles = trace_particles
 
         timer = Timer()
         if verbose > 0:
@@ -1201,8 +1167,19 @@ class DirectParticleTracing(_Objective):
 
         rtz, _ = self._trace_particles(
             field=self.things[0],
+            y0=self._x0,
+            model=self._model,
+            model_args=self._model_args,
+            ts=self._ts,
             params=params,
-            iota=iota_prof,
+            stepsize_controller=self._stepsize_controller,
+            saveat=self._saveat,
+            max_steps=self._max_steps,
+            min_step_size=self._min_step_size,
+            solver=self._solver,
+            adjoint=self._adjoint,
+            event=self._event,
+            options={"iota": iota_prof},
         )
 
         # rtz is shape [N_particles, N_time, 3], take just index rho
@@ -1220,4 +1197,4 @@ class DirectParticleTracing(_Objective):
         # f = <(rho drift at last non-NaN time)>/sum(time spent in device)
         # Looking at average drift per toroidal transit could be better, since
         # a particle can drift outward and come back inward
-        return safediv(rho_dev, tmax, fill=1e10)
+        return safediv(rho_dev, tmax, fill=1e10) * self._ts[-1]

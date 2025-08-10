@@ -1020,7 +1020,7 @@ def trace_particles(
     saveat=None,
     rtol=1e-8,
     atol=1e-8,
-    max_steps=1000,
+    max_steps=None,
     min_step_size=1e-10,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
@@ -1029,6 +1029,9 @@ def trace_particles(
     options={},
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
+
+    If this function will be used in an optimization loop, it is recommended to
+    pass a value for all the keyword arguments to prevent recompilation.
 
     Parameters
     ----------
@@ -1058,7 +1061,9 @@ def trace_particles(
         SaveAt object to specify where to save the output. If not provided, will
         save at the specified times in ts.
     max_steps : int
-        maximum number of steps between different output times
+        maximum number of steps for whole integration. This will be passed
+        to the diffrax.diffeqsolve function. Defaults to
+        (ts[1] - ts[0]) * 100 / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     solver: diffrax.AbstractSolver
@@ -1119,7 +1124,11 @@ def trace_particles(
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
     event = Event(default_terminating_event) if event is None else event
-
+    max_steps = (
+        max_steps
+        if max_steps is not None
+        else int((ts[1] - ts[0]) / min_step_size * 100)
+    )
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments,
@@ -1180,7 +1189,7 @@ def _intfun_wrapper(
         t0=ts[0],
         t1=ts[-1],
         saveat=saveat,
-        max_steps=int(max(max_steps, (ts[1] - ts[0]) / min_step_size) * len(ts)),
+        max_steps=max_steps,
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,

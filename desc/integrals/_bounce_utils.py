@@ -434,6 +434,12 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     return ext, g_ext
 
 
+# We can use the non-differentiable argmin because we actually want the gradients
+# to accumulate through only the minimum since we are differentiating how our
+# physics objective changes wrt equilibrium perturbations not wrt which of the
+# extrema get interpolated to.
+
+
 def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 

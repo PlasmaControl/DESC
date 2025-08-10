@@ -2598,7 +2598,8 @@ def field_line_integrate(
     rtol, atol : float
         relative and absolute tolerances for ode integration
     max_steps : int
-        maximum number of steps between different phis
+        maximum number of steps for the integration. Defaults to
+        abs((phis[-1] - phis[0]) / min_step_size * 1000)
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver

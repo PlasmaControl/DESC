@@ -1523,10 +1523,11 @@ class TestBounce2D:
             num_transit=1,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
+        f = bounce.reshape(grid, h(grid.nodes[:, 2]))
+        result = bounce.interp_to_argmin(f, points, nufft_eps=0)
+        np.testing.assert_allclose(result, h(argmin_g), rtol=1e-6)
         np.testing.assert_allclose(
-            bounce.interp_to_argmin(bounce.reshape(grid, h(grid.nodes[:, 2])), points),
-            h(argmin_g),
-            rtol=1e-6,
+            bounce.interp_to_argmin(f, points, nufft_eps=1e-6), result
         )
 
     @pytest.mark.unit
@@ -1686,8 +1687,9 @@ class TestBounce2D:
             num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],
-            check=True,
+            nufft_eps=nufft_eps,
             spline=False,
+            check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)

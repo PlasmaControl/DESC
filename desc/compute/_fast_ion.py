@@ -160,6 +160,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
         )
@@ -172,8 +173,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
-                is_fourier=True,
                 nufft_eps=nufft_eps,
+                is_fourier=True,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(
@@ -181,7 +182,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     drift1,
                     drift2
                     * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
+                        data["|grad(rho)|*|e_alpha|r,p|"],
+                        points,
+                        nufft_eps=nufft_eps,
+                        is_fourier=True,
                     ),
                 )
             )
@@ -322,6 +326,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
         )
@@ -332,9 +337,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                is_fourier=True,
                 num_well=num_well,
                 nufft_eps=nufft_eps,
+                is_fourier=True,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))

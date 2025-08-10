@@ -13,6 +13,8 @@ from desc.integrals._interp_utils import (
     ifft_non_uniform,
     interp1d_vec,
     irfft_non_uniform,
+    nufft2,
+    pad_for_fft,
     polyroot_vec,
     polyval_vec,
 )
@@ -478,31 +480,33 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
         Shape (..., num pitch, num well).
 
     """
-    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
-
     z1, z2 = points
     assert z1.ndim > 1 and z2.ndim > 1
-    #      z1 and z2 shape (..., num pitch, num well)
-    # and ext, g_ext shape (..., num extrema),
+
+    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+    h = interp1d_vec(ext, knots, h, method=method)[..., None, None, :]
+
+    #     z1, z2 shape (..., num pitch, num well)
+    # ext, g_ext shape (..., num extrema)
     # add axes to broadcast
-    #      z1 and z2 shape (..., num pitch, num well, 1).
-    # and ext, g_ext shape (...,         1,        1, num extrema).
-    where = jnp.where(
-        (z1[..., None] < ext[..., None, None, :])
-        & (ext[..., None, None, :] < z2[..., None]),
-        g_ext[..., None, None, :],
-        jnp.inf,
-    )
-    where = jnp.argmin(where, axis=-1, keepdims=True)
-
-    return jnp.take_along_axis(
-        interp1d_vec(ext, knots, h, method=method)[..., None, None, :],
-        where,
+    #     z1, z2 shape (..., num pitch, num well, 1)
+    # ext, g_ext shape (...,         1,        1, num extrema)
+    where = jnp.argmin(
+        jnp.where(
+            (z1[..., None] < ext[..., None, None, :])
+            & (ext[..., None, None, :] < z2[..., None]),
+            g_ext[..., None, None, :],
+            jnp.inf,
+        ),
         axis=-1,
-    ).squeeze(axis=-1)
+        keepdims=True,
+    )
+    return jnp.take_along_axis(h, where, axis=-1).squeeze(axis=-1)
 
 
-def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP=1):
+def interp_fft_to_argmin(
+    T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP=1, nufft_eps=1e-6
+):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
@@ -540,6 +544,9 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP
         Fourier resolution in toroidal direction.
     NFP : int
         Number of field periods.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
 
     Returns
     -------
@@ -547,30 +554,50 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP
         Shape (..., num well).
 
     """
-    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
-
     z1, z2 = points
     assert z1.ndim >= 1 and z2.ndim >= 1
-    #      z1 and z2 shape (..., num well)
-    # and ext, g_ext shape (..., num extrema),
-    # add axes to broadcast
-    #      z1 and z2 shape (..., num well, 1).
-    # and ext, g_ext shape (...,        1, num extrema).
-    where = jnp.where(
-        (z1[..., None] < ext[..., None, :]) & (ext[..., None, :] < z2[..., None]),
-        g_ext[..., None, :],
-        jnp.inf,
-    )
-    where = jnp.argmin(where, axis=-1, keepdims=True)
 
-    # TODO: Benchmark replacing this irfft2 with nufft. Prediction: Big improvement
-    h = _irfft2_non_uniform(
-        ext, T.eval1d(ext), h, n0=num_zeta, n1=num_theta, domain0=(0, 2 * jnp.pi / NFP)
-    )
+    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+    theta = T.eval1d(ext)
+    if nufft_eps < 1e-14:
+        h = _irfft2_non_uniform(
+            ext, theta, h, n0=num_zeta, n1=num_theta, domain0=(0, 2 * jnp.pi / NFP)
+        )
+    else:
+        shape = ext.shape
+        zeta = ext
+        if len(shape) > 2:
+            zeta = zeta.transpose(1, 0, 2).reshape(shape[1], -1)
+            theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
+        h = nufft2(
+            pad_for_fft(h.squeeze(-3), num_theta),
+            zeta,
+            theta,
+            domain0=(0, 2 * jnp.pi / NFP),
+            eps=nufft_eps / 10,
+        ).real
+        if len(shape) > 2:
+            h = h.reshape(shape[1], shape[0], shape[2]).transpose(1, 0, 2)
+
     if z1.ndim == h.ndim + 1:
-        h = h[None]  # to broadcast with num pitch axis
-    # add axis to broadcast with num well axis
-    return jnp.take_along_axis(h[..., None, :], where, axis=-1).squeeze(axis=-1)
+        h = h[None]  # add pitch axis
+    h = h[..., None, :]  # add well axis
+
+    #     z1, z2 shape (..., num well)
+    # ext, g_ext shape (..., num extrema)
+    # add axes to broadcast
+    #     z1, z2 shape (..., num well, 1)
+    # ext, g_ext shape (...,        1, num extrema)
+    where = jnp.argmin(
+        jnp.where(
+            (z1[..., None] < ext[..., None, :]) & (ext[..., None, :] < z2[..., None]),
+            g_ext[..., None, :],
+            jnp.inf,
+        ),
+        axis=-1,
+        keepdims=True,
+    )
+    return jnp.take_along_axis(h, where, axis=-1).squeeze(axis=-1)
 
 
 def get_fieldline(alpha, iota, num_transit):
@@ -600,7 +627,7 @@ def get_fieldline(alpha, iota, num_transit):
     #      αᵢ = ϑ − ιϕᵢ
     #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
     # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
-    return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota
+    return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
 
 
 def fourier_chebyshev(theta, iota, alpha, num_transit):
@@ -745,6 +772,7 @@ def cubic_spline(
     m_modes,
     n_modes,
     NFP=1,
+    nufft_eps=1e-6,
     *,
     vander_zeta=None,
     vander_theta=None,
@@ -773,6 +801,9 @@ def cubic_spline(
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_zeta : jnp.ndarray
         Precomputed transform matrix.
     vander_theta : jnp.ndarray
@@ -807,8 +838,10 @@ def cubic_spline(
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
     if num_zeta >= f.shape[-2] and num_zeta == f.shape[-2]:
-        # TODO (1574): This does not work unless second condition is met,
-        #  but it should as long as first condition is met.
+        # TODO (1574): Bug in IFFT.
+        #  https://github.com/jax-ml/jax/issues/27591.
+        #  This does not work unless second condition is met,
+        #  but it should when first condition is met.
         f = ifft(f, num_zeta, axis=-2, norm="forward")
     else:
         f = ifft_non_uniform(
@@ -823,12 +856,23 @@ def cubic_spline(
     # θ at uniform ζ on field lines
     theta = idct_non_uniform(x, T.cheb[..., None, :], T.Y, vander=vander_theta)
     theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
-    # Shape broadcasts with (num alpha, num rho, num transit, NFP, num zeta).
-    f = irfft_non_uniform(theta, f[..., None, :, :], num_theta, _modes=m_modes)
-    # TODO: Benchmark replacing this irfft with nufft. Prediction: Small improvement
+    ar = theta.shape[:-3]  # num alpha, num rho
+
+    if nufft_eps < 1e-14:
+        f = irfft_non_uniform(
+            theta, f[..., None, :, :], num_theta, _modes=m_modes
+        ).reshape(*ar, -1)
+    else:
+        assert f.ndim <= 4
+        s, d = ((-4, -1), (0, 1)) if len(ar) else (-1, 0)
+        theta = jnp.moveaxis(theta, s, d).reshape(*ar[-1:], num_zeta, -1)
+        f = pad_for_fft(f.squeeze(-3), num_theta)
+        f = nufft2(f, theta, eps=nufft_eps).real.mT.reshape(*ar[-1:], *ar[:-1], -1)
+        if len(ar) > 1:
+            f = jnp.swapaxes(f, 0, -2)
 
     zeta = jnp.ravel(zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, None])
-    f = CubicSpline(x=zeta, y=f.reshape(*f.shape[:-3], -1), axis=-1, check=check).c
-    f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
+    f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c
+    f = jnp.moveaxis(f, (0, 1), (-1, -2))
     assert f.shape[-2:] == (T.X * Y - 1, 4)
     return f, zeta

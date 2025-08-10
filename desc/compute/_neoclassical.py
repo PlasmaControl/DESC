@@ -231,6 +231,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
         )
@@ -241,9 +242,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 "|grad(rho)|*kappa_g",
-                is_fourier=True,
                 num_well=num_well,
                 nufft_eps=nufft_eps,
+                is_fourier=True,
             )
             return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 

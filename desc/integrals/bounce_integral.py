@@ -232,10 +232,9 @@ class Bounce2D(Bounce):
         The second callable should be the derivative of the first. This map defines
         a change of variable for the bounce integral. The choice made for the
         automorphism will affect the performance of the quadrature.
-    Bref : float
-        Optional. Reference magnetic field strength for normalization.
-    Lref : float
-        Optional. Reference length scale for normalization.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     is_reshaped : bool
         Whether the arrays in ``data`` are already reshaped to the expected form of
         shape (..., num zeta, num theta) or (num rho, num zeta, num theta).
@@ -248,11 +247,15 @@ class Bounce2D(Bounce):
         If true, then it is assumed that ``data`` holds Fourier transforms
         as returned by ``Bounce2D.fourier`` and ``data["iota"]`` has shape
         ``(grid.num_rho,)`` or is a scalar. Default is false.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
+    Bref : float
+        Optional. Reference magnetic field strength for normalization.
+    Lref : float
+        Optional. Reference length scale for normalization.
     spline : bool
         Whether to use cubic splines to compute bounce points.
         The recommended setting is ``True``.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
 
     """
 
@@ -316,12 +319,13 @@ class Bounce2D(Bounce):
         quad=None,
         *,
         automorphism=None,
-        Bref=1.0,
-        Lref=1.0,
+        nufft_eps=1e-6,
         is_reshaped=False,
         is_fourier=False,
-        check=False,
+        Bref=1.0,
+        Lref=1.0,
         spline=True,
+        check=False,
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
@@ -362,6 +366,7 @@ class Bounce2D(Bounce):
                 self._m_modes,
                 self._n_modes,
                 self._NFP,
+                nufft_eps,
                 check=check,
             )
         else:
@@ -434,6 +439,7 @@ class Bounce2D(Bounce):
         rho=jnp.array([1.0]),
         iota=None,
         params=None,
+        profiles=None,
         tol=1e-7,
         **kwargs,
     ):
@@ -458,6 +464,8 @@ class Bounce2D(Bounce):
         params : dict[str,jnp.ndarray]
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
         tol : float
             Stopping tolerance for root finding.
             Default is ``1e-7``.
@@ -476,7 +484,7 @@ class Bounce2D(Bounce):
 
         params = setdefault(params, eq.params_dict)
         if iota is None:
-            iota = eq._compute_iota_under_jit(rho, params, **kwargs)
+            iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
         iota = jnp.atleast_1d(iota)
 
         zeta = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
@@ -757,7 +765,7 @@ class Bounce2D(Bounce):
     #     expensive JAX limitation in GitHub issue #1303 is avoided.
 
     def _integrate_nufft(self, x, w, integrand, pitch, data, z1, z2, check, plot, eps):
-        if jnp.ndim(pitch) == 1:
+        if pitch.ndim == 1:
             pitch = pitch[..., None, None]
         elif pitch.ndim > 1:
             pitch = pitch[:, None, ..., None, None]
@@ -870,7 +878,7 @@ class Bounce2D(Bounce):
         data["|B|"] = (van * self._c["|B|"]).real.sum((-2, -1))
         return data
 
-    def interp_to_argmin(self, f, points, *, is_fourier=False):
+    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
@@ -887,6 +895,9 @@ class Bounce2D(Bounce):
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
+        nufft_eps : float
+            Precision requested for interpolation with non-uniform fast Fourier
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         is_fourier : bool
             If true, then it is assumed that ``f`` is the Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -914,6 +925,7 @@ class Bounce2D(Bounce):
                 self._num_theta,
                 self._num_zeta,
                 self._NFP,
+                nufft_eps,
             )
         )
 

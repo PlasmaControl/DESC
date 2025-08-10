@@ -217,7 +217,6 @@ def test_tracing_vacuum_tokamak():
         model=model,
         model_args=args,
         ts=ts,
-        bounds_R=(0, 1),
     )
     rpz = eq.map_coordinates(
         coords=np.array([rtz[0, :, 0], rtz[0, :, 1], rtz[0, :, 2]]).T,

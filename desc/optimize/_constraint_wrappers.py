@@ -771,7 +771,16 @@ class ProximalProjection(ObjectiveFunction):
             [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )
 
-        # history and caching
+        ## history and caching
+        # first, ensure equilibrium is solved to the
+        # specified tolerances, necessary as we assume
+        # eq is solved when taking the derivatives later
+        self._eq.solve(
+            objective=self._eq_solve_objective,
+            constraints=None,
+            **self._solve_options,
+        )
+        # then store the now-solved eq state as the initial state
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]
         self._allxopt = [self._objective.x(*self.things)]

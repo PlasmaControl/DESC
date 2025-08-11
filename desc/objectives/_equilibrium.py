@@ -322,10 +322,13 @@ class ForceBalanceDeflated(_Objective):
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
+        keys = ["Rb_lmn", "Zb_lmn"]
+        # TODO: better to do only surface, or every key? seems like can obtain
+        # very different results depending on if using only surf or every key, but
+        # at same time, only the surface matters as far as closeness of solution
+        # (the surface dictates the equilibrium, more or less)
         diffs = [
-            jnp.concatenate(
-                [params[key] - eq.params_dict[key] for key in params.keys()]
-            )
+            jnp.concatenate([params[key] - eq.params_dict[key] for key in keys])
             for eq in self._eqs
         ]
         diffs = jnp.vstack(diffs)

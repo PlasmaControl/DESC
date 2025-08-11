@@ -234,6 +234,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):

@@ -16,7 +16,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ._neoclassical import _bounce_overwrite, _vander_dct_cfl, _vander_dft_cfl
+from ._neoclassical import _bounce_overwrite, _get_vander
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
@@ -248,11 +248,8 @@ class GammaC(_Objective):
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["_vander"] = _get_vander(self, x)
         self._constants["fieldline quad"] = (x, w)
-        self._constants["_vander"] = {
-            "dct cfl": _vander_dct_cfl(x, self._constants["Y"].size),
-            "dft cfl": _vander_dft_cfl(x, self._grid),
-        }
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),

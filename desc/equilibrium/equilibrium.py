@@ -1401,9 +1401,7 @@ class Equilibrium(IOAble, Optimizable):
         if jnp.ndim(rho) < 2:
             zero = jnp.zeros_like(rho)
             rho = jnp.column_stack([rho, zero, zero])
-        iota = iota_profile.compute(Grid(rho, jitable=True))
-        assert iota.ndim == 1 and iota.size == len(rho)
-        return iota
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

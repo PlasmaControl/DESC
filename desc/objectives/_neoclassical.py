@@ -231,13 +231,9 @@ class EffectiveRipple(_Objective):
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["_vander"] = _get_vander(self, x)
         self._constants["fieldline quad"] = (x, w)
-        self._constants["_vander"] = {
-            "dct cfl": _vander_dct_cfl(x, self._constants["Y"].size),
-            "dft cfl": _vander_dft_cfl(x, self._grid),
-        }
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
@@ -392,6 +388,18 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
+
+
+def _get_vander(obj, x):
+    eq = obj.things[0]
+    Y_B = ((obj._hyperparam["Y_B"] + eq.NFP - 1) // eq.NFP) * eq.NFP
+    return {
+        "dct cfl": _vander_dct_cfl(x, obj._constants["Y"].size),
+        "dft cfl": _vander_dft_cfl(x, obj._grid),
+        "dct spline": _vander_dct_cfl(
+            jnp.linspace(-1, 1, Y_B, endpoint=False), obj._constants["Y"].size
+        ),
+    }
 
 
 def _vander_dft_cfl(x, grid):

@@ -163,6 +163,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -329,6 +330,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):

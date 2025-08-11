@@ -320,10 +320,12 @@ class Bounce2D(Bounce):
         Lref=1.0,
         spline=True,
         check=False,
+        vander=None,
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
+        vander = setdefault(vander, {})
         quad = setdefault(quad, default_quad)
 
         self._x, self._w = get_quadrature(quad, automorphism)
@@ -361,6 +363,7 @@ class Bounce2D(Bounce):
                 self._n_modes,
                 self._NFP,
                 nufft_eps,
+                vander_theta=vander.get("dct spline", None),
                 check=check,
             )
         else:
@@ -945,13 +948,13 @@ class Bounce2D(Bounce):
                 n1=self._num_theta,
                 domain0=(0, 2 * jnp.pi / self._NFP),
             )
-            if ext.ndim == 3:
+            if ext.ndim > 2:
                 f = f.transpose(1, 0, 2)
                 ext = ext.transpose(1, 0, 2)
                 B_ext = B_ext.transpose(1, 0, 2)
         else:
             shape = ext.shape
-            if ext.ndim == 3:
+            if ext.ndim > 2:
                 ext = ext.transpose(1, 0, 2)
                 theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
                 zeta = ext.reshape(shape[1], -1)

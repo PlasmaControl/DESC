@@ -3635,3 +3635,431 @@ def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
         dot(data["(e_zeta|r,a)_z|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
     )
     return data
+############################################
+@register_compute_fun(
+    name="n_rho_t",
+    label="\\partial_{\\theta}\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho),"
+    " derivative wrt poloidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_t",
+        "e_zeta",
+        "e_zeta_z",
+        "|e_theta x e_zeta|",
+        "|e_theta x e_zeta|_t",
+        "n_rho",
+    ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_rho_t(params, transforms, profiles, data, **kwargs):
+    data["n_rho_t"] = (
+        cross(data["e_theta_t"], data["e_zeta"])
+        + cross(data["e_theta"], data["e_zeta_t"])
+    ) / data["|e_theta x e_zeta|"][:, None] - data["n_rho"] / (
+        data["|e_theta x e_zeta|"][:, None]
+    ) * (
+        data["|e_theta x e_zeta|_t"][:, None]
+    )
+    return data
+
+##########################################################################################################################
+##########################################################################################################################
+##########################################################################################################################
+
+## Additional vectors on a surface
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^theta_s",  
+    label="\\e^{\\theta}_{s}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Tangent component of contravariant poloidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                              
+    #    "grid": [],                                                                                                           
+    #},                                                                                                                        
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                                                         
+    data=["n_rho", 
+          "e_zeta",
+          "|e_theta x e_zeta|",
+          #"e^theta",
+          "phi",
+         ], 
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",                                                      
+)                                                                                                                             
+def _e_sup_theta_s_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):  
+    #data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
+    #jnp.sum(a * b, axis=axis, keepdims=False)
+    # Old definition with covariant expression
+    #data["e^theta_s"] = data["e^theta"] - (jnp.sum(data["n_rho"]*data["e^theta"], axis=-1)*data["n_rho"].T).T
+    # New version with covariant expression
+    data["e^theta_s"] = - (data["|e_theta x e_zeta|"] ** (-1) * cross( data["n_rho"], data["e_zeta"] ).T).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^theta_s"] = rpz2xyz_vec(data["e^theta_s"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^zeta_s",  
+    label="\\e^{\\zeta}_{s}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Tangent component of contravariant toroidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                            
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                                                         
+    data=["n_rho", 
+          "e_theta", "|e_theta x e_zeta|",
+          #"e^zeta", 
+          "phi",
+         ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",                                                     
+)                                                                                                                             
+def _e_sup_zeta_s_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # Old definition with covariant expression
+    #data["e^zeta_s"] = data["e^zeta"] - (jnp.sum(data["n_rho"]*data["e^zeta"], axis=-1)*data["n_rho"].T).T
+    # New version with covariant expression
+    data["e^zeta_s"] = (data["|e_theta x e_zeta|"] ** (-1) * cross( data["n_rho"], data["e_theta"] ).T).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^zeta_s"] = rpz2xyz_vec(data["e^zeta_s"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^theta_s_t",  
+    label="\\e^{\\theta}_{s, \\theta}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Poloidal detivative of tangent component of contravariant poloidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                            
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                              
+    data=["n_rho","n_rho_t",
+          "e_zeta","e_zeta_t",
+          "|e_theta x e_zeta|","|e_theta x e_zeta|_t",
+          #"e^theta","e^theta_t",
+          "phi",
+         ], 
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",                                                       
+)                                                                                                                             
+def _e_sup_theta_s_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["e^theta_s_t"] = ( data["e^theta_t"] 
+    #                           - ( ( jnp.sum(data["n_rho_t"]*data["e^theta"], axis=-1)
+                                   #dot(data["n_t"],data["e^theta"]) 
+    #                                + jnp.sum(data["n_rho"]*data["e^theta_t"], axis=-1)
+                                    #dot(data["n_rho"],data["e^theta_t"]) 
+    #                               )*data["n_rho"].T
+    #                             ).T
+    #                           - ( ( jnp.sum(data["n_rho"]*data["e^theta"], axis=-1)
+                                  #dot(data["n_rho"],data["e^theta"]
+    #                               )*data["n_rho_t"].T 
+    #                             ).T
+    #                      )
+
+    data["e^theta_s_t"] = - ( - data["|e_theta x e_zeta|"] ** (-2) * data["|e_theta x e_zeta|_t"] * cross( data["n_rho"], data["e_zeta"] ).T
+                             + data["|e_theta x e_zeta|"] ** (-1) * ( cross( data["n_rho_t"], data["e_zeta"] )
+                                                                     + cross( data["n_rho"], data["e_zeta_t"] ) ).T
+                            ).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^theta_s_t"] = rpz2xyz_vec(data["e^theta_s_t"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^theta_s_z",  
+    label="\\e^{\\theta}_{s, \\theta}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Toroidal derivative of tangent component of contravariant poloidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                            
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                                                        
+    data=["n_rho","n_rho_z", 
+          "e_zeta","e_zeta_z",
+          "|e_theta x e_zeta|","|e_theta x e_zeta|_z",
+          "phi",
+          #"e^theta","e^theta_z"
+         ],  
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",
+)                                                                                                                             
+def _e_sup_theta_s_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["e^theta_s_z"] = ( data["e^theta_z"]
+    #                           - ( (jnp.sum(data["n_rho_z"]*data["e^theta"], axis=-1)
+                                   #dot(data["n_rho_z"],data["e^theta"]) 
+    #                                + jnp.sum(data["n_rho"]*data["e^theta_z"], axis=-1) 
+                                    #dot(data["n_rho"],data["e^theta_z"]) 
+    #                               )*data["n_rho"].T
+    #                             ).T
+    #                           - ( ( jnp.sum(data["n_rho"]*data["e^theta"], axis=-1)
+                                   #dot(data["n_rho"],data["e^theta"]
+    #                                  )*data["n_rho_z"].T 
+    #                             ).T 
+    #                      )
+
+    data["e^theta_s_z"] = - ( - data["|e_theta x e_zeta|"] ** (-2) * data["|e_theta x e_zeta|_z"] * cross( data["n_rho"], data["e_zeta"] ).T
+                             + data["|e_theta x e_zeta|"] ** (-1) * ( cross( data["n_rho_z"], data["e_zeta"] )
+                                                                     + cross( data["n_rho"], data["e_zeta_z"] ) ).T
+                            ).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^theta_s_z"] = rpz2xyz_vec(data["e^theta_s_z"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^zeta_s_t",  
+    label="\\e^{\\zeta}_{s, \\theta}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Poloidal derivative of tangent component of contravariant toroidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                            
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                                                         
+    data=["n_rho","n_rho_t", 
+          "e_theta","e_theta_t",
+          "|e_theta x e_zeta|","|e_theta x e_zeta|_t",
+          #"e^zeta","e^zeta_t",
+         ], 
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",                                                     
+)                                                                                                                             
+def _e_sup_zeta_s_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["e^zeta_s_t"] = ( data["e^zeta_t"] 
+    #                          - ( (jnp.sum(data["n_rho_t"]*data["e^zeta"], axis=-1)
+                                   #dot(data["n_rho_t"],data["e^zeta"]) 
+    #                               + jnp.sum(data["n_rho"]*data["e^zeta_t"], axis=-1)
+                                   #dot(data["n_rho"],data["e^zeta_t"]) 
+    #                              )*data["n_rho"].T
+    #                            ).T
+    #                          - ((jnp.sum(data["n_rho"]*data["e^zeta"], axis=-1)
+                                  #dot(data["n_rho"],data["e^zeta"])
+    #                             )*data["n_rho_t"].T
+    #                            ).T
+    #                         )
+
+    data["e^zeta_s_t"] = ( - data["|e_theta x e_zeta|"] ** (-2) * data["|e_theta x e_zeta|_t"] * cross( data["n_rho"], data["e_theta"] ).T
+                          + data["|e_theta x e_zeta|"] ** (-1) * ( cross( data["n_rho_t"], data["e_theta"] )
+                                                                  + cross( data["n_rho"], data["e_theta_t"] ) ).T
+                          ).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^zeta_s_t"] = rpz2xyz_vec(data["e^zeta_s_t"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="e^zeta_s_z",  
+    label="\\e^{\\theta}_{s, \\theta}",  
+    units="m^{-1}",                                                                                                             
+    units_long="inverse meters",                                                                                                 
+    description="Toroidal derivative of tangent component of contravariant toroidal basis vector", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={},                                                                                                            
+    profiles=[],                                                                                                              
+    coordinates="rtz",                                                                                                         
+    data=["n_rho","n_rho_z", 
+          #"e^zeta","e^zeta_z",
+          "e_theta","e_theta_z",
+          "|e_theta x e_zeta|","|e_theta x e_zeta|_z",
+         "phi",
+         ],   
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",
+)                                                                                                                             
+def _e_sup_zeta_s_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["e^zeta_s_z"] = ( data["e^zeta_z"] 
+    #                          - ( ( jnp.sum(data["n_rho_z"]*data["e^zeta"], axis=-1) 
+                                  #dot(data["n_rho_z"],data["e^zeta"]) 
+    #                               + jnp.sum(data["n_rho"]*data["e^zeta_z"], axis=-1)
+                                   #dot(data["n_rho"],data["e^zeta_z"]) 
+    #                              )*data["n_rho"].T
+    #                            ).T
+    #                          - ( (jnp.sum(data["n_rho"]*data["e^zeta"], axis=-1)
+                                   #dot(data["n_rho"],data["e^zeta"]) 
+    #                              )*data["n_rho_z"].T
+    #                            ).T
+    #                         )
+
+    data["e^zeta_s_z"] = ( - data["|e_theta x e_zeta|"] ** (-2) * data["|e_theta x e_zeta|_z"] * cross( data["n_rho"], data["e_theta"] ).T
+                          + data["|e_theta x e_zeta|"] ** (-1) * ( cross( data["n_rho_z"], data["e_theta"] )
+                                                                  + cross( data["n_rho"], data["e_theta_z"] ) ).T
+                          ).T
+    
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e^zeta_s_z"] = rpz2xyz_vec(data["e^zeta_s_z"], phi=data["phi"])
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="nabla_s^2_theta",  
+    label="\\nabla_{s}^{2} \\theta",  
+    units="~",                                                                                                                
+    units_long="~",                                                                                                      
+    description="Laplace-Beltrami Operator on the poloidal coordinate", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={                                                                                                              
+        "grid": [],                                                                                                           
+    },                                                                                                                        
+    profiles=[],                                                                                                              
+    coordinates="tz",                                                                                                         
+    data=["theta_t","theta_z",
+          "e^theta_s", "e^theta_s_t", "e^theta_s_z",
+          "e^zeta_s", "e^zeta_s_t", "e^zeta_s_z"],  
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    #basis="basis",                                                       
+)                                                                                                                             
+def _nabla_s_2_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["nabla_s^2_theta"] = (jnp.sum(data["e^theta_s"]*data["e^theta_s_t"], axis=-1) 
+                               #dot(data["e^theta_s"],data["e^theta_s_t"])#*data["theta_t"] 
+                                   #+ dot(data["e^theta_s"],data["e^theta_s"])*data["theta_tt"]
+                                   #+ dot(data["e^theta_s"],data["e^zeta_s_t"])*data["theta_z"]
+                                   #+ dot(data["e^theta_s"],data["e^zeta_s"])*data["theta_tz"]
+    #                           + jnp.sum(data["e^zeta_s"]*data["e^theta_s_z"], axis=-1)
+                               #dot(data["e^zeta_s"],data["e^theta_s_z"])#*data["theta_t"]
+                                   #+ dot(data["e^theta_s"],data["e^zeta_s"])*data["theta_tz"]
+                                   #+ dot(data["e^zeta_s"],data["e^zeta_s_z"])*data["theta_z"]
+                                   #+ dot(data["e^zeta_s"],data["e^zeta_s"])*data["theta_zz"]
+    #                           )
+    
+    data["nabla_s^2_theta"] = ( jnp.sum(data["e^theta_s"]*data["e^theta_s_t"], axis=-1) 
+                               + jnp.sum(data["e^zeta_s"]*data["e^theta_s_z"], axis=-1) 
+                              )
+    
+    #data["nabla_s^2_theta"] = ((data["sqrt(g)_t"]*(data["g^tt"]*data["theta_t"]
+    #                                              + data["g^tz"]*0#upz
+    #                                              )
+    #                            + data["sqrt(g)"]*(data["g^tt_t"]*data["theta_t"]
+    #                                              + data["g^tt"]*0#uptt 
+    #                                              + data["g^tz_t"]*0#upz
+    #                                              + data["g^tz"]*0#uptz
+    #                                             )
+    #                          ) 
+    #                           + (data["sqrt(g)_z"]*(data["g^tz"]*data["theta_t"] 
+    #                                                + data["g^zz"]*0#upz
+    #                                                )
+    #                              + data["sqrt(g)"]*(data["g^tz_z"]*data["theta_t"] 
+    #                                                + data["g^tz"]*0#uptz 
+    #                                                + data["g^zz_z"]*0#upz
+    #                                                + data["g^zz"]*0#upzz
+    #                                                )
+    #                             )
+    #                          ) * data["sqrt(g)"]**(-1)
+    return data
+
+##########################################################################################################################
+@register_compute_fun(                                                                                                        
+    name="nabla_s^2_zeta",  
+    label="\\nabla_{s}^{2} \\zeta",  
+    units="~",                                                                                                                
+    units_long="~",                                                                                                      
+    description="Laplace Beltrami operator on the toroidal coordinate", 
+    dim=3,                                                                                                                    
+    params=[],                                                                                                                
+    transforms={                                                                                                              
+        "grid": [],                                                                                                           
+    },                                                                                                                        
+    profiles=[],                                                                                                              
+    coordinates="tz",                                                                                                         
+    data=["zeta_t","zeta_z",
+          "e^theta_s", "e^theta_s_t", "e^theta_s_z",
+          "e^zeta_s", "e^zeta_s_t", "e^zeta_s_z",
+          #"sqrt(g)",
+          #"sqrt(g)_t","sqrt(g)_z",
+          #"g^tt", "g^zz", "g^tz",
+          #"g^tt_t", "g^zz_z", 
+          #"g^tz_t",
+          #"g^tz_z",
+         ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)                                                                                                                             
+def _nabla_s_2_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    #data["nabla_s^2_zeta"] = (#dot(data["e^theta_s"],data["e^theta_s_t"])*data["zeta_t"] 
+                                  #+ dot(data["e^theta_s"],data["e^theta_s"])*data["zeta_tt"]
+    #     jnp.sum(data["e^theta_s"]*data["e^zeta_s_t"], axis=-1)                          
+        #dot(data["e^theta_s"],data["e^zeta_s_t"])#*data["zeta_z"]
+                                  #+ dot(data["e^theta_s"],data["e^zeta_s"])*data["zeta_tz"]
+                                  #+ dot(data["e^zeta_s"],data["e^theta_s_z"])*data["zeta_t"]
+                                  #+ dot(data["e^theta_s"],data["e^zeta_s"])*data["zeta_tz"]
+    #                              + jnp.sum(data["e^zeta_s"]*data["e^zeta_s_z"], axis=-1) 
+        #dot(data["e^zeta_s"],data["e^zeta_s_z"])#*data["zeta_z"]
+                                  #+ dot(data["e^zeta_s"],data["e^zeta_s"])*data["zeta_zz"]
+    #                             )
+    
+    data["nabla_s^2_zeta"] = ( jnp.sum(data["e^theta_s"]*data["e^zeta_s_t"], axis=-1)        
+                              + jnp.sum(data["e^zeta_s"]*data["e^zeta_s_z"], axis=-1) 
+                             )
+    
+    #data["nabla_s^2_zeta"] = ( data["sqrt(g)_t"]*(data["g_tt"]*data["zeta_t"]
+    #                                              + data["g_tz"]*data["zeta_z"]
+    #                                            )
+    #                          + data["sqrt(g)"]*(data["g_tt_t"]*data["zeta_t"]
+    #                                             + data["g_tt"]*0#uptt
+    #                                             + data["g_tz_t"]*data["zeta_z"] 
+    #                                             + data["g_tz"]*0#uptz
+    #                                            )
+    #                          + data["sqrt(g)_z"]*(data["g_tz"]*data["zeta_t"] 
+    #                                               + data["g_zz"]*data["zeta_z"]
+    #                                              )
+    #                          + data["sqrt(g)"]*(data["g^tz_z"]*data["zeta_t"]
+    #                                             + data["g^tz"]*0#uptz 
+    #                                             + data["g^zz_z"]*data["zeta_z"] 
+    #                                             + data["g^zz"]*0#upzz
+    #                                            )
+    #                         )*data["sqrt(g)"]**(-1)
+    
+    return data

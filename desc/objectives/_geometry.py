@@ -619,6 +619,7 @@ class PlasmaVesselDistance(_Objective):
         errorif(
             self._use_signed_distance
             and not np.allclose(
+            #and np.allclose(
                 plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2],
                 surface_grid.nodes[surface_grid.unique_zeta_idx, 2],
             ),
@@ -1346,3 +1347,741 @@ class GoodCoordinates(_Objective):
         f = data["g_rr"]
 
         return jnp.concatenate([g, constants["sigma"] * f])
+
+## Isothermic objective
+class IsothermicError(_Objective):
+    """Target the "smoothness" of the solution to the PDEs that define an isothermic set of coordinates.
+    
+    An isothermic surface is parameterized by a set of coordinates that generate
+    mutually orthogonal basis vectors. An initial guess of a surface is deformed 
+    in order to obtain said set of coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(m)"
+    _print_value_fmt = "Magnetic field scale length: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        eval_grid=None,
+        sqrt_area_weighting=False,
+        name="Isothermic Error",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+        self._eval_grid = eval_grid
+        self._eq = eq
+        self._sqrt_area_weighting = sqrt_area_weighting
+        
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        #eq = self.things[0]
+        eq = self._eq
+        
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            eval_grid = self._eval_grid
+
+        self._dim_f = eval_grid.num_nodes
+        self._data_keys = ["lhs1","lhs2",
+                           "rhs1","rhs2",
+                          ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        #profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        #transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+        
+        self._constants = {
+            "quad_weights": w,
+            "eval_grid": self._eval_grid,
+        #    "transforms": transforms,
+        #    "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute magnetic field scale length.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        L : ndarray
+            Magnetic field scale length at each point (m).
+
+        """
+        if constants is None:
+            constants = self.constants
+        
+        eq = self._eq # Plasma Boundary treated as a fake equilibrium
+        
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=constants["eval_grid"])
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=constants["eval_grid"], jitable = True,)
+        
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params= params,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+        
+        data["area_weighting"] = (
+            jnp.sqrt(data["|e_theta x e_zeta|"])
+            if self._sqrt_area_weighting
+            else data["|e_theta x e_zeta|"]
+        )
+        
+        #return jnp.sqrt( ( ( data["lhs1"] - data["rhs1"] ) ** 2 
+        #                  + ( data["lhs2"] - data["rhs2"] ) ** 2 ) * data["area_weighting"]
+        #               )
+        
+        return ( ( data["lhs1"] - data["rhs1"] ) ** 2 
+                + ( data["lhs2"] - data["rhs2"] ) ** 2 ) * data["area_weighting"]
+
+
+##### Objectives to target the curvatures
+
+class Curv_k1(_Objective):
+    """Target a particular value for the (unsigned) principal curvature.
+
+    The two principal curvatures at a given point of a surface are the maximum and
+    minimum values of the curvature as expressed by the eigenvalues of the shape
+    operator at that point. They measure how the surface bends by different amounts in
+    different directions at that point.
+
+    This objective targets the maximum absolute value of the two principal curvatures.
+    Principal curvature with large absolute value indicates a tight radius of curvature
+    which may be difficult to obtain with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Curv K1: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Curv k1",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["curvature_k1_rho",
+                           "|e_theta x e_zeta|",
+                          ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return data["curvature_k1_rho"] * jnp.sqrt(data["|e_theta x e_zeta|"])
+        
+class Curv_k2(_Objective):
+    """Target a particular value for the (unsigned) principal curvature.
+
+    The two principal curvatures at a given point of a surface are the maximum and
+    minimum values of the curvature as expressed by the eigenvalues of the shape
+    operator at that point. They measure how the surface bends by different amounts in
+    different directions at that point.
+
+    This objective targets the maximum absolute value of the two principal curvatures.
+    Principal curvature with large absolute value indicates a tight radius of curvature
+    which may be difficult to obtain with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Curv k2: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Curv K2",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["curvature_k2_rho",
+                           "|e_theta x e_zeta|",
+                          ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return data["curvature_k2_rho"] * jnp.sqrt(data["|e_theta x e_zeta|"])
+
+class Surf_Jacobian_Variation(_Objective):
+    """Target a particular value for the (unsigned) principal curvature.
+
+    The two principal curvatures at a given point of a surface are the maximum and
+    minimum values of the curvature as expressed by the eigenvalues of the shape
+    operator at that point. They measure how the surface bends by different amounts in
+    different directions at that point.
+
+    This objective targets the maximum absolute value of the two principal curvatures.
+    Principal curvature with large absolute value indicates a tight radius of curvature
+    which may be difficult to obtain with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Curv k2: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Curv K2",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["|e_theta x e_zeta|",
+                           "|e_theta x e_zeta|_t",
+                           "|e_theta x e_zeta|_z",
+                          ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return jnp.sqrt( data["|e_theta x e_zeta|_t"] ** 2 
+                        + data["|e_theta x e_zeta|_z"] ** 2) * jnp.sqrt(data["|e_theta x e_zeta|"])
+
+class Surf_Jacobian_Norm_Variation(_Objective):
+    """Target a particular value for the (unsigned) principal curvature.
+
+    The two principal curvatures at a given point of a surface are the maximum and
+    minimum values of the curvature as expressed by the eigenvalues of the shape
+    operator at that point. They measure how the surface bends by different amounts in
+    different directions at that point.
+
+    This objective targets the maximum absolute value of the two principal curvatures.
+    Principal curvature with large absolute value indicates a tight radius of curvature
+    which may be difficult to obtain with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Curv k2: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Curv K2",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["e_theta","e_zeta",
+                           "e_theta_t","e_zeta_t",
+                           "e_theta_z","e_zeta_z",
+                           "|e_theta x e_zeta|",
+                          ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return jnp.sqrt(0#jnp.sum(data["e_theta"] * data["e_theta"], axis = 1) ** 2 
+                        #+ jnp.sum(data["e_zeta"] * data["e_zeta"], axis = 1) ** 2 
+                        #+ jnp.sum(data["e_theta"] * data["e_zeta"], axis = 1) ** 2
+                        + jnp.sum(data["e_theta_t"] * data["e_zeta"], axis = 1) ** 2
+                        + jnp.sum(data["e_theta"] * data["e_zeta_t"], axis = 1) ** 2
+                        + jnp.sum(data["e_theta_z"] * data["e_zeta"], axis = 1) ** 2 
+                        + jnp.sum(data["e_theta"] * data["e_zeta_z"], axis = 1) ** 2  
+                        + jnp.sum(data["e_theta"] * data["e_theta_z"], axis = 1) ** 2
+                        + jnp.sum(data["e_zeta"] * data["e_zeta_t"], axis = 1) ** 2
+                       ) * jnp.sqrt(data["|e_theta x e_zeta|"])

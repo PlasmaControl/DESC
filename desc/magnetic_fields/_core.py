@@ -70,6 +70,39 @@ def biot_savart_general(re, rs, J, dV):
 
     return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
+def biot_savart_general_reg(re, rs, J, dV):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re)
+
+    def body(i, B):
+        r = re - rs[i, :]
+        num = jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1) ** 3
+        B = B + jnp.where(den[:, None] <= 1e-9, 0, num / den[:, None])
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+
 
 def biot_savart_general_vector_potential(re, rs, J, dV):
     """Biot-Savart law for arbitrary sources for vector potential.
@@ -104,6 +137,60 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
 
     return 1e-7 * fori_loop(0, J.shape[0], body, A)
 
+def biot_savart_general_surface_divergence(re,
+                                           e_sub_theta, e_sub_zeta,
+                                           e_sup_theta_s, e_sup_zeta_s,
+                                           rs, J, dV,
+                                          ):
+    """Surface divergence on plasma surface of Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    
+    re, rs, J, dV, e_sub_theta, e_sub_zeta, e_sup_theta_s, e_sup_zeta_s = map(jnp.asarray, (re, rs, J, dV, 
+                                                                                             e_sub_theta, e_sub_zeta, 
+                                                                                             e_sup_theta_s, e_sup_zeta_s))
+    
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    nabla_s_dot_B = jnp.zeros_like(re[:,0])
+          
+    def body(i, nabla_s_dot_B):
+        r = re - rs[i, :]
+        d = jnp.linalg.norm(r, axis=-1)
+        
+        num = jnp.sum( - JdV[i, :] * ( jnp.cross(e_sup_theta_s, (d ** 2 * e_sub_theta.T
+                                                                 - 3 * jnp.sum(r*e_sub_theta, axis=-1) * r.T).T, 
+                                                 axis = -1) 
+                                      + jnp.cross(e_sup_zeta_s, (d ** 2 * e_sub_zeta.T 
+                                                                 - 3 * jnp.sum(r*e_sub_zeta, axis=-1) * r.T).T,  
+                                                  axis = -1)
+                                     ),
+                      axis=-1
+                     )
+        
+        den = d ** 5
+        
+        nabla_s_dot_B = nabla_s_dot_B + jnp.where(den == 0, 0, num / den )
+        return nabla_s_dot_B
+
+    test = 1e-7 * fori_loop(0, J.shape[0], body, nabla_s_dot_B)
+    #print(test.shape)
+    return test
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     """Read BNORM-style .txt file containing Bnormal Fourier coefficients.

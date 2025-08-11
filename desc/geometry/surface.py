@@ -1049,3 +1049,169 @@ class ZernikeRZToroidalSection(Surface):
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+##########################################################################################################################
+##########################################################################################################################
+##########################################################################################################################
+
+# Let's make a class just to define two optimizable scalars for harmonic vectors on a surface
+class HarmonicCoefficients(Surface):
+    """Defining harmonic coefficients as two attributes of a curve.
+
+    Parameters
+    ----------
+    a_n,b_n: array-like
+        Two scalars for the two harmonic components of a surface
+    NFP : int
+        Number of field periods.
+    sym : bool
+        Whether to enforce stellarator symmetry.
+    name : str
+        Name for this curve.
+
+    """
+
+    def __init__(
+        self,
+        a_n=1,
+        b_n=1,
+        #NFP = 1,
+        sym="auto",
+        name="",
+    ):
+        #super().__init__(name)
+        a_n, b_n = np.atleast_1d(a_n), np.atleast_1d(b_n)
+        
+        if a_n.size == 0:
+            raise ValueError("At least 1 coefficient for a_n must be supplied")
+        if b_n.size == 0:
+            b_n = a_n
+            
+        assert a_n.size == b_n.size, "a_n and b_n must be the same size"
+        
+        self._sym = sym
+
+        self._a_n = a_n
+        self._b_n = b_n
+
+
+    @optimizable_parameter
+    @property
+    def a_n(self):
+        """R coefficient."""
+        return self._a_n
+
+    @a_n.setter
+    def a_n(self, new):
+        if len(new) == len(self.a_n): #self.R_basis.num_modes:
+            self._a_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"a_n should be size 1, got {len(new)} for "
+                + f"the size of the new a_n."
+            )
+
+    @optimizable_parameter
+    @property
+    def b_n(self):
+        """b coefficient."""
+        return self._b_n
+
+    @b_n.setter
+    def b_n(self, new):
+        if len(new) == len(self.b_n): #self.Z_basis.num_modes:
+            self._b_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"b_n should be size 1, got {len(new)} for "
+                + f"the size of the new b_n"
+            )
+            
+    def change_resolution(self, *args, **kwargs):
+        pass
+    
+    @property
+    def NFP(self):
+        pass
+
+    @property
+    def R_basis(self):
+        pass
+
+    @property
+    def Z_basis(self):
+        pass
+
+    @property
+    def rho(self):
+        pass
+
+# Let's make a class just to define two optimizable scalars for harmonic vectors on a surface
+class Scalar(Surface):
+    """Defining a scalar on a curve.
+
+    Parameters
+    ----------
+    a_n: array-like
+        Entries of a scalar field on a surface
+    NFP : int
+        Number of field periods.
+    sym : bool
+        Whether to enforce stellarator symmetry.
+    name : str
+        Name for this curve.
+
+    """
+
+    def __init__(
+        self,
+        a_n,
+        #b_n=1,
+        #NFP = 1,
+        sym="auto",
+        name="",
+    ):
+        #super().__init__(name)
+        a_n = np.atleast_1d(a_n)
+        
+        if a_n.size == 0:
+            raise ValueError("At least 1 coefficient for a_n must be supplied")
+        
+        self._sym = sym
+        self._a_n = a_n
+
+
+    @optimizable_parameter
+    @property
+    def a_n(self):
+        """a_mn coefficient."""
+        return self._a_n
+
+    @a_n.setter
+    def a_n(self, new):
+        if len(new) == len(self.a_n): #self.R_basis.num_modes:
+            self._a_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"a_n should be size 1, got {len(new)} for "
+                + f"the size of the new a_n."
+            )
+            
+    def change_resolution(self, *args, **kwargs):
+        pass
+    
+    @property
+    def NFP(self):
+        pass
+
+    @property
+    def R_basis(self):
+        pass
+
+    @property
+    def Z_basis(self):
+        pass
+
+    @property
+    def rho(self):
+        pass

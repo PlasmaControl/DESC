@@ -151,7 +151,7 @@ class Transform(IOAble):
             # trivial case where we just return all zeros, so it doesn't matter
             self._method = "direct1"
             return
-
+        print(type(grid.nodes[:, 2]))
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
         if not isalmostequal(zeta_cts):

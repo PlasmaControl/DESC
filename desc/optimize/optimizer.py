@@ -238,6 +238,8 @@ class Optimizer(IOAble):
                 objective, nonlinear_constraint
             )
             assert set(objective.things) == set(nonlinear_constraint.things)
+        #print(objective.things)
+        #print(things)
         assert set(objective.things) == set(things)
 
         # wrap to handle linear constraints

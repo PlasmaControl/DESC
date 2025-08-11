@@ -873,3 +873,258 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     )  # reactions/s
     data["P_fusion"] = reaction_rate * energy * elementary_charge  # J/s
     return data
+
+# Define surface divergence of magnetic field through alpha and |e^rho|
+@register_compute_fun(
+    name="n.[nabla_s(alpha) x nabla_s(|e^rho|)]",
+    label="surf div",
+    units="T/m",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_rho","nabla_s(alpha)","nabla_s(|e^rho|)"],
+)
+def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs):
+    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"] = dot(data["n_rho"],
+                                                      cross(data["nabla_s(alpha)"],
+                                                            data["nabla_s(|e^rho|)"]
+                                                            )
+                                                     )**(1)
+    return data
+
+# Define surface divergence of magnetic field through alpha and |e^rho|
+@register_compute_fun(
+    name="n.[nabla_s(alpha) x nabla_s(|e^rho|)]^2",
+    label="surf div^2",
+    units="T/m",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"],
+)
+def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs):
+    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]^2"] = data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"]**(2)
+    return data
+
+@register_compute_fun(
+    name="|e^rho|",
+    label="|e^rho|",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho"],
+)
+def _norm_e_sup_rho(params, transforms, profiles, data, **kwargs):
+    
+    data["|e^rho|"] = jnp.sum( data["e^rho"] * data["e^rho"] , axis = 1) ** (1/2)
+    return data
+
+@register_compute_fun(
+    name="|e^rho|_t",
+    label="|e^rho|_t",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho","e^rho_t","|e^rho|"],
+)
+def _norm_e_sup_rho_t(params, transforms, profiles, data, **kwargs):
+    
+    data["|e^rho|_t"] = data["|e^rho|"]**(-1) * jnp.sum( data["e^rho"] * data["e^rho_t"] , axis = 1)
+    return data
+
+@register_compute_fun(
+    name="|e^rho|_z",
+    label="|e^rho|_z",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho","e^rho_z","|e^rho|"],
+)
+def _norm_e_sup_rho_z(params, transforms, profiles, data, **kwargs):
+    
+    data["|e^rho|_z"] = data["|e^rho|"]**(-1) * jnp.sum( data["e^rho"] * data["e^rho_z"] , axis = 1)
+    return data
+
+@register_compute_fun(
+    name="nabla_s(|e^rho|)",
+    label="nabla_s(|e^rho|)",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e^rho|_t","|e^rho|_z", 
+          "e^theta_s","e^zeta_s"],
+)
+def _nabla_s_e_rho_norm(params, transforms, profiles, data, **kwargs):
+    
+    data["nabla_s(|e^rho|)"] = (data["|e^rho|_t"] * data["e^theta_s"].T
+                                + data["|e^rho|_z"] * data["e^zeta_s"].T
+                                ).T
+    return data
+
+@register_compute_fun(
+    name="nabla_s(alpha)",
+    label="nabla_s(alpha)",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Surface divergence of tangent component of magnetic field,"
+    " calculated through alpha and |e^\rho|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["alpha_t","alpha_z", 
+          "e^theta_s","e^zeta_s"],
+)
+def _nabla_s_alpha(params, transforms, profiles, data, **kwargs):
+    
+    data["nabla_s(alpha)"] = (data["alpha_t"] * data["e^theta_s"].T
+                              + data["alpha_z"] * data["e^zeta_s"].T
+                              ).T
+    return data
+
+@register_compute_fun(
+    name="|nabla_s(alpha)|",
+    label="|nabla_s(alpha)|",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Norm of surface-gradient of alpha",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["nabla_s(alpha)"],
+)
+def _nabla_s_alpha_norm(params, transforms, profiles, data, **kwargs):
+    
+    data["|nabla_s(alpha)|"] = jnp.sum( data["nabla_s(alpha)"] * data["nabla_s(alpha)"] , axis = 1) ** (1/2)
+    return data
+
+
+@register_compute_fun(
+    name="d_|e^rho|^2",
+    label="d_|e^rho|^2",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Variation of |e^\rho| on a surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e^rho|_t","|e^rho|_z", 
+          #"e^theta_s","e^zeta_s",
+         ],
+)
+def _d_erho2(params, transforms, profiles, data, **kwargs):
+    
+    data["d_|e^rho|^2"] = data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2
+    #data["d_|e^rho|^2"] = jnp.sqrt(data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2)
+    return data
+
+@register_compute_fun(
+    name="d_|e^rho|",
+    label="d_|e^rho|",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Variation of |e^\rho| on a surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e^rho|_t","|e^rho|_z", 
+         ],
+)
+def _d_erho(params, transforms, profiles, data, **kwargs):
+    
+    data["d_|e^rho|"] = jnp.sqrt(data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2)
+    return data
+
+
+@register_compute_fun(
+    name="Laplace_Beltrami(alpha)",
+    label="Laplace_Beltrami(alpha)",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Variation of |e^\rho| on a surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["alpha_t","alpha_z", 
+          "alpha_tt","alpha_tz", 
+          "alpha_zz", 
+          "e^theta_s","e^zeta_s",
+          "e^theta_s_t","e^zeta_s_t",
+          "e^theta_s_z","e^zeta_s_z",
+         ],
+)
+def _Laplace_Beltrami_alpha(params, transforms, profiles, data, **kwargs):
+    
+    data["Laplace_Beltrami(alpha)"] = (jnp.sum(data["e^theta_s"] * data["e^theta_s_t"], axis=-1) * data["alpha_t"]
+                                       + jnp.sum(data["e^theta_s"] * data["e^theta_s"], axis=-1) * data["alpha_tt"]
+                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s_t"], axis=-1) * data["alpha_z"]
+                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
+                                       + jnp.sum(data["e^zeta_s"] * data["e^theta_s_z"], axis=-1) * data["alpha_t"]
+                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
+                                       + jnp.sum(data["e^zeta_s"] * data["e^zeta_s_z"], axis=-1) * data["alpha_z"]
+                                       + jnp.sum(data["e^zeta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_zz"]
+                                      ) 
+    return data
+
+@register_compute_fun(
+    name="Laplace_Beltrami(alpha)^2",
+    label="Laplace_Beltrami(alpha)^2",
+    units="1/m2",
+    units_long="Tesla per meter",
+    description="Variation of |e^\rho| on a surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["Laplace_Beltrami(alpha)",
+         ],
+)
+def _Laplace_Beltrami_alpha_square(params, transforms, profiles, data, **kwargs):
+    
+    data["Laplace_Beltrami(alpha)^2"] = data["Laplace_Beltrami(alpha)"]**2
+    
+    return data

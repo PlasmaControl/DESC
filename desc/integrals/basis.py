@@ -270,7 +270,6 @@ class FourierChebyshevSeries(IOAble):
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         # Add axis to broadcast against multiple x values.
         cheb = cheb_from_dct(
-            # TODO: Benchmark replacing this with nufft. Prediction: Small improvement
             irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
         )
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)

@@ -13,15 +13,16 @@ from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
     _set_default_plot_kwargs,
+    argmin,
     bounce_points,
     chebyshev,
     cubic_spline,
     fourier_chebyshev,
-    interp_fft_to_argmin,
-    interp_to_argmin,
+    get_extrema,
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
+    _irfft2_non_uniform,
     cheb_pts,
     fourier_pts,
     idct_non_uniform,
@@ -129,7 +130,7 @@ def _swap(f):
     (num pitch,                     -1) <-> (num pitch,                     -1)
     """
     assert f.ndim <= 4
-    return jnp.swapaxes(f, 0, -2)
+    return f.swapaxes(0, -2)
 
 
 default_quad = get_quadrature(
@@ -266,26 +267,20 @@ class Bounce2D(Bounce):
     # coordinate systems may be used as that task reduces to a surface integral,
     # which is invariant to the order of summation).
     #
-    # The DESC coordinate system is related to field-line-following coordinate
-    # systems by a relation whose solution is best found with Newton iteration
-    # since this solution is unique. Newton iteration is not a globally
-    # convergent algorithm to find the real roots of r : ζ ↦ B(ζ) − 1/λ where
-    # ζ is a field-line-following coordinate. For this, function approximation
-    # of B is necessary.
+    # The DESC coordinate system maps to field-line-following coordinate
+    # systems with a relation whose solution is best found with Newton iteration.
+    # In contrast, Newton iteration is not a globally convergent algorithm to
+    # find the real roots of r : ζ ↦ B(ζ) − 1/λ where ζ is a field-line-following
+    # coordinate. For this, function approximation of B is necessary.
     #
     # The frequency transform of a map under the chosen basis must be concentrated
-    # at low frequencies for the series to converge fast. For periodic
-    # (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
-    # series. Both converge exponentially, but the larger region of convergence in the
+    # at low frequencies for the series to converge fast. For periodic (non-periodic)
+    # maps, the standard choice for the basis is a Fourier (Chebyshev) series.
+    # Both converge exponentially, but the larger region of convergence in the
     # complex plane of Fourier series makes it preferable to choose coordinate
-    # systems such that the function to approximate is periodic. One reason Chebyshev
-    # polynomials are preferred to other orthogonal polynomial series is
-    # fast discrete polynomial transforms (DPT) are implemented via fast transform
-    # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    # to interpolate θ(α,ζ). Using Chebyshev series with the Kosloff and Tal-Ezer
-    # almost-equispaced grid does not really show much improvement.
-    # Alternative approaches include using filtered Fourier series, Fourier
-    # continuation methods, or (preferably) prolate spheroidal wave functions.
+    # systems such that the function to approximate is periodic. A Fourier-Chebyshev
+    # series is chosen to interpolate θ(α,ζ). Using Chebyshev series with the
+    # Kosloff and Tal-Ezer almost-equispaced grid does not show worthwhile improvement.
     #
     # Function approximation in (α, ζ) coordinates demands particular interpolation
     # points in that coordinate system because there is no transformation that converts
@@ -295,11 +290,10 @@ class Bounce2D(Bounce):
     #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
     #
     #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
-    # However, the basis for the latter are trigonometric functions with
+    # The basis for the latter are trigonometric functions with
     # irrational frequencies, courtesy of the irrational rotational transform.
-    # Globally convergent root-finding schemes for that basis (at fixed α) are
-    # not efficient. The denominator of a close rational could be absorbed into the
-    # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
+    # The denominator of a close rational could be absorbed into the coordinate ϕ,
+    # but this balloons the frequency, and hence degree of the series.
     #
     # Quadrature is chosen over Runge-Kutta methods of the form
     #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
@@ -345,7 +339,7 @@ class Bounce2D(Bounce):
             "T(z)": fourier_chebyshev(
                 theta,
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),
-                jnp.atleast_1d(alpha),
+                alpha,
                 num_transit,
             ),
         }
@@ -511,9 +505,20 @@ class Bounce2D(Bounce):
         return self._n_modes.size
 
     def _swap_pitch(self, pitch_inv):
-        # Move num pitch axis to front so that the num rho axis broadcasts with
-        # the spectral coefficients of the Fourier series defined on that surface.
-        # Shape is (num pitch, 1, num rho) or (num pitch, num rho) or (num pitch, ).
+        """Transpose to simplify broadcasting.
+
+        Parameters
+        ----------
+        pitch_inv : jnp.ndarray
+            Shape (num rho, num pitch).
+
+        Returns
+        -------
+        pitch_inv : jnp.ndarray
+            Shape (num pitch, 1, num rho) if T(z) has shape (num alpha, num rho, ...).
+            Shape (num pitch, num rho)    if T(z) has shape (num alpha, ...).
+
+        """
         return jnp.moveaxis(atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv), -1, 0)
 
     def points(self, pitch_inv, num_well=None):
@@ -569,8 +574,8 @@ class Bounce2D(Bounce):
             )
             if z1.ndim == 4:
                 # move rho axis to 0 and alpha axis to 1
-                z1 = jnp.swapaxes(z1, 0, 1)
-                z2 = jnp.swapaxes(z2, 0, 1)
+                z1 = z1.transpose(1, 0, 2, 3)
+                z2 = z2.transpose(1, 0, 2, 3)
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
@@ -623,7 +628,7 @@ class Bounce2D(Bounce):
             B = self._c["B(z)"]
             if B.ndim == 4:
                 # move rho axis to 0 and alpha axis to 1
-                B = jnp.swapaxes(B, 0, 1)
+                B = B.transpose(1, 0, 2, 3)
             return _check_bounce_points(
                 z1=points[0],
                 z2=points[1],
@@ -772,9 +777,10 @@ class Bounce2D(Bounce):
         shape = (*z1.shape, x.size)
         cov = grad_bijection_from_disc(z1, z2)
 
-        zeta = flatten_matrix(bijection_from_disc(x, z1[..., None], z2[..., None]))
-        theta = _swap(self._c["T(z)"].eval1d(_swap(zeta))).reshape(shape)
-        zeta = zeta.reshape(shape)
+        zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
+        theta = _swap(self._c["T(z)"].eval1d(_swap(flatten_matrix(zeta)))).reshape(
+            shape
+        )
         data = self._nufft(zeta, theta, data, eps)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = zeta
@@ -817,9 +823,14 @@ class Bounce2D(Bounce):
         zeta = flatten_matrix(zeta, 4)
         theta = flatten_matrix(theta, 4)
         c = jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3)
-        c = pad_for_fft(c, self._num_theta)
-        c = nufft2(c, zeta, theta, (0, 2 * jnp.pi / self._NFP), eps=eps).real
-        c = jnp.swapaxes(c, 0, -2).reshape(len(data) + 2, *shape)
+        c = nufft2(
+            pad_for_fft(c, self._num_theta),
+            zeta,
+            theta,
+            (0, 2 * jnp.pi / self._NFP),
+            eps=eps,
+        ).real
+        c = c.swapaxes(0, -2).reshape(len(data) + 2, *shape)
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _integrate_nummt(self, x, w, integrand, pitch, data, z1, z2, check, plot, eps):
@@ -912,22 +923,50 @@ class Bounce2D(Bounce):
         errorif(
             isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
             NotImplementedError,
-            "Set spline to true until implemented.",
+            "Must choose Bounce2D(spline=True) for this feature.",
         )
-        return _swap(
-            interp_fft_to_argmin(
-                self._c["T(z)"],
-                f if is_fourier else Bounce2D.fourier(f),
-                map(_swap, points),
-                self._c["knots"],
-                self._c["B(z)"],
-                polyder_vec(self._c["B(z)"]),
-                self._num_theta,
-                self._num_zeta,
-                self._NFP,
-                nufft_eps,
+        if not is_fourier:
+            f = Bounce2D.fourier(f)
+
+        ext, B_ext = get_extrema(
+            self._c["knots"],
+            self._c["B(z)"],
+            polyder_vec(self._c["B(z)"]),
+            sentinel=0.0,
+        )
+        theta = self._c["T(z)"].eval1d(ext)
+
+        if nufft_eps < 1e-14:
+            f = _irfft2_non_uniform(
+                ext,
+                theta,
+                f,
+                n0=self._num_zeta,
+                n1=self._num_theta,
+                domain0=(0, 2 * jnp.pi / self._NFP),
             )
-        )
+            if ext.ndim == 3:
+                f = f.transpose(1, 0, 2)
+                ext = ext.transpose(1, 0, 2)
+                B_ext = B_ext.transpose(1, 0, 2)
+        else:
+            shape = ext.shape
+            if ext.ndim == 3:
+                ext = ext.transpose(1, 0, 2)
+                theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
+                zeta = ext.reshape(shape[1], -1)
+            else:
+                zeta = ext.ravel()
+                theta = theta.ravel()
+            f = nufft2(
+                pad_for_fft(f.squeeze(-3), self._num_theta),
+                zeta,
+                theta,
+                domain0=(0, 2 * jnp.pi / self._NFP),
+                eps=nufft_eps,
+            ).real.reshape(shape[-2], *shape[:-2], shape[-1])
+
+        return argmin(*points, f, ext, B_ext)
 
     def compute_fieldline_length(self, quad=None, vander=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
@@ -1501,7 +1540,10 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
+        ext, g_ext = get_extrema(self._zeta, self._B, self._dB_dz, sentinel=0.0)
+        return argmin(
+            *points, interp1d_vec(ext, self._zeta, f, method=method), ext, g_ext
+        )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.

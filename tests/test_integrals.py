@@ -37,8 +37,8 @@ from desc.integrals import (
 )
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
-    _get_extrema,
     bounce_points,
+    get_extrema,
 )
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
@@ -881,7 +881,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         dB_dz = B.derivative()
-        ext, B_ext = _get_extrema(k, B.c.T, dB_dz.c.T)
+        ext, B_ext = get_extrema(k, B.c.T, dB_dz.c.T)
         mask = ~np.isnan(ext)
         ext, B_ext = ext[mask], B_ext[mask]
         idx = np.argsort(ext)
@@ -1504,7 +1504,8 @@ class TestBounce2D:
     """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
-    def test_interp_to_argmin(self):
+    @pytest.mark.parametrize("nufft_eps", [0, 1e-6])
+    def test_interp_to_argmin(self, nufft_eps):
         """Test interpolation of h to argmin of g."""  # noqa: D202
 
         def g(z):
@@ -1521,13 +1522,15 @@ class TestBounce2D:
             theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,
+            nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
-        f = bounce.reshape(grid, h(grid.nodes[:, 2]))
-        result = bounce.interp_to_argmin(f, points, nufft_eps=0)
-        np.testing.assert_allclose(result, h(argmin_g), rtol=1e-6)
         np.testing.assert_allclose(
-            bounce.interp_to_argmin(f, points, nufft_eps=1e-6), result
+            bounce.interp_to_argmin(
+                bounce.reshape(grid, h(grid.nodes[:, 2])), points, nufft_eps=nufft_eps
+            ),
+            h(argmin_g),
+            rtol=1e-6,
         )
 
     @pytest.mark.unit

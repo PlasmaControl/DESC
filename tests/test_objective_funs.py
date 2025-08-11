@@ -2022,7 +2022,10 @@ class TestObjectiveFunction:
         )
         obj.build()
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
+            obj.compute(eq.params_dict),
+            grid.compress(data["effective ripple"]),
+            # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
+            rtol=2e-7,
         )
         obj = GammaC(
             eq,

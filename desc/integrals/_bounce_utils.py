@@ -6,12 +6,10 @@ from matplotlib import pyplot as plt
 
 from desc.backend import dct, ifft, jnp
 from desc.integrals._interp_utils import (
-    _irfft2_non_uniform,
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
     ifft_non_uniform,
-    interp1d_vec,
     irfft_non_uniform,
     nufft2,
     pad_for_fft,
@@ -396,7 +394,7 @@ def plot_ppoly(
     return fig, ax
 
 
-def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
+def get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     """Return extrema (z*, g(z*)).
 
     Parameters
@@ -436,62 +434,35 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     return ext, g_ext
 
 
-# We can use the non-differentiable argmin because we actually want the gradients
-# to accumulate through only the minimum since we are differentiating how our
-# physics objective changes wrt equilibrium perturbations not wrt which of the
-# extrema get interpolated to.
-
-
-def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
-    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
-
-    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
+def argmin(z1, z2, f, ext, g_ext):
+    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns f(A).
 
     Parameters
     ----------
-    h : jnp.ndarray
-        Shape (..., knots.size).
-        Values evaluated on ``knots`` to interpolate.
-    points : jnp.ndarray
+    z1, z2 : jnp.ndarray
         Shape (..., num pitch, num well).
         Boundaries to detect argmin between.
-        First (second) element stores left (right) boundaries.
-    knots : jnp.ndarray
-        Shape (knots.size, ).
-        z coordinates of spline knots. Must be strictly increasing.
-    g : jnp.ndarray
-        Shape (..., knots.size - 1, g.shape[-1]).
-        Polynomial coefficients of the spline of g in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    dg_dz : jnp.ndarray
-        Shape (..., knots.size - 1, g.shape[-1] - 1).
-        Polynomial coefficients of the spline of ∂g/∂z in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    method : str
-        Method of interpolation.
-        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-        Default is cubic C1 local spline.
+        ``z1`` (``z2``) stores left (right) boundaries.
+    f : jnp.ndarray
+        Function interpolated to ``ext``.
 
     Returns
     -------
-    h : jnp.ndarray
+    f : jnp.ndarray
         Shape (..., num pitch, num well).
+        ``f`` at the minimum extrema of ``g`` between ``z1`` and ``z2``.
 
     """
-    z1, z2 = points
     assert z1.ndim > 1 and z2.ndim > 1
-
-    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
-    h = interp1d_vec(ext, knots, h, method=method)[..., None, None, :]
-
-    #     z1, z2 shape (..., num pitch, num well)
-    # ext, g_ext shape (..., num extrema)
-    # add axes to broadcast
-    #     z1, z2 shape (..., num pitch, num well, 1)
-    # ext, g_ext shape (...,         1,        1, num extrema)
+    assert f.shape == ext.shape
+    # We can use the non-differentiable argmin because we actually want the gradients
+    # to accumulate through only the minimum since we are differentiating how our
+    # physics objective changes wrt equilibrium perturbations not wrt which of the
+    # extrema get interpolated to.
     where = jnp.argmin(
+        # With the new axes, the shapes are:
+        #     z1, z2 (..., num pitch, num well, 1)
+        # ext, g_ext (...,         1,        1, num extrema)
         jnp.where(
             (z1[..., None] < ext[..., None, None, :])
             & (ext[..., None, None, :] < z2[..., None]),
@@ -501,103 +472,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
         axis=-1,
         keepdims=True,
     )
-    return jnp.take_along_axis(h, where, axis=-1).squeeze(axis=-1)
-
-
-def interp_fft_to_argmin(
-    T, h, points, knots, g, dg_dz, num_theta, num_zeta, NFP=1, nufft_eps=1e-6
-):
-    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
-
-    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
-
-    Parameters
-    ----------
-    T : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ on field lines.
-        {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
-        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit.
-    h : jnp.ndarray
-        Shape (..., 1, num zeta, num theta // 2 + 1)
-        Fourier coefficients as returned by ``Bounce2D.fourier``.
-    points : jnp.ndarray
-        Shape (..., num well).
-        Boundaries to detect argmin between.
-        First (second) element stores left (right) boundaries.
-    knots : jnp.ndarray
-        Shape (knots.size, ).
-        z coordinates of spline knots. Must be strictly increasing.
-    g : jnp.ndarray
-        Shape (..., knots.size - 1, g.shape[-1]).
-        Polynomial coefficients of the spline of g in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    dg_dz : jnp.ndarray
-        Shape (..., knots.size - 1, g.shape[-1] - 1).
-        Polynomial coefficients of the spline of ∂g/∂z in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    num_theta : int
-        Fourier resolution in poloidal direction.
-    num_zeta : int
-        Fourier resolution in toroidal direction.
-    NFP : int
-        Number of field periods.
-    nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
-    Returns
-    -------
-    h : jnp.ndarray
-        Shape (..., num well).
-
-    """
-    z1, z2 = points
-    assert z1.ndim >= 1 and z2.ndim >= 1
-
-    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
-    theta = T.eval1d(ext)
-    if nufft_eps < 1e-14:
-        h = _irfft2_non_uniform(
-            ext, theta, h, n0=num_zeta, n1=num_theta, domain0=(0, 2 * jnp.pi / NFP)
-        )
-    else:
-        shape = ext.shape
-        zeta = ext
-        if len(shape) > 2:
-            zeta = zeta.transpose(1, 0, 2).reshape(shape[1], -1)
-            theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
-        h = nufft2(
-            pad_for_fft(h.squeeze(-3), num_theta),
-            zeta,
-            theta,
-            domain0=(0, 2 * jnp.pi / NFP),
-            eps=nufft_eps / 10,
-        ).real
-        if len(shape) > 2:
-            h = h.reshape(shape[1], shape[0], shape[2]).transpose(1, 0, 2)
-
-    if z1.ndim == h.ndim + 1:
-        h = h[None]  # add pitch axis
-    h = h[..., None, :]  # add well axis
-
-    #     z1, z2 shape (..., num well)
-    # ext, g_ext shape (..., num extrema)
-    # add axes to broadcast
-    #     z1, z2 shape (..., num well, 1)
-    # ext, g_ext shape (...,        1, num extrema)
-    where = jnp.argmin(
-        jnp.where(
-            (z1[..., None] < ext[..., None, :]) & (ext[..., None, :] < z2[..., None]),
-            g_ext[..., None, :],
-            jnp.inf,
-        ),
-        axis=-1,
-        keepdims=True,
-    )
-    return jnp.take_along_axis(h, where, axis=-1).squeeze(axis=-1)
+    return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(axis=-1)
 
 
 def get_fieldline(alpha, iota, num_transit):
@@ -622,7 +497,7 @@ def get_fieldline(alpha, iota, num_transit):
 
     """
     iota = jnp.atleast_1d(iota)[:, jnp.newaxis]
-    alpha = alpha[:, jnp.newaxis, jnp.newaxis]
+    alpha = jnp.atleast_1d(alpha)[:, jnp.newaxis, jnp.newaxis]
     # Select the next branch such that ϑ is continuous.
     #      αᵢ = ϑ − ιϕᵢ
     #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
@@ -643,6 +518,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Shape (num rho, ).
         Rotational transform normalized by 2π.
     alpha : jnp.ndarray
+        Shape (num alpha, ).
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
@@ -698,7 +574,6 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     # peeling off field lines
     fieldline = get_fieldline(alpha, iota, num_transit)
     if theta.ndim == 2:
-        # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)
     # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
@@ -792,7 +667,7 @@ def cubic_spline(
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
-        This number will be rounded up to an integer multiple of NFP.
+        This number will be rounded up to an integer multiple of ``NFP``.
     num_theta : int
         Fourier resolution in poloidal direction.
     m_modes : jnp.ndarray
@@ -856,20 +731,22 @@ def cubic_spline(
     # θ at uniform ζ on field lines
     theta = idct_non_uniform(x, T.cheb[..., None, :], T.Y, vander=vander_theta)
     theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
-    ar = theta.shape[:-3]  # num alpha, num rho
 
+    shape = theta.shape[:-3]
     if nufft_eps < 1e-14:
         f = irfft_non_uniform(
             theta, f[..., None, :, :], num_theta, _modes=m_modes
-        ).reshape(*ar, -1)
+        ).reshape(*shape, -1)
     else:
-        assert f.ndim <= 4
-        s, d = ((-4, -1), (0, 1)) if len(ar) else (-1, 0)
-        theta = jnp.moveaxis(theta, s, d).reshape(*ar[-1:], num_zeta, -1)
-        f = pad_for_fft(f.squeeze(-3), num_theta)
-        f = nufft2(f, theta, eps=nufft_eps).real.mT.reshape(*ar[-1:], *ar[:-1], -1)
-        if len(ar) > 1:
-            f = jnp.swapaxes(f, 0, -2)
+        if len(shape) > 1:
+            theta = theta.transpose(1, 4, 0, 2, 3).reshape(shape[-1], num_zeta, -1)
+        else:
+            theta = theta.transpose(3, 0, 1, 2).reshape(num_zeta, -1)
+        f = nufft2(
+            pad_for_fft(f.squeeze(-3), num_theta), theta, eps=nufft_eps
+        ).real.mT.reshape(shape[-1], *shape[:-1], -1)
+        if len(shape) > 1:
+            f = f.transpose(1, 0, 2)
 
     zeta = jnp.ravel(zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, None])
     f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c

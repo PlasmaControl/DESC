@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH --job-name=rd7_RQA
+#SBATCH --time=00:40:00
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=32
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=128G  # Per node
+#SBATCH --mail-type=begin        # send mail when process begins
+#SBATCH --mail-type=end          # send email when job ends
+#SBATCH --mail-user=fcastro@princeton.edu
+#SBATCH --error=slurm-%j.err
+
+# Load your modules or activate your environment
+# module purge
+
+module load anaconda3/2024.6
+module load openmpi/gcc/4.1.6
+conda activate desc-mpi  # Replace with your actual env name
+
+export JAX_PLATFORM_NAME="cpu"
+export JAX_TRACEBACK_FILTERING=off  # Enable full JAX traceback for debugging
+
+# Optional: Set virtual devices for testing (e.g., simulate 8 devices per node)
+#srun --mpi=pmi2 python direct-reg.py
+#mpirun -np $SLURM_NTASKS python direct-reg.py
+srun --mpi=pmix python direct-reg.py

@@ -7,8 +7,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from diffrax import (
-    ConstantStepSize,
-    Event,
+    DiscreteTerminatingEvent,
     ODETerm,
     PIDController,
     SaveAt,
@@ -19,7 +18,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign, vmap
+from desc.backend import jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -831,8 +830,6 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
-        elif isinstance(params, dict):
-            params = params["params"]
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -2580,7 +2577,7 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    max_steps=1000,
+    maxstep=1000,
     min_step_size=1e-8,
     solver=Tsit5(),
     bounds_R=(0, np.inf),
@@ -2605,7 +2602,7 @@ def field_line_integrate(
         Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for ode integration
-    max_steps : int
+    maxstep : int
         maximum number of steps between different phis
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
@@ -2663,23 +2660,17 @@ def field_line_integrate(
 
     # diffrax parameters
 
-    def default_terminating_event(t, y, args, **kwargs):
-        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
+    def default_terminating_event_fxn(state, **kwargs):
+        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
     kwargs.setdefault(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
     )
     kwargs.setdefault(
-        "event",
-        Event(default_terminating_event),
-    )
-    # Euler method does not support adaptive step size controller
-    kwargs["stepsize_controller"] = (
-        ConstantStepSize()
-        if solver.__class__.__name__ == "Euler"
-        else kwargs["stepsize_controller"]
+        "discrete_terminating_event",
+        DiscreteTerminatingEvent(default_terminating_event_fxn),
     )
 
     term = ODETerm(odefun)
@@ -2692,7 +2683,7 @@ def field_line_integrate(
         t0=phis[0],
         t1=phis[-1],
         saveat=saveat,
-        max_steps=max_steps * len(phis),
+        max_steps=maxstep * len(phis),
         dt0=min_step_size,
         args=(field,),
         **kwargs,
@@ -2700,9 +2691,11 @@ def field_line_integrate(
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
+    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        x = vmap(intfun)(x0)
+        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
+        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))

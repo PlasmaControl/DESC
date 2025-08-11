@@ -576,7 +576,6 @@ class Bounce2D(Bounce):
                 num_well,
             )
             if z1.ndim == 4:
-                # move rho axis to 0 and alpha axis to 1
                 z1 = z1.transpose(1, 0, 2, 3)
                 z2 = z2.transpose(1, 0, 2, 3)
         return z1, z2
@@ -630,7 +629,6 @@ class Bounce2D(Bounce):
         else:
             B = self._c["B(z)"]
             if B.ndim == 4:
-                # move rho axis to 0 and alpha axis to 1
                 B = B.transpose(1, 0, 2, 3)
             return _check_bounce_points(
                 z1=points[0],
@@ -777,12 +775,11 @@ class Bounce2D(Bounce):
             pitch = pitch[..., None, None]
         elif pitch.ndim > 1:
             pitch = pitch[:, None, ..., None, None]
-        shape = (*z1.shape, x.size)
         cov = grad_bijection_from_disc(z1, z2)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
         theta = _swap(self._c["T(z)"].eval1d(_swap(flatten_matrix(zeta)))).reshape(
-            shape
+            zeta.shape
         )
         data = self._nufft(zeta, theta, data, eps)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
@@ -800,7 +797,7 @@ class Bounce2D(Bounce):
 
         if check:
             _check_interp(
-                shape,
+                zeta.shape,
                 data["zeta"],
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
@@ -1027,7 +1024,7 @@ class Bounce2D(Bounce):
         # Simple mean over α because when ζ extends beyond one transit we need
         # to weight all field lines uniformly regardless of their area wrt α.
 
-    def _partial_sum_cfl(self, x, vander=None):
+    def _partial_sum_cfl(self, x, vander):
         x = (
             bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis]
             if vander is None

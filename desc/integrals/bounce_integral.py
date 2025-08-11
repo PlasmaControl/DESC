@@ -955,9 +955,10 @@ class Bounce2D(Bounce):
         else:
             shape = ext.shape
             if ext.ndim > 2:
+                B_ext = B_ext.transpose(1, 0, 2)
                 ext = ext.transpose(1, 0, 2)
-                theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
                 zeta = ext.reshape(shape[1], -1)
+                theta = theta.transpose(1, 0, 2).reshape(shape[1], -1)
             else:
                 zeta = ext.ravel()
                 theta = theta.ravel()

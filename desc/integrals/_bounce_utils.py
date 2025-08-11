@@ -454,7 +454,7 @@ def argmin(z1, z2, f, ext, g_ext):
 
     """
     assert z1.ndim > 1 and z2.ndim > 1
-    assert f.shape == ext.shape
+    assert f.shape == ext.shape == g_ext.shape
     # We can use the non-differentiable argmin because we actually want the gradients
     # to accumulate through only the minimum since we are differentiating how our
     # physics objective changes wrt equilibrium perturbations not wrt which of the

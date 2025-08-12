@@ -1168,3 +1168,31 @@ def copy_rpz_periods(rpz, NFP):
     z = jnp.tile(z, NFP)
     p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
     return jnp.array([r, p.flatten(), z]).T
+
+def winding(curve,points):
+    """
+    Compute the winding number of points relative to closed
+    curves.
+    
+    Parameters
+    ----------
+    curve : array-like, shape(n_curves,M,2)
+        X,Y coordinates of closed curves to be evaluated.
+    points : array-like, shape(n_curves,N,2)
+        X,Y coordinates of points to be evaluated. 
+
+    Returns
+    -------
+    winding : array-like, shape(n_curves,N)
+        Winding numbers
+    """
+    errorif(curve.shape[0]!=points.shape[0])
+    if not np.allclose(curve[:,0],curve[:,-1]):
+        curve = np.concatenate([curve,curve[:,0:1]],axis=1)
+    z = points[:,:,None,:] - curve[:,None,:-1,:]
+    z_next = points[:,:,None,:] - curve[:,None,1:,:]
+    z = z[..., 0] + 1j * z[...,1]
+    z_next = z_next[...,0] + 1j * z_next[...,1]
+    angles = np.angle(z_next/z)
+    winding = np.sum(angles,axis=2)
+    return winding

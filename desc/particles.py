@@ -614,9 +614,11 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         params = field.params_dict
@@ -722,9 +724,11 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         params = field.params_dict
@@ -832,9 +836,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
@@ -942,9 +948,11 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         data = self.surface.compute(
             ["|e_theta x e_zeta|", "theta", "zeta"], grid=self.grid

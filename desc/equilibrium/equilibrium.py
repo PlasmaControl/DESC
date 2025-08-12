@@ -1803,10 +1803,10 @@ class Equilibrium(Optimizable, _MagneticField):
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
         [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+        coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         B, data = self.compute_magnetic_field(
-            grid,
+            coords,
             source_grid=source_grid,
             chunk_size=chunk_size,
             method=method,
@@ -1829,7 +1829,7 @@ class Equilibrium(Optimizable, _MagneticField):
             if method != "virtual casing" and A_source_grid is None:
                 A_source_grid = source_grid
             A, data = self.compute_magnetic_vector_potential(
-                grid,
+                coords,
                 chunk_size=chunk_size,
                 source_grid=A_source_grid,
                 return_data=True,
@@ -1856,6 +1856,7 @@ class Equilibrium(Optimizable, _MagneticField):
     def save_fieldlines_format(
         self,
         path,
+        coils,
         Rmin=5,
         Rmax=11,
         Zmin=-5,
@@ -1863,17 +1864,21 @@ class Equilibrium(Optimizable, _MagneticField):
         nR=101,
         nZ=101,
         nphi=90,
+        coil_grid=None,
         save_pressure=True,
         chunk_size=50,
         source_grid=None,
         method="biot-savart",
         curl_A_grid=None,
+        NFP=None,
     ):
+        if NFP is None:
+            NFP = self.NFP
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
-        phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=True)
+        phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=True)
         [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+        coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
         if source_grid is None:
             if method == "virtual casing":
                 source_grid = LinearGrid(
@@ -1886,7 +1891,7 @@ class Equilibrium(Optimizable, _MagneticField):
             else:
                 source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
         B, data = self.compute_magnetic_field(
-            grid,
+            coords,
             source_grid=source_grid,
             chunk_size=chunk_size,
             method=method,
@@ -1894,10 +1899,19 @@ class Equilibrium(Optimizable, _MagneticField):
             return_data=True,
             return_rtz=save_pressure,
         )
+        # Add magnetic field from coils
+        from desc.magnetic_fields import SumMagneticField
+
+        coils = SumMagneticField(coils) if isinstance(coils, list) else coils
+        B += coils.compute_magnetic_field(
+            coords, source_grid=coil_grid, basis="rpz", chunk_size=chunk_size
+        )
+
         if save_pressure:
-            plasma_mask = self.in_plasma(grid.reshape(nR, nphi, nZ, 3)).flatten()
+            # For points inside the plasma, map R,phi,Z --> rho, theta, zeta
+            plasma_mask = self.in_plasma(coords.reshape(nR, nphi, nZ, 3)).flatten()
             guess = data["src_rtz"][plasma_mask]
-            plasma_grid = grid[plasma_mask]
+            plasma_grid = coords[plasma_mask]
             guess[:, 2] = plasma_grid[:, 1]  # zeta = phi
             rtz = Grid(
                 map_coordinates(
@@ -1909,7 +1923,10 @@ class Equilibrium(Optimizable, _MagneticField):
                 ),
                 NFP=self.NFP,
             )
+            # Calculate the pressure for points inside the plasma
             p_plasma = self.compute("p", grid=rtz)["p"]
+
+            # Set points outside the plasma to have p=0
             pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
             pressure[plasma_mask] = p_plasma
         else:

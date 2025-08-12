@@ -813,9 +813,12 @@ def compute_theta_coords(
         flux_coords, L_lmn, tol, maxiter, full_output, **kwargs
     )
 
-def in_plasma(points,eq):
+
+def in_plasma(points, eq, M=24):
     """
     Determine if an array of points in cylindrical coordinates is inside the plasma boundary.
+    Will probably return False if the point is directly on the boundary, but will be most sensitive
+    to resolution at and near the boundary.
     
     Parameters
     ----------
@@ -823,48 +826,55 @@ def in_plasma(points,eq):
         R,phi,Z coordinates of points to be evaluated. points[:,idx,:,1] should be constant.
     eq : Equilibrium
         Equilibrium with the desired plasma boundary.
-
+    M : int
+        Poloidal resolution of equilibrium grid on which the winding number is evaluated.
     Returns
     -------
     out : array-like shape(n_r,n_phi,n_z)
         Boolean array indicating whether each point is inside the plasma boundary.
     """
-    phi = np.unique(points[...,1])
-    grid = LinearGrid(rho=[1.0],M=24,zeta=phi,NFP=eq.NFP)
-    data = eq.compute(['R','Z'],grid=grid)
-    R_plasma = data['R'].reshape(grid.num_zeta,-1)
-    Z_plasma = data['Z'].reshape(grid.num_zeta,-1)
-    pts = points[...,[0,2]].transpose(1,0,2,3).reshape(points.shape[1],-1,2)
-    curve = np.stack([R_plasma,Z_plasma],axis=-1)
+    phi = np.unique(points[..., 1])
+    grid = LinearGrid(rho=[1.0], M=M, zeta=phi, NFP=eq.NFP)
+    data = eq.compute(["R", "Z"], grid=grid)
+    R_plasma = data["R"].reshape(grid.num_zeta, -1)
+    Z_plasma = data["Z"].reshape(grid.num_zeta, -1)
+    pts = points[..., [0, 2]].transpose(1, 0, 2, 3).reshape(points.shape[1], -1, 2)
+    curve = np.stack([R_plasma, Z_plasma], axis=-1)
 
-    out = np.isclose(np.abs(winding(curve,pts)),2*np.pi)
-    out = out.reshape(points.shape[1],points.shape[0],points.shape[2]).transpose(1,0,2)
+    out = np.isclose(np.abs(winding(curve, pts)), 2 * np.pi)
+    out = out.reshape(points.shape[1], points.shape[0], points.shape[2]).transpose(
+        1, 0, 2
+    )
     return out
 
-def plasma_dist(points,eq):
+
+def plasma_dist(points, eq, M=24):
     """
     Determine distance of array of points in cylindrical coordinates from the plasma boundary.
-    
+
     Parameters
     ----------
     points : array-like shape(n_r,n_phi,n_z,3)
         R,phi,Z coordinates of points to be evaluated. points[:,idx,:,1] should be constant.
     eq : Equilibrium
         Equilibrium with the desired plasma boundary.
-
+    M : int
+        Poloidal resolution of equilibrium grid on which the distance is evaluated.
     Returns
     -------
     out : array-like shape(n_r,n_phi,n_z)
         Minimum distance of each point in points from the plasma. Assumes ~ axisymmetry, i.e.
         assumes nearest point is in the same phi plane for improved computational performance.
     """
-    phi = np.unique(points[...,1])
-    grid = LinearGrid(rho=[1.0],M=24,zeta=phi,NFP=eq.NFP)
-    data = eq.compute(['R','Z'],grid=grid)
-    R_plasma = data['R'].reshape(grid.num_zeta,-1)
-    Z_plasma = data['Z'].reshape(grid.num_zeta,-1)
-    pts = points[...,[0,2]].transpose(1,0,2,3).reshape(points.shape[1],-1,2)
-    curve = np.stack([R_plasma,Z_plasma],axis=-1)
-    out = safenorm(pts[:,:,None,:] - curve[:,None,:,:],axis=-1).min(axis=-1)
-    out = out.reshape(points.shape[1],points.shape[0],points.shape[2]).transpose(1,0,2)
+    phi = np.unique(points[..., 1])
+    grid = LinearGrid(rho=[1.0], M=M, zeta=phi, NFP=eq.NFP)
+    data = eq.compute(["R", "Z"], grid=grid)
+    R_plasma = data["R"].reshape(grid.num_zeta, -1)
+    Z_plasma = data["Z"].reshape(grid.num_zeta, -1)
+    pts = points[..., [0, 2]].transpose(1, 0, 2, 3).reshape(points.shape[1], -1, 2)
+    curve = np.stack([R_plasma, Z_plasma], axis=-1)
+    out = safenorm(pts[:, :, None, :] - curve[:, None, :, :], axis=-1).min(axis=-1)
+    out = out.reshape(points.shape[1], points.shape[0], points.shape[2]).transpose(
+        1, 0, 2
+    )
     return out

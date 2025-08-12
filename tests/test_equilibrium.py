@@ -15,6 +15,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
+from desc.geometry import FourierRZToroidalSurface
 
 from .utils import area_difference, compute_coords
 
@@ -472,3 +473,35 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
             optimizer="lsq-exact",
             maxiter=0,
         )
+
+@pytest.mark.unit
+def test_in_plasma():
+    # Create an axisymmetric equilibrium with a circular cross-section
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        surface=FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=1,
+            aspect_ratio=1,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=2,
+            sym=True,
+        ),
+        NFP=2
+    )
+    # Create a 3D meshgrid of points
+    R = np.linspace(0,2,10)
+    phi = np.linspace(0,2*np.pi/eq.NFP,10,endpoint=False)
+    Z = np.linspace(-1,1,10)
+    points = np.stack(np.meshgrid(R,phi,Z,indexing='ij'),axis=-1)
+
+    # The cross-section of the equilibrium is a unit circle centered at (R,Z)=(1,0)
+    rho = (points[...,0]-1)**2+(points[...,2])**2
+    
+    np.testing.assert_allclose(eq.in_plasma(points,M=64),(rho<1))

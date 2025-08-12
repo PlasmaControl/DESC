@@ -1489,10 +1489,9 @@ class TestBounce:
             ).sum()
 
         pitch = 1.0
-        # can obtain from math or just extrapolate from analytic expression plot
-        analytic_approximation_of_gradient = 650
+        analytic_approximation_of_gradient = 651.8
         np.testing.assert_allclose(
-            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=5e-3
+            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=2.5e-3
         )
         # It is expected that this is much larger because the integrand is singular
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).

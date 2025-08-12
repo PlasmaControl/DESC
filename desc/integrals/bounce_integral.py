@@ -820,13 +820,11 @@ class Bounce2D(Bounce):
 
         """
         shape = zeta.shape
-        zeta = flatten_matrix(zeta, 4)
-        theta = flatten_matrix(theta, 4)
         c = jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3)
         c = nufft2(
             pad_for_fft(c, self._num_theta),
-            zeta,
-            theta,
+            flatten_matrix(zeta, 4),
+            flatten_matrix(theta, 4),
             (0, 2 * jnp.pi / self._NFP),
             eps=eps,
         ).real

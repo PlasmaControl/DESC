@@ -126,7 +126,8 @@ class EffectiveRipple(_Objective):
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
+        basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
         If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.

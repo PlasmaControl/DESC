@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from netCDF4 import Dataset
+import h5py
 from desc.utils import rpz2xyz, rpz2xyz_vec, errorif
 
 
@@ -11,11 +12,11 @@ def save_bmw_format(
     Rmax,
     Zmin,
     Zmax,
+    nR,
+    nZ,
+    nphi,
     source_data={},
     source_grid=None,
-    nR=101,
-    nZ=101,
-    nphi=90,
     NFP=1,
     A=None,
     series=3,
@@ -27,16 +28,16 @@ def save_bmw_format(
     """
     errorif(
         (source_grid is None) and ("J" in source_data.keys()),
-        msg="If you wish to save the current density used to evaluate B," \
+        msg="If you wish to save the current density used to evaluate B,"
         "please also include the source grid on which it was calculated.",
     )
 
-    # 
+    #
     path = os.path.expanduser(path)
 
     # Reshape magnetic field on grid
-    new_shape = (nR,nphi,nZ)
-    transpose = (1,2,0) # (R,phi,Z) --> (phi,R,Z)
+    new_shape = (nR, nphi, nZ)
+    transpose = (1, 2, 0)  # (R,phi,Z) --> (phi,R,Z)
     B_R = B[:, 0].reshape(new_shape).transpose(transpose)
     B_phi = B[:, 1].reshape(new_shape).transpose(transpose)
     B_Z = B[:, 2].reshape(new_shape).transpose(transpose)
@@ -98,9 +99,14 @@ def save_bmw_format(
 
         # DESC grids order nodes as (zeta, rho, theta) ~ (v,s,u)
         # BMW outputs J and P as (v,u,s), so we need to swap the last two dimensions
-        new_shape = (source_grid.num_zeta, source_grid.num_rho, source_grid.num_theta, 3)
-        transpose = (0,2,1,3)
-        
+        new_shape = (
+            source_grid.num_zeta,
+            source_grid.num_rho,
+            source_grid.num_theta,
+            3,
+        )
+        transpose = (0, 2, 1, 3)
+
         source_rpz = np.stack(
             (source_data["R"], source_data["phi"], source_data["Z"]), axis=-1
         )
@@ -129,3 +135,182 @@ def save_bmw_format(
         jz_grid[:] = J[..., 2]
 
     file.close()
+
+
+def save_fieldlines_format(
+    path,
+    B,
+    Rmin,
+    Rmax,
+    Zmin,
+    Zmax,
+    phi_min,
+    phi_max,
+    nR,
+    nZ,
+    nphi,
+    pressure=None,
+):
+    # FIELDLINES requires a minimum and maximum toroidal angle to be supplied, and the endpoint is included
+    # Older versions of FIELDLINES normalize B_R and B_Z as B_i*R/B_PHI, for i=R,Z, but the most recent version 
+    # returns B_R in units of T
+    # https://github.com/PrincetonUniversity/STELLOPT/blob/7a03761db9c408902669b3a34823ef2f3d6dba0e/pySTEL/libstell/fieldlines.py
+    # https://github.com/PrincetonUniversity/STELLOPT/commit/30bce7c339e66fa1ea1e1be4043fe8a19bdae400
+    # https://www.mathworks.com/matlabcentral/fileexchange/54931-read_fieldlines
+    # https://princetonuniversity.github.io/STELLOPT/FIELDLINES.html#output-data-format
+
+    if phi_max is None:
+        phi_max = 2 * np.pi / NFP
+    # Reshape magnetic field on grid
+    B = B.reshape(nR, nphi, nZ, 3)
+    lpres = pressure is not None
+    if lpres:
+        pressure = pressure.reshape(nR, nphi, nZ)
+    else:
+        pressure = np.zeros((nR,nphi,nZ))
+
+    save_data = [
+        {
+            "key": "B_PHI",
+            "description": np.bytes_(b"Toroidal Field (BPHI)"),
+            "value": B[...,1],
+        },
+        {
+            "key": "B_R",
+            "description": np.bytes_(b"Radial Fieldline Eq. (BR)"),
+            "value": B[...,0],
+        },
+        {
+            "key": "B_Z",
+            "description": np.bytes_(b"Vertical Fieldline Eq. (BZ)"),
+            "value": B[...,2],
+        },
+        {
+            "key": "PRES",
+            "description": np.bytes_(b"Plasma Pressure (PRES)"),
+            "value": pressure,
+        },
+        {
+            "key": "VERSION",
+            "description": np.bytes_(b"Version Number"),
+            "value": np.array([1.79999995]),
+        },
+        {
+            "key": "ladvanced",
+            "description": np.bytes_(b"Advanced Grid Flag"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "laxis_i",
+            "description": np.bytes_(b"Axis calc"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lcoil",
+            "description": np.bytes_(b"Coil input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "leqdsk",
+            "description": np.bytes_(b"EQDSK input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lhint",
+            "description": np.bytes_(b"HINT input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lmgrid",
+            "description": np.bytes_(b"MGRID input"),
+            "value": np.array([1], dtype=np.int32),
+        },
+        {
+            "key": "lmu",
+            "description": np.bytes_(b"Diffusion Logical"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lpies",
+            "description": np.bytes_(b"PIES input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lpres",
+            "description": np.bytes_(b"Pressure output"),
+            "value": np.array([lpres], dtype=np.int32),
+        },
+        {
+            "key": "lreverse",
+            "description": np.bytes_(b"VMEC input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lspec",
+            "description": np.bytes_(b"SPEC input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lvac",
+            "description": np.bytes_(b"Vacuum calc"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lvessel",
+            "description": np.bytes_(b"Vessel input"),
+            "value": np.array([0], dtype=np.int32),
+        },
+        {
+            "key": "lvmec",
+            "description": np.bytes_(b"VMEC input"),
+            "value": np.array([1], dtype=np.int32),
+        },
+        {
+            "key": "nphi",
+            "description": np.bytes_(b"Number of Toroidal Gridpoints"),
+            "value": np.array([nphi], dtype=np.int32),
+        },
+        {
+            "key": "nr",
+            "description": np.bytes_(b"Number of Radial Gridpoints"),
+            "value": np.array([nR], dtype=np.int32),
+        },
+        {
+            "key": "nz",
+            "description": np.bytes_(b"Number of Vertical Gridpoints"),
+            "value": np.array([nZ], dtype=np.int32),
+        },
+        {
+            "key": "phiaxis",
+            "description": np.bytes_(b"Toroidal Axis [rad]"),
+            "value": np.linspace(phi_min, phi_max, nphi, endpoint=True),
+        },
+        {
+            "key": "raxis",
+            "description": np.bytes_(b"Radial Axis [m]"),
+            "value": np.linspace(Rmin, Rmax, nR, endpoint=True),
+        },
+        {
+            "key": "zaxis",
+            "description": np.bytes_(b"Vertical Axis [m]"),
+            "value": np.linspace(Zmin, Zmax, nZ, endpoint=True),
+        },
+    ]
+    f = h5py.File(path, "w")
+
+    def add_ds(key, value, description):
+        if value.ndim>1:
+            # FIELDLINES is written in Fortran using R,phi,Z coordinates,
+            # but since arrays are stored in column-major order in Fortran,
+            # it's tranposed when loaded into python, where arrays are stored
+            # in row-major order. See the first Github link
+            T = tuple(np.flip(np.arange(value.ndim)))
+            value = value.transpose(T)
+        dset = f.create_dataset(key, data=value)
+        dset.attrs[f"{key}_description"] = description
+
+    for ds in save_data:
+        add_ds(ds["key"], ds["value"], ds["description"])
+    
+    f.close()
+    

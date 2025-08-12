@@ -10,6 +10,6 @@ from .ascii_io import read_ascii, write_ascii
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .optimizable_io import IOAble, load
 from .pickle_io import PickleReader, PickleWriter
-from .field_io import save_bmw_format
+from .field_io import save_bmw_format, save_fieldlines_format
 
 __all__ = ["InputReader", "load"]

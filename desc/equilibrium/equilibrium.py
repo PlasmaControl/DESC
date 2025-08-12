@@ -37,7 +37,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
-from desc.io import IOAble, save_bmw_format
+from desc.io import IOAble, save_bmw_format, save_fieldlines_format
 from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
 from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
@@ -67,10 +67,10 @@ from desc.utils import (
     warnif,
     rpz2xyz,
     rpz2xyz_vec,
-    xyz2rpz_vec
+    xyz2rpz_vec,
 )
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl, in_plasma
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1252,6 +1252,7 @@ class Equilibrium(Optimizable, _MagneticField):
         return_A=False,
         support=1e-5,
         return_data=False,
+        return_rtz=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1265,8 +1266,8 @@ class Equilibrium(Optimizable, _MagneticField):
             "biot-savart", "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates  the magnetic field directly from the
             current density, whereas "vector potential" first calculates A, and then
-            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
-            fastest method and accurate at high resolution, but doesn't work inside the 
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the
+            fastest method and accurate at high resolution, but doesn't work inside the
             plasma.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
@@ -1312,6 +1313,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Vector potential at the coordinates specified by A_grid, R_bounds, and Z_bounds.
             Only returned if return_A = True.
         """
+        return_data = return_data or return_rtz or return_A
         methods = ["biot-savart", "virtual casing", "vector potential"]
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
@@ -1321,12 +1323,8 @@ class Equilibrium(Optimizable, _MagneticField):
             {', '.join(methods)}"""
         method = method.lower().strip()
         if method == methods[0]:
-            eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
             if source_grid is None:
-                source_grid = QuadratureGrid(
-                    L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-                )
-
+                source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
             data = self.compute(
                 ["J", "phi", "sqrt(g)", "x"],
                 grid=source_grid,
@@ -1352,13 +1350,35 @@ class Equilibrium(Optimizable, _MagneticField):
                     source_xyz,
                     J=J,
                     dV=dV,
-                    chunk_size=chunk_size,
-                    support=support,
+                    chunk_size=50,
+                    return_rtz=return_rtz,
                 )
-                f += fj
-                return f
+                if return_rtz:
+                    B, idx, dist = f
+                    Bj, idxj, distj = fj
+                    B += Bj
+                    # If return_rtz, biot_savart_general returns the argmin and the min distance
+                    mask = distj < dist
+                    idx = jnp.where(mask, idxj, idx)
+                    dist = jnp.where(mask, distj, dist)
+                    return B, idx, dist
+                else:
+                    f += fj
+                    return f
 
-            B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+            if return_rtz:
+                f0 = (
+                    jnp.zeros_like(coords),
+                    jnp.zeros(coords.shape[0], dtype=jnp.int32),
+                    jnp.full(coords.shape[0], jnp.inf),
+                )
+            else:
+                f0 = jnp.zeros_like(coords)
+            B = fori_loop(0, source_grid.NFP, nfp_loop, f0)
+            if return_rtz:
+                B, idx, dist = B
+                data["src_rtz"] = source_grid.nodes[idx, :]
+                data["src_dist"] = dist
             if basis.lower() == "rpz":
                 B = xyz2rpz_vec(B, phi=coords[:, 1])
         elif method == methods[1]:
@@ -1462,11 +1482,8 @@ class Equilibrium(Optimizable, _MagneticField):
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
             if return_A:
-                if not return_data:
-                    data = {}
                 data["A_coords_rpz"] = A_coords
                 data["A"] = A
-                return B, data
         if return_data:
             return B, data
         else:
@@ -1760,7 +1777,7 @@ class Equilibrium(Optimizable, _MagneticField):
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object. Should NOT include 
+            Grid used to discretize MagneticField object. Should NOT include
             endpoint at 2pi.
         A_source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object for calculating A.
@@ -1770,16 +1787,16 @@ class Equilibrium(Optimizable, _MagneticField):
             "biot-savart", "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates the magnetic field directly from the
             current density, whereas "vector potential" first calculates A, and then
-            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the 
-            fastest method and accurate at high resolution, but doesn't work inside the 
+            takes curl(A) to ensure a divergence-free field. 'virtual casing' is the
+            fastest method and accurate at high resolution, but doesn't work inside the
             plasma.
             if passing method='virtual casing' and save_vector_potential=False, the
-            final dataset will not contain the source current density values (which BMW 
+            final dataset will not contain the source current density values (which BMW
             normally contains) since the current density is not directly computed in the
             virtual casing method.
         curl_A_grid : Grid
-            If using method='vector potential', the grid that A will be evaluated on in 
-            order to take B=curl(A). Does not affect the grid on which the vector potential 
+            If using method='vector potential', the grid that A will be evaluated on in
+            order to take B=curl(A). Does not affect the grid on which the vector potential
             is evaluated to be saved.
         """
         R = np.linspace(Rmin, Rmax, nR)
@@ -1798,7 +1815,7 @@ class Equilibrium(Optimizable, _MagneticField):
         )
 
         if source_grid is None:
-            if method == 'virtual casing':
+            if method == "virtual casing":
                 source_grid = LinearGrid(
                     rho=jnp.array([1.0]),
                     M=256,
@@ -1807,9 +1824,7 @@ class Equilibrium(Optimizable, _MagneticField):
                     sym=False,
                 )
             else:
-                source_grid = QuadratureGrid(
-                        L=64, M=64, N=64, NFP=self.NFP
-                    )
+                source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
         if save_vector_potential:
             if method != "virtual casing" and A_source_grid is None:
                 A_source_grid = source_grid
@@ -1837,6 +1852,102 @@ class Equilibrium(Optimizable, _MagneticField):
             A=A,
             series=series,
         )
+
+    def save_fieldlines_format(
+        self,
+        path,
+        Rmin=5,
+        Rmax=11,
+        Zmin=-5,
+        Zmax=5,
+        nR=101,
+        nZ=101,
+        nphi=90,
+        save_pressure=True,
+        chunk_size=50,
+        source_grid=None,
+        method="biot-savart",
+        curl_A_grid=None,
+    ):
+        R = np.linspace(Rmin, Rmax, nR)
+        Z = np.linspace(Zmin, Zmax, nZ)
+        phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=True)
+        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
+        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+        if source_grid is None:
+            if method == "virtual casing":
+                source_grid = LinearGrid(
+                    rho=jnp.array([1.0]),
+                    M=256,
+                    N=256,
+                    NFP=self.NFP if self.N > 0 else 64,
+                    sym=False,
+                )
+            else:
+                source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
+        B, data = self.compute_magnetic_field(
+            grid,
+            source_grid=source_grid,
+            chunk_size=chunk_size,
+            method=method,
+            A_grid=curl_A_grid,
+            return_data=True,
+            return_rtz=save_pressure,
+        )
+        if save_pressure:
+            plasma_mask = self.in_plasma(grid.reshape(nR, nphi, nZ, 3)).flatten()
+            guess = data["src_rtz"][plasma_mask]
+            plasma_grid = grid[plasma_mask]
+            guess[:, 2] = plasma_grid[:, 1]  # zeta = phi
+            rtz = Grid(
+                map_coordinates(
+                    self,
+                    plasma_grid,
+                    ("R", "phi", "Z"),
+                    ("rho", "theta", "zeta"),
+                    guess=guess,
+                ),
+                NFP=self.NFP,
+            )
+            p_plasma = self.compute("p", grid=rtz)["p"]
+            pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
+            pressure[plasma_mask] = p_plasma
+        else:
+            pressure = None
+
+        save_fieldlines_format(
+            path=path,
+            B=B,
+            Rmin=Rmin,
+            Rmax=Rmax,
+            Zmin=Zmin,
+            Zmax=Zmax,
+            phi_min=phi.min(),
+            phi_max=phi.max(),
+            nR=nR,
+            nZ=nZ,
+            nphi=nphi,
+            pressure=pressure,
+        )
+
+    def in_plasma(self, points, M=24):
+        """
+        Determine if an array of points in cylindrical coordinates is inside the plasma boundary.
+        Will probably return False if the point is directly on the boundary, but will be most sensitive
+        to resolution at and near the boundary.
+
+        Parameters
+        ----------
+        points : array-like shape(n_r,n_phi,n_z,3)
+            R,phi,Z coordinates of points to be evaluated. points[:,idx,:,1] should be constant.
+        M : int
+            Poloidal resolution of equilibrium grid on which the winding number is evaluated.
+        Returns
+        -------
+        out : array-like shape(n_r,n_phi,n_z)
+            Boolean array indicating whether each point is inside the plasma boundary.
+        """
+        return in_plasma(points, self, M)
 
     @property
     def surface(self):

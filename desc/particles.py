@@ -655,7 +655,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             model=model,
             field=field,
             params=params,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -765,7 +765,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             model=model,
             field=field,
             params=params,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -847,6 +847,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
         self._chosen_idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
 
+        # positions of the selected nodes in R, phi, Z coordinates
         x = data["x"][self._chosen_idxs, :]
         params = field.params_dict
 
@@ -856,15 +857,20 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = field.map_coordinates(
+            tol = 1e-8
+            x, out = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
+                maxiter=200,
+                tol=tol,
+                full_output=True,
             )
-            if jnp.isnan(x).any():
+            if jnp.where(out[0] > tol)[0].any():
                 raise ValueError(
-                    "Mapping from lab to flux coordinates failed. Make sure the curve "
-                    "lies in the equilibrium."
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
+                    "curve lies in the equilibrium."
                 )
             if field.iota is None:
                 iota = field.get_profile("iota")
@@ -986,15 +992,20 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = field.map_coordinates(
+            tol = 1e-8
+            x, out = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
                 guess=x_guess,
+                maxiter=200,
+                tol=tol,
+                full_output=True,
             )
-            if jnp.isnan(x).any():
+            if jnp.where(out[0] > tol)[0].any():
                 raise ValueError(
-                    "Mapping from lab to flux coordinates failed. Make sure the "
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
                     "surface lies in the equilibrium."
                 )
             if field.iota is None:

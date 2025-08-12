@@ -106,7 +106,6 @@ def test_mirror_force_drift():
     R0 = np.array([2.0])
 
     field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))
-    print(field.params_dict)
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=xi0, E=E)
     model = VacuumGuidingCenterTrajectory(frame="lab")
     ts = np.linspace(0, 1e-6, 10)
@@ -221,7 +220,7 @@ def test_tracing_vacuum_tokamak():
         ts=ts,
     )
     grid = Grid(rtz[0, :, :], jitable=True)
-    rpz = eq.compute("x", grid=grid)
+    rpz = eq.compute("x", grid=grid)["x"]
     # We will find the B0*r00/R field representation of the vacuum tokamak
     # First, find the magnetic field at a random R position (equation doesn't
     # depend on R as long as B0 and r00 are consistent)

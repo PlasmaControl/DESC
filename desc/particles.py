@@ -534,8 +534,9 @@ def _compute_modB(x, field, params, **kwargs):
         if "iota" in kwargs:
             profiles["iota"] = kwargs["iota"]
         return field.compute("|B|", params=params, grid=grid, profiles=profiles)["|B|"]
+    source_grid = kwargs.pop("source_grid", None)
     return jnp.linalg.norm(
-        field.compute_magnetic_field(x, params=params, **kwargs), axis=-1
+        field.compute_magnetic_field(x, params=params, source_grid=source_grid), axis=-1
     )
 
 

@@ -2024,6 +2024,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict),
             grid.compress(data["effective ripple"]),
+            # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
             # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
             rtol=2e-7,
         )
@@ -2041,6 +2042,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict),
             grid.compress(data["Gamma_c"]),
+            # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
             # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
             rtol=2e-5,
         )
@@ -3986,8 +3988,8 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
-            # TODO: Change default objective setting to use nuffts
-            #       Once JAX-finufft fixes their AD.
+            # TODO:Change default objective setting to use nuffts AD is fixed.
+            # https://github.com/flatironinstitute/jax-finufft/issues/158
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(
@@ -4017,8 +4019,8 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
-            # TODO: Change default objective setting to use nuffts
-            #       Once JAX-finufft fixes their AD.
+            # TODO:Change default objective setting to use nuffts AD is fixed.
+            # https://github.com/flatironinstitute/jax-finufft/issues/158
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))

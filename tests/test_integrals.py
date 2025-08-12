@@ -1725,8 +1725,8 @@ class TestBounce2D:
             )
         else:
             with pytest.raises(AssertionError):
-                # TODO: Change default objective setting to use nuffts
-                #       Once JAX-finufft fixes their AD.
+                # TODO: Move this out of with block once the linked issue is fixed.
+                #  https://github.com/flatironinstitute/jax-finufft/issues/158
                 TestBounce._test_bounce_autodiff(
                     bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
                 )

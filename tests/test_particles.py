@@ -5,16 +5,18 @@ import pytest
 
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import (
     MagneticFieldFromUser,
     ToroidalMagneticField,
     VerticalMagneticField,
 )
 from desc.particles import (
+    CurveParticleInitializer,
     ManualParticleInitializerFlux,
     ManualParticleInitializerLab,
+    SurfaceParticleInitializer,
     VacuumGuidingCenterTrajectory,
     trace_particles,
 )
@@ -218,11 +220,8 @@ def test_tracing_vacuum_tokamak():
         model_args=args,
         ts=ts,
     )
-    rpz = eq.map_coordinates(
-        coords=np.array([rtz[0, :, 0], rtz[0, :, 1], rtz[0, :, 2]]).T,
-        inbasis=("rho", "theta", "zeta"),
-        outbasis=("R", "phi", "Z"),
-    )
+    grid = Grid(rtz[0, :, :], jitable=True)
+    rpz = eq.compute("x", grid=grid)
     # We will find the B0*r00/R field representation of the vacuum tokamak
     # First, find the magnetic field at a random R position (equation doesn't
     # depend on R as long as B0 and r00 are consistent)
@@ -258,11 +257,8 @@ def test_init_manual_lab():
     def test(R0):
         particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
         x0, args = particles.init_particles(model, field)
-        ms, qs, mus = args.T
         assert x0.shape == (1, 4)
-        assert ms.shape == (1,)
-        assert qs.shape == (1,)
-        assert mus.shape == (1,)
+        assert args.shape == (1, 3)
 
     # test different data formats initialize properly
     test(1.0)
@@ -273,11 +269,8 @@ def test_init_manual_lab():
     R0 = np.linspace(1, 3, 100)
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
     x0, args = particles.init_particles(model, field)
-    ms, qs, mus = args.T
     assert x0.shape == (100, 4)
-    assert ms.shape == (100,)
-    assert qs.shape == (100,)
-    assert mus.shape == (100,)
+    assert args.shape == (100, 3)
 
     # test using lab class to initialize in flux coordinates
     eq = Equilibrium(M=4, N=0)
@@ -288,12 +281,8 @@ def test_init_manual_lab():
     R0 = [10.0, 10.1]
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
     x0, args = particles.init_particles(model, eq)
-
-    ms, qs, mus = args.T
     assert x0.shape == (2, 4)
-    assert ms.shape == (2,)
-    assert qs.shape == (2,)
-    assert mus.shape == (2,)
+    assert args.shape == (2, 3)
 
 
 @pytest.mark.unit
@@ -346,3 +335,125 @@ def test_init_manual_flux():
     field = ToroidalMagneticField(1.0, 3.0)
     with pytest.raises(NotImplementedError):
         x0, args = particles.init_particles(model, field)
+
+
+@pytest.mark.unit
+def test_init_surface_particles():
+    """Test SurfaceParticleInitializer class."""
+    # some dummy equilibrium with R=10 and a=1
+    eq = Equilibrium(M=4, N=0)
+    # some dummy equilibrium with R=10 and a=2
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 2]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        Z_lmn=np.array([0, -2]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    eq_large = Equilibrium(M=4, N=0, surface=surf)
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+
+    rho = 0.8
+    surf = eq.get_surface_at(rho=rho)
+    # rho=0.8 surface is not inside eq but inside eq_large
+    surf_large = eq_large.get_surface_at(rho=rho)
+    grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+
+    N = 100
+    particles = SurfaceParticleInitializer(
+        surface=surf, N=N, xi_min=0.1, xi_max=0.9, grid=grid, seed=42
+    )
+    particles_large = SurfaceParticleInitializer(
+        surface=surf_large, N=N, xi_min=0.1, xi_max=0.9, grid=grid, seed=42
+    )
+    # surface and equilibrium are consistent in rho since we generated the surface
+    # from the equilibrium
+    x0, args = particles.init_particles(model, eq)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    np.testing.assert_allclose(x0[:, 0], surf.rho)
+
+    # larger surface is out of small equilibrium, so it should fail
+    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+        _, _ = particles_large.init_particles(model, eq)
+
+    # surface and equilibrium are consistent in rho since we generated the surface
+    # from the equilibrium
+    x0, args = particles_large.init_particles(model, eq_large)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    np.testing.assert_allclose(x0[:, 0], surf.rho)
+
+    # surface lies inside the equilibrium, but their rho shouldn't match
+    x0, args = particles.init_particles(model, eq_large)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    assert (x0[:, 0] != surf.rho).all()
+
+
+@pytest.mark.unit
+def test_init_curve_particles():
+    """Test CurveParticleInitializer class."""
+    # some dummy equilibrium with R=10 and a=1
+    eq = Equilibrium(M=4, N=0)
+    # some dummy equilibrium with R=20 and a=1
+    surface = FourierRZToroidalSurface(
+        R_lmn=np.array([20, 1]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        Z_lmn=np.array([0, -1]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    eq_large = Equilibrium(M=4, N=0, surface=surface)
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+
+    curve = eq.get_axis()
+    # curve that passesthrough the LCFS of small equilibrium
+    curve_mid = FourierRZCurve(R_n=11.0)
+    curve_large = eq_large.get_axis()
+    grid = LinearGrid(N=eq.N_grid)
+
+    N = 100
+    particles = CurveParticleInitializer(
+        curve=curve, N=N, xi_min=0.1, xi_max=0.9, grid=grid, seed=42
+    )
+    particles_mid = CurveParticleInitializer(
+        curve=curve_mid, N=N, xi_min=0.1, xi_max=0.9, grid=grid, seed=42
+    )
+    particles_large = CurveParticleInitializer(
+        curve=curve_large, N=N, xi_min=0.1, xi_max=0.9, grid=grid, seed=42
+    )
+    x0, args = particles.init_particles(model, eq)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    np.testing.assert_allclose(x0[:, 0], 0.0, atol=1e-8)
+
+    # mid curve should lie on the LCFS of small equilibrium
+    x0, args = particles_mid.init_particles(model, eq)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    np.testing.assert_allclose(x0[:, 0], 1.0, atol=1e-8)
+
+    # larger curve is out of smaller equilibrium, so it should fail
+    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+        _, _ = particles_large.init_particles(model, eq)
+
+    x0, args = particles_large.init_particles(model, eq_large)
+
+    assert x0.shape == (N, 4)
+    assert args.shape == (N, 3)
+    np.testing.assert_allclose(x0[:, 0], 0.0, atol=1e-8)
+
+    # also check that particle positions are correct in lab frame
+    grid_t = Grid(x0[:, :3], jitable=True)
+    rpz = eq_large.compute("x", grid=grid_t)["x"]
+
+    np.testing.assert_allclose(rpz[:, 0], curve_large.R_n[0], atol=1e-8)
+    np.testing.assert_allclose(rpz[:, 2], 0.0, atol=1e-8)
+
+    # smaller curve is out of larger equilibrium, so it should fail
+    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+        _, _ = particles.init_particles(model, eq_large)

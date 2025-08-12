@@ -14,7 +14,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
 
-from desc.backend import sign
+from desc.backend import sign, vmap
 from desc.basis import fourier, zernike_radial_poly
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
@@ -4202,9 +4202,17 @@ def plot_particle_trajectories(  # noqa: C901
         **trace_kwargs,
     )
 
-    rs = rpz[:, :, 0]  # R or rho
-    phis = rpz[:, :, 1]  # phi or theta
-    zs = rpz[:, :, 2]  # Z or zeta
+    def to_lab(coords):
+        grid = Grid(coords, jitable=True)
+        return field.compute("x", grid=grid)["x"]
+
+    # tracing an equilibrium gives rpz in flux coordinates
+    if model.frame == "flux" and isinstance(field, Equilibrium):
+        rpz = vmap(to_lab, in_axes=(0,))(rpz)
+
+    rs = rpz[:, :, 0]
+    phis = rpz[:, :, 1]
+    zs = rpz[:, :, 2]
 
     if fig is None:
         fig = go.Figure()
@@ -4219,26 +4227,12 @@ def plot_particle_trajectories(  # noqa: C901
         plot_data["rho"] = []
         plot_data["theta"] = []
 
+    end_points = []
+    end_point_colors = []
     for i in range(rs.shape[0]):  # iterate over each particle
-        if model.frame == "flux":
-            if isinstance(field, Equilibrium):
-                rpz_i = map_coordinates(
-                    eq=field,
-                    coords=np.array([rs[i, :], phis[i, :], zs[i, :]]).T,
-                    inbasis=("rho", "theta", "zeta"),
-                    outbasis=("R", "phi", "Z"),
-                )
-                r = rpz_i[:, 0]
-                phi = rpz_i[:, 1]
-                z = rpz_i[:, 2]
-            else:
-                raise ValueError(
-                    "Field must be an Equilibrium when using flux coordinates."
-                )
-        else:
-            r = rs[i, :]
-            phi = phis[i, :]
-            z = zs[i, :]
+        r = rs[i, :]
+        phi = phis[i, :]
+        z = zs[i, :]
 
         x = r * np.cos(phi)
         y = r * np.sin(phi)
@@ -4272,18 +4266,21 @@ def plot_particle_trajectories(  # noqa: C901
             )
         )
         if end_position:
-            fig.add_trace(
-                go.Scatter3d(
-                    x=np.asarray(x[-1]),
-                    y=np.asarray(y[-1]),
-                    z=np.asarray(z[-1]),
-                    mode="markers",
-                    marker=dict(size=10, color=color[i % len(color)]),
-                    name=f"Particle[{i}] End Point",
-                    hovertext=f"Particle[{i}] End Point",
-                    showlegend=False,
-                )
+            end_points.append([x[-1], y[-1], z[-1]])
+            end_point_colors.append(color[i % len(color)])
+
+    if end_position:
+        end_points = np.array(end_points)
+        fig.add_trace(
+            go.Scatter3d(
+                x=end_points[:, 0],
+                y=end_points[:, 1],
+                z=end_points[:, 2],
+                mode="markers",
+                marker=dict(size=5, color=end_point_colors),
+                showlegend=False,
             )
+        )
     xaxis_title = (
         LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
     )

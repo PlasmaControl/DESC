@@ -614,9 +614,11 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         params = field.params_dict
@@ -653,7 +655,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             model=model,
             field=field,
             params=params,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -722,9 +724,11 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         params = field.params_dict
@@ -761,7 +765,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             model=model,
             field=field,
             params=params,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -832,17 +836,19 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
-        data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
+        data = self.curve.compute(["x_s", "x", "ds"], grid=self.grid)
+        # length of the line segment at each grid point
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
-        idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
+        self._chosen_idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
 
-        zeta = data["s"][idxs]
-        theta = jnp.zeros_like(zeta)
-        rho = jnp.zeros_like(zeta)
+        # positions of the selected nodes in R, phi, Z coordinates
+        x = data["x"][self._chosen_idxs, :]
         params = field.params_dict
 
         if model.frame == "flux":
@@ -851,7 +857,21 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = jnp.array([rho, theta, zeta]).T
+            tol = 1e-8
+            x, out = field.map_coordinates(
+                coords=x,
+                inbasis=("R", "phi", "Z"),
+                outbasis=("rho", "theta", "zeta"),
+                maxiter=200,
+                tol=tol,
+                full_output=True,
+            )
+            if jnp.where(out[0] > tol)[0].any():
+                raise ValueError(
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
+                    "curve lies in the equilibrium."
+                )
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -863,9 +883,6 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "in flux frame. Since trying to integrate in lab frame will "
                     "require multiple coordinate mapping, it is not implemented."
                 )
-            x = jnp.array([rho, theta, zeta]).T
-            grid = Grid(x)
-            x = self.curve.compute("x", grid=grid)["x"]
 
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
@@ -942,19 +959,31 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             the trajectory model, which includes 3D spatial dimensions and depending on
             the model, parallel velocity and total velocity. The initial positions are
             in the frame of the model.
-        args : tuple
-            Additional arguments needed by the model, mass, charge, and
-            magnetic moment (mv⊥²/2|B|) of each particle.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
         """
         data = self.surface.compute(
-            ["|e_theta x e_zeta|", "theta", "zeta"], grid=self.grid
+            ["|e_theta x e_zeta|", "x", "theta", "zeta"], grid=self.grid
         )
-        sqrtg = data["|e_theta x e_zeta|"]
-        idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
+        # surface area for each grid point
+        # include spacing (dt*dz) to account for non-uniform grids
+        sqrtg = data["|e_theta x e_zeta|"] * self.grid.spacing[:, 1:].prod(axis=-1)
+        self._chosen_idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
 
-        zeta = data["zeta"][idxs]
-        theta = data["theta"][idxs]
+        # eq and surface might not have the same theta definition, so we will do a
+        # root finding to find the correct theta and zeta coordinates from R, phi, Z
+        # coordinates. We will use the surface's rho, theta, zeta coordinates as an
+        # initial guess for the root finding.
+        zeta = data["zeta"][self._chosen_idxs]
+        theta = data["theta"][self._chosen_idxs]
         rho = self.surface.rho * jnp.ones_like(zeta)
+        x_guess = jnp.array([rho, theta, zeta]).T
+        # positions of the selected nodes in R, phi, Z coordinates
+        x = data["x"][self._chosen_idxs, :]
+
         params = field.params_dict
 
         if model.frame == "flux":
@@ -963,7 +992,22 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = jnp.array([rho, theta, zeta]).T
+            tol = 1e-8
+            x, out = field.map_coordinates(
+                coords=x,
+                inbasis=("R", "phi", "Z"),
+                outbasis=("rho", "theta", "zeta"),
+                guess=x_guess,
+                maxiter=200,
+                tol=tol,
+                full_output=True,
+            )
+            if jnp.where(out[0] > tol)[0].any():
+                raise ValueError(
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
+                    "surface lies in the equilibrium."
+                )
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -975,15 +1019,12 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "in flux frame. Since trying to integrate in lab frame will "
                     "require multiple coordinate mapping, it is not implemented."
                 )
-            x = jnp.array([rho, theta, zeta]).T
-            grid = Grid(x)
-            x = self.surface.compute("x", grid=grid)["x"]
 
         v = jnp.sqrt(2 * self.E / self.m)
         vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
 
         return super()._return_particles(
-            x=x, v=v, vpar=vpar, model=model, field=field, parmas=params, **kwargs
+            x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
         )
 
 
@@ -995,15 +1036,17 @@ def _find_random_indices(sqrtg, N, seed):
     sqrtg /= sqrtg.max()
     nattempts = 10 * N
     rng = np.random.default_rng(seed=seed)
-    accept = None
-    # loop until choosing exactly N distinct indices
-    while len(np.unique(accept)) < N or accept is None:
-        # generated random integers might repeat if nattempts is large
-        idxs = np.unique(rng.integers(0, sqrtg.shape[0], size=(nattempts,)))
+    accept = []
+    # loop until choosing exactly N indices
+    # note: generated random integers might repeat, but we will still keep them
+    # So, the final list of indices might have duplicates, meaning that a grid point
+    # spawned multiple particles.
+    while len(accept) < N:
+        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
         # note: probability of selecting a number <0.3 in range [0, 1] is 30%
         accept = np.where(rng.uniform(0, 1, size=(idxs.shape[0],)) < sqrtg[idxs])[0]
-        # choose random N of the accepted indices (might end up choosing less)
-        accept = accept[np.unique(rng.integers(0, accept.shape[0], size=(N,)))]
+        # choose random N of the accepted indices
+        accept = accept[rng.integers(0, accept.shape[0], size=(N,))]
         idxs = idxs[accept]
 
     return np.sort(idxs)

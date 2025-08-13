@@ -1,0 +1,218 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author "DESC Development Team <PlasmaControl@princeton.edu>"
+    Version "0.12.2"
+    Description "DESC: 3D MHD equilibrium solver for stellarators and tokamaks"
+    Repository "https://github.com/PlasmaControl/DESC"
+
+%help
+    DESC (Differential Equilibrium Solver for Compact stellarators) is a code 
+    for computing and optimizing three-dimensional magnetohydrodynamic (MHD) 
+    equilibria for stellarators and tokamaks.
+    
+    This container includes:
+    - DESC with CPU support (JAX CPU backend)
+    - All required dependencies
+    - Optional: GPU support (if built with --build-arg GPU=true)
+    - Python 3.11 environment
+    
+    Usage:
+        # Run DESC on an example
+        apptainer exec desc.sif python -m desc desc/examples/SOLOVEV
+        
+        # Interactive Python shell
+        apptainer run desc.sif
+        
+        # Shell access
+        apptainer shell desc.sif
+
+%arguments
+    GPU=false
+    PYTHON_VERSION=3.11
+
+%environment
+    # Set environment variables
+    export LC_ALL=C
+    export DEBIAN_FRONTEND=noninteractive
+    export PYTHONPATH="/opt/DESC:$PYTHONPATH"
+    export PATH="/opt/miniconda3/bin:$PATH"
+    
+    # JAX configuration for better performance
+    export JAX_ENABLE_X64=True
+    export JAX_PLATFORM_NAME=cpu
+    
+    # Configure for cluster/HPC usage
+    export OMP_NUM_THREADS=1
+    export OPENBLAS_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    export NUMEXPR_NUM_THREADS=1
+
+%files
+    # Copy the entire DESC source code
+    . /opt/DESC
+
+%post
+    # Update system and install basic dependencies
+    apt-get update && apt-get install -y \
+        build-essential \
+        curl \
+        wget \
+        git \
+        ca-certificates \
+        libgl1-mesa-glx \
+        libegl1-mesa \
+        libxrandr2 \
+        libxss1 \
+        libxcursor1 \
+        libxcomposite1 \
+        libasound2 \
+        libxi6 \
+        libxtst6 \
+        libhdf5-dev \
+        libnetcdf-dev \
+        gfortran \
+        vim \
+        htop \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Install Miniconda
+    cd /opt
+    wget https://repo.anaconda.com/miniconda/Miniconda3-py311_24.7.1-0-Linux-x86_64.sh -O miniconda.sh
+    bash miniconda.sh -b -p /opt/miniconda3
+    rm miniconda.sh
+    
+    # Initialize conda
+    export PATH="/opt/miniconda3/bin:$PATH"
+    conda init bash
+    
+    # Create and activate DESC environment
+    conda create -n desc python={{ PYTHON_VERSION }} -y
+    
+    # Activate environment and install dependencies
+    export PATH="/opt/miniconda3/envs/desc/bin:$PATH"
+    
+    # Install core scientific packages via conda for better compatibility
+    conda install -n desc -c conda-forge -y \
+        numpy \
+        scipy \
+        matplotlib \
+        h5py \
+        netcdf4 \
+        scikit-image \
+        sympy \
+        mpmath \
+        colorama \
+        termcolor \
+        plotly \
+        psutil \
+        pylatexenc \
+        pip
+        
+    # Activate the environment
+    source /opt/miniconda3/bin/activate desc
+    
+    # Install JAX and DESC-specific dependencies via pip
+    if [ "{{ GPU }}" = "true" ]; then
+        echo "Installing JAX with GPU support..."
+        pip install --upgrade \
+            'jax[cuda12]>=0.4.24,!=0.4.36,<=0.6.2' \
+            'diffrax>=0.4.1,<=0.7.0' \
+            'interpax>=0.3.3,<=0.3.10' \
+            'nvgpu<=0.10.0' \
+            'orthax<=0.2.5' \
+            'quadax>=0.2.2,<=0.2.9'
+            
+        # Set GPU environment
+        export JAX_PLATFORM_NAME=gpu
+    else
+        echo "Installing JAX with CPU support..."
+        pip install --upgrade \
+            'jax[cpu]>=0.4.24,!=0.4.36,<=0.6.2' \
+            'diffrax>=0.4.1,<=0.7.0' \
+            'interpax>=0.3.3,<=0.3.10' \
+            'nvgpu<=0.10.0' \
+            'orthax<=0.2.5' \
+            'quadax>=0.2.2,<=0.2.9'
+    fi
+    
+    # Install DESC
+    cd /opt/DESC
+    pip install -e .
+    
+    # Test installation
+    python -c "from desc.backend import print_backend_info; print_backend_info()"
+    python -c "import desc; print(f'DESC version: {desc.__version__}')"
+    
+    # Clean up
+    conda clean -all -y
+    apt-get autoremove -y
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    rm -rf /root/.cache/pip
+
+%runscript
+    #!/bin/bash
+    # Default runscript - starts interactive Python with DESC available
+    export PATH="/opt/miniconda3/envs/desc/bin:$PATH"
+    source /opt/miniconda3/bin/activate desc
+    
+    if [ $# -eq 0 ]; then
+        echo "=== DESC Container ==="
+        echo "DESC version: $(python -c 'import desc; print(desc.__version__)')"
+        echo "JAX devices: $(python -c 'import jax; print([str(d) for d in jax.devices()])')"
+        echo ""
+        echo "Starting interactive Python session..."
+        echo "DESC is already imported and ready to use!"
+        echo ""
+        python -c "import desc; from desc.backend import print_backend_info; print_backend_info()"
+        exec python
+    else
+        exec python "$@"
+    fi
+
+%startscript
+    #!/bin/bash
+    # Service/daemon mode (rarely used for DESC)
+    export PATH="/opt/miniconda3/envs/desc/bin:$PATH"
+    source /opt/miniconda3/bin/activate desc
+    echo "DESC container started in service mode"
+
+%test
+    #!/bin/bash
+    # Test that DESC is working correctly
+    export PATH="/opt/miniconda3/envs/desc/bin:$PATH"
+    source /opt/miniconda3/bin/activate desc
+    
+    echo "=== Testing DESC Installation ==="
+    
+    # Test basic import
+    python -c "import desc; print(f'DESC version: {desc.__version__}')"
+    
+    # Test backend
+    python -c "from desc.backend import print_backend_info; print_backend_info()"
+    
+    # Test JAX functionality
+    python -c "import jax; import jax.numpy as jnp; print(f'JAX devices: {jax.devices()}')"
+    
+    # Test basic DESC functionality
+    python -c "
+import desc
+from desc import set_device
+from desc.equilibrium import Equilibrium
+from desc.profiles import PowerSeriesProfile
+
+# Create a simple test case
+pres = PowerSeriesProfile([1e3, 0, -2e3])
+temp = PowerSeriesProfile([1e4, -2e4])
+eq = Equilibrium(M=3, N=2, pressure=pres, iota=temp)
+print('Basic DESC objects created successfully!')
+
+# Test grid creation
+from desc.grid import LinearGrid
+grid = LinearGrid(M=3, N=2, rho=10, zeta=8)
+print(f'Grid created with {grid.num_nodes} nodes')
+"
+    
+    echo "=== All tests passed! ==="

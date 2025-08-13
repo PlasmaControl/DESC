@@ -1,0 +1,270 @@
+[project]
+name = "desc"
+version = "0.12.2"
+description = "Computes, analyzes and optimizes 3D MHD equilibria for stellarators and tokamaks"
+authors = ["Daniel Dudt", "Rory Conlin", "Dario Panici", "Egemen Kolemen <PlasmaControl@princeton.edu>"]
+license = "MIT"
+channels = ["conda-forge", "pytorch", "nvidia"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[system-requirements]
+linux = "5.10"
+libc = { family="glibc", version="2.17" }
+
+# Core dependencies shared across all environments
+[dependencies]
+python = ">=3.10,<=3.13"
+pip = "*"
+
+# Scientific computing core
+numpy = ">=1.20.0,<=2.2.6"
+scipy = ">=1.7.0,<=1.15.3"
+matplotlib = ">=3.7.3,<=3.10.5"
+h5py = ">=3.0.0,<=3.14.0"
+netcdf4 = ">=1.5.4,<=1.7.2"
+scikit-image = "<=0.25.2"
+sympy = "*"
+
+# Specialized packages
+mpmath = ">=1.0.0,<=1.3.0"
+colorama = "<=0.4.6"
+termcolor = "<=3.1.0"
+plotly = ">=5.16,<=6.2.0"
+psutil = "<=7.0.0"
+pylatexenc = ">=2.0,<=2.10"
+
+# DESC-specific packages (install via pip for latest versions)
+# jax, diffrax, interpax, nvgpu, orthax, quadax will be installed via pip
+
+# ============================================================================
+# Environment Definitions
+# ============================================================================
+
+# Default environment for local development (CPU only)
+[environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "dev" }
+gpu = { features = ["gpu"], solve-group = "gpu" }
+gpu-dev = { features = ["gpu", "dev"], solve-group = "gpu-dev" }
+cluster = { features = ["cluster"], solve-group = "cluster" }
+cluster-gpu = { features = ["cluster", "gpu"], solve-group = "cluster-gpu" }
+cluster-dev = { features = ["cluster", "dev"], solve-group = "cluster-dev" }
+cluster-gpu-dev = { features = ["cluster", "gpu", "dev"], solve-group = "cluster-gpu-dev" }
+
+# ============================================================================
+# Feature Groups
+# ============================================================================
+
+[feature.dev.dependencies]
+# Documentation building
+sphinx = ">=5.0,<=8.2.3"
+nbsphinx = ">=0.8.12,<=0.9.7"
+sphinx-argparse = ">=0.4.0,!=0.5.0,<=0.5.2"
+sphinx-copybutton = "<=0.5.2"
+sphinx-rtd-theme = ">=1.0,<=3.0.2"
+sphinx-github-style = ">=1.0,<=1.2.2"
+sphinx-design = "*"
+
+# Code formatting and linting
+black = "24.10.0"
+flake8 = "~=7.3"
+pre-commit = "<=4.3.0"
+
+# Testing
+pytest = "~=8.4"
+pytest-cov = ">=2.6.0,<=6.2.1"
+pytest-benchmark = "<=5.1.0"
+pytest-monitor = "<=1.6.6"
+pytest-mpl = "0.16.1"
+pytest-split = ">=0.8.2,<=0.10.0"
+nbmake = "<=1.5.5"
+
+# Additional test dependencies
+shapely = ">=1.8.2,<=2.1.1"
+
+# Building
+build = "*"
+
+[feature.gpu.dependencies]
+# GPU support - CUDA toolkit
+cuda-toolkit = { version = ">=11.8", channel = "nvidia" }
+cudnn = { version = ">=8.0", channel = "nvidia" }
+
+[feature.cluster.dependencies]
+# Additional packages commonly needed on clusters
+mpi4py = "*"
+# Some clusters may need specific MPI implementations
+openmpi = "*"
+
+# ============================================================================
+# Tasks - Installation and Setup
+# ============================================================================
+
+[tasks]
+
+# Install DESC and JAX dependencies via pip (CPU version)
+install-desc-cpu = """
+pip install --upgrade \
+  'jax[cpu]>=0.4.24,!=0.4.36,<=0.6.2' \
+  'diffrax>=0.4.1,<=0.7.0' \
+  'interpax>=0.3.3,<=0.3.10' \
+  'nvgpu<=0.10.0' \
+  'orthax<=0.2.5' \
+  'quadax>=0.2.2,<=0.2.9' && \
+pip install -e .
+"""
+
+# Install DESC and JAX dependencies via pip (GPU version)
+install-desc-gpu = """
+pip install --upgrade \
+  'jax[cuda12]>=0.4.24,!=0.4.36,<=0.6.2' \
+  'diffrax>=0.4.1,<=0.7.0' \
+  'interpax>=0.3.3,<=0.3.10' \
+  'nvgpu<=0.10.0' \
+  'orthax<=0.2.5' \
+  'quadax>=0.2.2,<=0.2.9' && \
+pip install -e .
+"""
+
+# Install development requirements
+install-dev-extras = """
+pip install \
+  'flake8-docstrings>=1.0.0,<=1.7.0' \
+  'flake8-eradicate>=1.0.0,<=1.5.0' \
+  'flake8-isort>=5.0.0,<=6.1.1' \
+  'qsc<=0.1.3' && \
+pip install git+https://github.com/rogeriojorge/pyQIC/
+"""
+
+# Check installation
+check-install = """
+python -c "from desc.backend import print_backend_info; print_backend_info()"
+"""
+
+# Run example to verify installation
+test-example = """
+python -m desc -vv desc/examples/SOLOVEV
+"""
+
+# Setup tasks for different environments
+setup-cpu = { depends-on = ["install-desc-cpu", "check-install"] }
+setup-gpu = { depends-on = ["install-desc-gpu", "check-install"] }
+setup-dev = { depends-on = ["install-desc-cpu", "install-dev-extras", "check-install"] }
+setup-gpu-dev = { depends-on = ["install-desc-gpu", "install-dev-extras", "check-install"] }
+
+# ============================================================================
+# Cluster-specific Tasks
+# ============================================================================
+
+# Common cluster setup (loads modules if available)
+setup-cluster-modules = """
+# Load common cluster modules (if available)
+if command -v module &> /dev/null; then
+  echo "Module system detected, loading common modules..."
+  # Try to load common modules - these may vary by cluster
+  module load anaconda 2>/dev/null || echo "anaconda module not found"
+  module load cuda 2>/dev/null || echo "cuda module not found"
+  module load gcc 2>/dev/null || echo "gcc module not found"
+  module list 2>/dev/null || echo "No modules loaded"
+else
+  echo "No module system detected"
+fi
+"""
+
+# Princeton/PPPL cluster specific setup
+setup-princeton-cluster = """
+# PPPL/Princeton cluster specific modules
+if command -v module &> /dev/null; then
+  module load anaconda/2024.02
+  module load cuda/12.2
+  module load gcc/11.2.0
+fi
+"""
+
+# NERSC cluster specific setup
+setup-nersc-cluster = """
+# NERSC cluster specific modules
+if command -v module &> /dev/null; then
+    module load cudatoolkit/12.4
+    module load cudnn/8.9.3_cuda12
+    module load python/3.11
+fi
+"""
+
+# Generic HPC cluster setup
+setup-hpc-cluster = """
+# Generic HPC cluster setup
+if command -v module &> /dev/null; then
+  # Try common module names
+  module load python 2>/dev/null || module load Python 2>/dev/null || echo "Python module not found"
+  module load cuda 2>/dev/null || module load CUDA 2>/dev/null || echo "CUDA module not found"
+  module load gcc 2>/dev/null || module load GCC 2>/dev/null || echo "GCC module not found"
+  module load openmpi 2>/dev/null || module load OpenMPI 2>/dev/null || echo "OpenMPI module not found"
+fi
+"""
+
+# Combined cluster setups with DESC installation
+setup-cluster-cpu = { depends-on = ["setup-cluster-modules", "install-desc-cpu"] }
+setup-cluster-gpu = { depends-on = ["setup-cluster-modules", "install-desc-gpu"] }
+setup-princeton = { depends-on = ["setup-princeton-cluster", "install-desc-gpu"] }
+setup-nersc = { depends-on = ["setup-nersc-cluster", "install-desc-gpu"] }
+setup-hpc = { depends-on = ["setup-hpc-cluster", "install-desc-cpu"] }
+
+# ============================================================================
+# Development Tasks
+# ============================================================================
+
+# Testing
+test = "pytest tests/ -v"
+test-fast = "pytest tests/ -m 'not slow' -v"
+test-unit = "pytest tests/ -m 'unit' -v"
+test-regression = "pytest tests/ -m 'regression' -v"
+test-coverage = "pytest tests/ --cov=desc --cov-report=html"
+
+# Linting and formatting
+lint = "flake8 desc/ tests/"
+format = "black desc/ tests/"
+format-check = "black --check desc/ tests/"
+
+# Documentation
+docs-build = """
+cd docs && make html
+"""
+docs-clean = """
+cd docs && make clean
+"""
+docs-serve = """
+python -m http.server --directory docs/_build/html 8000
+"""
+
+# Pre-commit hooks
+pre-commit-install = "pre-commit install"
+pre-commit-run = "pre-commit run --all-files"
+
+# ============================================================================
+# Environment-specific solve groups
+# ============================================================================
+
+[solve-group.default]
+channels = ["conda-forge"]
+
+[solve-group.dev]
+channels = ["conda-forge"]
+
+[solve-group.gpu]
+channels = ["conda-forge", "nvidia"]
+
+[solve-group.gpu-dev]
+channels = ["conda-forge", "nvidia"]
+
+[solve-group.cluster]
+channels = ["conda-forge"]
+
+[solve-group.cluster-gpu]
+channels = ["conda-forge", "nvidia"]
+
+[solve-group.cluster-dev]
+channels = ["conda-forge"]
+
+[solve-group.cluster-gpu-dev]
+channels = ["conda-forge", "nvidia"]

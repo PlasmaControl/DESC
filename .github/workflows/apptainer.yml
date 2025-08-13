@@ -1,0 +1,353 @@
+name: Build Apptainer Containers
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      build_gpu:
+        description: 'Build GPU container'
+        required: false
+        default: 'false'
+        type: boolean
+      python_version:
+        description: 'Python version to use'
+        required: false
+        default: '3.11'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job to determine what containers to build
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      should_push: ${{ steps.should-push.outputs.result }}
+    steps:
+      - name: Determine build matrix
+        id: set-matrix
+        run: |
+          # Default matrix for regular builds
+          MATRIX='{"include":[
+            {"name":"cpu","gpu":false,"python":"3.11","tags":"latest,cpu"},
+            {"name":"cpu-py310","gpu":false,"python":"3.10","tags":"cpu-py310"}
+          ]}'
+          
+          # Add GPU build if requested or on release
+          if [[ "${{ github.event.inputs.build_gpu }}" == "true" ]] || [[ "${{ github.ref_type }}" == "tag" ]]; then
+            MATRIX='{"include":[
+              {"name":"cpu","gpu":false,"python":"3.11","tags":"latest,cpu"},
+              {"name":"cpu-py310","gpu":false,"python":"3.10","tags":"cpu-py310"},
+              {"name":"gpu","gpu":true,"python":"3.11","tags":"gpu"},
+              {"name":"gpu-py310","gpu":true,"python":"3.10","tags":"gpu-py310"}
+            ]}'
+          fi
+          
+          # Override python version if specified
+          if [[ "${{ github.event.inputs.python_version }}" != "" ]]; then
+            MATRIX=$(echo $MATRIX | sed "s/3.11/${{ github.event.inputs.python_version }}/g")
+          fi
+          
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Build matrix: $MATRIX"
+
+      - name: Should push to registry
+        id: should-push
+        run: |
+          # Push on master, dev, tags, or manual dispatch
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]] || \
+             [[ "${{ github.ref }}" == "refs/heads/dev" ]] || \
+             [[ "${{ github.ref_type }}" == "tag" ]] || \
+             [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "result=true" >> $GITHUB_OUTPUT
+          else
+            echo "result=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Build containers
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            container_relevant:
+              - 'desc/**'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.py'
+              - 'setup.cfg'
+              - 'pyproject.toml'
+              - 'apptainer.def'
+              - '.github/workflows/apptainer.yml'
+
+      - name: Skip if no relevant changes (PR only)
+        if: github.event_name == 'pull_request' && steps.changes.outputs.container_relevant != 'true'
+        run: |
+          echo "No container-relevant changes detected in PR. Skipping build."
+          echo "SKIP_BUILD=true" >> $GITHUB_ENV
+
+      - name: Setup Apptainer
+        if: env.SKIP_BUILD != 'true'
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: 1.3.0
+
+      - name: Log in to Container Registry
+        if: env.SKIP_BUILD != 'true' && needs.setup.outputs.should_push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        if: env.SKIP_BUILD != 'true'
+        id: meta
+        run: |
+          # Generate version tag
+          VERSION=""
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          elif [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+            VERSION="latest"
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+            VERSION="dev"
+          else
+            VERSION="pr-${{ github.event.number }}"
+          fi
+          
+          # Build tag list
+          TAGS="${{ matrix.tags }}"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # For version tags, add version-specific tags
+            VERSION_TAGS=$(echo "$TAGS" | sed "s/latest/$VERSION/g" | sed "s/cpu/$VERSION-cpu/g" | sed "s/gpu/$VERSION-gpu/g")
+            TAGS="$TAGS,$VERSION_TAGS"
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+            # For dev branch, prefix with dev-
+            TAGS=$(echo "$TAGS" | sed 's/\([^,]*\)/dev-\1/g')
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, use pr- prefix
+            TAGS=$(echo "$TAGS" | sed "s/\([^,]*\)/pr-${{ github.event.number }}-\1/g")
+          fi
+          
+          # Convert to full image names
+          FULL_TAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for tag in "${TAG_ARRAY[@]}"; do
+            if [[ "$FULL_TAGS" == "" ]]; then
+              FULL_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag"
+            else
+              FULL_TAGS="$FULL_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag"
+            fi
+          done
+          
+          echo "tags=$FULL_TAGS" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Container tags: $FULL_TAGS"
+
+      - name: Build Apptainer container (${{ matrix.name }})
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          echo "Building ${{ matrix.name }} container..."
+          echo "GPU: ${{ matrix.gpu }}"
+          echo "Python: ${{ matrix.python }}"
+          
+          # Build the container
+          apptainer build \
+            --build-arg GPU=${{ matrix.gpu }} \
+            --build-arg PYTHON_VERSION=${{ matrix.python }} \
+            --fakeroot \
+            desc-${{ matrix.name }}.sif \
+            apptainer.def
+
+      - name: Test container
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          echo "=== Testing container functionality ==="
+          
+          # Run built-in tests
+          apptainer test desc-${{ matrix.name }}.sif
+          
+          # Test basic DESC functionality
+          echo "=== Testing DESC example ==="
+          apptainer exec desc-${{ matrix.name }}.sif python -m desc -vv desc/examples/SOLOVEV
+          
+          echo "=== Container test completed successfully ==="
+
+      - name: Convert to OCI and push to registry
+        if: env.SKIP_BUILD != 'true' && needs.setup.outputs.should_push == 'true'
+        run: |
+          # Convert SIF to OCI format and push
+          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
+          
+          # Push to first tag
+          FIRST_TAG="${TAGS[0]}"
+          echo "Converting and pushing to: $FIRST_TAG"
+          
+          apptainer push desc-${{ matrix.name }}.sif oci://$FIRST_TAG
+          
+          # Tag and push additional tags using docker/podman
+          if command -v docker &> /dev/null; then
+            for tag in "${TAGS[@]:1}"; do
+              echo "Tagging and pushing: $tag"
+              docker tag $FIRST_TAG $tag
+              docker push $tag
+            done
+          else
+            echo "Docker not available, skipping additional tags"
+          fi
+
+      - name: Upload container artifact (for PRs)
+        if: env.SKIP_BUILD != 'true' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desc-container-${{ matrix.name }}
+          path: desc-${{ matrix.name }}.sif
+          retention-days: 7
+
+      - name: Generate container info
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          echo "=== Container Information ===" > container-info-${{ matrix.name }}.txt
+          echo "Build Date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> container-info-${{ matrix.name }}.txt
+          echo "Git Commit: ${{ github.sha }}" >> container-info-${{ matrix.name }}.txt
+          echo "Git Ref: ${{ github.ref }}" >> container-info-${{ matrix.name }}.txt
+          echo "Container: ${{ matrix.name }}" >> container-info-${{ matrix.name }}.txt
+          echo "GPU Support: ${{ matrix.gpu }}" >> container-info-${{ matrix.name }}.txt
+          echo "Python Version: ${{ matrix.python }}" >> container-info-${{ matrix.name }}.txt
+          echo "" >> container-info-${{ matrix.name }}.txt
+          
+          # Get container size
+          if [[ -f "desc-${{ matrix.name }}.sif" ]]; then
+            SIZE=$(du -h desc-${{ matrix.name }}.sif | cut -f1)
+            echo "Container Size: $SIZE" >> container-info-${{ matrix.name }}.txt
+          fi
+          
+          # Test basic functionality and capture output
+          echo "=== Test Output ===" >> container-info-${{ matrix.name }}.txt
+          apptainer exec desc-${{ matrix.name }}.sif python -c "
+from desc.backend import print_backend_info
+import desc
+print(f'DESC Version: {desc.__version__}')
+print_backend_info()
+" >> container-info-${{ matrix.name }}.txt 2>&1 || echo "Test failed" >> container-info-${{ matrix.name }}.txt
+
+      - name: Upload container info
+        if: env.SKIP_BUILD != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-info-${{ matrix.name }}
+          path: container-info-${{ matrix.name }}.txt
+          retention-days: 30
+
+  # Create release assets for tags
+  release:
+    if: github.ref_type == 'tag' && needs.setup.outputs.should_push == 'true'
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Download all container info
+        uses: actions/download-artifact@v4
+        with:
+          pattern: container-info-*
+          merge-multiple: true
+
+      - name: Create release documentation
+        run: |
+          cat > CONTAINERS.md << 'EOF'
+          # DESC Apptainer Containers
+          
+          This release includes pre-built Apptainer containers for DESC.
+          
+          ## Available Containers
+          
+          - **CPU Container**: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+          - **GPU Container**: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}-gpu`
+          
+          ## Usage
+          
+          ### Pull and run a container:
+          ```bash
+          # CPU version
+          apptainer pull oci://ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          apptainer run desc_${{ github.ref_name }}.sif
+          
+          # GPU version (requires NVIDIA GPU and drivers)
+          apptainer pull oci://ghcr.io/${{ github.repository }}:${{ github.ref_name }}-gpu
+          apptainer run --nv desc_${{ github.ref_name }}-gpu.sif
+          ```
+          
+          ### Run DESC on an example:
+          ```bash
+          apptainer exec desc_${{ github.ref_name }}.sif python -m desc desc/examples/SOLOVEV
+          ```
+          
+          ### Interactive shell:
+          ```bash
+          apptainer shell desc_${{ github.ref_name }}.sif
+          ```
+          
+          ## Container Details
+          
+          EOF
+          
+          # Append all container info files
+          for info_file in container-info-*.txt; do
+            if [[ -f "$info_file" ]]; then
+              echo "### $(basename "$info_file" .txt)" >> CONTAINERS.md
+              echo '```' >> CONTAINERS.md
+              cat "$info_file" >> CONTAINERS.md
+              echo '```' >> CONTAINERS.md
+              echo "" >> CONTAINERS.md
+            fi
+          done
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            CONTAINERS.md
+            container-info-*.txt
+          body_path: CONTAINERS.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}

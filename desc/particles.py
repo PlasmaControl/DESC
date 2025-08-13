@@ -23,7 +23,7 @@ from scipy.constants import (
     proton_mass,
 )
 
-from desc.backend import jit, jnp, tree_map, vmap
+from desc.backend import jax, jit, jnp, tree_map, vmap
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
@@ -846,7 +846,13 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         data = self.curve.compute(["x_s", "x", "ds"], grid=self.grid)
         # length of the line segment at each grid point
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
-        self._chosen_idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
+        self._chosen_idxs = jax.random.choice(
+            key=jax.random.PRNGKey(self.seed),
+            a=sqrtg.shape[0],
+            shape=(self.N,),
+            replace=True,
+            p=sqrtg / sqrtg.sum(),
+        )
 
         # positions of the selected nodes in R, phi, Z coordinates
         x = data["x"][self._chosen_idxs, :]
@@ -972,8 +978,13 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         # surface area for each grid point
         # include spacing (dt*dz) to account for non-uniform grids
         sqrtg = data["|e_theta x e_zeta|"] * self.grid.spacing[:, 1:].prod(axis=-1)
-        self._chosen_idxs = _find_random_indices(sqrtg, self.N, seed=self.seed)
-
+        self._chosen_idxs = jax.random.choice(
+            key=jax.random.PRNGKey(self.seed),
+            a=sqrtg.shape[0],
+            shape=(self.N,),
+            replace=True,
+            p=sqrtg / sqrtg.sum(),
+        )
         # eq and surface might not have the same theta definition, so we will do a
         # root finding to find the correct theta and zeta coordinates from R, phi, Z
         # coordinates. We will use the surface's rho, theta, zeta coordinates as an
@@ -1027,30 +1038,6 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         return super()._return_particles(
             x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
         )
-
-
-def _find_random_indices(sqrtg, N, seed):
-    """Find random indices for sampling particles on a surface or curve."""
-    # probability of particle generation in a given grid point is proportional to
-    # its volume/area/length, which is sqrtg. Normalize sqrtg for random number
-    # generation limit of 1
-    sqrtg /= sqrtg.max()
-    nattempts = 10 * N
-    rng = np.random.default_rng(seed=seed)
-    accept = []
-    # loop until choosing exactly N indices
-    # note: generated random integers might repeat, but we will still keep them
-    # So, the final list of indices might have duplicates, meaning that a grid point
-    # spawned multiple particles.
-    while len(accept) < N:
-        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
-        # note: probability of selecting a number <0.3 in range [0, 1] is 30%
-        accept = np.where(rng.uniform(0, 1, size=(idxs.shape[0],)) < sqrtg[idxs])[0]
-        # choose random N of the accepted indices
-        accept = accept[rng.integers(0, accept.shape[0], size=(N,))]
-        idxs = idxs[accept]
-
-    return np.sort(idxs)
 
 
 def trace_particles(

@@ -1336,7 +1336,7 @@ class LinearGrid(_Grid):
         elif zeta is not None:
             errorif(
                 np.any(np.asarray(zeta) > zeta_period),
-                msg="LinearGrid defined on 1 field period.",
+                msg="LinearGrid should be defined on 1 field period.",
             )
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP

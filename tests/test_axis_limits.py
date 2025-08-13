@@ -74,8 +74,13 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
-    "B_dot_grad(grad(rho))",
     "J^theta_PEST",
+    "e^vartheta",
+    "e^vartheta_t",
+    "e^vartheta_v|PEST",
+    "e^vartheta_z|PEST",
+    "J^theta_t",
+    "J^theta_z",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -100,22 +105,17 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
-    "e^vartheta",
-    "e^vartheta_t",
-    "e^vartheta_v|PEST",
-    "e^vartheta_z|PEST",
     "e^zeta_v|PEST",
     "e^zeta_z|PEST",
     "e^rho_v|PEST",
     "e^rho_z|PEST",
-    "J^theta_t",
-    "J^theta_z",
     "J^zeta_t",
     "J^zeta_z",
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
     "gds2",
+    "B_dot_grad(grad(rho))",
 }
 
 

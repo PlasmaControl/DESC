@@ -1231,7 +1231,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1264,6 +1264,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1340,6 +1341,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
@@ -1351,16 +1353,55 @@ class Equilibrium(IOAble, Optimizable):
         alpha,
         zeta,
         L_lmn,
-        L,
+        lmbda,
         theta0=None,
-        period=np.inf,
         tol=1e-6,
         maxiter=30,
         **kwargs,
     ):
         return _map_clebsch_coordinates(
-            iota, alpha, zeta, L_lmn, L, theta0, period, tol, maxiter, **kwargs
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            theta0,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
         )
+
+    def _compute_iota_under_jit(self, rho, params=None, profiles=None, **kwargs):
+        """Compute rotational transform in JITable manner.
+
+        Parameters
+        ----------
+        rho : jnp.ndarray
+            Surface to compute rotational transform.
+        params : dict[str,jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
+
+        Returns
+        -------
+        iota : jnp.ndarray
+            Shape (len(rho), ).
+
+        """
+        setdefault(params, self.params_dict)
+        if profiles is None:
+            profiles = get_profiles("iota", self)
+        if profiles["iota"] is None:
+            iota_profile = self.get_profile(["iota", "iota_r"], params=params, **kwargs)
+        else:
+            iota_profile = profiles["iota"]
+
+        if jnp.ndim(rho) < 2:
+            zero = jnp.zeros_like(rho)
+            rho = jnp.column_stack([rho, zero, zero])
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

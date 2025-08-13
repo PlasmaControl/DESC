@@ -38,7 +38,7 @@ def map_coordinates(  # noqa: C901
     outbasis=("rho", "theta", "zeta"),
     guess=None,
     params=None,
-    period=None,
+    period=(np.inf, np.inf, np.inf),
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -73,6 +73,7 @@ def map_coordinates(  # noqa: C901
     period : tuple of float
         Assumed periodicity for each quantity in ``inbasis``.
         Use ``np.inf`` to denote no periodicity.
+        Default assumes no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -123,14 +124,16 @@ def map_coordinates(  # noqa: C901
     # TODO (#1382): make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
         if inbasis == ("rho", "alpha", "zeta"):
+            errorif(
+                np.isfinite(period[1]),
+                msg=f"Period must be ∞ for inbasis={inbasis}, but got {period[1]}.",
+            )
             if "iota" in kwargs:
                 iota = kwargs.pop("iota")
+            elif "profiles" in kwargs:
+                iota = eq._compute_iota_under_jit(coords, params, **kwargs)
             else:
-                if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(
-                        ["iota", "iota_r"], params=params, **kwargs
-                    )
-                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
+                iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
             rho, alpha, zeta = coords.T
             coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
             inbasis = ("rho", "theta_PEST", "zeta")
@@ -140,7 +143,7 @@ def map_coordinates(  # noqa: C901
                 L_lmn=params["L_lmn"],
                 L_basis=eq.L_basis,
                 guess=guess[:, 1] if guess is not None else None,
-                period=period[1] if period is not None else np.inf,
+                period=period[1],
                 tol=tol,
                 maxiter=maxiter,
                 full_output=full_output,
@@ -153,7 +156,7 @@ def map_coordinates(  # noqa: C901
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
+    period = np.asarray(period)
     coords = _periodic(coords, period)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -339,7 +342,10 @@ def _map_PEST_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    # noqa: D202
+    errorif(
+        np.isfinite(period) and period != (2 * jnp.pi),
+        msg=f"Period must be ∞ or 2π, but got {period}.",
+    )
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
     def rootfun(theta, theta_PEST, rho, zeta):
@@ -390,7 +396,7 @@ def _map_PEST_coordinates(
     return out
 
 
-def _partial_sum(L, L_lmn, W, W_lmn, iota):
+def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
     TODO(#1243) Do proper partial summation once the DESC
@@ -399,16 +405,16 @@ def _partial_sum(L, L_lmn, W, W_lmn, iota):
 
     Parameters
     ----------
-    L : Transform
+    lmbda : Transform
         FourierZernikeBasis
     L_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for λ.
-    W : Transform
+    omega : Transform
         FourierZernikeBasis
     W_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for ω.
     iota : jnp.ndarray
-        Shape (L.grid.num_rho, )
+        Shape (lmbda.grid.num_rho, )
 
     Returns
     -------
@@ -417,20 +423,21 @@ def _partial_sum(L, L_lmn, W, W_lmn, iota):
         Shape (num rho, num zeta, num modes).
 
     """
-    grid = L.grid
+    grid = lmbda.grid
     errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
+    # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
     # TODO: (#568)
     warnif(
-        grid.M > L.basis.M,
+        grid.M > lmbda.basis.M,
         ResolutionWarning,
         msg="Poloidal grid resolution is higher than necessary for coordinate mapping.",
     )
     warnif(
-        grid.M < L.basis.M,
+        grid.M < lmbda.basis.M,
         ResolutionWarning,
         msg="High frequency lambda modes will be truncated in coordinate mapping.",
     )
-    lmbda_minus_iota_omega = L.transform(L_lmn)
+    lmbda_minus_iota_omega = lmbda.transform(L_lmn)
     lmbda_minus_iota_omega = (
         rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
         .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
@@ -440,14 +447,15 @@ def _partial_sum(L, L_lmn, W, W_lmn, iota):
     return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
+@partial(jit, static_argnames=["tol", "maxiter"])
 def _map_clebsch_coordinates(
     iota,
     alpha,
     zeta,
     L_lmn,
-    L,
+    lmbda,
     theta0=None,
-    period=np.inf,
+    *,
     tol=1e-6,
     maxiter=30,
     **kwargs,
@@ -470,9 +478,6 @@ def _map_clebsch_coordinates(
     theta0 : jnp.ndarray
         Shape (num iota, num alpha, num zeta).
         Optional initial guess for the computational coordinates.
-    period : float
-        Assumed periodicity for α.
-        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -490,39 +495,33 @@ def _map_clebsch_coordinates(
     """
     # noqa: D202
 
-    # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
-    def rootfun(theta, alpha, c_m):
+    def rootfun(theta, target, c_m):
         c = (jnp.exp(1j * modes * theta) * c_m).real.sum()
-        alpha_k = theta + c
-        return _fixup_residual(alpha_k - alpha, period)
+        target_k = theta + c
+        return target_k - target
 
-    def jacfun(theta, alpha, c_m):
-        # Valid everywhere except where θ+λ−ιω = k period where k ∈ ℤ.
+    def jacfun(theta, target, c_m):
         dc_dt = ((1j * jnp.exp(1j * modes * theta) * c_m).real * modes).sum()
         return 1 + dc_dt
 
-    def fixup(x, *args):
-        return _periodic(x, period)
-
     @partial(jnp.vectorize, signature="(),(),(m)->()")
-    def vecroot(theta0, alpha, c_m):
+    def vecroot(theta0, target, c_m):
         return root_scalar(
             rootfun,
             theta0,
             jac=jacfun,
-            args=(alpha, c_m),
-            fixup=fixup,
+            args=(target, c_m),
             tol=tol,
             maxiter=maxiter,
             full_output=False,
             **kwargs,
         )
 
-    c_m, modes = _partial_sum(L, L_lmn, None, None, iota)
+    c_m, modes = _partial_sum(lmbda, L_lmn, None, None, iota)
     c_m = c_m[:, jnp.newaxis]
-    alpha = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
+    target = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
     # Assume λ − ι ω = 0 for default initial guess.
-    return vecroot(setdefault(theta0, alpha), alpha, c_m)
+    return vecroot(setdefault(theta0, target), target, c_m)
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

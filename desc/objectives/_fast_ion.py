@@ -245,7 +245,7 @@ class GammaC(_Objective):
         self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("default", "Unequal number of field periods")
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
             # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
             self._constants["lambda"] = get_transforms(
                 "lambda",
@@ -293,7 +293,7 @@ class GammaC(_Objective):
             alpha=constants["X"],
             zeta=constants["Y"],
             L_lmn=params["L_lmn"],
-            L=constants["lambda"],
+            lmbda=constants["lambda"],
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
         )[..., ::-1]

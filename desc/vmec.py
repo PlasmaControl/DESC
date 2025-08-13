@@ -1508,10 +1508,13 @@ class VMECIO:
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
         f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
-        if eq.pressure is not None:
+        if eq.pressure is not None and isinstance(
+            eq.pressure, (PowerSeriesProfile, SplineProfile)
+        ):
             pressure = eq.pressure
         else:
-            # if kinetic profiles, fit pressure to power series
+            # if kinetic profiles or non-power series or spline,
+            #  fit pressure to power series
             grid = LinearGrid(L=eq.L_grid, axis=True)
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])

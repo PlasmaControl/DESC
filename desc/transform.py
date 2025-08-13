@@ -38,7 +38,7 @@ class Transform(IOAble):
         * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
         * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
           you to create transforms inside JIT compiled functions.
-        * ``'rpz'`` uses a fast fourier transform in the phi (second) dimension, and 
+        * ``'rpz'`` uses a fast fourier transform in the phi (second) dimension, and
             direct cosine transforms in the R and Z (first and third) dimensions so
             must have a compatible grid (CylindricalGrid) and basis (DoubleChebyshev
             FourierBasis)
@@ -166,8 +166,8 @@ class Transform(IOAble):
         if self.method == "jitable":
             matrices = {
                 "direct1": {
-                    i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
-                    for i in range(n + 1)
+                    i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
+                    for i in range(ndi + 1)
                 },
             }
         elif self.method == "fft":
@@ -177,10 +177,7 @@ class Transform(IOAble):
         elif self.method == "direct2":
             matrices = {
                 "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
-            "rpz": {"dr": {i: {} for i in range(n + 1)},
-                    "dphi": {i: {} for i in range(n + 1)},
-                    "dz": {i: {} for i in range(n + 1)}},
-                "direct2": {k: {} for k in range(ndk + 1)},
+                "direct2": {k: {} for k in range(ndk + 1)}
             }
         elif self.method == "direct1":
             matrices = {
@@ -189,6 +186,15 @@ class Transform(IOAble):
                     for i in range(ndi + 1)
                 },
             }
+        elif self.method in ["rpz", "partialrpz", "directrpz"]:
+            matrices = {
+                "rpz": {
+                    "dr": {i: {} for i in range(ndi + 1)},
+                    "dphi": {j: {} for j in range(ndj + 1)},
+                    "dz": {k: {} for k in range(ndk + 1)},
+                },
+            }
+        
 
         return matrices
 
@@ -357,7 +363,8 @@ class Transform(IOAble):
             self.method = "direct1"
             return
         from desc.basis import DoubleChebyshevFourierBasis
-        if not isinstance(basis,DoubleChebyshevFourierBasis):
+
+        if not isinstance(basis, DoubleChebyshevFourierBasis):
             warnings.warn(
                 colored(
                     "Direct RPZ method requires a basis of type"
@@ -369,6 +376,7 @@ class Transform(IOAble):
             self.method = "direct1"
             return
         self._method = "partialrpz"
+
     def _check_inputs_directrpz(self, grid, basis):
         if not grid.is_meshgrid:
             warnings.warn(
@@ -381,7 +389,8 @@ class Transform(IOAble):
             self.method = "direct1"
             return
         from desc.basis import DoubleChebyshevFourierBasis
-        if not isinstance(basis,DoubleChebyshevFourierBasis):
+
+        if not isinstance(basis, DoubleChebyshevFourierBasis):
             warnings.warn(
                 colored(
                     "Direct RPZ method requires a basis of type"
@@ -392,6 +401,7 @@ class Transform(IOAble):
             )
             self.method = "direct1"
             return
+
     def _check_inputs_rpz(self, grid, basis):
         from desc.grid import CylindricalGrid
         from desc.basis import DoubleChebyshevFourierBasis
@@ -471,7 +481,7 @@ class Transform(IOAble):
                     self.dft_grid, d, modes=temp_modes
                 )
 
-        if self.method in ["rpz", "partialrpz","directrpz"]:
+        if self.method in ["rpz", "partialrpz", "directrpz"]:
             # Coefficients for Fourier derivatives in spectral coordinates (phi basis)
             self.dk = self.basis.NFP * jnp.arange(-self.basis.M, self.basis.M + 1)
 
@@ -485,20 +495,21 @@ class Transform(IOAble):
             self.unique_N_modes = self.basis.modes[self.basis.unique_N_idx, 2]
 
             for dr in np.unique(self.derivatives[:, 0]):
-                if dr > 0 or self.method in ["partialrpz","directrpz"]:
+                if dr > 0 or self.method in ["partialrpz", "directrpz"]:
                     self.matrices["rpz"]["dr"][dr] = chebyshev(
                         r[:, jnp.newaxis],
                         self.unique_L_modes,
                         dr=dr,
                     )
             for dz in np.unique(self.derivatives[:, 2]):
-                if dz > 0 or self.method in ["partialrpz","directrpz"]:
+                if dz > 0 or self.method in ["partialrpz", "directrpz"]:
                     self.matrices["rpz"]["dz"][dz] = chebyshev(
                         z[:, jnp.newaxis],
                         self.unique_N_modes,
                         dr=dz,
                     )
         from desc.basis import fourier
+
         if self.method == "directrpz":
             phi = self.grid.nodes[self.grid.unique_phi_idx, 1]
             self.unique_phi_modes = self.basis.modes[self.basis.unique_M_idx, 1]
@@ -517,7 +528,7 @@ class Transform(IOAble):
         if self.built_pinv:
             return
         rcond = None if self.rcond == "auto" else self.rcond
-        if self.method in ["direct1", "jitable", "partialrpz","directrpz"]:
+        if self.method in ["direct1", "jitable", "partialrpz", "directrpz"]:
             A = self.basis.evaluate(self.grid, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
@@ -633,8 +644,9 @@ class Transform(IOAble):
             # transform coefficients
             c_fft = jnp.real(jnp.fft.ifft(c_pad))
             return (A @ c_fft).flatten(order="F")
-        elif self.method in ["rpz", "partialrpz","directrpz"]:
+        elif self.method in ["rpz", "partialrpz", "directrpz"]:
             from desc.basis import ifftfit, ichebfit
+
             # reshape coefficients (Z,R,phi)
             c_3d = c.reshape(
                 self.basis.unique_N_idx.shape[0],
@@ -644,7 +656,9 @@ class Transform(IOAble):
             )
             dphi = dt
             if self.method == "directrpz":
-                y = (self.matrices["rpz"]["dphi"][dphi] @ c_3d.swapaxes(2, -2)).swapaxes(2, -2)
+                y = (
+                    self.matrices["rpz"]["dphi"][dphi] @ c_3d.swapaxes(2, -2)
+                ).swapaxes(2, -2)
             else:
                 # differentiate with respect to phi
                 y = (
@@ -666,7 +680,7 @@ class Transform(IOAble):
             else:
                 y = (self.matrices["rpz"]["dz"][dz] @ y.swapaxes(0, -2)).swapaxes(0, -2)
 
-            return jnp.squeeze(y.reshape(self.grid.num_nodes,-1))
+            return jnp.squeeze(y.reshape(self.grid.num_nodes, -1))
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -687,9 +701,9 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method in ["direct1","partialrpz"]:
+        if self.method in ["direct1", "partialrpz"]:
             # Partial RPZ method just defaults to direct1 because it
-            # probably won't be necessary to fit a transform to a grid that 
+            # probably won't be necessary to fit a transform to a grid that
             # doesn't have Chebyshev nodes in the R and Z directions
             Ainv = self.matrices["pinv"]
             c = jnp.matmul(Ainv, x)
@@ -713,8 +727,12 @@ class Transform(IOAble):
 
             x_3d = x.reshape(self.grid.num_z, self.grid.num_r, self.grid.num_phi, -1)
             c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2, n=self.basis.M)
-            c = c.reshape(self.basis.num_modes) if x.ndim == 1 else c.reshape(self.basis.num_modes,-1)
- 
+            c = (
+                c.reshape(self.basis.num_modes)
+                if x.ndim == 1
+                else c.reshape(self.basis.num_modes, -1)
+            )
+
         return c
 
     def project(self, y):

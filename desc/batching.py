@@ -218,7 +218,7 @@ def make_shardable(f, axis=0, num_devices=None):
         Remainder portion of ``f``.
 
     """
-    warnif(True, msg="Sharded chunked vmap is expiremental. Use at your own risk.")
+    warnif(True, msg="Sharded chunked vmap is experimental. Use at your own risk.")
     if num_devices is None:
         num_devices = jax.device_count()
 

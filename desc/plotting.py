@@ -4191,12 +4191,9 @@ def plot_particle_trajectories(  # noqa: C901
     if not isinstance(color, (list, tuple)):
         color = [color]
 
-    # prepare arguments for partile tracing
-    x0, args = initializer.init_particles(model=model, field=field)
     rpz, _ = trace_particles(
         field=field,
-        y0=x0,
-        model_args=args,
+        initializer=initializer,
         model=model,
         ts=ts,
         **trace_kwargs,

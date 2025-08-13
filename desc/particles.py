@@ -427,7 +427,6 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         vc = slowing_down_critical_velocity(data["Te"], self.m_eff)
 
         # derivative of the guiding center position in R, phi, Z coordinates
-        # TODO: Is this correct? Check
         Rdot = vpar * data["b"] + (
             (m / q / data["|B|"] ** 2)
             * (vpar**2 + 0.5 * (v**2 - vpar**2))
@@ -1042,9 +1041,8 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
 def trace_particles(
     field,
-    y0,
+    initializer,
     model,
-    model_args,
     ts,
     params=None,
     stepsize_controller=None,
@@ -1061,20 +1059,14 @@ def trace_particles(
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
-    If this function will be used in an optimization loop, it is recommended to
-    pass a value for all the keyword arguments to prevent recompilation.
+    For jit friendly version of this function, see `_trace_particles`.
 
     Parameters
     ----------
     field : MagneticField or Equilibrium
         Source of magnetic field to integrate
-    y0 : array-like
-        Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of ``ParticleInitializer.init_particles``.
-    model_args : array-like
-        Additional arguments needed by the model, such as mass, charge, and
-        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
-        ``ParticleInitializer.init_particles``.
+    initializer : AbstractParticleInitializer
+        Particle initializer
     ts : array-like
         Strictly increasing array of time values where output is desired.
     model : AbstractTrajectoryModel
@@ -1132,6 +1124,70 @@ def trace_particles(
         Velocity of each particle at specified times. The exact number of meaning
         will depend on ``model.vcoords``.
 
+    """
+    y0, model_args = initializer.init_particles(model, field)
+    return _trace_particles(
+        field=field,
+        y0=y0,
+        model=model,
+        model_args=model_args,
+        ts=ts,
+        params=params,
+        stepsize_controller=stepsize_controller,
+        saveat=saveat,
+        rtol=rtol,
+        atol=atol,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        solver=solver,
+        adjoint=adjoint,
+        bounds=bounds,
+        event=event,
+        options=options,
+    )
+
+
+def _trace_particles(
+    field,
+    y0,
+    model,
+    model_args,
+    ts,
+    params=None,
+    stepsize_controller=None,
+    saveat=None,
+    rtol=1e-8,
+    atol=1e-8,
+    max_steps=None,
+    min_step_size=1e-10,
+    solver=Tsit5(),
+    adjoint=RecursiveCheckpointAdjoint(),
+    bounds=None,
+    event=None,
+    options={},
+):
+    """Trace charged particles in an equilibrium or external magnetic field.
+
+    This is the jit friendly version of the `trace_particles` function. For full
+    documentation, see `trace_particles`. The only difference is that this function
+    takes the outputs of `initializer.init_particles` as inputs, rather than
+    the particle initializer itself. There won't be any checks on the y0 and model_args
+    inputs, so make sure they are in the correct format. One can use this function
+    in an optimization loop, where the initial positions and velocities of particles
+    are ccomputed in the `build` method of the objective function. If the objective
+    requires initialization of particles at each iteration, make sure that the
+    initializer class can work under jit compilation which is not the case for all of
+    them.
+
+    Parameters
+    ----------
+    y0 : array-like
+        Initial particle positions and velocities, stacked in horizontally [x0, v0].
+        The first output of ``initializer.init_particles``.
+    model_args : array-like
+        Additional arguments needed by the model, such as mass, charge, and
+        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
+        ``initializer.init_particles``.
     """
     if not params:
         params = field.params_dict

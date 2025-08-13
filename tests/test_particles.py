@@ -18,6 +18,7 @@ from desc.particles import (
     ManualParticleInitializerLab,
     SurfaceParticleInitializer,
     VacuumGuidingCenterTrajectory,
+    _trace_particles,
     trace_particles,
 )
 from desc.utils import rpz2xyz, xyz2rpz_vec
@@ -42,8 +43,7 @@ def test_constant_field_cases():
         q=1.0,
     )
 
-    x0, args = particles.init_particles(model=model, field=field)
-    rpz, _ = trace_particles(field, x0, model_args=args, model=model, ts=ts)
+    rpz, _ = trace_particles(field, initializer=particles, model=model, ts=ts)
     p1r = rpz[0, :, 0]
     p1z = rpz[0, :, 2]
     p2r = rpz[1, :, 0]
@@ -66,8 +66,7 @@ def test_constant_field_cases():
         q=1.0,
     )
 
-    x0, args = particles.init_particles(model=model, field=field)
-    rpz, _ = trace_particles(field, x0, model_args=args, model=model, ts=ts)
+    rpz, _ = trace_particles(field, initializer=particles, model=model, ts=ts)
     p1r = rpz[0, :, 0]
     p1z = rpz[0, :, 2]
     p2r = rpz[1, :, 0]
@@ -110,7 +109,7 @@ def test_mirror_force_drift():
     model = VacuumGuidingCenterTrajectory(frame="lab")
     ts = np.linspace(0, 1e-6, 10)
     x0, args = particles.init_particles(model=model, field=field)
-    rpz, vpar = trace_particles(
+    rpz, vpar = _trace_particles(
         field=field,
         y0=x0,
         model_args=args,
@@ -144,7 +143,7 @@ def test_tracing_purely_toroidal_magnetic_field():
     model = VacuumGuidingCenterTrajectory(frame="lab")
     x0, args = particles.init_particles(model=model, field=field)
     m, q, _ = args[0, :]
-    rpz, vpar = trace_particles(
+    rpz, vpar = _trace_particles(
         field=field,
         y0=x0,
         model_args=args,
@@ -212,7 +211,7 @@ def test_tracing_vacuum_tokamak():
     # Ensure particles stay within the surface by bounds_R (not actually
     # needed here since the tracing time is chosen accordingly, but this
     # is the intended use case).
-    rtz, vpar = trace_particles(
+    rtz, vpar = _trace_particles(
         y0=x0,
         field=eq,
         model=model,

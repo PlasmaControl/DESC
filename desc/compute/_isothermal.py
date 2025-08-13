@@ -236,7 +236,7 @@ def lambda_iso(params, transforms, profiles, data, **kwargs):
 
 def v_iso_tt(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso_tt"] = - data["lambda_ratio"] * ( data["u_iso_tt"] + data["b_iso"] * data["V_iso_tt"] ) 
+    data["v_iso_tt"] = data["lambda_ratio"] * ( data["V_iso_tt"] + data["b_iso"] * data["u_iso_tt"] ) 
                              
     return data
 
@@ -260,7 +260,7 @@ def v_iso_tt(params, transforms, profiles, data, **kwargs):
 
 def v_iso_tz(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso_tz"] = - data["lambda_ratio"] * ( data["u_iso_tz"] + data["b_iso"] * data["V_iso_tz"] ) 
+    data["v_iso_tz"] = data["lambda_ratio"] * ( data["V_iso_tz"] + data["b_iso"] * data["u_iso_tz"] ) 
                              
     return data
 
@@ -284,7 +284,7 @@ def v_iso_tz(params, transforms, profiles, data, **kwargs):
 
 def v_iso_zz(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso_zz"] = - data["lambda_ratio"] * ( data["u_iso_zz"] + data["b_iso"] * data["V_iso_zz"] ) 
+    data["v_iso_zz"] = data["lambda_ratio"] * ( data["V_iso_zz"] + data["b_iso"] * data["u_iso_zz"] ) 
                              
     return data
 
@@ -308,7 +308,7 @@ def v_iso_zz(params, transforms, profiles, data, **kwargs):
 
 def v_iso_t(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso_t"] = - data["lambda_ratio"] * ( data["u_iso_t"] + data["b_iso"] * data["V_iso_t"] ) 
+    data["v_iso_t"] = data["lambda_ratio"] * ( data["V_iso_t"] + data["b_iso"] * data["u_iso_t"] ) 
                              
     return data
 
@@ -332,7 +332,7 @@ def v_iso_t(params, transforms, profiles, data, **kwargs):
 
 def v_iso_z(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso_z"] = - data["lambda_ratio"] * ( data["u_iso_z"] + data["b_iso"] * data["V_iso_z"] ) 
+    data["v_iso_z"] = data["lambda_ratio"] * ( data["V_iso_z"] + data["b_iso"] * data["u_iso_z"] ) 
                              
     return data
 
@@ -356,7 +356,7 @@ def v_iso_z(params, transforms, profiles, data, **kwargs):
 
 def v_iso(params, transforms, profiles, data, **kwargs):
     
-    data["v_iso"] = - data["lambda_ratio"] * ( data["u_iso"] + data["b_iso"] * data["V_iso"] ) 
+    data["v_iso"] = data["lambda_ratio"] * ( data["V_iso"] + data["b_iso"] * data["u_iso"] ) 
                              
     return data
 
@@ -510,7 +510,6 @@ def u_iso_z(params, transforms, profiles, data, **kwargs):
 def u_iso(params, transforms, profiles, data, **kwargs):
     
     data["u_iso"] = data["zeta"] - data["phi_iso"]
-    
     return data
 
 # Find a toroidal harmonic vector on a surface
@@ -679,11 +678,134 @@ def V_iso(params, transforms, profiles, data, **kwargs):
 def H2(params, transforms, profiles, data, **kwargs):
     
     # Normalize H_2 to match same magnitude of H_1 (?)
-    data["H_2"] = - data["lambda_ratio"] * ( data["H_1"] + data["b_iso"] * data["nabla_s_V_iso"] )
+    data["H_2"] = data["lambda_ratio"] * ( data["nabla_s_V_iso"] + data["b_iso"] * data["H_1"] )
+    #- data["lambda_ratio"] * ( data["H_1"] + data["b_iso"] * data["nabla_s_V_iso"] )
     
     if kwargs.get("basis", "rpz").lower() == "xyz":
         data["H_2"] = rpz2xyz_vec(data["H_2"], phi=data["phi"])
         
+    return data
+
+#
+@register_compute_fun(
+    name="tau",
+    label="\tau",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["tau_1","tau_2"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+
+def tau(params, transforms, profiles, data, **kwargs):
+    
+    data["tau"] = data["tau_1"] + data["tau_2"] * 1j
+                             
+    return data
+    
+@register_compute_fun(
+    name="tau_1",
+    label="\tau_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["lambda_ratio","b_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+
+def tau_1(params, transforms, profiles, data, **kwargs):
+    
+    #
+    data["tau_1"] = data["b_iso"] * data["lambda_ratio"] / (1 + ( data["b_iso"] * data["lambda_ratio"]) ** 2)
+                             
+    return data
+
+#
+@register_compute_fun(
+    name="tau_2",
+    label="\tau_2",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["lambda_ratio","b_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+
+def tau_2(params, transforms, profiles, data, **kwargs):
+    
+    #
+    data["tau_2"] = data["lambda_ratio"] / (1 + ( data["b_iso"] * data["lambda_ratio"]) ** 2)
+                             
+    return data
+
+#
+@register_compute_fun(
+    name="omega_1",
+    label="\omega_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["lambda_ratio","b_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+
+def omega_1(params, transforms, profiles, data, **kwargs):
+    
+    #
+    data["omega_1"] = 2 * jnp.pi + 2 * jnp.pi * data["b_iso"] * data["lambda_ratio"] * 1j
+                             
+    return data
+
+
+@register_compute_fun(
+    name="omega_2",
+    label="\omega_2",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["lambda_ratio","b_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+
+def omega_2(params, transforms, profiles, data, **kwargs):
+    
+    data["omega_2"] = 2 * jnp.pi * data["lambda_ratio"] * 1j
+                             
     return data
 
 # Find a toroidal harmonic vector on a surface
@@ -706,13 +828,12 @@ def H2(params, transforms, profiles, data, **kwargs):
 
 def lambda_ratio(params, transforms, profiles, data, **kwargs):
     
-    lambda_temp = data["H_1"] + data["b_iso"] * data["nabla_s_V_iso"]
-    
+    lambda_temp = data["nabla_s_V_iso"] + data["b_iso"] * data["H_1"] 
+    #
     data["lambda_ratio"] = jnp.mean( jnp.sqrt( jnp.sum( data["H_1"] * data["H_1"] , axis=-1 
                                                       ) / jnp.sum( lambda_temp * lambda_temp , axis=-1 )
                                              )
-                                   )
-                             
+                                   )                    
     return data
 
 @register_compute_fun(
@@ -757,10 +878,12 @@ def psi_iso(params, transforms, profiles, data, **kwargs):
 
 def b_iso(params, transforms, profiles, data, **kwargs):
 
-    data["b_iso"] = - jnp.mean( jnp.sum( data["H_1"] * data["H_1"] , axis=-1 
-                                       ) / jnp.sum( data["nabla_s_V_iso"] * data["H_1"] , axis=-1 
-                                                  ) 
+    data["b_iso"] = - jnp.mean( jnp.sum( data["nabla_s_V_iso"] * data["H_1"] , axis=-1 ) / jnp.sum( data["H_1"] * data["H_1"] , axis=-1 )
                               )
+    #- jnp.mean( jnp.sum( data["H_1"] * data["H_1"] , axis=-1 
+                    #                   ) / jnp.sum( data["nabla_s_V_iso"] * data["H_1"] , axis=-1 
+                    #                              ) 
+                    #          )
 
     return data
 

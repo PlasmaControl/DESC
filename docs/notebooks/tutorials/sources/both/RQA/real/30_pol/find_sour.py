@@ -349,7 +349,7 @@ def f_sour(data_or,
            u1_, v1_, # first dipole
            N, d_0):
     
-    gamma = data_or["du"] / (2*jnp.pi)
+    #gamma = data_or["du"] / (2*jnp.pi)
     
     # Evaluate the dipoles on the grid of vortices
     w1 = comp_loc(u1_, v1_,)
@@ -359,7 +359,7 @@ def f_sour(data_or,
     f1_reg = f_reg(w1, d_0, data_or)
 
     return ( jnp.log( v_1_num )
-            - jnp.real( w1 ) / ( gamma * data_or["dv"] ) * data_or["w"] 
+            - 2 * jnp.pi * jnp.real( w1 ) / ( data_or["omega_1"] ** 2 * data_or["tau_2"] ) * data_or["w"] 
             - 1/2 * f1_reg
            )
 
@@ -376,10 +376,10 @@ def omega_sour(data_or,
     
     chi_reg_1 = chi_reg(w1, d_0, data_or)
     
-    gamma = data_or["du"] / ( 2 * jnp.pi )
+    #gamma = data_or["du"] / ( 2 * jnp.pi )
     
     omega = ( v_1_num_prime / v_1_num # Regularized near the vortex cores
-             - jnp.real( w1 ) / ( gamma * data_or["dv"] ) 
+             - 2 * jnp.pi * jnp.real( w1 ) / ( data_or["omega_1"] ** 2 * data_or["tau_2"] ) 
              + 1 / 2 * ( chi_reg_1 ) # Additional terms with regularization close to the vortex core
             )
     
@@ -387,8 +387,11 @@ def omega_sour(data_or,
 
 def v1_eval(w0, N, d_0, data_or):
     
-    gamma = data_or["du"] / ( 2 * jnp.pi )
-    p = jnp.exp( - data_or["dv"] / ( 2 * gamma ) )
+    #gamma = data_or["du"] / ( 2 * jnp.pi )
+    #p = jnp.exp( - data_or["dv"] / ( 2 * gamma ) )
+    
+    gamma = data_or["omega_1"] / jnp.pi
+    p = data_or["tau"]
     
     product_ = 0
 
@@ -398,7 +401,7 @@ def v1_eval(w0, N, d_0, data_or):
                     + ( ( ( (-1) ** n
                         )*( p ** ( n **2 + n )
                           )
-                       ) * jnp.sin( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / ( 2 * gamma ) )
+                       ) * jnp.sin( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma )
                       )
                    )
     
@@ -423,8 +426,8 @@ def f_reg(w0,# location of the vortex
 
 def v1_prime_eval(w0, N, d_0, data_or):
 
-    gamma = data_or["du"] / ( 2 * jnp.pi )
-    p = jnp.exp( - data_or["dv"] / ( 2 * gamma ) )
+    gamma = data_or["omega_1"] / jnp.pi
+    p = data_or["tau"]
     
     _product = 0
     for n in range(0,N):
@@ -433,8 +436,8 @@ def v1_prime_eval(w0, N, d_0, data_or):
                     + ( ( ( (-1) ** n
                         ) * ( p ** ( n ** 2 + n )
                             )
-                        ) * ( ( ( 2 * n + 1 ) / ( 2 * gamma )
-                              ) * jnp.cos( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / ( 2 * gamma )
+                        ) * ( ( ( 2 * n + 1 ) / gamma
+                              ) * jnp.cos( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma
                                          )
                             )
                       )
@@ -459,8 +462,15 @@ def iso_coords_interp(name,_data, sgrid, eq):
     b0 = np.load(name + 'b.npy') #first_derivative_z(u, tdata, tgrid,)
     lamb_ratio = np.load(name + 'ratio.npy') #first_derivative_z(u, tdata, tgrid,)
     
-    _data["du"] = 2*jnp.pi#jnp.max(u.flatten()) - jnp.min(u.flatten())
-    _data["dv"] = jnp.max(v.flatten()) - jnp.min(v.flatten())
+    #_data["du"] = 2*jnp.pi#jnp.max(u.flatten()) - jnp.min(u.flatten())
+    #_data["dv"] = jnp.max(v.flatten()) - jnp.min(v.flatten())
+
+    _data["omega_1"] = np.load(name + 'omega_1.npy')
+    _data["omega_2"] = np.load(name + 'omega_2.npy')
+
+    _data["tau"] = np.load(name + 'tau.npy')
+    _data["tau_1"] = np.load(name + 'tau_1.npy')
+    _data["tau_2"] = np.load(name + 'tau_2.npy')
     
     lamb_u = np.load(name + 'lambda_u.npy')
     lamb_v = np.load(name + 'lambda_v.npy')
@@ -485,7 +495,7 @@ def iso_coords_interp(name,_data, sgrid, eq):
     theta_mod = add_extra_coords(tdata["theta"], n_size,m_size,0)
     zeta_mod = add_extra_coords(tdata["zeta"], n_size,m_size,1)
     u_mod = zeta_mod - add_extra_periodic(Phi, n_size,m_size)
-    v_mod = - lamb_ratio * (u_mod + b0 * ( theta_mod - add_extra_periodic(Psi, n_size,m_size) ) )
+    v_mod = lamb_ratio * ( theta_mod - add_extra_periodic(Psi, n_size,m_size) + b0 * u_mod )
     u_t_mod = add_extra_periodic(u_t, n_size,m_size)
     u_z_mod = add_extra_periodic(u_z, n_size,m_size)
     v_t_mod = add_extra_periodic(v_t, n_size,m_size)

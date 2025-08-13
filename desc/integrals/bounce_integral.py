@@ -724,7 +724,7 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv, num_well)
 
-        res = (self._integrate_nummt if (nufft_eps < 1e-14) else self._integrate_nufft)(
+        res = (self._integrate_nummt if nufft_eps < 1e-14 else self._integrate_nufft)(
             x, w, integrand, 1 / pitch_inv, data, *points, check, plot, nufft_eps
         )
         return res[0] if len(res) == 1 else res

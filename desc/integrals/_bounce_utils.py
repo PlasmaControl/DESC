@@ -88,21 +88,20 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     )
     assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
-    # Reshape so that last axis enumerates intersects of a pitch along a field line.
-    dB_sign = flatten_matrix(
+    dB_dz = flatten_matrix(
         jnp.sign(polyval_vec(x=intersect, c=dB_dz[..., jnp.newaxis, :, jnp.newaxis, :]))
     )
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_matrix(intersect >= 0)
     # We ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
-    is_z1 = (dB_sign <= 0) & mask
-    is_z2 = (dB_sign >= 0) & _in_epigraph_and(mask, dB_sign)
+    z1 = (dB_dz <= 0) & mask
+    z2 = (dB_dz >= 0) & _in_epigraph_and(mask, dB_dz)
 
     # Transform out of local power basis expansion.
     intersect = flatten_matrix(intersect + knots[:-1, jnp.newaxis])
-    z1 = take_mask(intersect, is_z1, size=num_well, fill_value=_sentinel)
-    z2 = take_mask(intersect, is_z2, size=num_well, fill_value=_sentinel)
+    z1 = take_mask(intersect, z1, size=num_well, fill_value=_sentinel)
+    z2 = take_mask(intersect, z2, size=num_well, fill_value=_sentinel)
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
     # Set to zero so integration is over set of measure zero

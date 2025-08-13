@@ -929,7 +929,6 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
     is_even = (n % 2) == 0
     n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
     nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
-    vander = jnp.concatenate(
+    return jnp.concatenate(
         [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
     )
-    return vander

@@ -35,7 +35,7 @@ from desc.utils import (
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _in_epigraph_and(is_intersect, df_dy_sign, /):
+def _in_epigraph_and(is_intersect, df_dy, /):
     """Set and epigraph of function f with the given set of points.
 
     Used to return only intersects where the straight line path between
@@ -45,7 +45,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     ----------
     is_intersect : jnp.ndarray
         Boolean array indicating whether index corresponds to an intersect.
-    df_dy_sign : jnp.ndarray
+    df_dy : jnp.ndarray
         Shape ``is_intersect.shape``.
         Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
 
@@ -69,8 +69,8 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     # as a right boundary, except under an edge case of a series of inflection points.
     idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
-        (df_dy_sign[idx[0]] == 0)
-        & (df_dy_sign[idx[1]] < 0)
+        (df_dy[idx[0]] == 0)
+        & (df_dy[idx[1]] < 0)
         & is_intersect[idx[0]]
         & is_intersect[idx[1]]
         # In theory, we need to keep propagating this edge case, e.g.
@@ -516,29 +516,29 @@ class PiecewiseChebyshevSeries(IOAble):
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, mask, df_dy_sign = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
+        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
         # Flatten so that last axis enumerates intersects along the piecewise spline.
         y = flatten_matrix(self._isomorphism_to_C1(y))
         mask = flatten_matrix(mask)
-        df_dy_sign = flatten_matrix(df_dy_sign)
+        df_dy = flatten_matrix(df_dy)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersection i.e. ``is_z1`` because the subset of
-        # pitch values that generate this edge case has zero measure. By ignoring
-        # this, for those subset of pitch values the integrations will be done in
-        # the hypograph of |B|, which will yield zero. If in future decide to
-        # not ignore this, note the solution is to
+        # polynomials is a left intersection because the subset of pitch values
+        # that generate this edge case has zero measure. By ignoring this, for those
+        # subset of pitch values the integrations will be done in the hypograph of
+        # |B|, which will yield zero. If in future decide to not ignore this, note
+        # the solution is to
         # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
         # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
         #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
         #    are not differentiable.
-        is_z1 = (df_dy_sign <= 0) & mask
-        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(mask, df_dy_sign)
+        z1 = (df_dy <= 0) & mask
+        z2 = (df_dy >= 0) & _in_epigraph_and(mask, df_dy)
 
         sentinel = self.domain[0] - 1.0
-        z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)
-        z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
+        z1 = take_mask(y, z1, size=num_intersect, fill_value=sentinel)
+        z2 = take_mask(y, z2, size=num_intersect, fill_value=sentinel)
 
         mask = (z1 > sentinel) & (z2 > sentinel)
         # Set to zero so integration is over set of measure zero

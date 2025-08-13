@@ -25,7 +25,6 @@ New Features
         - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
     - Implemented particle trajectory models are:
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
-        - ``SlowingDownGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs with slowing down on electrons and main ions.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
     - ``_trace_particles`` function is differentiable version of the ``trace_particles`` which takes in the outputs of the particle initializer instead of initializing internally. Both modes of the automatic differentiation, forward or reverse, are possible by proper choice of ``adjoint`` argument of the function. See ``diffrax`` documentation for details.
 

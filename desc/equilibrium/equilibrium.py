@@ -20,7 +20,6 @@ from desc.basis import (
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -28,8 +27,7 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.nabla import curl_cylindrical, _curl_cylindrical, _normalize_rpz
-#from desc.compute.extend_flux_coords import build_extended_coords, metric
+from desc.compute.nabla import curl_cylindrical
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -38,7 +36,7 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
-from desc.integrals.singularities import _kernel_biot_savart, _kernel_biot_savart_A
+from desc.integrals.singularities import _kernel_biot_savart
 from desc.integrals.virtual_casing import integrate_surface
 from desc.magnetic_fields import (
     _MagneticField,
@@ -65,6 +63,9 @@ from desc.utils import (
     only1,
     setdefault,
     warnif,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz_vec
 )
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
@@ -1241,17 +1242,13 @@ class Equilibrium(Optimizable, _MagneticField):
         transforms=None,
         chunk_size=50,
         method="biot-savart",
-        L=None,
-        M=8,
-        N=None,
         out_grid=None,
         A_grid=None,
         R_bounds=[5, 11],
         phi_bounds=None,
         Z_bounds=[-5, 5],
         return_A=False,
-        support=1E-5
-    ):
+        ):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -1276,10 +1273,6 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-        L, M, N: int
-            Only used if method == "vector potential".
-            Spectral resolution to use when taking the curl of the vector potential
-            in a spectral basis. L and N default to M, and M defaults to 8.
         A_grid: Grid
             Only used if method == "vector potential".
             The grid with the (R,phi,Z) coordinates at which to evaluate the vector potential,
@@ -1298,9 +1291,6 @@ class Equilibrium(Optimizable, _MagneticField):
         return_A: bool
             Only used if method == "vector potential".
             If True, the vector potential used to evaluate B will also be returned.
-        support: float
-            For the Biot-Savart magnetic field and vector potential calculations, a source point
-            will be removed if it is too close to the point being evaluated (|dr|<=support)
         Returns
         -------
         field : ndarray, shape(n,3)
@@ -1344,7 +1334,7 @@ class Equilibrium(Optimizable, _MagneticField):
                 source_xyz = rpz2xyz(source_rpz)
                 J = rpz2xyz_vec(data["J"], phi=phi)
                 fj = biot_savart_general(
-                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size, support=support
+                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,
                 )
                 f += fj
                 return f
@@ -1395,7 +1385,6 @@ class Equilibrium(Optimizable, _MagneticField):
                     params=params,
                     basis=basis,
                     transforms=transforms,
-                    support=support
                 )
                 if source_grid is None:
                     self.A_grid = A_grid
@@ -1404,13 +1393,10 @@ class Equilibrium(Optimizable, _MagneticField):
             else:
                 A = self.vector_potential
 
-            # Default spectral resolution parameters
-            if L is None:
-                L = A_grid.L
-            if M is None:
-                M = A_grid.M
-            if N is None:
-                N = A_grid.N
+            # Spectral resolution parameters
+            L = A_grid.L
+            M = A_grid.M
+            N = A_grid.N
 
             # Build spectral transforms
             basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
@@ -1436,7 +1422,7 @@ class Equilibrium(Optimizable, _MagneticField):
             else:
                 A_rpz = A
 
-            B = _curl_cylindrical(
+            B = curl_cylindrical(
                 A_rpz, A_coords[:, 0], coords[:, 0], in_transform, out_transform, scales
             )
             if basis.lower == "xyz":
@@ -1454,7 +1440,6 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
-        support=1E-5
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1475,10 +1460,6 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-        support: float
-            For the Biot-Savart magnetic field and vector potential calculations, a source point
-            will be removed if it is too close to the point being evaluated (|dr|<=support)
-
         Returns
         -------
         A : ndarray, shape(n,3)
@@ -1512,7 +1493,7 @@ class Equilibrium(Optimizable, _MagneticField):
             source_xyz = rpz2xyz(source_rpz)
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,support=support
+                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,
             )
             f += fj
             return f

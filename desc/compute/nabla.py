@@ -1,9 +1,19 @@
-import jax.numpy as jnp
+"""
+Functions for taking the curl and divergence in cylindrical coordinates.
+
+Partial derivatives are calculated using spectral methods. Both functions
+have an identical API that requires as inputs the input and output Transform
+objects to and from spectral space, assumed to be for the same basis.
+"""
+
+from desc.backend import jnp
+
 
 def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
-    """
-    Take the curl of A in cylindrical coordinates,
-    given Transforms to and from spectral coordinates.
+    """Take the curl of A in cylindrical coordinates.
+
+    Uses spectral methods to take partial derivatives of A and calculate
+    its curl on the grid associated with out_transform.
 
     Parameters
     ----------
@@ -23,9 +33,9 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         real grid on which the curl is to be evaluated.
         the transform must have been built, with derivs>=1.
     scales: jnp.ndarray, shape (3,)
-        If the real coordinates in the transform object are scaled to be dimensionless,
-        this parameter adjusts the dimensions of the partial derivatives
-        so they are taken with the normal coordinates, not the coordinates in the transform.
+        This parameter adjusts the dimensions of the partial derivatives so they are
+        taken with respect to the normal coordinates, not the coordinates in the
+        transform.
 
     Returns
     -------
@@ -41,12 +51,13 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
             if c == 1 and d == 0:
                 # partial (R*A_phi)/partial R instead of partial A_phi/partial R
                 RA_phi_coeff = in_transform.fit(in_R * A[:, 1])
-                terms[:, c, d] = out_transform.transform(RA_phi_coeff, dr=1)
+                term_cd = out_transform.transform(RA_phi_coeff, dr=1)
             elif c != d:
                 # partial A_c/partial r_d
-                terms[:, c, d] = out_transform.transform(
+                term_cd = out_transform.transform(
                     A_coeff[:, c], dr=(d == 0), dt=(d == 1), dz=(d == 2)
                 )
+            terms = terms.at[:, c, d].set(term_cd)
     # Rescale derivatives
     terms = terms / scales.reshape(1, 1, -1)
 
@@ -60,14 +71,16 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
     # (curl(A))_z = 1/R(partial(R A_phi)/partial R - partial A_R/partial phi)
     curl_A_z = 1 / out_R * (terms[:, 1, 0] - terms[:, 0, 1])
 
-    curl_A = jnp.vstack([curl_A_R, curl_A_phi, curl_A_z]).T
+    curl_A = jnp.stack([curl_A_R, curl_A_phi, curl_A_z], axis=-1)
     return curl_A
 
 
 def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
     """
-    Take the divergence of A in cylindrical coordinates,
-    given Transforms to and from spectral coordinates.
+    Take the divergence of A in cylindrical coordinates.
+
+    Uses spectral methods to take partial derivatives of A and calculate
+    its divergence on the grid associated with out_transform.
 
     Parameters
     ----------
@@ -87,13 +100,13 @@ def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         real grid on which the divergence is to be evaluated.
         the transform must have been built, with derivs>=1.
     scales: jnp.ndarray, shape (3,)
-        If the real coordinates in the transform object are scaled to be dimensionless,
-        this parameter adjusts the dimensions of the partial derivatives
-        so they are taken with the normal coordinates, not the coordinates in the transform.
+        This parameter adjusts the dimensions of the partial derivatives so they are
+        taken with respect to the normal coordinates, not the coordinates in the
+        transform.
 
     Returns
     -------
-    div_A : ndarray, shape(n,3)
+    div_A : ndarray, shape(n,)
         The divergence of the vector field, in cylindrical coordinates.
     """
     A_coeff = in_transform.fit(
@@ -104,9 +117,10 @@ def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
     terms = jnp.zeros((out_R.shape[0], 3))
     for c in range(3):
         # partial A_c/partial r_d
-        terms[:, c] = out_transform.transform(
+        term_c = out_transform.transform(
             A_coeff[:, c], dr=(c == 0), dt=(c == 1), dz=(c == 2)
         )
+        terms = terms.at[:, c].set(term_c)
     # Rescale derivatives
     terms = (
         terms
@@ -114,6 +128,6 @@ def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         / scales.reshape(1, -1)
     )
 
-    # Calculate curl from the partial derivatives
+    # Calculate divergence from the partial derivatives
     div = terms.sum(axis=1)
     return div

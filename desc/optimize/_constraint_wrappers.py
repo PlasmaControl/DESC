@@ -609,6 +609,9 @@ class ProximalProjection(ObjectiveFunction):
         self._objective = objective
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options
+        self._solve_during_proximal_build = solve_options.pop(
+            "solve_during_proximal_build", True
+        )  # If user does not want the solve during build, mainly for debug purposes
         perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
@@ -775,11 +778,12 @@ class ProximalProjection(ObjectiveFunction):
         # first, ensure equilibrium is solved to the
         # specified tolerances, necessary as we assume
         # eq is solved when taking the derivatives later
-        self._eq.solve(
-            objective=self._eq_solve_objective,
-            constraints=None,
-            **self._solve_options,
-        )
+        if self._solve_during_proximal_build:
+            self._eq.solve(
+                objective=self._eq_solve_objective,
+                constraints=None,
+                **self._solve_options,
+            )
         # then store the now-solved eq state as the initial state
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]

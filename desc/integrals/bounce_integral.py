@@ -724,14 +724,13 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv, num_well)
 
-        fun = self._integrate_nufft if (nufft_eps >= 1e-14) else self._integrate_nummt
-        result = fun(
+        res = (self._integrate_nummt if (nufft_eps < 1e-14) else self._integrate_nufft)(
             x, w, integrand, 1 / pitch_inv, data, *points, check, plot, nufft_eps
         )
-        return result[0] if len(result) == 1 else result
+        return res[0] if len(res) == 1 else res
 
-    # TODO(#1303): Singularity subtraction quadrature enables more efficient algorithms.
-    #  for weakly singular integrals. To compute
+    # TODO(#1303): Singularity subtraction quadrature enables more efficient algorithms
+    #  for singular integrals with (1−λ|B|)⁰ᐧ⁵. To compute
     #    ∫ fh dζ where e.g. h = (1−λ|B|)⁰ᐧ⁵
     #  Taylor expand the singular part. For example, to first order
     #    g₁ = f(ζ₁) [−λ [∂|B|/∂ζ|ρ,α](ζ₁)]⁰ᐧ⁵ (ζ − ζ₁)⁰ᐧ⁵
@@ -775,7 +774,7 @@ class Bounce2D(Bounce):
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        result = [
+        res = [
             (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).dot(w) * cov
             for f in integrand
         ]
@@ -787,11 +786,11 @@ class Bounce2D(Bounce):
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
                 [data[k] for k in data if k not in ("zeta", "|e_zeta|r,a|", "|B|")],
-                result,
+                res,
                 plot=plot,
             )
 
-        return result
+        return res
 
     def _nufft(self, zeta, theta, data, eps):
         """Non-uniform fast Fourier transform.
@@ -820,7 +819,7 @@ class Bounce2D(Bounce):
         pitch = self._swap_pitch(pitch)[..., None]
         z1 = _swap(z1)
         z2 = _swap(z2)
-        shape = [*z1.shape, x.size]
+        s = [*z1.shape, x.size]
         cov = grad_bijection_from_disc(z1, z2)
 
         zeta = flatten_matrix(bijection_from_disc(x, z1[..., None], z2[..., None]))
@@ -830,30 +829,28 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         data["theta"] = theta
 
-        result = [
+        res = [
             _swap(
-                (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"])
-                .reshape(shape)
-                .dot(w)
+                (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).reshape(s).dot(w)
                 * cov
             )
             for f in integrand
         ]
 
         if check:
-            shape[-3], shape[0] = shape[0], shape[-3]
+            s[-3], s[0] = s[0], s[-3]
             data = apply(data, _swap)
             _check_interp(
-                shape,
+                s,
                 data["zeta"],
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
                 [data[k] for k in data if k not in ("zeta", "|e_zeta|r,a|", "|B|")],
-                result,
+                res,
                 plot=plot,
             )
 
-        return result
+        return res
 
     def _nummt(self, zeta, theta, data):
         """Non-uniform matrix multiplication transform.
@@ -974,21 +971,20 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
-        vander = setdefault(vander, {})
         if quad is None:
-            if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
-                deg = self._c["B(z)"].Y
-            else:
-                num_transit = self._c["T(z)"].X
-                deg = self._c["knots"].size // num_transit
-            x, w = leggauss(deg // 2)
             # Integrating an analytic oscillatory map so a high order quadrature
             # is ideal. Difficult to pick the right frequency for Filon quadrature
             # in general, which would work best at high NFP. Gauss-Legendre is
             # superior to Clenshaw-Curtis for smooth oscillatory maps. Prolate
             # spheroidal wave function quadrature would be an improvement.
-        else:
-            x, w = quad
+            deg = (
+                self._c["B(z)"].Y
+                if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
+                else (self._c["knots"].size // self._c["T(z)"].X)
+            )
+            quad = leggauss(deg // 2)
+        x, w = quad
+        vander = setdefault(vander, {})
 
         B_sup_zeta = irfft_non_uniform(
             idct_non_uniform(
@@ -1232,7 +1228,6 @@ class Bounce1D(Bounce):
             source=(0, 1),
             destination=(-1, -2),
         )
-        self._dB_dz = polyder_vec(self._B)
 
     @staticmethod
     def reshape(grid, f):
@@ -1296,7 +1291,9 @@ class Bounce1D(Bounce):
         if jnp.ndim(pitch_inv) == 2:
             # if rho axis exists, then add alpha axis
             pitch_inv = pitch_inv[:, jnp.newaxis]
-        return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
+        return bounce_points(
+            pitch_inv, self._zeta, self._B, polyder_vec(self._B), num_well
+        )
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1403,24 +1400,21 @@ class Bounce1D(Bounce):
 
         data = apply(setdefault(data, {}), subset=names, exclude=("|B|",))
 
-        if jnp.ndim(pitch_inv) == 2:
-            # if rho axis exists, then add alpha axis
-            pitch_inv = pitch_inv[:, jnp.newaxis]
         if points is None:
-            points = bounce_points(
-                pitch_inv, self._zeta, self._B, self._dB_dz, num_well
-            )
-
+            points = self.points(pitch_inv, num_well)
         pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
+        if pitch.ndim == 3:
+            # if rho axis exists, then add alpha axis
+            pitch = pitch[:, jnp.newaxis]
 
         if kwargs.get("batch", True):
-            result = self._integrate(
+            res = self._integrate(
                 x,
                 w,
                 integrand,
                 pitch,
                 data,
-                points,
+                *points,
                 method,
                 check,
                 plot,
@@ -1436,24 +1430,22 @@ class Bounce1D(Bounce):
                     integrand,
                     pitch,
                     data,
-                    points,
+                    *points,
                     method,
                     check=False,
                     plot=False,
                     batch=False,
                 )
 
-            result = batch_map(loop, [jnp.moveaxis(z, -1, 0) for z in points], 1)
-            result = [jnp.moveaxis(r, 0, -1) for r in result]
+            res = batch_map(loop, [jnp.moveaxis(z, -1, 0) for z in points], 1)
+            res = [jnp.moveaxis(r, 0, -1) for r in res]
 
-        return result[0] if len(result) == 1 else result
+        return res[0] if len(res) == 1 else res
 
     def _integrate(
-        self, x, w, integrand, pitch, data, points, method, check, plot, batch
+        self, x, w, integrand, pitch, data, z1, z2, method, check, plot, batch
     ):
-        z1, z2 = points
-        # (..., num pitch, num well, num quad)
-        shape = (*z1.shape, x.size)
+        s = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
         cov = grad_bijection_from_disc(z1, z2)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
@@ -1481,14 +1473,12 @@ class Bounce1D(Bounce):
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        result = [
-            (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
-        ]
+        res = [(f(data, B, pitch) / b_sup_z).reshape(s).dot(w) * cov for f in integrand]
 
         if check:
-            _check_interp(shape, zeta, b_sup_z, B, data.values(), result, plot=plot)
+            _check_interp(s, zeta, b_sup_z, B, data.values(), res, plot=plot)
 
-        return result
+        return res
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
@@ -1518,7 +1508,9 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        ext, g_ext = get_extrema(self._zeta, self._B, self._dB_dz, sentinel=0.0)
+        ext, g_ext = get_extrema(
+            self._zeta, self._B, polyder_vec(self._B), sentinel=0.0
+        )
         return argmin(
             *points, interp1d_vec(ext, self._zeta, f, method=method), ext, g_ext
         )
@@ -1544,19 +1536,17 @@ class Bounce1D(Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        B, dB_dz = self._B, self._dB_dz
+        B = self._B
         if B.ndim == 4:
             B = B[l]
-            dB_dz = dB_dz[l]
         if B.ndim == 3:
             B = B[m]
-            dB_dz = dB_dz[m]
         if pitch_inv is not None:
             errorif(
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            z1, z2 = bounce_points(pitch_inv, self._zeta, B, dB_dz)
+            z1, z2 = bounce_points(pitch_inv, self._zeta, B, polyder_vec(B))
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv

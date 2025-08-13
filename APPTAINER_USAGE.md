@@ -16,25 +16,25 @@ DESC provides pre-built Apptainer containers that include:
 ### Production Images (from releases)
 ```bash
 # Latest release - CPU version
-ghcr.io/plasmacontrol/desc:latest
+ghcr.io/tokamaster/desc:latest
 
 # Latest release - GPU version  
-ghcr.io/plasmacontrol/desc:gpu
+ghcr.io/tokamaster/desc:gpu
 
 # Specific version - CPU
-ghcr.io/plasmacontrol/desc:v0.12.2
+ghcr.io/tokamaster/desc:v0.12.2
 
 # Specific version - GPU
-ghcr.io/plasmacontrol/desc:v0.12.2-gpu
+ghcr.io/tokamaster/desc:v0.12.2-gpu
 ```
 
 ### Development Images
 ```bash
 # Development branch - CPU
-ghcr.io/plasmacontrol/desc:dev-cpu
+ghcr.io/tokamaster/desc:dev-cpu
 
 # Development branch - GPU
-ghcr.io/plasmacontrol/desc:dev-gpu
+ghcr.io/tokamaster/desc:dev-gpu
 ```
 
 ## Quick Start
@@ -42,10 +42,10 @@ ghcr.io/plasmacontrol/desc:dev-gpu
 ### 1. Pull a Container
 ```bash
 # CPU version (most common)
-apptainer pull desc-cpu.sif oci://ghcr.io/plasmacontrol/desc:latest
+apptainer pull desc-cpu.sif oci://ghcr.io/tokamaster/desc:latest
 
 # GPU version (requires NVIDIA GPU)
-apptainer pull desc-gpu.sif oci://ghcr.io/plasmacontrol/desc:gpu
+apptainer pull desc-gpu.sif oci://ghcr.io/tokamaster/desc:gpu
 ```
 
 ### 2. Run DESC
@@ -113,7 +113,7 @@ For GPU-enabled containers, use the `--nv` flag to enable NVIDIA GPU access:
 
 ```bash
 # Pull GPU container
-apptainer pull desc-gpu.sif oci://ghcr.io/plasmacontrol/desc:gpu
+apptainer pull desc-gpu.sif oci://ghcr.io/tokamaster/desc:gpu
 
 # Run with GPU access
 apptainer exec --nv desc-gpu.sif python your_gpu_script.py
@@ -221,7 +221,7 @@ If you need to modify the container, you can build from the provided definition:
 
 ```bash
 # Clone DESC repository
-git clone https://github.com/PlasmaControl/DESC.git
+git clone https://github.com/tokamaster/DESC.git
 cd DESC
 
 # Build CPU version
@@ -339,4 +339,4 @@ The containers include:
 - **Scientific libraries**: NumPy, SciPy, Matplotlib, H5Py, etc.
 - **Size**: ~2-4 GB (varies by configuration)
 
-For more information, visit the [DESC documentation](https://desc-docs.readthedocs.io/) or [GitHub repository](https://github.com/PlasmaControl/DESC).
+For more information, visit the [DESC documentation](https://desc-docs.readthedocs.io/) or [GitHub repository](https://github.com/tokamaster/DESC).

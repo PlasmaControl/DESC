@@ -5,7 +5,7 @@ From: ubuntu:22.04
     Author "DESC Development Team <PlasmaControl@princeton.edu>"
     Version "0.12.2"
     Description "DESC: 3D MHD equilibrium solver for stellarators and tokamaks"
-    Repository "https://github.com/PlasmaControl/DESC"
+    Repository "https://github.com/tokamaster/DESC"
 
 %help
     DESC (Differential Equilibrium Solver for Compact stellarators) is a code 

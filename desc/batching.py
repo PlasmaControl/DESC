@@ -34,7 +34,7 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan, vmap
-from desc.utils import Index, errorif
+from desc.utils import Index, errorif, warnif
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -196,6 +196,11 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
 def make_shardable(f, axis=0, num_devices=None):
     """Return sharded and remainder portions of ``f``.
 
+    Notes
+    -----
+    https://github.com/PlasmaControl/DESC/pull/1773#issue-3138019038
+    https://github.com/PlasmaControl/DESC/pull/1773#issuecomment-2981490799
+
     Parameters
     ----------
     f : Pytree
@@ -213,6 +218,7 @@ def make_shardable(f, axis=0, num_devices=None):
         Remainder portion of ``f``.
 
     """
+    warnif(True, msg="Sharded chunked vmap is expiremental. Use at your own risk.")
     if num_devices is None:
         num_devices = jax.device_count()
 

@@ -12,15 +12,15 @@ from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, fori_loop, jnp
 from desc.basis import (
-    FourierZernikeBasis,
     DoubleChebyshevFourierBasis,
+    FourierZernikeBasis,
     fourier,
     zernike_radial,
 )
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+from desc.compute.nabla import curl_cylindrical
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -28,17 +28,16 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.nabla import curl_cylindrical
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid, CylindricalGrid, _Grid
+from desc.grid import CylindricalGrid, Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
-from desc.io import IOAble
 from desc.integrals.singularities import _kernel_biot_savart
 from desc.integrals.virtual_casing import integrate_surface
+from desc.io import IOAble
 from desc.magnetic_fields import (
     _MagneticField,
     biot_savart_general,
@@ -62,12 +61,13 @@ from desc.utils import (
     copy_coeffs,
     errorif,
     only1,
-    setdefault,
-    warnif,
     rpz2xyz,
     rpz2xyz_vec,
-    xyz2rpz_vec
+    setdefault,
+    warnif,
+    xyz2rpz_vec,
 )
+
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
@@ -1234,151 +1234,7 @@ class Equilibrium(Optimizable, _MagneticField):
         )
         return data
 
-    def compute_magnetic_field(
-        self,
-        coords,
-        params=None,
-        basis="rpz",
-        source_grid=None,
-        transforms=None,
-        chunk_size=None,
-    ):
-        """Compute magnetic field at a set of points.
-
-        Parameters
-        ----------
-        coords : array-like shape(n,3)
-            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
-            Dictionary of optimizable parameters, eg field.params_dict.
-        basis : {"rpz", "xyz"}
-            Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating B from
-            Biot-Savart. Should NOT include endpoint at 2pi.
-        transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from source_grid
-        chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
-            If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
-
-        Returns
-        -------
-        field : ndarray, shape(n,3)
-            magnetic field at specified points
-
-        """
-        coords = jnp.atleast_2d(coords)
-        eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-            )
-
-        data = self.compute(
-            ["J", "phi", "sqrt(g)", "x"],
-            grid=source_grid,
-            params=params,
-            transforms=transforms,
-        )
-        # surface element, must divide by NFP to remove the NFP multiple on the surface
-        # grid weights, as we account for that when doing the for loop over NFP
-        dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
-
-        def nfp_loop(j, f):
-            # calculate (by rotating) rs, rs_t, rz_t
-            phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
-                2 * jnp.pi
-            )
-            # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-            source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
-            source_xyz = rpz2xyz(source_rpz)
-            J = rpz2xyz_vec(data["J"], phi=phi)
-            fj = biot_savart_general(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
-            )
-            f += fj
-            return f
-
-        B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-        if basis.lower() == "rpz":
-            B = xyz2rpz_vec(B, phi=coords[:, 1])
-        return B
-
-    def compute_magnetic_vector_potential(
-        self,
-        coords,
-        params=None,
-        basis="rpz",
-        source_grid=None,
-        transforms=None,
-        chunk_size=None,
-    ):
-        """Compute magnetic vector potential at a set of points.
-
-        Parameters
-        ----------
-        coords : array-like shape(n,3)
-            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
-            Dictionary of optimizable parameters, eg field.params_dict.
-        basis : {"rpz", "xyz"}
-            Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating A from
-            Biot-Savart. Should NOT include endpoint at 2pi.
-        transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from source_grid
-        chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
-            If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
-
-        Returns
-        -------
-        A : ndarray, shape(n,3)
-            magnetic vector potential at specified points
-
-        """
-        coords = jnp.atleast_2d(coords)
-        eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
-        if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-            )
-
-        data = self.compute(
-            ["J", "phi", "sqrt(g)", "x"],
-            grid=source_grid,
-            params=params,
-            transforms=transforms,
-        )
-        # surface element, must divide by NFP to remove the NFP multiple on the surface
-        # grid weights, as we account for that when doing the for loop over NFP
-        dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
-
-        def nfp_loop(j, f):
-            # calculate (by rotating) rs, rs_t, rz_t
-            phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
-                2 * jnp.pi
-            )
-            # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-            source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
-            source_xyz = rpz2xyz(source_rpz)
-            J = rpz2xyz_vec(data["J"], phi=phi)
-            fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
-            )
-            f += fj
-            return f
-
-        A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-        if basis.lower() == "rpz":
-            A = xyz2rpz_vec(A, phi=coords[:, 1])
-        return A
-
-    def map_coordinates(
+    def compute_magnetic_field(  # noqa: C901
         self,
         coords=None,
         params=None,
@@ -1393,7 +1249,7 @@ class Equilibrium(Optimizable, _MagneticField):
         phi_bounds=None,
         Z_bounds=[-5, 5],
         return_A=False,
-        ):
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -1420,29 +1276,32 @@ class Equilibrium(Optimizable, _MagneticField):
             then supply ``None``. Default is ``None``.
         A_grid: Grid
             Only used if method == "vector potential".
-            The grid with the (R,phi,Z) coordinates at which to evaluate the vector potential,
-            normalized so that R and Z are between 0 and 1. This normalization will be rescaled
-            by R_bounds and Z_bounds.
+            The grid with the (R,phi,Z) coordinates at which to evaluate the vector
+            potential, normalized so that R and Z are between 0 and 1.
+            This normalization will be rescaled by R_bounds and Z_bounds.
         R_bounds: array-like, shape (2,)
             Only used if method == "vector potential".
             The minimum and maximum major radius to evaluate A, in meters.
         phi_bounds: array-like, shape (2,)
             Only used if method == "vector potential".
-            The minimum and maximum major radius to evaluate A, in the same units as coords.
-            By default, the vector potential will be evaluated at all phi between 0 and 2pi/NFP.
+            The minimum and maximum major radius to evaluate A, in the same units as
+            coords. By default, the vector potential will be evaluated at all phi
+            between 0 and 2pi/NFP.
         Z_bounds: array-like, shape (2,)
             Only used if method == "vector potential".
             The minimum and maximum height to evaluate A, in meters.
         return_A: bool
             Only used if method == "vector potential".
             If True, the vector potential used to evaluate B will also be returned.
+
         Returns
         -------
         field : ndarray, shape(n,3)
             Magnetic field at specified points
         vector potential : ndarray, shape (m,3), optional
-            Vector potential at the coordinates specified by A_grid, R_bounds, and Z_bounds.
-            Only returned if return_A = True.
+            Vector potential at the coordinates specified by A_grid, R_bounds, and
+            Z_bounds. Only returned if return_A = True.
+
         """
         methods = ["biot-savart", "virtual casing", "vector potential"]
         coords = jnp.atleast_2d(coords)
@@ -1465,8 +1324,8 @@ class Equilibrium(Optimizable, _MagneticField):
                 params=params,
                 transforms=transforms,
             )
-            # surface element, must divide by NFP to remove the NFP multiple on the surface
-            # grid weights, as we account for that when doing the for loop over NFP
+            # surface element, must divide by NFP to remove the NFP multiple on the
+            # surface grid weights, as we account for it during the for loop over NFP
             dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
 
             def nfp_loop(j, f):
@@ -1479,7 +1338,11 @@ class Equilibrium(Optimizable, _MagneticField):
                 source_xyz = rpz2xyz(source_rpz)
                 J = rpz2xyz_vec(data["J"], phi=phi)
                 fj = biot_savart_general(
-                    eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,
+                    eval_xyz,
+                    source_xyz,
+                    J=J,
+                    dV=dV,
+                    chunk_size=chunk_size,
                 )
                 f += fj
                 return f
@@ -1498,11 +1361,12 @@ class Equilibrium(Optimizable, _MagneticField):
                 )
             kernel = _kernel_biot_savart
 
-            source_data = self.compute(kernel.keys,
-                        grid=source_grid,
-                        params=params,
-                        transforms=transforms,
-                        override_grid=False
+            source_data = self.compute(
+                kernel.keys,
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                override_grid=False,
             )
             B = integrate_surface(
                 coords, source_data, source_grid, kernel, chunk_size=chunk_size
@@ -1519,7 +1383,7 @@ class Equilibrium(Optimizable, _MagneticField):
                     phi = np.linspace(phi_bounds[0], phi_bounds[1], 64)
                     A_grid = CylindricalGrid(L=128, phi=phi, N=128, NFP=self.NFP)
             A_coords = A_grid.nodes * scales + shifts
-            # If we have already computed the vector potential at these same coordinates, just use those
+            # reuse the vector potential at these same coordinates, if possible
             if (
                 (not hasattr(self, "A_coords")) or A_coords != self.A_coords
             ) or source_grid is not None:
@@ -1544,8 +1408,10 @@ class Equilibrium(Optimizable, _MagneticField):
             N = A_grid.N
 
             # Build spectral transforms
-            basis_obj = DoubleChebyshevFourierBasis(L,M,N,self.NFP)
-            in_transform = Transform(A_grid, basis_obj, build_pinv=True, build=False, method="rpz")
+            basis_obj = DoubleChebyshevFourierBasis(L, M, N, self.NFP)
+            in_transform = Transform(
+                A_grid, basis_obj, build_pinv=True, build=False, method="rpz"
+            )
             if out_grid is None:
                 out_grid = Grid((coords - shifts) / scales)
             if coords is None:
@@ -1576,7 +1442,6 @@ class Equilibrium(Optimizable, _MagneticField):
                 B = (B, A)
         return B
 
-    
     def compute_magnetic_vector_potential(
         self,
         coords,
@@ -1605,6 +1470,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+
         Returns
         -------
         A : ndarray, shape(n,3)
@@ -1638,7 +1504,11 @@ class Equilibrium(Optimizable, _MagneticField):
             source_xyz = rpz2xyz(source_rpz)
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,
+                eval_xyz,
+                source_xyz,
+                J=J,
+                dV=dV,
+                chunk_size=chunk_size,
             )
             f += fj
             return f

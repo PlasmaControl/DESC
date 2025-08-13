@@ -112,6 +112,16 @@ class FluxLoop(_Objective):
     _coordinates = "rtz"
     _units = "(Wb)"
     _print_value_fmt = "Toroidal Flux: "
+    _static_attrs = _Objective._static_attrs + [
+        # TODO: should we add an intermediate flag to avoid using an array as static?
+        "_sheet_current",
+        "_vacuum",
+        "_eq_vc_data_keys",
+        # TODO: make it field fixed or ext field fixed
+        "_coils_fixed",
+        "_sheet_data_keys",
+        "_compute_A_or_B_from_CurrentPotentialField",
+    ]
 
     def __init__(
         self,
@@ -128,7 +138,6 @@ class FluxLoop(_Objective):
         field_grid=None,
         flux_loop_grid=None,
         vc_source_grid=None,
-        eval_grid=None,
         name="toroidal-flux",
         jac_chunk_size=None,
         coils_fixed=False,
@@ -141,7 +150,6 @@ class FluxLoop(_Objective):
             target = eq.Psi
         self._coils = coilset
         self._field_grid = field_grid
-        self._eval_grid = eval_grid
         self._vc_source_grid = vc_source_grid
         self._flux_loop_grid = flux_loop_grid
         self._flux_loops = flux_loops
@@ -378,7 +386,7 @@ class RogowskiLoop(_Objective):
     coils : CoilSet
         Coilset that supports the equilibrium. If coils_fixed is True,
         their contribution to the flux loops will be pre-calculated.
-    flux_loops : MagneticField
+    flux_loops : CoilSet
         CoilSet object, contains the diagnostic flux loop geometry.
         Assumed to be fixed
     target : {float, ndarray}, optional
@@ -450,6 +458,16 @@ class RogowskiLoop(_Objective):
     _coordinates = "rtz"
     _units = "(Tm)"
     _print_value_fmt = "Net Enclosed Current: "
+    _static_attrs = _Objective._static_attrs + [
+        # TODO: should we add an intermediate flag to avoid using an array as static?
+        "_sheet_current",
+        "_vacuum",
+        "_eq_vc_data_keys",
+        # TODO: make it field fixed or ext field fixed
+        "_coils_fixed",
+        "_sheet_data_keys",
+        "_compute_A_or_B_from_CurrentPotentialField",
+    ]
 
     def __init__(
         self,
@@ -466,7 +484,6 @@ class RogowskiLoop(_Objective):
         field_grid=None,
         flux_loop_grid=None,
         vc_source_grid=None,
-        eval_grid=None,
         name="toroidal-flux",
         jac_chunk_size=None,
         coils_fixed=False,
@@ -479,9 +496,9 @@ class RogowskiLoop(_Objective):
             target = eq.Psi
         self._coils = coilset
         self._field_grid = field_grid
-        self._eval_grid = eval_grid
         self._vc_source_grid = vc_source_grid
         self._flux_loop_grid = flux_loop_grid
+        # TODO: allow single coil to be passed in
         self._flux_loops = flux_loops
         self._eq = eq
         self._vacuum = vacuum

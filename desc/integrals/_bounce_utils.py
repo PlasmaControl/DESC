@@ -712,12 +712,13 @@ def cubic_spline(
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
-    if num_zeta >= f.shape[-2] and num_zeta == f.shape[-2]:
-        # TODO (1574): Bug in IFFT.
-        #  https://github.com/jax-ml/jax/issues/27591.
-        #  This does not work unless second condition is met,
-        #  but it should when first condition is met.
-        f = ifft(f, num_zeta, axis=-2, norm="forward")
+    if num_zeta >= f.shape[-2]:
+        p = num_zeta - f.shape[-2]
+        p = (p // 2, p - p // 2)
+        pad = [(0, 0)] * f.ndim
+        pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
+        f = jnp.fft.ifftshift(jnp.pad(jnp.fft.fftshift(f, axes=-2), pad), axes=-2)
+        f = ifft(f, axis=-2, norm="forward")
     else:
         f = ifft_non_uniform(
             zeta[:num_zeta, None],

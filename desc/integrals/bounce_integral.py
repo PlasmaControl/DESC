@@ -631,13 +631,7 @@ class Bounce2D(Bounce):
             if B.ndim == 4:
                 B = B.transpose(1, 0, 2, 3)
             return _check_bounce_points(
-                z1=points[0],
-                z2=points[1],
-                pitch_inv=pitch_inv,
-                knots=self._c["knots"],
-                B=B,
-                plot=plot,
-                **kwargs,
+                *points, pitch_inv, self._c["knots"], B, plot=plot, **kwargs
             )
 
     def integrate(
@@ -732,16 +726,7 @@ class Bounce2D(Bounce):
 
         fun = self._integrate_nufft if (nufft_eps >= 1e-14) else self._integrate_nummt
         result = fun(
-            x,
-            w,
-            integrand,
-            1 / pitch_inv,
-            data,
-            points[0],
-            points[1],
-            check,
-            plot,
-            nufft_eps,
+            x, w, integrand, 1 / pitch_inv, data, *points, check, plot, nufft_eps
         )
         return result[0] if len(result) == 1 else result
 
@@ -1341,13 +1326,7 @@ class Bounce1D(Bounce):
 
         """
         return _check_bounce_points(
-            z1=points[0],
-            z2=points[1],
-            pitch_inv=pitch_inv,
-            knots=self._zeta,
-            B=self._B,
-            plot=plot,
-            **kwargs,
+            *points, pitch_inv, self._zeta, self._B, plot=plot, **kwargs
         )
 
     def integrate(

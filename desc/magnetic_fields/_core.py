@@ -49,7 +49,7 @@ from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
 def biot_savart_general(
-    re, rs, J, dV=jnp.array([1.0]), chunk_size=None, support=1e-10, return_rtz=False
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None, return_rtz=False
 ):
     """Biot-Savart law for arbitrary sources.
 
@@ -71,9 +71,6 @@ def biot_savart_general(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-    support: float
-        A source point will be removed if it is too close to the point being
-        evaluated (|dr|<=support)
     Returns
     -------
     B : ndarray
@@ -90,7 +87,7 @@ def biot_savart_general(
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        num = jnp.where((dr_norm > support), jnp.cross(dr, JdV, axis=-1), 0)
+        num = jnp.cross(dr, JdV, axis=-1)
         den = dr_norm**3
         B = safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
         if return_rtz:
@@ -107,7 +104,7 @@ def biot_savart_general(
     return B
 
 def biot_savart_general_vector_potential(
-    re, rs, J, dV=jnp.array([1.0]), chunk_size=None, support=1e-10
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None,
 ):
     """Biot-Savart law for arbitrary sources for vector potential.
 
@@ -129,9 +126,6 @@ def biot_savart_general_vector_potential(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-    support: float
-        A source point will be removed if it is too close to the point being
-        evaluated (|dr|<=support)
 
 
     Returns
@@ -148,7 +142,7 @@ def biot_savart_general_vector_potential(
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        num = jnp.where(dr_norm > support, JdV, 0)
+        num = JdV
         den = dr_norm
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
@@ -2682,6 +2676,7 @@ def field_line_integrate(
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
+        field = args[0]
         r = rpz[:, 0]
         br, bp, bz = (
             scale
@@ -2726,6 +2721,7 @@ def field_line_integrate(
         max_steps=maxstep * len(phis),
         dt0=min_step_size,
         throw=False,
+        args=(field,),
         **kwargs,
     ).ys
 

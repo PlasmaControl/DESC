@@ -1,7 +1,6 @@
 from desc.backend import fori_loop, jnp
 from desc.batching import batch_map
-from desc.utils import errorif
-from desc.utils import xyz2rpz_vec
+from desc.utils import errorif, xyz2rpz_vec
 
 
 def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None):

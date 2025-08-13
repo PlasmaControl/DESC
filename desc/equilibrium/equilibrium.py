@@ -169,7 +169,23 @@ class Equilibrium(Optimizable, _MagneticField):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
+    _static_attrs = Optimizable._static_attrs + [
+        "_sym",
+        "_R_sym",
+        "_Z_sym",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_spectral_indexing",
+        "_bdry_mode",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -974,43 +990,27 @@ class Equilibrium(Optimizable, _MagneticField):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        deps_after_0d = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d
+            )
+            + names
         )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep
-            for dep in deps
-            if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d
+            if is_1dr_rad_grid(dep) and dep not in need_src_deps
         }
+        deps_after_0d_1dr = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d | dep1dr
+            )
+            + names
+        )
         dep1dz = {
             dep
-            for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
-            if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d_1dr
+            if is_1dz_tor_grid(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -1023,9 +1023,11 @@ class Equilibrium(Optimizable, _MagneticField):
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1dr = calc1dz = False
+                calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1dr = calc1dz = False
+                calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
         else:
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
@@ -1061,13 +1063,14 @@ class Equilibrium(Optimizable, _MagneticField):
                 )
                 warnif(
                     # if need more toroidal resolution
-                    "z" in req and grid.N < self.N_grid
+                    "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
                     and not (
                         override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
                     ),
                     ResolutionWarning,
-                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
+                    f"< {self._N_grid}*{self.NFP}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -2226,26 +2229,16 @@ class Equilibrium(Optimizable, _MagneticField):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
-        basis_L = FourierZernikeBasis(
-            L=L,
-            M=M,
-            N=N,
-            NFP=na_eq.nfp,
-            sym="sin" if not na_eq.lasym else False,
-            spectral_indexing=spectral_indexing,
-        )
 
         transform_R = Transform(grid, basis_R, method="direct1")
         transform_Z = Transform(grid, basis_Z, method="direct1")
-        transform_L = Transform(grid, basis_L, method="direct1")
         A_R = transform_R.matrices["direct1"][0][0][0]
         A_Z = transform_Z.matrices["direct1"][0][0][0]
-        A_L = transform_L.matrices["direct1"][0][0][0]
 
         W = 1 / grid.nodes[:, 0].flatten() ** w
-        A_Rw = A_R * W[:, None]
-        A_Zw = A_Z * W[:, None]
-        A_Lw = A_L * W[:, None]
+        A_R = A_R * W[:, None]
+        A_Z = A_Z * W[:, None]
+        A_L = A_Z  # can just reuse Z for L, works for both sym and asym cases
 
         rho = grid.nodes[grid.unique_rho_idx, 0]
         R_1D = np.zeros((grid.num_nodes,))
@@ -2262,9 +2255,9 @@ class Equilibrium(Optimizable, _MagneticField):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
-        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
-        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
+        inputs["R_lmn"] = np.linalg.lstsq(A_R, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Z, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_L, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)

@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..utils import errorif
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
@@ -146,7 +146,6 @@ def compute(  # noqa: C901
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-        from .geom_utils import rpz2xyz, rpz2xyz_vec
 
         for name in data.keys():
             errorif(
@@ -235,7 +234,7 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
-    data : dict[str, jnp.ndarray]
+    data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions
 
     Returns
@@ -310,7 +309,7 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Name(s) of the quantity(s) to compute.
     deps : set[str]
         Dependencies gathered so far.
-    data : dict[str, jnp.ndarray]
+    data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.

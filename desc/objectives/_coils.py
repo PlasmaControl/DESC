@@ -6,12 +6,20 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    Timer,
+    broadcast_tree,
+    copy_rpz_periods,
+    errorif,
+    rpz2xyz,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -739,6 +747,8 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
+    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+
     _scalar = False
     _units = "(m)"
     _print_value_fmt = "Minimum coil-coil distance: "
@@ -920,6 +930,13 @@ class PlasmaCoilSetDistanceBound(_Objective):
         bounds_default="``bounds=(0,1)``.",
         coil=True,
     )
+    _static_attrs = _Objective._static_attrs + [
+        "_mode",
+        "_eq_fixed",
+        "_coils_fixed",
+        "_use_softmin",
+        "_dist_chunk_size",
+    ]
 
     _scalar = False
     _units = "(m)"
@@ -1017,10 +1034,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
             self._dim_f = 2 * coil.num_coils
         else:  # min or max mode
             self._dim_f = coil.num_coils
-        self._eq_data_keys = ["R", "phi", "Z"]
+        self._data_keys = ["R", "phi", "Z"]
 
-        eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
-        eq_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=plasma_grid)
+        eq_profiles = get_profiles(self._data_keys, obj=eq, grid=plasma_grid)
+        eq_transforms = get_transforms(self._data_keys, obj=eq, grid=plasma_grid)
 
         self._constants = {
             "eq": eq,
@@ -1035,7 +1052,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             # precompute the equilibrium surface coordinates
             data = compute_fun(
                 eq,
-                self._eq_data_keys,
+                self._data_keys,
                 params=eq.params_dict,
                 transforms=eq_transforms,
                 profiles=eq_profiles,
@@ -1101,7 +1118,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
         else:
             data = compute_fun(
                 constants["eq"],
-                self._eq_data_keys,
+                self._data_keys,
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
@@ -1205,6 +1222,7 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         coil=True,
     )
 
+    _static_attrs = PlasmaCoilSetDistanceBound._static_attrs
     _scalar = False
     _units = "(m)"
     _print_value_fmt = "Minimum plasma-coil distance: "
@@ -1335,14 +1353,23 @@ class CoilArclengthVariance(_CoilObjective):
 
         coilset = self.things[0]
         # local import to avoid circular import
-        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+        from desc.coils import (
+            CoilSet,
+            FourierXYCoil,
+            FourierXYZCoil,
+            SplineXYZCoil,
+            _Coil,
+        )
 
         def _is_single_coil(c):
             return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
         coils = tree_leaves(coilset, is_leaf=_is_single_coil)
         self._constants["mask"] = np.array(
-            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+            [
+                int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil, FourierXYCoil)))
+                for coil in coils
+            ]
         )
 
         if self._normalize:
@@ -1423,6 +1450,12 @@ class QuadraticFlux(_Objective):
         target_default="``target=0``.",
         bounds_default="``target=0``.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_vacuum",
+    ]
 
     _scalar = False
     _linear = False
@@ -1645,6 +1678,8 @@ class SurfaceQuadraticFlux(_Objective):
         bounds_default="``target=0``.",
     )
 
+    _static_attrs = _Objective._static_attrs + ["_bs_chunk_size", "_field_fixed"]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "QFM surface normal field error: "
@@ -1861,6 +1896,12 @@ class ToroidalFlux(_Objective):
         ),
         loss_detail=" Note: has no effect for this objective.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_field_fixed",
+        "_use_vector_potential",
+    ]
 
     _coordinates = "rtz"
     _units = "(Wb)"
@@ -2128,6 +2169,8 @@ class LinkingCurrentConsistency(_Objective):
         target_default="``target=0``.",
         bounds_default="``target=0``.",
     )
+
+    _static_attrs = _Objective._static_attrs + ["_eq_fixed"]
 
     _scalar = True
     _units = "(A)"
@@ -2479,7 +2522,7 @@ class SurfaceCurrentRegularization(_Objective):
         bounds_default="``target=0``.",
         overwrite={"weight": weight_str},
     )
-
+    _static_attrs = _Objective._static_attrs + ["_regularization"]
     _coordinates = "tz"
     _print_value_fmt = "Surface Current Regularization: "
 

@@ -309,6 +309,7 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO:Generalize for a general phi before #568
 @register_compute_fun(
     name="e^rho_z|PEST",  # ∇ρ is the same in any coordinate system.
     label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
@@ -624,6 +625,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO:Generalize for a general phi before #568
 @register_compute_fun(
     name="e^vartheta_z|PEST",
     label="\\partial_{\\zeta}\\lvert_{PEST} \\mathbf{e}^{\\zeta}",
@@ -1359,6 +1361,7 @@ def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO:Generalize for a general phi before #568
 @register_compute_fun(
     name="e^zeta_z|PEST",
     label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",

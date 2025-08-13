@@ -2254,6 +2254,7 @@ def _g_sub_rr_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g_rr_z|PEST",
     label="\\partial_{\\phi} g_{\\rho\\rho}|PEST",
@@ -2292,6 +2293,7 @@ def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g_vv_z|PEST",
     label="\\partial_{\\theta_PEST} g_{\\vartheta\\vartheta}|PEST",
@@ -2330,6 +2332,7 @@ def _g_sub_zz_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g_rv_z|PEST",
     label="\\partial_{\\rho} g_{\\zeta\\zeta}|PEST",
@@ -2351,6 +2354,7 @@ def _g_sub_rv_z_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g^rr_z|PEST",
     label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
@@ -2389,6 +2393,7 @@ def _g_sup_rr_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g^rv_z|PEST",
     label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
@@ -2431,6 +2436,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="g^rz_z|PEST",
     label="\\partial_{\\zeta} g_{\\zeta\\zeta}|PEST",
@@ -2536,6 +2542,7 @@ def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="sqrt(g)_PEST_z|PEST",
     label="\\partial_{\\rho} \\sqrt{g}_PEST",
@@ -2596,6 +2603,8 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
+    # B⋅∇ = B^θ_P ∂/∂θ + B^ζ ∂/∂ζ
+    # ∇ρ = (e_θ × e_ζ)/√g
     data["B_dot_grad(grad(rho))"] = (
         cross(data["e_theta_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]

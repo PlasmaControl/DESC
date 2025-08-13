@@ -1276,15 +1276,7 @@ class Equilibrium(Optimizable, _MagneticField):
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-<<<<<<< HEAD
-            then supply ``None``.
-        L, M, N: int
-            Only used if method == "vector potential".
-            Spectral resolution to use when taking the curl of the vector potential
-            in a spectral basis. L and N default to M, and M defaults to 8.
-=======
             then supply ``None``. Default is ``None``.
->>>>>>> ma/rpz_basis
         A_grid: Grid
             Only used if method == "vector potential".
             The grid with the (R,phi,Z) coordinates at which to evaluate the vector potential,
@@ -1549,7 +1541,11 @@ class Equilibrium(Optimizable, _MagneticField):
                 data["xyz"] = source_xyz
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
-                eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size,
+                eval_xyz,
+                source_xyz,
+                J=J,
+                dV=dV,
+                chunk_size=chunk_size,
             )
             f += fj
             return f
@@ -1863,6 +1859,7 @@ class Equilibrium(Optimizable, _MagneticField):
         method="biot-savart",
         curl_A_grid=None,
         NFP=None,
+        replace_in_plasma=True,
     ):
         if NFP is None:
             NFP = self.NFP
@@ -1899,7 +1896,7 @@ class Equilibrium(Optimizable, _MagneticField):
             coords, source_grid=coil_grid, basis="rpz", chunk_size=chunk_size
         )
 
-        if save_pressure:
+        if save_pressure or replace_in_plasma:
             # For points inside the plasma, map R,phi,Z --> rho, theta, zeta
             plasma_mask = self.in_plasma(coords.reshape(nR, nphi, nZ, 3)).flatten()
             guess = data["src_rtz"][plasma_mask]
@@ -1915,14 +1912,17 @@ class Equilibrium(Optimizable, _MagneticField):
                 ),
                 NFP=self.NFP,
             )
-            # Calculate the pressure for points inside the plasma
-            p_plasma = self.compute("p", grid=rtz)["p"]
+            if save_pressure:
+                # Calculate the pressure for points inside the plasma
+                p_plasma = self.compute("p", grid=rtz)["p"]
 
-            # Set points outside the plasma to have p=0
-            pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
-            pressure[plasma_mask] = p_plasma
-        else:
-            pressure = None
+                # Set points outside the plasma to have p=0
+                pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
+                pressure[plasma_mask] = p_plasma
+            else:
+                pressure = None
+            if replace_in_plasma:
+                B[plasma_mask, :] = self.compute("B", grid=rtz, basis="rpz")["B"]
 
         save_fieldlines_format(
             path=path,

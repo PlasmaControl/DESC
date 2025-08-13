@@ -300,8 +300,6 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "sqrt(g)_t", "B_theta_r", "B_rho_t", "B_rho_tt", "B_theta_rt"],
-    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rt",
-    # "B_theta_rr", "B_rho_rt", "B_theta_rrt", "B_rho_rtt"],
 )
 def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["J^zeta_t"] = (
@@ -325,8 +323,6 @@ def _J_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "sqrt(g)_z", "B_theta_r", "B_rho_t", "B_theta_rz", "B_rho_tz"],
-    # --no-verify axis_limit_data=["sqrt(g)_r", "sqrt(g)_rz", "B_theta_rr",
-    # --no-verify "B_rho_rt", "B_theta_rrz", "B_rho_rtz"],
 )
 def _J_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["J^zeta_z"] = (

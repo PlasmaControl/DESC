@@ -52,12 +52,13 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
                 # partial (R*A_phi)/partial R instead of partial A_phi/partial R
                 RA_phi_coeff = in_transform.fit(in_R * A[:, 1])
                 term_cd = out_transform.transform(RA_phi_coeff, dr=1)
+                terms = terms.at[:, c, d].set(term_cd)
             elif c != d:
                 # partial A_c/partial r_d
                 term_cd = out_transform.transform(
                     A_coeff[:, c], dr=(d == 0), dt=(d == 1), dz=(d == 2)
                 )
-            terms = terms.at[:, c, d].set(term_cd)
+                terms = terms.at[:, c, d].set(term_cd)
     # Rescale derivatives
     terms = terms / scales.reshape(1, 1, -1)
 

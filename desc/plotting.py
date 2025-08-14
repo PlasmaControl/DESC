@@ -207,6 +207,68 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         return plt.gcf(), ax
 
 
+def _update_3d_layout(
+    fig,
+    showaxislabels,
+    showgrid,
+    zeroline,
+    showticklabels,
+    figsize,
+    dpi,
+    title,
+):
+    """Apply common layout operations for 3D plots using plotly."""
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    return fig
+
+
 def _get_grid(**kwargs):
     """Get grid for plotting.
 
@@ -1100,54 +1162,15 @@ def plot_3d(
     if fig is None:
         fig = go.Figure()
     fig.add_trace(meshdata)
-    xaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
-    )
-    yaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
-    )
-    zaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
-    )
-
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=xaxis_title,
-            yaxis_title=yaxis_title,
-            zaxis_title=zaxis_title,
-            aspectmode="data",
-            xaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            yaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            zaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-        ),
-        width=figsize[0] * dpi,
-        height=figsize[1] * dpi,
-        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
-        font=dict(family="Times"),
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
@@ -3933,11 +3956,10 @@ def plot_field_lines(
         y = rs[:, i] * np.sin(phis)
         z = zs[:, i]
 
-        if return_data:
-            plot_data["X"].append(x)
-            plot_data["Y"].append(y)
-            plot_data["Z"].append(z)
-            plot_data["R"].append(rs[:, i])
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["R"].append(rs[:, i])
 
         fig.add_trace(
             go.Scatter3d(
@@ -3956,53 +3978,15 @@ def plot_field_lines(
                 showlegend=False,
             )
         )
-    xaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
-    )
-    yaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
-    )
-    zaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
-    )
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=xaxis_title,
-            yaxis_title=yaxis_title,
-            zaxis_title=zaxis_title,
-            aspectmode="data",
-            xaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            yaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            zaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-        ),
-        width=figsize[0] * dpi,
-        height=figsize[1] * dpi,
-        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
-        font=dict(family="Times"),
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
     if return_data:
         return fig, plot_data
@@ -4019,7 +4003,7 @@ def plot_particle_trajectories(  # noqa: C901
     fig=None,
     **kwargs,
 ):
-    """Field line plot from external magnetic field.
+    """Plot particle trajectories in a magnetic field.
 
     Parameters
     ----------
@@ -4235,15 +4219,14 @@ def plot_particle_trajectories(  # noqa: C901
         y = r * np.sin(phi)
         z = z
 
-        if return_data:
-            plot_data["X"].append(x)
-            plot_data["Y"].append(y)
-            plot_data["Z"].append(z)
-            plot_data["R"].append(r)
-            plot_data["phi"].append(phi)
-            if isinstance(field, Equilibrium):
-                plot_data["rho"].append(rs[i, :])
-                plot_data["theta"].append(phis[i, :])
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["R"].append(r)
+        plot_data["phi"].append(phi)
+        if isinstance(field, Equilibrium):
+            plot_data["rho"].append(rs[i, :])
+            plot_data["theta"].append(phis[i, :])
 
         fig.add_trace(
             go.Scatter3d(
@@ -4278,53 +4261,15 @@ def plot_particle_trajectories(  # noqa: C901
                 showlegend=False,
             )
         )
-    xaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
-    )
-    yaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
-    )
-    zaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
-    )
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=xaxis_title,
-            yaxis_title=yaxis_title,
-            zaxis_title=zaxis_title,
-            aspectmode="data",
-            xaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            yaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            zaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-        ),
-        width=figsize[0] * dpi,
-        height=figsize[1] * dpi,
-        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
-        font=dict(family="Times"),
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
     if return_data:
         return fig, plot_data

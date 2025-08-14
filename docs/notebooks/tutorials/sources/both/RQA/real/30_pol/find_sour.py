@@ -42,7 +42,6 @@ from desc.fns_simp import _compute_magnetic_field_from_Current, _compute_magneti
 
 from scipy.interpolate import griddata
 
-
 def bn_res(p_M, p_N, 
            sdata1,
            sdata2,
@@ -107,7 +106,7 @@ def B_sour(p_M, p_N,
                                                        N,
                                                        d_0), 
                                                 surface, eq, Bgrid, basis="rpz")
-
+@jax.jit
 def B_theta_contours(p_M, p_N,
                      sdata,
                      sgrid,
@@ -153,7 +152,7 @@ def B_theta_contours(p_M, p_N,
     return _compute_magnetic_field_from_Current_Contour(ss_grid, 
                                                         K_cont,
                                                         surface, eq, Bgrid, basis="rpz")
-
+@jax.jit
 def B_sticks(p_M, p_N,
                  sgrid,
                  surface,
@@ -203,6 +202,7 @@ def B_sticks(p_M, p_N,
     
     return b_sticks_total
 
+@jax.jit
 def stick(p2_, # second point of the stick
           p1_, # first point of the stick
           plasma_points, # points on the plasma surface
@@ -244,6 +244,7 @@ def stick(p2_, # second point of the stick
         
     return b_stick
 
+#@jax.jit
 def K_sour(p_M, p_N,
            sdata1,
            sdata2,
@@ -344,7 +345,7 @@ def K_sour(p_M, p_N,
                                                 + omega_total_real2 * sdata3["e_u"].T
                                                 )
             ).T
-
+@jax.jit
 def f_sour(data_or,
            u1_, v1_, # first dipole
            N, d_0):
@@ -410,6 +411,7 @@ def v1_eval(w0, N, d_0, data_or):
                      1 # Arbitraty value of 1 inside the circle around the vortex core
                     )
 
+@jax.jit
 def chi_reg(w0,# location of the vortex
             d_0, data_or):
     
@@ -417,12 +419,14 @@ def chi_reg(w0,# location of the vortex
                      - ( data_or["lambda_u"] / data_or["lambda_iso"]) + ( data_or["lambda_v"] / data_or["lambda_iso"] ) * 1j,
                      0)
 
+@jax.jit
 def f_reg(w0,# location of the vortex
           d_0, data_or):
     
     return jnp.where(jnp.abs(data_or["w"] - w0) < d_0,
                      jnp.log(data_or["lambda_iso"]),
                      0)
+
 
 def v1_prime_eval(w0, N, d_0, data_or):
 

@@ -1366,7 +1366,8 @@ class Equilibrium(Optimizable, _MagneticField):
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
-
+        if return_data:
+            return B, data
         return B
 
     def compute_magnetic_vector_potential(

@@ -2451,8 +2451,8 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^rho", "e^zeta", "e^rho_p|PEST", "e^zeta_p|PEST"],
 )
-def _g_sup_rz_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g^rz_z|PEST"] = dot(data["e^rho"], data["e^zeta_z|PEST"]) + dot(
+def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
+    data["g^rz_p|PEST"] = dot(data["e^rho"], data["e^zeta_p|PEST"]) + dot(
         data["e^rho_p|PEST"], data["e^zeta"]
     )
     return data

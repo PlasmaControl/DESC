@@ -82,9 +82,9 @@ _bounce_doc = {
 
         Due to bugs in upstream libraries
         (https://github.com/flatironinstitute/jax-finufft/issues/158),
-        you must specify ``nufft_eps=0`` if you intend to use JAX's automatic
-        differentiation to differentiate the computation. Performance will improve
-        significantly once jax-finufft fixes this.
+        you must specify ``nufft_eps=0`` if you intend to use automatic differentiation
+        to differentiate the computation. Performance will improve significantly once
+        jax-finufft fixes this.
         """,
     "spline": """bool :
         Whether to use cubic splines to compute bounce points.

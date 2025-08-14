@@ -201,12 +201,12 @@ class Bounce2D(Bounce):
     (https://github.com/flatironinstitute/jax-finufft/issues/158),
     the automatic differentiation tool fails to compute the objective derivative.
     If you will use automatic differentiation to compute the derivative of a
-    function which calls any of:
+    function which calls any of the following methods, then you must specify
+    ``nufft_eps=0`` in those methods for correctness.
+
       * ``Bounce2D.__init__``
       * ``Bounce2D.integrate``
       * ``Bounce2D.interp_to_argmin``
-
-    then you must provide ``nufft_eps=0`` in those methods for correctness.
 
     Parameters
     ----------

@@ -309,7 +309,7 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO:Generalize for a general phi before #568
+# TODO:Generalize for a general zeta before #568
 @register_compute_fun(
     name="e^rho_z|PEST",  # ∇ρ is the same in any coordinate system.
     label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
@@ -625,7 +625,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO:Generalize for a general phi before #568
+# TODO:Generalize for a general zeta before #568
 @register_compute_fun(
     name="e^vartheta_z|PEST",
     label="\\partial_{\\zeta}\\lvert_{PEST} \\mathbf{e}^{\\zeta}",
@@ -1361,7 +1361,7 @@ def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO:Generalize for a general phi before #568
+# TODO:Generalize for a general zeta before #568
 @register_compute_fun(
     name="e^zeta_z|PEST",
     label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
@@ -3978,7 +3978,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
 ################################################################################
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="e_theta_PEST_v|PEST",
     label="\\partial_{\\vartheta} \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
@@ -4005,12 +4005,12 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
     return data
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
-    name="e_theta_PEST_z|PEST",
+    name="e_theta_PEST_p|PEST",
     label="\\partial_{\\phi} |_{\\rho, \\vartheta}"
     " \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
-    "= \\mathbf{e}_{\\theta_{PEST} \\phi}",
+    "= {\\mathbf{e}_{\\theta_{PEST}}_{\\phi}}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4030,10 +4030,10 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
         "theta_PEST_z",
         "theta_PEST_tz",
     ],
-    aliases=["e_vartheta_z|PEST", "e_phi_v|PEST", "e_phi_t|PEST"],
+    aliases=["e_vartheta_p|PEST", "e_phi_v|PEST", "e_phi_t|PEST"],
 )
 def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    data["e_theta_PEST_z|PEST"] = (
+    data["e_theta_PEST_p|PEST"] = (
         data["e_theta_z"]
         - data["e_theta_PEST_v|PEST"]
         * data["theta_PEST_t"][:, jnp.newaxis]
@@ -4043,12 +4043,12 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     return data
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
-    name="e_phi_z|PEST",
+    name="e_phi_p|PEST",
     label="\\partial_{\\phi} |_{\\rho, \\vartheta}"
     " \\mathbf{e}_{\\vartheta} |_{\\rho, \\phi}"
-    "= \\mathbf{e}_{\\theta_{PEST} \\phi}",
+    "= {\\mathbf{e}_{\\theta_{PEST}}_{\\phi}}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4064,22 +4064,22 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
         "e_zeta_z",  # TODO: 568
         "e_theta_PEST",
         "e_theta_PEST_v|PEST",
-        "e_theta_PEST_z|PEST",
+        "e_theta_PEST_p|PEST",
         "theta_PEST_z",
         "theta_PEST_zz",
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    data["e_phi_z|PEST"] = (
+    data["e_phi_p|PEST"] = (
         data["e_zeta_z"]
-        - 2 * data["e_theta_PEST_z|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - 2 * data["e_theta_PEST_p|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
         - data["e_theta_PEST"] * (data["theta_PEST_zz"])[:, jnp.newaxis]
         - data["e_theta_PEST_v|PEST"] * (data["theta_PEST_z"] ** 2)[:, jnp.newaxis]
     )
     return data
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="e_theta_PEST_r|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
@@ -4116,7 +4116,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     return data
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="e_phi_r|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
@@ -4143,7 +4143,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
         "theta_PEST_z",
         "theta_PEST_rz",
     ],
-    aliases=["e_rho_z|PEST"],
+    aliases=["e_rho_p|PEST"],
 )
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
     data["e_phi_r|PEST"] = (
@@ -4157,7 +4157,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     return data
 
 
-# TODO: Generalize for a general phi before #568
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="e_rho_r|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"

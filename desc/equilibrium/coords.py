@@ -403,6 +403,11 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     TODO(#1243) Do proper partial summation once the DESC
     basis are improved to store the padded tensor product modes.
     https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+    The partial summation implemented here has a totally unnecessary FourierZernike
+    spectral to real transform and unnecessary N^2 FFT's of size N. Still the
+    performance improvement is significant. To avoid the transform and FFTs,
+    I suggest padding the FourierZernike basis modes to make the partial summation
+    trivial. Then this computation will likely take microseconds.
 
     Parameters
     ----------
@@ -455,7 +460,7 @@ def _map_clebsch_coordinates(
     zeta,
     L_lmn,
     lmbda,
-    theta0=None,
+    guess=None,
     *,
     tol=1e-6,
     maxiter=30,
@@ -467,18 +472,20 @@ def _map_clebsch_coordinates(
     ----------
     iota : ndarray
         Shape (num iota, ).
-        Rotational transform on each node.
+        Rotational transform.
     alpha : ndarray
-        Shape (num alpha, )
+        Shape (num alpha, ).
+        Field line labels.
     zeta : ndarray
-        Shape (num zeta, )
+        Shape (num zeta, ).
+        DESC toroidal angle.
     L_lmn : jnp.ndarray
         Spectral coefficients for λ.
-    L : Transform
-        Transform for λ built on coordinates [ρ, θ, ζ].
-    theta0 : jnp.ndarray
+    lmbda : Transform
+        Transform for λ built on DESC coordinates [ρ, θ, ζ].
+    guess : jnp.ndarray
         Shape (num iota, num alpha, num zeta).
-        Optional initial guess for the computational coordinates.
+        Optional initial guess for the DESC computational coordinate θ solution.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -506,10 +513,10 @@ def _map_clebsch_coordinates(
         return 1 + dc_dt
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
-    def vecroot(theta0, target, c_m):
+    def vecroot(guess, target, c_m):
         return root_scalar(
             rootfun,
-            theta0,
+            guess,
             jac=jacfun,
             args=(target, c_m),
             tol=tol,
@@ -522,7 +529,7 @@ def _map_clebsch_coordinates(
     c_m = c_m[:, jnp.newaxis]
     target = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
     # Assume λ − ι ω = 0 for default initial guess.
-    return vecroot(setdefault(theta0, target), target, c_m)
+    return vecroot(setdefault(guess, target), target, c_m)
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

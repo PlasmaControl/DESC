@@ -11,16 +11,10 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, fori_loop, jnp
-from desc.basis import (
-    DoubleChebyshevFourierBasis,
-    FourierZernikeBasis,
-    fourier,
-    zernike_radial,
-)
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.nabla import curl_cylindrical
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -33,7 +27,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import CylindricalGrid, Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.integrals.singularities import _kernel_biot_savart
 from desc.integrals.virtual_casing import integrate_surface
@@ -1236,19 +1230,13 @@ class Equilibrium(Optimizable, _MagneticField):
 
     def compute_magnetic_field(  # noqa: C901
         self,
-        coords=None,
+        coords,
         params=None,
         basis="rpz",
         source_grid=None,
         transforms=None,
         chunk_size=50,
         method="biot-savart",
-        out_grid=None,
-        A_grid=None,
-        R_bounds=[5, 11],
-        phi_bounds=None,
-        Z_bounds=[-5, 5],
-        return_A=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1259,10 +1247,13 @@ class Equilibrium(Optimizable, _MagneticField):
         params : dict or array-like of dict, optional
             Dictionary of optimizable parameters, eg field.params_dict.
         method: string
-            "biot-savart", "virtual casing" or "vector potential". "biot-savart"
-            and "virtual casing" calculates  the magnetic field directly from the
-            current density, whereas "vector potential" first calculates A, and then
-            takes curl(A) to ensure a divergence-free field.
+            "biot-savart" or "virtual casing". both methods calculate the magnetic
+            field directly from the current density. if you wish to use the curl(A)
+            method, create a PlasmaField object.
+            NOTE: the virtual casing method does not work at all inside the plasma,
+            but it is faster outside the plasma. the biot-savart method also doesn't
+            work very well inside the plasma. if you want the field inside the plasma,
+            create a PlasmaField object.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
@@ -1274,36 +1265,14 @@ class Equilibrium(Optimizable, _MagneticField):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-        A_grid: Grid
-            Only used if method == "vector potential".
-            The grid with the (R,phi,Z) coordinates at which to evaluate the vector
-            potential, normalized so that R and Z are between 0 and 1.
-            This normalization will be rescaled by R_bounds and Z_bounds.
-        R_bounds: array-like, shape (2,)
-            Only used if method == "vector potential".
-            The minimum and maximum major radius to evaluate A, in meters.
-        phi_bounds: array-like, shape (2,)
-            Only used if method == "vector potential".
-            The minimum and maximum major radius to evaluate A, in the same units as
-            coords. By default, the vector potential will be evaluated at all phi
-            between 0 and 2pi/NFP.
-        Z_bounds: array-like, shape (2,)
-            Only used if method == "vector potential".
-            The minimum and maximum height to evaluate A, in meters.
-        return_A: bool
-            Only used if method == "vector potential".
-            If True, the vector potential used to evaluate B will also be returned.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             Magnetic field at specified points
-        vector potential : ndarray, shape (m,3), optional
-            Vector potential at the coordinates specified by A_grid, R_bounds, and
-            Z_bounds. Only returned if return_A = True.
 
         """
-        methods = ["biot-savart", "virtual casing", "vector potential"]
+        methods = ["biot-savart", "virtual casing"]
         coords = jnp.atleast_2d(coords)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         assert (
@@ -1373,73 +1342,7 @@ class Equilibrium(Optimizable, _MagneticField):
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
-        elif method == methods[2]:
-            shifts = np.array([R_bounds[0], 0, Z_bounds[0]])
-            scales = np.array([R_bounds[1] - R_bounds[0], 1, Z_bounds[1] - Z_bounds[0]])
-            if A_grid is None:
-                if phi_bounds is None:
-                    A_grid = CylindricalGrid(L=128, M=128, N=128, NFP=self.NFP)
-                else:
-                    phi = np.linspace(phi_bounds[0], phi_bounds[1], 64)
-                    A_grid = CylindricalGrid(L=128, phi=phi, N=128, NFP=self.NFP)
-            A_coords = A_grid.nodes * scales + shifts
-            # reuse the vector potential at these same coordinates, if possible
-            if (
-                (not hasattr(self, "A_coords")) or A_coords != self.A_coords
-            ) or source_grid is not None:
-                A = self.compute_magnetic_vector_potential(
-                    A_coords,
-                    chunk_size=chunk_size,
-                    source_grid=source_grid,
-                    params=params,
-                    basis=basis,
-                    transforms=transforms,
-                )
-                if source_grid is None:
-                    self.A_grid = A_grid
-                    self.A_coords = A_coords
-                    self.vector_potential = A
-            else:
-                A = self.vector_potential
 
-            # Spectral resolution parameters
-            L = A_grid.L
-            M = A_grid.M
-            N = A_grid.N
-
-            # Build spectral transforms
-            basis_obj = DoubleChebyshevFourierBasis(L, M, N, self.NFP)
-            in_transform = Transform(
-                A_grid, basis_obj, build_pinv=True, build=False, method="rpz"
-            )
-            if out_grid is None:
-                out_grid = Grid((coords - shifts) / scales)
-            if coords is None:
-                coords = out_grid.nodes * scales + shifts
-            out_transform = Transform(
-                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
-            )
-
-            A = self.compute_magnetic_vector_potential(
-                A_coords,
-                chunk_size=chunk_size,
-                source_grid=source_grid,
-                params=params,
-                basis=basis,
-                transforms=transforms,
-            )
-            if basis.lower == "xyz":
-                A_rpz = xyz2rpz_vec(A, phi=coords[:, 1])
-            else:
-                A_rpz = A
-
-            B = curl_cylindrical(
-                A_rpz, A_coords[:, 0], coords[:, 0], in_transform, out_transform, scales
-            )
-            if basis.lower == "xyz":
-                B = rpz2xyz_vec(B, phi=coords[:, 1])
-            if return_A:
-                B = (B, A)
         return B
 
     def compute_magnetic_vector_potential(

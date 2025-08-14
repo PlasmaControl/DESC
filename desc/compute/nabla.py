@@ -43,6 +43,36 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         The curl of the vector field, in cylindrical coordinates.
     """
     A_coeff = in_transform.fit(A)
+    RA_phi_coeff = in_transform.fit(in_R * A[:, 1])
+    return _curl_cylindrical(A_coeff, RA_phi_coeff, out_R, out_transform, scales)
+
+
+def _curl_cylindrical(A_coeff, RA_phi_coeff, out_R, out_transform, scales):
+    """Take the curl of A, using precomputed spectral coeffs.
+
+    Parameters
+    ----------
+    A_coeff : ndarray, shape(num_modes,3)
+        Spectral coefficients for A.
+    RA_phi_coeff : ndarray, shape(num_modes,)
+        Spectral coefficients for R*A_phi.
+    out_R : ndarray, shape(n,)
+        radial location for each point at which to calculate
+        the curl
+    out_transform: Transform
+        transform from the spectral basis on which A is calculated to the
+        real grid on which the curl is to be evaluated.
+        the transform must have been built, with derivs>=1.
+    scales: jnp.ndarray, shape (3,)
+        This parameter adjusts the dimensions of the partial derivatives so they are
+        taken with respect to the normal coordinates, not the coordinates in the
+        transform.
+
+    Returns
+    -------
+    curl_A : ndarray, shape(n,3)
+        The curl of the vector field, in cylindrical coordinates.
+    """
     # Calculate matrix of terms for the curl
     # (dims: datapoint, component index, derivative index)
     terms = jnp.zeros((out_R.shape[0], 3, 3))
@@ -50,7 +80,6 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         for d in range(3):
             if c == 1 and d == 0:
                 # partial (R*A_phi)/partial R instead of partial A_phi/partial R
-                RA_phi_coeff = in_transform.fit(in_R * A[:, 1])
                 term_cd = out_transform.transform(RA_phi_coeff, dr=1)
                 terms = terms.at[:, c, d].set(term_cd)
             elif c != d:

@@ -196,13 +196,21 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         iota profile, it must be passed as a keyword argument in kwargs. In that case,
         params should also contain i_l, which is the iota profile parameters.
         """
-        rho, theta, zeta, vpar = x
+        xp, yp, zeta, vpar = x
+        # we use cartesian-like coordinates xp and yp which are x=rho*cos(theta) and
+        # y=rho*sin(theta) for integration, but convert them to flux coordinates for
+        # compute functions. This way, we don't have the problem of terminating the
+        # integration when rho<0, but actually the particle is still in the plasma
+        # volume.
+        rho = jnp.sqrt(xp**2 + yp**2)
+        theta = jnp.arctan2(yp, xp)
+        # compute functions are not correct for very small rho
+        rho = jnp.where(rho < 1e-6, 1e-6, rho)
         iota = kwargs.get("iota", None)
         grid = Grid(
             jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
             jitable=True,
-            sort=False,
         )
         data_keys = [
             "B",
@@ -230,8 +238,12 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         rhodot = dot(Rdot, data["e^rho"])
         thetadot = dot(Rdot, data["e^theta"])
         zetadot = dot(Rdot, data["e^zeta"])
+        # get the derivative for cartesian-like coordinates
+        xpdot = rhodot * jnp.cos(theta) - rho * thetadot * jnp.sin(theta)
+        ypdot = rhodot * jnp.sin(theta) + rho * thetadot * jnp.cos(theta)
+        # derivative the parallel velocity
         vpardot = -mu / m * dot(data["b"], data["grad(|B|)"])
-        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot]).reshape(x.shape)
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
     def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):
@@ -995,15 +1007,14 @@ def _trace_particles(
     """Trace charged particles in an equilibrium or external magnetic field.
 
     This is the jit friendly version of the `trace_particles` function. For full
-    documentation, see `trace_particles`. The only difference is that this function
-    takes the outputs of `initializer.init_particles` as inputs, rather than
-    the particle initializer itself. There won't be any checks on the y0 and model_args
-    inputs, so make sure they are in the correct format. One can use this function
-    in an optimization loop, where the initial positions and velocities of particles
-    are ccomputed in the `build` method of the objective function. If the objective
-    requires initialization of particles at each iteration, make sure that the
-    initializer class can work under jit compilation which is not the case for all of
-    them.
+    documentation, see `trace_particles`. This function takes the outputs of
+    `initializer.init_particles` as inputs, rather than the particle initializer
+    itself. There won't be any checks on the y0 and model_args inputs, so make sure
+    they are in the correct format. One can use this function in an objective, where
+    the initial positions and velocities of particles are computed in the `build`
+    method. If the objective requires initialization of particles at each iteration,
+    make sure that the initializer can work under jit compilation which is not the
+    case for all of them.
 
     Parameters
     ----------
@@ -1030,24 +1041,36 @@ def _trace_particles(
         if isinstance(field, Equilibrium):
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
-    def default_terminating_event(t, y, args, **kwargs):
-        i_out = jnp.logical_or(y[0] < bounds[0, 0], y[0] > bounds[0, 1])
-        j_out = jnp.logical_or(y[1] < bounds[1, 0], y[1] > bounds[1, 1])
+    def default_event(t, y, args, **kwargs):
+        if isinstance(field, Equilibrium):
+            i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
+            j = jnp.arctan2(y[1], y[0])
+        else:
+            i = y[0]
+            j = y[1]
+        i_out = jnp.logical_or(i < bounds[0, 0], i > bounds[0, 1])
+        j_out = jnp.logical_or(j < bounds[1, 0], j > bounds[1, 1])
         k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
-    event = Event(default_terminating_event) if event is None else event
+    event = Event(default_event) if event is None else event
     max_steps = (
         max_steps
         if max_steps is not None
         else int((ts[1] - ts[0]) / min_step_size * 100)
     )
+
+    # convert cartesian-like for integration in flux coordinates
+    if isinstance(field, Equilibrium):
+        xp = y0[:, 0] * jnp.cos(y0[:, 1])
+        yp = y0[:, 0] * jnp.sin(y0[:, 1])
+        y0 = y0.at[:, 0].set(xp)
+        y0 = y0.at[:, 1].set(yp)
+
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        # we only want to map over initial positions and particle arguments,
-        # other arguments are there to prevent closing over them, and hence
-        # reduce the number of recompilations in, for example, an optimization
-        # loop. Note: vmap with keyword arguments is weird, not using it for now
+        # we only want to map over initial positions and particle arguments
+        # Note: vmap with keyword arguments is weird, not using it for now
         yt = vmap(_intfun_wrapper, in_axes=(0, 0) + 12 * (None,))(
             y0,
             model_args,
@@ -1069,6 +1092,13 @@ def _trace_particles(
 
     x = yt[:, :, :3]
     v = yt[:, :, 3:]
+
+    # convert back to flux coordinates
+    if isinstance(field, Equilibrium):
+        rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
+        theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
+        x = x.at[:, :, 0].set(rho)
+        x = x.at[:, :, 1].set(theta)
 
     return x, v
 

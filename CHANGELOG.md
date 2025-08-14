@@ -19,6 +19,7 @@ New Features
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
 - New basis vectors and metric elements corresponding to covariant vectors and contravariant and their derivatives in PEST coordinates.
 
+
 Bug Fixes
 
 - Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.

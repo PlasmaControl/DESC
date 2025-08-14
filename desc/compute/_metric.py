@@ -2306,10 +2306,10 @@ def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_vartheta|r,p", "e_vartheta_z|PEST"],
+    data=["e_vartheta|r,p", "e_vartheta_p|PEST"],
 )
-def _g_sub_vv_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["g_vv_z|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_z|PEST"])
+def _g_sub_vv_p_PEST(params, transforms, profiles, data, **kwargs):
+    data["g_vv_p|PEST"] = 2 * dot(data["e_vartheta|r,p"], data["e_vartheta_p|PEST"])
     return data
 
 
@@ -2453,7 +2453,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_rz_z_PEST(params, transforms, profiles, data, **kwargs):
     data["g^rz_z|PEST"] = dot(data["e^rho"], data["e^zeta_z|PEST"]) + dot(
-        data["e^rho_z|PEST"], data["e^zeta"]
+        data["e^rho_p|PEST"], data["e^zeta"]
     )
     return data
 

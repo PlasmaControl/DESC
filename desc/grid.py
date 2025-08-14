@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class _Grid(IOAble, ABC):
+class AbstractGrid(IOAble, ABC):
     """Base class for collocation grids."""
 
     _io_attrs_ = [
@@ -772,7 +772,7 @@ class _Grid(IOAble, ABC):
         return x
 
 
-class Grid(_Grid):
+class Grid(AbstractGrid):
     """Collocation grid with custom node placement.
 
     Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
@@ -1049,7 +1049,7 @@ class Grid(_Grid):
         return self._source_grid
 
 
-class LinearGrid(_Grid):
+class LinearGrid(AbstractGrid):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -1095,7 +1095,7 @@ class LinearGrid(_Grid):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = _Grid._io_attrs_ + [
+    _io_attrs_ = AbstractGrid._io_attrs_ + [
         "_toroidal_endpoint",
         "_poloidal_endpoint",
     ]
@@ -1416,7 +1416,7 @@ class LinearGrid(_Grid):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(_Grid):
+class QuadratureGrid(AbstractGrid):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -1549,7 +1549,7 @@ class QuadratureGrid(_Grid):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(_Grid):
+class ConcentricGrid(AbstractGrid):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more

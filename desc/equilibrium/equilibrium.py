@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import AbstractGrid, Grid, LinearGrid, QuadratureGrid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
@@ -869,7 +869,7 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         errorif(
-            not isinstance(grid, _Grid),
+            not isinstance(grid, AbstractGrid),
             TypeError,
             msg="must pass in a Grid object for argument grid!"
             f" instead got type {type(grid)}",

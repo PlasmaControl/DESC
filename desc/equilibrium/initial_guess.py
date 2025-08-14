@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid, _Grid
+from desc.grid import AbstractGrid, Grid
 from desc.io import load
 from desc.objectives import (
     FixThetaSFL,
@@ -363,7 +363,7 @@ def _initial_guess_points(nodes, x, x_basis):
         Vector of flux surface coefficients associated with x_basis.
 
     """
-    if not isinstance(nodes, _Grid):
+    if not isinstance(nodes, AbstractGrid):
         nodes = Grid(nodes, sort=False)
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)

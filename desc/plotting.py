@@ -1203,7 +1203,7 @@ def plot_fsa(  # noqa: C901
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-    grid : _Grid
+    grid : AbstractGrid
         Grid to compute name on. If provided, the parameters
         ``rho``, ``M``, and ``N`` are ignored.
     **kwargs : dict, optional

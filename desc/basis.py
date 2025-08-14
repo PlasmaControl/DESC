@@ -8,7 +8,7 @@ import mpmath
 import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
-from desc.grid import Grid, _Grid
+from desc.grid import AbstractGrid, Grid
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -412,7 +412,7 @@ class PowerSeries(_Basis):
             basis functions evaluated at nodes
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -528,7 +528,7 @@ class FourierSeries(_Basis):
             [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -658,7 +658,7 @@ class DoubleFourierSeries(_Basis):
             ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -869,7 +869,7 @@ class ZernikePolynomial(_Basis):
             Basis functions evaluated at nodes.
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -1028,7 +1028,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
             ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -1270,7 +1270,7 @@ class FourierZernikeBasis(_Basis):
             Basis functions evaluated at nodes.
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
@@ -1428,7 +1428,7 @@ class ChebyshevPolynomial(_Basis):
             basis functions evaluated at nodes
 
         """
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGrid):
             grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes

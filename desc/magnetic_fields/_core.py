@@ -29,7 +29,7 @@ from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid, _Grid
+from desc.grid import AbstractGrid, LinearGrid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
@@ -2947,7 +2947,7 @@ class OmnigenousField(Optimizable, IOAble):
             grid = LinearGrid(
                 theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
             )
-        elif not isinstance(grid, _Grid):
+        elif not isinstance(grid, AbstractGrid):
             raise TypeError(
                 "must pass in a Grid object for argument grid!"
                 f" instead got type {type(grid)}"

@@ -1764,7 +1764,6 @@ class Equilibrium(Optimizable, _MagneticField):
         coil_grid=None,
         source_grid=None,
         method="biot-savart",
-        curl_A_grid=None,
         NFP=None,
         replace_in_plasma=True,
     ):
@@ -1807,10 +1806,6 @@ class Equilibrium(Optimizable, _MagneticField):
             fastest method and accurate at high resolution, but doesn't work inside the
             plasma.
             if passing method='virtual casing', replace_in_plasma is highly recommended.
-        curl_A_grid : Grid, optional
-            If using method='vector potential', the grid that A will be evaluated on in
-            order to take B=curl(A). Does not affect the grid on which the vector
-            potential is evaluated to be saved.
         NFP : int, optional
             The NFP input only defines the maximum phi of the evaluation grid, i.e.
             phimax = 2pi/NFP. Defaults to self.NFP
@@ -1842,7 +1837,6 @@ class Equilibrium(Optimizable, _MagneticField):
             source_grid=source_grid,
             chunk_size=chunk_size,
             method=method,
-            A_grid=curl_A_grid,
             return_data=True,
             return_rtz=save_pressure,
         )

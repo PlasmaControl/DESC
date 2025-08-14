@@ -311,8 +311,8 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
 
 # TODO:Generalize for a general zeta before #568
 @register_compute_fun(
-    name="e^rho_z|PEST",  # ∇ρ is the same in any coordinate system.
-    label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
+    name="e^rho_p|PEST",  # ∇ρ is the same in any coordinate system.
+    label="\\partial_{\\phi} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector"
@@ -324,8 +324,8 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^rho_t", "e^rho_z", "theta_PEST_t", "theta_PEST_z"],
 )
-def _e_sup_rho_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^rho_z|PEST"] = data["e^rho_z"]
+def _e_sup_rho_p_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^rho_p|PEST"] = data["e^rho_z"]
     -data["e^rho_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
     return data
 

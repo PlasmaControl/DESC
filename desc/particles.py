@@ -16,7 +16,8 @@ from diffrax import (
 )
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jit, jnp, tree_map, vmap
+from desc.backend import jax, jit, jnp, tree_map
+from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
@@ -893,6 +894,7 @@ def trace_particles(
     adjoint=RecursiveCheckpointAdjoint(),
     bounds=None,
     event=None,
+    chunk_size=None,
     options={},
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
@@ -946,6 +948,9 @@ def trace_particles(
         event function will be used, which stops integration when particles leave the
         bounds. If integration is stopped by the event, the output will contain NaN
         values for the points outside the bounds.
+    chunk_size : int, optional
+        Chunk size for integration over particles. If not provided, the integration will
+        be done over all particles at once without chunking.
     options : dict, optional
         Additional keyword arguments to pass to the field computation, such as
             - iota : Profile
@@ -981,6 +986,7 @@ def trace_particles(
         adjoint=adjoint,
         bounds=bounds,
         event=event,
+        chunk_size=chunk_size,
         options=options,
     )
 
@@ -1002,6 +1008,7 @@ def _trace_particles(
     adjoint=RecursiveCheckpointAdjoint(),
     bounds=None,
     event=None,
+    chunk_size=None,
     options={},
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
@@ -1071,7 +1078,9 @@ def _trace_particles(
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments
         # Note: vmap with keyword arguments is weird, not using it for now
-        yt = vmap(_intfun_wrapper, in_axes=(0, 0) + 12 * (None,))(
+        yt = vmap_chunked(
+            _intfun_wrapper, in_axes=(0, 0) + 12 * (None,), chunk_size=chunk_size
+        )(
             y0,
             model_args,
             field,

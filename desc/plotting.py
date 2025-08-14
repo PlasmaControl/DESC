@@ -4189,6 +4189,7 @@ def plot_particle_trajectories(  # noqa: C901
 
     # tracing an equilibrium gives rpz in flux coordinates
     if model.frame == "flux" and isinstance(field, Equilibrium):
+        rtz = rpz.copy()
         rpz = vmap(to_lab, in_axes=(0,))(rpz)
 
     rs = rpz[:, :, 0]
@@ -4225,8 +4226,8 @@ def plot_particle_trajectories(  # noqa: C901
         plot_data["R"].append(r)
         plot_data["phi"].append(phi)
         if isinstance(field, Equilibrium):
-            plot_data["rho"].append(rs[i, :])
-            plot_data["theta"].append(phis[i, :])
+            plot_data["rho"].append(rtz[i, :, 0])
+            plot_data["theta"].append(rtz[i, :, 1])
 
         fig.add_trace(
             go.Scatter3d(

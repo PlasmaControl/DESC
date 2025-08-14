@@ -15,7 +15,7 @@ from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.integrals import compute_B_plasma
-from desc.optimizable import optimizable_parameter
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import (
     Timer,
     check_posint,

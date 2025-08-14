@@ -135,7 +135,8 @@ def map_coordinates(  # noqa: C901
             else:
                 iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
             rho, alpha, zeta = coords.T
-            coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
+            omega = 0  # TODO(#568)
+            coords = jnp.column_stack([rho, alpha + iota * (zeta + omega), zeta])
             inbasis = ("rho", "theta_PEST", "zeta")
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(

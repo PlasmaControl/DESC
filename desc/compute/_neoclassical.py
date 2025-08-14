@@ -79,6 +79,12 @@ _bounce_doc = {
     "nufft_eps": """float :
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+
+        Due to bugs in upstream libraries
+        (https://github.com/flatironinstitute/jax-finufft/issues/158),
+        you must specify ``nufft_eps=0`` if you intend to use JAX's automatic
+        differentiation to differentiate the computation. Performance will improve
+        significantly once jax-finufft fixes this.
         """,
     "spline": """bool :
         Whether to use cubic splines to compute bounce points.

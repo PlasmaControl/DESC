@@ -144,7 +144,7 @@ class Bounce2D(Bounce):
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
-    * dℓ parameterizes the distance along the field line in meters.
+    * dℓ parametrizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
     * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
@@ -165,14 +165,14 @@ class Bounce2D(Bounce):
       θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
       λ B(ζₖ) = 1
-    Interpolate smooth periodic components of integrand with FFTs.
+    Interpolate smooth periodic parts of integrand with FFTs.
       G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
       Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
-    permissible if separable into periodic and secular components.
-    In that case, supply the periodic component, which will be interpolated
+    permissible if separable into periodic and secular parts.
+    In that case, supply the periodic part, which will be interpolated
     with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
 
     Examples
@@ -193,6 +193,20 @@ class Bounce2D(Bounce):
         non-uniform quadrature points takes 𝒪(-(F+Q) log(F) log(ε)) time
         whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
         F decreases whereas C increases. Also, Q >> F and Q >> C.
+
+    Warnings
+    --------
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
+    and reduces the memory consumption. However, due to bugs in upstream libraries
+    (https://github.com/flatironinstitute/jax-finufft/issues/158),
+    the automatic differentiation tool fails to compute the objective derivative.
+    If you will use automatic differentiation to compute the derivative of a
+    function which calls any of:
+      * ``Bounce2D.__init__``
+      * ``Bounce2D.integrate``
+      * ``Bounce2D.interp_to_argmin``
+
+    then you must provide ``nufft_eps=0`` in those methods for correctness.
 
     Parameters
     ----------
@@ -1116,7 +1130,7 @@ class Bounce1D(Bounce):
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
-    * dℓ parameterizes the distance along the field line in meters.
+    * dℓ parametrizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
     * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment

@@ -58,12 +58,12 @@ class EffectiveRipple(_Objective):
 
     Warnings
     --------
-    Selecting the option to use non-uniform Fast Fourier transforms (NUFFT)
-    significantly improves speed and reduces the memory consumption. However
-    due to bugs in upstream libraries
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
+    and reduces the memory consumption. However, due to bugs in upstream libraries
     (https://github.com/flatironinstitute/jax-finufft/issues/158),
-    the automatic differentiation tool fails to compute the objective derivative.
-    Therefore it is currently not recommended to use the NUFFT option.
+    the automatic differentiation tool fails to compute the derivative correctly.
+    Therefore it is not recommended to use NUFFTs in optimization.
+    The current default setting of ``nufft_eps=0`` will not use NUFFTs.
 
     Parameters
     ----------

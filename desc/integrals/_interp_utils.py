@@ -7,12 +7,27 @@ methods that have the best (asymptotic) algorithmic complexity.
 For example, we prefer to not use Horner's method.
 """
 
+import warnings
 from functools import partial
 
 import numpy as np
 from interpax import interp1d
-from jax_finufft import nufft2 as _nufft2
-from jax_finufft import options
+from termcolor import colored
+
+try:
+    from jax_finufft import nufft2 as _nufft2
+    from jax_finufft import options
+except ImportError:
+    warnings.warn(
+        colored(
+            "\njax-finufft is not installed.\n"
+            "You must set the parameter nufft_eps to zero, e.g. ``nufft_eps=0``\n",
+            "when computing effective ripple, Gamma_c, and any other computations\n"
+            "that involve bounce integrals.\n",
+            "yellow",
+        )
+    )
+
 from orthax.chebyshev import chebroots
 
 from desc.backend import dct, jnp, rfft, rfft2, take

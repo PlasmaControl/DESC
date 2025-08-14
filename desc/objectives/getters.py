@@ -344,7 +344,6 @@ def maybe_add_self_consistency(thing, constraints):
 
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
-    # Equilibrium
     if {"R_lmn", "Rb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryRSelfConsistency)
 

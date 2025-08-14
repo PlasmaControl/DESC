@@ -806,9 +806,18 @@ class FixLambdaGauge(FixParameters):
         if eq.sym:
             indices = False
         else:
-            indices = np.where(
-                np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
-            )[0]
+            if eq.mirror:
+                indices = np.where(
+                    np.logical_and(
+                        eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 1] == 0
+                    )
+                )[0]
+            else:
+                indices = np.where(
+                    np.logical_and(
+                        eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0
+                    )
+                )[0]
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
@@ -817,6 +826,69 @@ class FixLambdaGauge(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
+
+        # --no-verify eq = self.things[0]
+        # --no-verify L_basis = eq.L_basis
+
+        # --no-verify if L_basis.sym:
+        # --no-verify     self._A = np.zeros((0, L_basis.num_modes))
+        # --no-verify else:
+        # --no-verify     # l(rho,0,0) = 0
+        # --no-verify     # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
+        # --no-verify     # what this constraint does is make all the coefficients of each power
+        # --no-verify     # of rho equal to zero
+        # --no-verify     # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
+        # --no-verify     # this constraint will make
+        # --no-verify     # L_200 + 2*L_310 = 0
+        # --no-verify     # L_100 + 2*L_210 = 0
+        # --no-verify     # for mirror: l(rho,0,2pi) = 0
+        # --no-verify     if eq.mirror:
+        # --no-verify         L_modes = L_basis.modes
+        # --no-verify         mnpos = np.where((L_modes[:, 1] >= 0))[0]
+        # --no-verify         l_lmn = L_modes[mnpos, :]
+        # --no-verify         if len(l_lmn) > 0:
+        # --no-verify             c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+        # --no-verify         else:
+        # --no-verify             c = np.zeros((0, 0))
+
+        # --no-verify         A = np.zeros((c.shape[1], L_basis.num_modes))
+        # --no-verify         A[:, mnpos] = c.T
+        # --no-verify         self._A = A
+        # --no-verify     else:
+        # --no-verify         L_modes = L_basis.modes
+        # --no-verify         mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
+        # --no-verify         l_lmn = L_modes[mnpos, :]
+        # --no-verify         if len(l_lmn) > 0:
+        # --no-verify             c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+        # --no-verify         else:
+        # --no-verify             c = np.zeros((0, 0))
+
+        # --no-verify         A = np.zeros((c.shape[1], L_basis.num_modes))
+        # --no-verify         A[:, mnpos] = c.T
+        # --no-verify         self._A = A
+
+        # --no-verify self._dim_f = self._A.shape[0]
+
+        # --no-verify super().build(use_jit=use_jit, verbose=verbose)
+
+    # --no-verify def compute(self, params, constants=None):
+    # --no-verify     """Compute lambda gauge freedom errors.
+
+    # --no-verify     Parameters
+    # --no-verify     ----------
+    # --no-verify     params : dict
+    # --no-verify         Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+    # --no-verify     constants : dict
+    # --no-verify         Dictionary of constant data, eg transforms, profiles etc. Defaults to
+    # --no-verify         self.constants
+
+    # --no-verify     Returns
+    # --no-verify     -------
+    # --no-verify     f : ndarray
+    # --no-verify         gauge freedom errors.
+
+    # --no-verify     """
+    # --no-verify     return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixThetaSFL(FixParameters):

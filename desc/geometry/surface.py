@@ -15,7 +15,8 @@ from desc.backend import (
     sign,
     vmap,
 )
-from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.basis import ChebyshevFourierSeries, DoubleFourierSeries, ZernikePolynomial
+from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -73,6 +74,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_basis",
         "_NFP",
         "_rho",
+        "_mirror",
+        "_length",
     ]
     _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
@@ -90,6 +93,8 @@ class FourierRZToroidalSurface(Surface):
         rho=1,
         name="",
         check_orientation=True,
+        mirror=False,
+        length=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -135,10 +140,23 @@ class FourierRZToroidalSurface(Surface):
             else:
                 sym = False
 
-        self._R_basis = DoubleFourierSeries(
+        self._mirror = mirror
+        if self.mirror:
+            assert (sym == False) or (sym == None), NotImplementedError(
+                f"mirror sym expected false or None but given {sym}"
+            )
+            assert NFP == 1, NotImplementedError(
+                f"mirror NFP expected 1 but given {NFP}"
+            )
+            Basis = ChebyshevFourierSeries
+
+        else:
+            Basis = DoubleFourierSeries
+
+        self._R_basis = Basis(
             M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
         )
-        self._Z_basis = DoubleFourierSeries(
+        self._Z_basis = Basis(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
 
@@ -158,6 +176,30 @@ class FourierRZToroidalSurface(Surface):
             assert self._compute_orientation() == 1
 
         self.name = name
+
+        if self.mirror:
+            if length == None:
+                self.length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self.length = length
+        else:
+            self.length = None
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror"""
+        return self._mirror
+
+    @property
+    def length(self):
+        """float or None: length of the mirror"""
+        return self._length
+
+    @length.setter
+    def length(self, new):
+        self._length = new
 
     @property
     def NFP(self):

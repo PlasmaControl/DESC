@@ -95,7 +95,7 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):

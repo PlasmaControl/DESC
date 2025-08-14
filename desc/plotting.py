@@ -1,5 +1,6 @@
 """Functions for plotting and visualizing equilibria."""
 
+import inspect
 import numbers
 import tkinter
 import warnings
@@ -10,17 +11,26 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
-from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet
+from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
-from desc.utils import errorif, only1, parse_argname_change, setdefault
+from desc.integrals import surface_averages_map
+from desc.magnetic_fields import field_line_integrate
+from desc.utils import (
+    check_posint,
+    errorif,
+    islinspaced,
+    only1,
+    parse_argname_change,
+    setdefault,
+)
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -39,9 +49,10 @@ __all__ = [
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
-    "plot_regcoil_outputs",
     "plot_section",
     "plot_surfaces",
+    "plot_field_lines",
+    "poincare_plot",
 ]
 
 
@@ -107,22 +118,24 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
-        fig.set_tight_layout(True)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         fig.set_layout_engine("tight")
+    else:
+        fig.set_tight_layout(True)
 
 
 def _get_cmap(name, n=None):
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
-        return matplotlib.cm.get_cmap(name, n)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         c = matplotlib.colormaps[name]
         if n is not None:
             c = c.resampled(n)
         return c
+    else:
+        return matplotlib.cm.get_cmap(name, n)
 
 
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
@@ -131,7 +144,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     Parameters
     ----------
     ax : None or matplotlib AxesSubplot instance
-        Axis to plot to.
+        Axis to plot on.
     is3d: bool
         Whether the plot is three-dimensional.
     rows : int, optional
@@ -184,15 +197,12 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         return plt.gcf(), ax
     else:
         ax = np.atleast_1d(ax)
-        if isinstance(ax.flatten()[0], matplotlib.axes.Axes):
-            return plt.gcf(), ax
-        else:
-            raise TypeError(
-                colored(
-                    "ax argument must be None or an axis instance or array of axes",
-                    "red",
-                )
-            )
+        errorif(
+            not isinstance(ax.flatten()[0], matplotlib.axes.Axes),
+            TypeError,
+            "ax argument must be None or an axis instance or array of axes",
+        )
+        return plt.gcf(), ax
 
 
 def _get_grid(**kwargs):
@@ -210,20 +220,19 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": None,
-        "M": None,
-        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": np.array([1.0]),
-        "theta": np.array([0.0]),
-        "zeta": np.array([0.0]),
     }
-    for key in kwargs.keys():
-        if key in grid_args.keys():
-            grid_args[key] = kwargs[key]
+    grid_args.update(kwargs)
+    if ("L" not in grid_args) and ("rho" not in grid_args):
+        grid_args["rho"] = np.array([1.0])
+    if ("M" not in grid_args) and ("theta" not in grid_args):
+        grid_args["theta"] = np.array([0.0])
+    if ("N" not in grid_args) and ("zeta" not in grid_args):
+        grid_args["zeta"] = np.array([0.0])
+
     grid = LinearGrid(**grid_args)
 
     return grid
@@ -275,11 +284,10 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     """
     parameterization = _parse_parameterization(eq)
-    if name not in data_index[parameterization]:
-        raise ValueError(
-            f"Unrecognized value '{name}' for "
-            + f"parameterization {parameterization}."
-        )
+    errorif(
+        name not in data_index[parameterization],
+        msg=f"Unrecognized value '{name}' for parameterization {parameterization}.",
+    )
     assert component in [
         None,
         "R",
@@ -291,9 +299,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     label = data_index[parameterization][name]["label"]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute(name, grid=grid)[name]
+    data = eq.compute(name, grid=grid)[name]
 
     if data_index[parameterization][name]["dim"] > 1:
         if component is None:
@@ -312,6 +318,80 @@ def _compute(eq, name, grid, component=None, reshape=True):
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
+    return data, label
+
+
+def _compute_Bn(
+    eq, field, plot_grid, field_grid, chunk_size=None, B_plasma_chunk_size=None
+):
+    """Compute normal field from virtual casing + coils, using correct grids."""
+    errorif(
+        field is None,
+        ValueError,
+        "If B*n is entered as the variable to plot, a magnetic field"
+        " must be provided.",
+    )
+    errorif(
+        not np.all(np.isclose(plot_grid.nodes[:, 0], 1)),
+        ValueError,
+        "If B*n is entered as the variable to plot, "
+        "the grid nodes must be at rho=1.",
+    )
+
+    theta_endpoint = zeta_endpoint = False
+
+    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+        source_grid = eval_grid = plot_grid
+    # often plot_grid is still linearly spaced but includes endpoints. In that case
+    # make a temp grid that just leaves out the endpoint so we can FFT
+    elif (
+        isinstance(plot_grid, LinearGrid)
+        and not plot_grid.sym
+        and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
+        and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
+    ):
+        if plot_grid._poloidal_endpoint:
+            theta_endpoint = True
+            theta = plot_grid.nodes[plot_grid.unique_theta_idx[0:-1], 1]
+        if plot_grid._toroidal_endpoint:
+            zeta_endpoint = True
+            zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
+        vc_grid = LinearGrid(
+            theta=theta,
+            zeta=zeta,
+            NFP=plot_grid.NFP,
+            endpoint=False,
+        )
+        # override attr since we know fft is ok even with custom nodes
+        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        source_grid = eval_grid = vc_grid
+    else:
+        eval_grid = plot_grid
+        source_grid = LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        data, _ = field.compute_Bnormal(
+            eq,
+            eval_grid=eval_grid,
+            source_grid=field_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
+        )
+    data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
+    if theta_endpoint:
+        data = np.vstack((data, data[0, :]))
+    if zeta_endpoint:
+        data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+    data = data.reshape(
+        (plot_grid.num_theta, plot_grid.num_rho, plot_grid.num_zeta), order="F"
+    )
+
+    label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     return data, label
 
 
@@ -437,7 +517,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -452,7 +532,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``linecolor``: str or tuple, color to use for plot line
+        * ``color``: str or tuple, color to use for plot line
         * ``ls``: str, linestyle to use for plot line
         * ``lw``: float, linewidth to use for plot line
 
@@ -463,7 +543,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -492,13 +572,21 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 log=log,
                 ax=ax,
                 return_data=return_data,
+                grid=grid,
                 **kwargs,
             )
         rho = grid.nodes[:, 0]
         if not np.all(np.isclose(rho, rho[0])):
             # rho nodes are not constant, so user must be plotting against rho
             return plot_fsa(
-                eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
+                eq,
+                name,
+                rho=rho,
+                log=log,
+                ax=ax,
+                return_data=return_data,
+                grid=grid,
+                **kwargs,
             )
 
     elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
@@ -509,47 +597,54 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
+
+    data, ylabel = _compute(
+        eq, name, grid, kwargs.pop("component", None), reshape=False
+    )
+
+    # reshape data to 1D
     if len(plot_axes) != 1:
-        return ValueError(colored("Grid must be 1D", "red"))
+        surface_label = {"r": "rho", "t": "theta", "z": "zeta"}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        axis = {"r": 0, "t": 1, "z": 2}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        errorif(
+            surface_label is None or axis is None,
+            NotImplementedError,
+            msg="Grid must be 1D",
+        )
+        data = grid.compress(data, surface_label=surface_label)
+        nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
+    else:
+        axis = plot_axes[0]
+        data = data.ravel()
+        nodes = grid.nodes[:, axis]
 
-    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
     label = kwargs.pop("label", None)
-
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     # reshape data to 1D
     data = data.flatten()
-    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
+    color = kwargs.pop("color", colorblind_colors[0])
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
     if log:
-        data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        data = np.abs(data)
+        ax.semilogy(nodes, data, label=label, color=color, ls=ls, lw=lw)
     else:
-        ax.plot(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        ax.plot(nodes, data, label=label, color=color, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
-    xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
+    xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
-    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+    plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
@@ -560,8 +655,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     return fig, ax
 
 
-def plot_2d(
-    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+def plot_2d(  # noqa : C901
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot 2D cross-sections.
 
@@ -575,14 +670,12 @@ def plot_2d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the gradient of magnetic pressure,
-        while finite beta equilibria are normalized by the pressure gradient.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -598,11 +691,16 @@ def plot_2d(
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``levels``: int or array-like, passed to contourf.
+          If ``name="|F|_normalized"`` and ``log=True``, default is
+          ``np.logspace(-6, 0, 7)``. Otherwise the default (``None``) uses the min/max
+          values of the data.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+        * ``filled`` : bool, whether to fill contours or not i.e. whether to use
+          `contourf` or `contour`
 
     Returns
     -------
@@ -611,7 +709,7 @@ def plot_2d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -623,13 +721,33 @@ def plot_2d(
         plot_2d(eq, 'sqrt(g)')
 
     """
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        norm_F = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None and norm_F:
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
+        elif normalize is not None and norm_F:
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
     parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 2:
-        return ValueError(colored("Grid must be 2D", "red"))
+    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(
@@ -639,52 +757,20 @@ def plot_2d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
-    if norm_F:
-        # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -700,7 +786,9 @@ def plot_2d(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if norm_F:
+        if name == "|F|_normalized" or (
+            name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
+        ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
@@ -718,6 +806,7 @@ def plot_2d(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    filled = kwargs.pop("filled", True)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -732,8 +821,10 @@ def plot_2d(
         .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
-
-    im = ax.contourf(xx, yy, data, **contourf_kwargs)
+    if not filled:
+        im = ax.contour(xx, yy, data, **contourf_kwargs)
+    else:
+        im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -742,12 +833,12 @@ def plot_2d(
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     ax.set_title(label, fontsize=title_fontsize)
-    if norm_F:
+    if normalize:
         ax.set_title(
             "%s / %s"
             % (
                 "$" + data_index[parameterization][name]["label"] + "$",
-                "$" + data_index[parameterization][norm_name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
             )
         )
     _set_tight_layout(fig)
@@ -757,7 +848,7 @@ def plot_2d(
         name: data,
     }
 
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
@@ -845,9 +936,9 @@ def plot_3d(
     log : bool, optional
         Whether to use a log scale.
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -862,9 +953,15 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
-        * ``showgrid``: bool of whether or not to show gridlines in the plot.
-        * ``zeroline``: bool of whether or not to show the zero gridline in the plot.
-        * ``showscale``: Bool, whether or not to show the colorbar. True by default
+        * ``showscale``: Bool, whether or not to show the colorbar. True by default.
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
@@ -876,11 +973,14 @@ def plot_3d(
     fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -911,6 +1011,8 @@ def plot_3d(
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
     showscale = kwargs.pop("showscale", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -920,48 +1022,18 @@ def plot_3d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
-        )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
+        data, label = _compute_Bn(
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
-        ValueError,
-        f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+        msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -973,9 +1045,9 @@ def plot_3d(
     if grid.num_rho == 1:
         n1, n2 = grid.num_theta, grid.num_zeta
         if not grid.nodes[-1][2] == 2 * np.pi:
-            p1, p2 = True, False
+            p1, p2 = False, False
         else:
-            p1, p2 = True, True
+            p1, p2 = False, True
     elif grid.num_theta == 1:
         n1, n2 = grid.num_rho, grid.num_zeta
         p1, p2 = False, True
@@ -1026,12 +1098,21 @@ def plot_3d(
     if fig is None:
         fig = go.Figure()
     fig.add_trace(meshdata)
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
 
     fig.update_layout(
         scene=dict(
-            xaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]),
-            yaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]),
-            zaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]),
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
             aspectmode="data",
             xaxis=dict(
                 backgroundcolor="white",
@@ -1040,6 +1121,7 @@ def plot_3d(
                 zerolinecolor="darkgrey",
                 showgrid=showgrid,
                 zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             yaxis=dict(
                 backgroundcolor="white",
@@ -1048,6 +1130,7 @@ def plot_3d(
                 zerolinecolor="darkgrey",
                 showgrid=showgrid,
                 zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             zaxis=dict(
                 backgroundcolor="white",
@@ -1056,6 +1139,7 @@ def plot_3d(
                 zerolinecolor="darkgrey",
                 showgrid=showgrid,
                 zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
         ),
         width=figsize[0] * dpi,
@@ -1079,9 +1163,10 @@ def plot_fsa(  # noqa: C901
     rho=20,
     M=None,
     N=None,
-    norm_F=False,
+    normalize=None,
     ax=None,
     return_data=False,
+    grid=None,
     **kwargs,
 ):
     """Plot flux surface averages of quantities.
@@ -1111,15 +1196,15 @@ def plot_fsa(  # noqa: C901
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
         Toroidal grid resolution. Default is eq.N_grid.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the volume average of the gradient
-        of magnetic pressure, while finite beta equilibria are normalized by the
-        volume average of the pressure gradient.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
+    grid : _Grid
+        Grid to compute name on. If provided, the parameters
+        ``rho``, ``M``, and ``N`` are ignored.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1134,7 +1219,7 @@ def plot_fsa(  # noqa: C901
         * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``linecolor``: str or tuple, color to use for plot line
+        * ``color``: str or tuple, color to use for plot line
         * ``ls``: str, linestyle to use for plot line
         * ``lw``: float, linewidth to use for plot line
 
@@ -1145,7 +1230,7 @@ def plot_fsa(  # noqa: C901
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1157,22 +1242,46 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(0, 1, rho + 1)
-    rho = np.atleast_1d(rho)
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        norm_F = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None and norm_F:
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
+        elif normalize is not None and norm_F:
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
     if M is None:
         M = eq.M_grid
     if N is None:
         N = eq.N_grid
-    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
+    if grid is None:
+        if np.isscalar(rho) and (int(rho) == rho):
+            rho = np.linspace(0, 1, rho + 1)
+        rho = np.atleast_1d(rho)
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    else:
+        rho = grid.compress(grid.nodes[:, 0])
+
+    color = kwargs.pop("color", colorblind_colors[0])
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     label = kwargs.pop("label", None)
-
-    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if "<" + name + ">" in data_index[p]:
         # If we identify the quantity to plot as something in data_index, then
@@ -1208,10 +1317,12 @@ def plot_fsa(  # noqa: C901
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+            # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
             schemes = (
                 name + "_r",
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
+                "(" + name + ")_r",
             )
             values_r = next(
                 (
@@ -1243,16 +1354,14 @@ def plot_fsa(  # noqa: C901
         values = np.where(is_nan, np.nan, averages)
         plot_data_ylabel_key = f"<{name}>_fsa"
 
-    if norm_F:
-        # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data = _compute(eq, norm_name, grid, reshape=False)[0]
+    if normalize:
+        norm_data = _compute(eq, normalize, grid, reshape=False)[0]
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
+        ax.semilogy(rho, values, label=label, color=color, ls=ls, lw=lw)
     else:
-        ax.plot(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
+        ax.plot(rho, values, label=label, color=color, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1261,12 +1370,12 @@ def plot_fsa(  # noqa: C901
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
-    if norm_F:
+    if normalize:
         ax.set_ylabel(
             "%s / %s"
             % (
                 "$" + data_index[p][name]["label"] + "$",
-                "$" + data_index[p][norm_name]["label"] + "$",
+                "$" + data_index[p][normalize]["label"] + "$",
             ),
             fontsize=ylabel_fontsize,
         )
@@ -1276,7 +1385,7 @@ def plot_fsa(  # noqa: C901
         ax.legend()
 
     plot_data = {"rho": rho, plot_data_ylabel_key: values}
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
@@ -1288,7 +1397,7 @@ def plot_fsa(  # noqa: C901
 
 
 def plot_section(
-    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot Poincare sections.
 
@@ -1302,14 +1411,12 @@ def plot_section(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the gradient of magnetic pressure,
-        while finite beta equilibria are normalized by the pressure gradient.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1325,10 +1432,15 @@ def plot_section(
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``levels``: int or array-like, passed to contourf.
+          If ``name="|F|_normalized"`` and ``log=True``, default is
+          ``np.logspace(-6, 0, 7)``. Otherwise the default (``None``) uses the min/max
+          values of the data.
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry
+        * ``fill`` : bool,  Whether the contours are filled, i.e. whether to use
+          `contourf` or `contour`. Default to ``fill=True``
 
     Returns
     -------
@@ -1337,7 +1449,7 @@ def plot_section(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1349,6 +1461,27 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        norm_F = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None and norm_F:
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
+        elif normalize is not None and norm_F:
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
     phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
     phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
     phi = parse_argname_change(phi, kwargs, "nphi", "phi")
@@ -1358,10 +1491,9 @@ def plot_section(
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     if grid is None:
-        nfp = eq.NFP
         grid_kwargs = {
-            "L": 25,
-            "NFP": nfp,
+            "L": max(25, eq.L_grid),
+            "NFP": 1,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": phi,
@@ -1377,7 +1509,6 @@ def plot_section(
             guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
-
     else:
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
@@ -1391,14 +1522,13 @@ def plot_section(
             guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
+
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
-    if norm_F:
-        # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+    data, _ = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
@@ -1418,15 +1548,17 @@ def plot_section(
     R = coords["R"].reshape((nt, nr, nz), order="F")
     Z = coords["Z"].reshape((nt, nr, nz), order="F")
     data = data.reshape((nt, nr, nz), order="F")
-
+    op = "contour" + ("f" if kwargs.pop("fill", True) else "")
     contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if norm_F:
+        if name == "|F|_normalized" or (
+            name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
+        ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
-            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
             contourf_kwargs["levels"] = kwargs.pop(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
@@ -1446,11 +1578,16 @@ def plot_section(
     ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
-
+    data_index_p = data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    units = (
+        f"$(${data_index_p[name]['units']}$)" if data_index_p[name]["units"] else "$"
+    )
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
-        cntr = ax[i].contourf(R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs)
+        cntr = getattr(ax[i], op)(
+            R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
+        )
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(cntr, cax=cax)
         cbar.update_ticks()
@@ -1458,30 +1595,21 @@ def plot_section(
         ax[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
         ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
+
         ax[i].set_title(
             "$"
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
-            + "$ ($"
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
-            + "$)"
+            + data_index_p[name]["label"]
+            + units
             + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
             )
         )
-        if norm_F:
+        if normalize:
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
-                    "$"
-                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
-                        "label"
-                    ]
-                    + "$",
-                    "$"
-                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
-                        "label"
-                    ]
-                    + "$",
+                    "$" + data_index_p[name]["label"] + "$",
+                    "$" + data_index_p[normalize]["label"] + "$",
                     "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
@@ -1491,7 +1619,7 @@ def plot_section(
     _set_tight_layout(fig)
 
     plot_data = {"R": R, "Z": Z, name: data}
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
@@ -1522,7 +1650,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1562,7 +1690,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1616,9 +1744,14 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     phi = np.atleast_1d(phi)
     nphi = len(phi)
 
+    # do not need NFP supplied to these grids as
+    # the above logic takes care of the correct phi range
+    # if defaults are requested. Setting NFP here instead
+    # can create reshaping issues when phi is supplied and gets
+    # truncated by 2pi/NFP. See PR #1204
     grid_kwargs = {
         "rho": rho,
-        "NFP": nfp,
+        "NFP": 1,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
@@ -1637,7 +1770,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
-        "NFP": nfp,
+        "NFP": 1,
         "theta": theta,
         "zeta": phi,
     }
@@ -1735,6 +1868,175 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     return fig, ax
 
 
+def poincare_plot(
+    field,
+    R0,
+    Z0,
+    ntransit=100,
+    phi=None,
+    NFP=None,
+    grid=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Poincare plot of field lines from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points at phi=0 for field line tracing.
+    ntransit : int
+        Number of transits to trace field lines for.
+    phi : float, int or array-like or None
+        Values of phi to plot section at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 6.
+    NFP : int, optional
+        Number of field periods. By default attempts to infer from ``field``, otherwise
+        uses NFP=1.
+    grid : Grid, optional
+        Grid used to discretize ``field``.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``color``: str or tuple, color to use for field lines.
+        * ``marker``: str, markerstyle to use for the plotted points
+        * ``size``: float, markersize to use for the plotted points
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", colorblind_colors[0])
+    marker = kwargs.pop("marker", "o")
+    size = kwargs.pop("size", 5)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"poincare_plot got unexpected keyword argument: {kwargs.keys()}"
+
+    if NFP is None:
+        NFP = getattr(field, "NFP", 1)
+
+    phi = 6 if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nplanes = len(phi)
+
+    phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi / NFP).flatten()
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        source_grid=grid,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((ntransit, nplanes, -1))
+    rs = fieldR.reshape((ntransit, nplanes, -1))
+
+    data = {
+        "R": rs,
+        "Z": zs,
+    }
+
+    rows = np.floor(np.sqrt(nplanes)).astype(int)
+    cols = np.ceil(nplanes / rows).astype(int)
+
+    figw = 4 * cols
+    figh = 5 * rows
+    if figsize is None:
+        figsize = (figw, figh)
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True)
+
+    for i in range(nplanes):
+        ax.flat[i].scatter(
+            rs[:, i, :],
+            zs[:, i, :],
+            color=color,
+            marker=marker,
+            s=size,
+        )
+
+        ax.flat[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+        ax.flat[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
+        ax.flat[i].tick_params(labelbottom=True, labelleft=True)
+        ax.flat[i].set_title(
+            "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(NFP * phi[i] / (2 * np.pi)),
+            fontsize=title_fontsize,
+        )
+
+    _set_tight_layout(fig)
+
+    if return_data:
+        return fig, ax, data
+    return fig, ax
+
+
 def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
@@ -1751,7 +2053,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1778,7 +2080,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1816,7 +2118,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
+    grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
@@ -1868,7 +2170,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(**legend_kw)
+    ax.legend(**legend_kw)
     _set_tight_layout(fig)
 
     plot_data = {}
@@ -1886,6 +2188,9 @@ def plot_boundaries(
 ):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
+
     Parameters
     ----------
     eqs : array-like of Equilibrium, Surface or EquilibriaFamily
@@ -1901,7 +2206,7 @@ def plot_boundaries(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1929,7 +2234,7 @@ def plot_boundaries(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1941,7 +2246,21 @@ def plot_boundaries(
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -1955,9 +2274,7 @@ def plot_boundaries(
 
     phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(
-            0, 2 * np.pi / eqs[-1].NFP, phi + 1
-        )  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eqs[-1].NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
 
     neq = len(eqs)
@@ -1985,7 +2302,7 @@ def plot_boundaries(
         plot_axis_i = plot_axis and eqs[i].L > 0
         rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
 
-        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi, "rho": rho}
+        grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
@@ -2008,7 +2325,7 @@ def plot_boundaries(
         plot_data["R"].append(R)
         plot_data["Z"].append(Z)
 
-        for j in range(nz - 1):
+        for j in range(nz):
             (line,) = ax.plot(
                 R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )
@@ -2025,7 +2342,7 @@ def plot_boundaries(
     ax.tick_params(labelbottom=True, labelleft=True)
 
     if any(labels) and kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {}))
+        ax.legend(**kwargs.pop("legend_kw", {}))
     _set_tight_layout(fig)
 
     assert (
@@ -2053,6 +2370,9 @@ def plot_comparison(
     **kwargs,
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
+
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
 
     Parameters
     ----------
@@ -2082,7 +2402,7 @@ def plot_comparison(
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2105,7 +2425,7 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2122,7 +2442,21 @@ def plot_comparison(
                                  )
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
     lw = parse_argname_change(lw, kwargs, "lws", "lw")
@@ -2215,13 +2549,13 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     Parameters
     ----------
     coils : Coil, CoilSet, Curve, or iterable
-        Coil or coils to plot
+        Coil or coils to plot.
     grid : Grid, optional
         Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2234,13 +2568,37 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+        * ``check_intersection``: Bool, whether or not to check the intersection of
+          the coils before plotting. False by default.
 
     Returns
     -------
     fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)
@@ -2248,10 +2606,19 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     figsize = kwargs.pop("figsize", (10, 10))
     color = kwargs.pop("color", "black")
     unique = kwargs.pop("unique", False)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
     errorif(
         len(kwargs) != 0,
+        msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+    errorif(
+        not isinstance(coils, _Coil),
         ValueError,
-        f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):
@@ -2263,13 +2630,16 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if grid is None:
         grid = LinearGrid(N=400, endpoint=True)
 
-    def flatten_coils(coilset):
+    def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
             if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
                 if not unique and (coilset.NFP > 1 or coilset.sym):
                     # plot all coils for symmetric coil sets
                     coilset = CoilSet.from_symmetry(
-                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                        coilset,
+                        NFP=coilset.NFP,
+                        sym=coilset.sym,
+                        check_intersection=check_intersection,
                     )
             return [a for i in coilset for a in flatten_coils(i)]
         else:
@@ -2310,28 +2680,40 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         )
 
         fig.add_trace(trace)
+    xaxis_title = "X (m)" if showaxislabels else ""
+    yaxis_title = "Y (m)" if showaxislabels else ""
+    zaxis_title = "Z (m)" if showaxislabels else ""
     fig.update_layout(
         scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title="Z (m)",
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
             xaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             aspectmode="data",
         ),
@@ -2382,7 +2764,7 @@ def plot_boozer_modes(  # noqa: C901
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2410,7 +2792,7 @@ def plot_boozer_modes(  # noqa: C901
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2427,7 +2809,7 @@ def plot_boozer_modes(  # noqa: C901
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
 
-    B_mn = np.array([[]])
+    rho = np.sort(rho)
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     linestyle = kwargs.pop("ls", "-")
@@ -2436,7 +2818,7 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -2445,16 +2827,15 @@ def plot_boozer_modes(  # noqa: C901
     else:
         matrix, modes = ptolemy_linear_transform(basis.modes)
 
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
-        B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
+    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    transforms = get_transforms(
+        "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute("|B|_mn_B", grid=grid, transforms=transforms)
+    B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
+    B_mn = np.atleast_2d(matrix @ B_mn.T).T
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
     if norm:
@@ -2504,7 +2885,7 @@ def plot_boozer_modes(  # noqa: C901
             )
 
     plot_data = {
-        "|B|_mn": B_mn,
+        "|B|_mn_B": B_mn,
         "B modes": modes,
         "rho": rho,
     }
@@ -2520,7 +2901,7 @@ def plot_boozer_modes(  # noqa: C901
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
+        ax.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0
@@ -2552,9 +2933,9 @@ def plot_boozer_surface(
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
-        grid to use for computing boozer spectrum
+        Grid to use for computing boozer spectrum
     grid_plot : Grid, optional
-        grid to plot on
+        Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
@@ -2566,7 +2947,7 @@ def plot_boozer_surface(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2586,11 +2967,11 @@ def plot_boozer_surface(
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2615,22 +2996,14 @@ def plot_boozer_surface(
 
     # default grids
     if grid_compute is None:
-        if eq_switch:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 4 * thing.M,
-                "N": 4 * thing.N,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
-        else:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 50,
-                "N": 50,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
+        # grid_compute only used for Equilibrium, not OmnigenousField
+        grid_kwargs = {
+            "rho": rho,
+            "M": 4 * getattr(thing, "M", 1),
+            "N": 4 * getattr(thing, "N", 1),
+            "NFP": thing.NFP,
+            "endpoint": False,
+        }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
@@ -2638,7 +3011,7 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": thing.NFP,
-            "endpoint": True,
+            "endpoint": eq_switch,
         }
         grid_plot = _get_grid(**grid_kwargs)
 
@@ -2649,12 +3022,12 @@ def plot_boozer_surface(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
             )
         B_transform = get_transforms(
-            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
         )["B"]
-        B = B_transform.transform(data["|B|_mn"]).reshape(
+        B = B_transform.transform(data["|B|_mn_B"]).reshape(
             (grid_plot.num_theta, grid_plot.num_zeta), order="F"
         )
         theta_B = (
@@ -2670,12 +3043,12 @@ def plot_boozer_surface(
         iota = grid_compute.compress(data["iota"])
     else:  # OmnigenousField
         iota = kwargs.pop("iota", None)
-        errorif(iota is None, ValueError, "iota must be supplied for OmnigenousField")
+        errorif(iota is None, msg="iota must be supplied for OmnigenousField")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
                 ["theta_B", "zeta_B", "|B|"],
-                grid=grid_compute,
+                grid=grid_plot,
                 helicity=thing.helicity,
                 iota=iota,
             )
@@ -2775,7 +3148,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2800,7 +3173,6 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``labels``: list of strs of length 3, labels to apply to each QS error metric
 
     Returns
     -------
@@ -2809,7 +3181,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2831,6 +3203,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
+    rho = np.sort(rho)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -2848,126 +3221,99 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
-    f_B = np.array([])
-    f_C = np.array([])
-    f_T = np.array([])
-    plot_data = {}
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        if fB:
-            transforms = get_transforms(
-                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
-            )
-            if i == 0:  # only need to do this once for the first rho surface
-                matrix, modes, idx = ptolemy_linear_transform(
-                    transforms["B"].basis.modes,
-                    helicity=helicity,
-                    NFP=transforms["B"].basis.NFP,
-                )
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute(
-                    ["|B|_mn", "B modes"], grid=grid, transforms=transforms
-                )
-            B_mn = matrix @ data["|B|_mn"]
-            f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
-            f_B = np.append(f_B, f_b)
-        if fC:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute("f_C", grid=grid, helicity=helicity)
-            f_c = (
-                np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
-                / np.mean(data["sqrt(g)"])
-                / B0**3
-            )
-            f_C = np.append(f_C, f_c)
-        if fT:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute("f_T", grid=grid)
-            f_t = (
-                np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
-                / np.mean(data["sqrt(g)"])
-                * R0**2
-                / B0**4
-            )
-            f_T = np.append(f_T, f_t)
+    plot_data = {"rho": rho}
 
-    plot_data["f_B"] = f_B
-    plot_data["f_C"] = f_C
-    plot_data["f_T"] = f_T
-    plot_data["rho"] = rho
+    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    names = []
+    if fB:
+        names += ["|B|_mn_B"]
+        transforms = get_transforms(
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        )
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes,
+            helicity=helicity,
+            NFP=transforms["B"].basis.NFP,
+        )
+    if fC or fT:
+        names += ["sqrt(g)"]
+    if fC:
+        names += ["f_C"]
+    if fT:
+        names += ["f_T"]
 
-    if log:
-        if fB:
-            ax.semilogy(
-                rho,
-                f_B,
-                ls=ls[0 % len(ls)],
-                c=colors[0 % len(colors)],
-                marker=markers[0 % len(markers)],
-                label=labels[0 % len(labels)],
-                lw=lw[0 % len(lw)],
-            )
-        if fC:
-            ax.semilogy(
-                rho,
-                f_C,
-                ls=ls[1 % len(ls)],
-                c=colors[1 % len(colors)],
-                marker=markers[1 % len(markers)],
-                label=labels[1 % len(labels)],
-                lw=lw[1 % len(lw)],
-            )
-        if fT:
-            ax.semilogy(
-                rho,
-                f_T,
-                ls=ls[2 % len(ls)],
-                c=colors[2 % len(colors)],
-                marker=markers[2 % len(markers)],
-                label=labels[2 % len(labels)],
-                lw=lw[2 % len(lw)],
-            )
-    else:
-        if fB:
-            ax.plot(
-                rho,
-                f_B,
-                ls=ls[0 % len(ls)],
-                c=colors[0 % len(colors)],
-                marker=markers[0 % len(markers)],
-                label=labels[0 % len(labels)],
-                lw=lw[0 % len(lw)],
-            )
-        if fC:
-            ax.plot(
-                rho,
-                f_C,
-                ls=ls[1 % len(ls)],
-                c=colors[1 % len(colors)],
-                marker=markers[1 % len(markers)],
-                label=labels[1 % len(labels)],
-                lw=lw[1 % len(lw)],
-            )
-        if fT:
-            ax.plot(
-                rho,
-                f_T,
-                ls=ls[2 % len(ls)],
-                c=colors[2 % len(colors)],
-                marker=markers[2 % len(markers)],
-                label=labels[2 % len(labels)],
-                lw=lw[2 % len(lw)],
-            )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute(
+            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity
+        )
+
+    if fB:
+        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
+        B_mn = (matrix @ B_mn.T).T
+        f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
+            np.sum(B_mn**2, axis=-1)
+        )
+        plot_data["f_B"] = f_B
+    if fC:
+        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
+        f_C = grid.meshgrid_reshape(data["f_C"], "rtz")
+        f_C = (
+            np.mean(np.abs(f_C) * sqrtg, axis=(1, 2))
+            / np.mean(sqrtg, axis=(1, 2))
+            / B0**3
+        )
+        plot_data["f_C"] = f_C
+    if fT:
+        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
+        f_T = grid.meshgrid_reshape(data["f_T"], "rtz")
+        f_T = (
+            np.mean(np.abs(f_T) * sqrtg, axis=(1, 2))
+            / np.mean(sqrtg, axis=(1, 2))
+            * R0**2
+            / B0**4
+        )
+        plot_data["f_T"] = f_T
+
+    plot_op = ax.semilogy if log else ax.plot
+
+    if fB:
+        plot_op(
+            rho,
+            f_B,
+            ls=ls[0 % len(ls)],
+            c=colors[0 % len(colors)],
+            marker=markers[0 % len(markers)],
+            label=labels[0 % len(labels)],
+            lw=lw[0 % len(lw)],
+        )
+    if fC:
+        plot_op(
+            rho,
+            f_C,
+            ls=ls[1 % len(ls)],
+            c=colors[1 % len(colors)],
+            marker=markers[1 % len(markers)],
+            label=labels[1 % len(labels)],
+            lw=lw[1 % len(lw)],
+        )
+    if fT:
+        plot_op(
+            rho,
+            f_T,
+            ls=ls[2 % len(ls)],
+            c=colors[2 % len(colors)],
+            marker=markers[2 % len(markers)],
+            label=labels[2 % len(labels)],
+            lw=lw[2 % len(lw)],
+        )
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     if ylabel:
         ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        ax.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
     assert (
         len(kwargs) == 0
@@ -2988,7 +3334,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     grid : Grid
         Grid to plot.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3007,7 +3353,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -3085,15 +3431,32 @@ def plot_grid(grid, return_data=False, **kwargs):
     return fig, ax
 
 
-def plot_basis(basis, return_data=False, **kwargs):
+def plot_basis(  # noqa : C901
+    basis,
+    derivative=np.array([0, 0, 0]),
+    return_data=False,
+    **kwargs,
+):
     """Plot basis functions.
+
+    Currently supported basis classes are:
+        - PowerSeries
+        - FourierSeries
+        - ChebyshevPolynomial
+        - DoubleFourierSeries
+        - ZernikePolynomial
+        - FourierZernikeBasis (only 2D in rho and theta)
+        - ChebyshevDoubleFourierBasis (only 2D in rho and theta)
 
     Parameters
     ----------
     basis : Basis
         basis to plot
+    derivative : (1,3), optional
+        Order of derivatives to compute in (rho,theta,zeta).
+        Default is [0,0,0] (no derivative).
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3111,11 +3474,11 @@ def plot_basis(basis, return_data=False, **kwargs):
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
-        Axes used for plotting. A single axis is used for 1d basis functions,
+        Axes being plotted to. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -3130,14 +3493,15 @@ def plot_basis(basis, return_data=False, **kwargs):
 
     """
     title_fontsize = kwargs.pop("title_fontsize", None)
+    no_derivative = (np.array([0, 0, 0]) == derivative).all()
 
-    # TODO: add all other Basis classes
+    # 1D BASIS
     if basis.__class__.__name__ == "PowerSeries":
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {"l": basis.modes[:, 0], "amplitude": [], "rho": r}
 
         for fi, l in zip(f.T, basis.modes[:, 0]):
@@ -3147,7 +3511,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_ylabel("$f_l(\\rho)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
-        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+        if no_derivative:
+            ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
         ax.set_title(
             "{}, $L={}$".format(basis.__class__.__name__, basis.L),
             fontsize=title_fontsize,
@@ -3163,7 +3528,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
@@ -3175,7 +3540,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
         ax.set_xticklabels(["$0$", "$\\pi/N_{{FP}}$", "$2\\pi/N_{{FP}}$"])
-        ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        if no_derivative:
+            ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
             "{}, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.N, basis.NFP
@@ -3188,6 +3554,35 @@ def plot_basis(basis, return_data=False, **kwargs):
 
         return fig, ax
 
+    elif basis.__class__.__name__ == "ChebyshevPolynomial":
+        grid = LinearGrid(rho=100, endpoint=True)
+        r = grid.nodes[:, 0]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
+
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
+        plot_data = {"l": basis.modes[:, 0], "amplitude": [], "rho": r}
+
+        for fi, n in zip(f.T, basis.modes[:, 0]):
+            ax.plot(r, fi, label="$l={:d}$".format(int(n)))
+            plot_data["amplitude"].append(fi)
+
+        ax.set_xlabel("$\\rho$")
+        ax.set_ylabel("$f_l(\\rho)$")
+        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        if no_derivative:
+            ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        ax.set_title(
+            "{}, $L={}$".format(basis.__class__.__name__, basis.L),
+            fontsize=title_fontsize,
+        )
+        _set_tight_layout(fig)
+        if return_data:
+            return fig, ax, plot_data
+
+        return fig, ax
+
+    # 2D\3D BASIS
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
@@ -3205,7 +3600,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             2 * mmax + 2, 2 * nmax + 2, width_ratios=wratios, height_ratios=hratios
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {
             "m": basis.modes[:, 1],
             "n": basis.modes[:, 2],
@@ -3225,7 +3620,10 @@ def plot_basis(basis, return_data=False, **kwargs):
                     2 * np.pi / basis.NFP,
                 ]
             )
-            ax[mmax + m, 0].set_yticks([0, np.pi / 2, np.pi, 3 / 2 * np.pi, 2 * np.pi])
+            if type(ax[mmax + m, 0]) is matplotlib.axes._axes.Axes:
+                ax[mmax + m, 0].set_yticks(
+                    [0, np.pi / 2, np.pi, 3 / 2 * np.pi, 2 * np.pi]
+                )
             ax[mmax + m, nmax + n].set_xticklabels([])
             ax[mmax + m, nmax + n].set_yticklabels([])
             im = ax[mmax + m, nmax + n].contourf(
@@ -3247,14 +3645,15 @@ def plot_basis(basis, return_data=False, **kwargs):
                     ["$0$", None, "$\\pi/N_{{FP}}$", None, "$2\\pi/N_{{FP}}$"],
                     fontsize=8,
                 )
-            if n + nmax == 0:
+            if n + nmax == 0 and type(ax[mmax + m, 0]) is matplotlib.axes._axes.Axes:
                 ax[mmax + m, 0].set_ylabel("$m={}$ \n $\\theta$".format(m), fontsize=10)
                 ax[mmax + m, 0].set_yticklabels(
                     ["$0$", None, "$\\pi$", None, "$2\\pi$"], fontsize=8
                 )
         cb_ax = plt.subplot(gs[:, -1])
         cbar = fig.colorbar(im, cax=cb_ax)
-        cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
+        if no_derivative:
+            cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
         fig.suptitle(
             "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
@@ -3266,6 +3665,62 @@ def plot_basis(basis, return_data=False, **kwargs):
             return fig, ax, plot_data
 
         return fig, ax
+
+    elif basis.__class__.__name__ == "ChebyshevDoubleFourierBasis":
+        lmax = abs(basis.modes[:, 0]).max().astype(int)
+        mmax = abs(basis.modes[:, 1]).max().astype(int)
+
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        v = grid.nodes[grid.unique_theta_idx, 1]
+
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 2 * lmax)))
+
+        plot_data = {"amplitude": [], "rho": r, "theta": v}
+
+        ax = {i: {} for i in range(lmax + 1)}
+        ratios = np.ones(2 * (mmax + 1))
+        ratios[-1] = kwargs.get("cbar_ratio", 0.15)
+        gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1), width_ratios=ratios)
+
+        modes = basis.modes[basis.modes[:, 2] == 0]
+        plot_data["l"] = basis.modes[:, 0]
+        plot_data["m"] = basis.modes[:, 1]
+        Zs = basis.evaluate(grid.nodes, modes=modes, derivatives=derivative)
+        for i, (l, m) in enumerate(
+            zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
+        ):
+            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 1], projection="polar")
+            ax[l][m].axis("off")
+            im = ax[l][m].contourf(
+                v,
+                r,
+                Z,
+                levels=np.linspace(-1, 1, 100) if no_derivative else 100,
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            plot_data["amplitude"].append(Zs)
+
+        cb_ax = plt.subplot(gs[:, -1])
+        plt.subplots_adjust(right=0.9)
+        cbar = fig.colorbar(im, cax=cb_ax)
+        if no_derivative:
+            cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.suptitle(
+            "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
+                basis.__class__.__name__, basis.M, basis.N, basis.NFP
+            ),
+            y=0.98,
+            fontsize=title_fontsize,
+        )
+        _set_tight_layout(fig)
+        if return_data:
+            return fig, ax, plot_data
+
+        return fig, ax
+
     elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
@@ -3274,35 +3729,33 @@ def plot_basis(basis, return_data=False, **kwargs):
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
-        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 4 * lmax / 2)))
 
         plot_data = {"amplitude": [], "rho": r, "theta": v}
 
         ax = {i: {} for i in range(lmax + 1)}
         ratios = np.ones(2 * (mmax + 1) + 1)
-        ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.15)
         gs = matplotlib.gridspec.GridSpec(
-            lmax + 2, 2 * (mmax + 1) + 1, width_ratios=ratios
+            lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios
         )
 
         modes = basis.modes[basis.modes[:, 2] == 0]
         plot_data["l"] = basis.modes[:, 0]
         plot_data["m"] = basis.modes[:, 1]
-        Zs = basis.evaluate(grid.nodes, modes=modes)
+        Zs = basis.evaluate(grid.nodes, modes=modes, derivatives=derivative)
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
             Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
-            ax[l][m] = plt.subplot(
-                gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
-            )
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
             ax[l][m].set_title("$l={}, m={}$".format(l, m))
             ax[l][m].axis("off")
             im = ax[l][m].contourf(
                 v,
                 r,
                 Z,
-                levels=np.linspace(-1, 1, 100),
+                levels=np.linspace(-1, 1, 100) if no_derivative else 100,
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
             plot_data["amplitude"].append(Zs)
@@ -3310,7 +3763,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         cb_ax = plt.subplot(gs[:, -1])
         plt.subplots_adjust(right=0.8)
         cbar = fig.colorbar(im, cax=cb_ax)
-        cbar.set_ticks(np.linspace(-1, 1, 9))
+        if no_derivative:
+            cbar.set_ticks(np.linspace(-1, 1, 9))
         fig.suptitle(
             "{}, $L={}$, $M={}$, spectral indexing = {}".format(
                 basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
@@ -3325,25 +3779,246 @@ def plot_basis(basis, return_data=False, **kwargs):
         return fig, ax
 
 
+def plot_field_lines(
+    field,
+    R0,
+    Z0,
+    phi0=0,
+    ntransit=1,
+    nphi_per_transit=50,
+    endpoint=True,
+    fig=None,
+    return_data=False,
+    **kwargs,
+):
+    """Field line plot from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points for field line tracing.
+    phi0 : float
+        Starting value of phi for field line tracing in radians. Defaults to 0.
+    ntransit : int, float
+        Number of transits to trace field lines for. Defaults to 1. To trace the field
+        in negative toroidal direction, use a negative value.
+    nphi_per_transit : int
+        Number of equidistant toroidal points to plot for each field line per
+        transit. Must be positive integer. Defaults to 50.
+    endpoint : bool
+        If True, the point phi0+2*pi*ntransit is included, else the last point
+        is phi0 + 2*np.pi*(ntransit - 1/nphi_per_transit). Defaults to True.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``color``: color to use for field lines, default is black.
+        * ``figsize``: tuple of length 2, the size of the figure in inches
+        * ``lw``: float, linewidth of plotted field lines
+        * ``ls``: str, linestyle of plotted field lines
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+        Contains keys ``["X","Y","Z","R","phi"]``, each entry in the dict is a list
+        of length `R0.size` corresponding to the number of field lines, and each
+        element of that list is an array of size `phis.size` corresponding to the
+        coordinate values along that field line.
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_field_lines.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        import desc
+        from desc.plotting import plot_field_lines
+
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        eq = desc.examples.get("precise_QA")
+        grid_trace = desc.grid.LinearGrid(rho=[1])
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+        fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", "black")
+    figsize = kwargs.pop("figsize", (10, 10))
+    title = kwargs.pop("title", "")
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_field_lines got unexpected keyword argument: {kwargs.keys()}"
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    nphi_per_transit = check_posint(nphi_per_transit, "nphi_per_transit", False)
+    npts = int(np.abs(nphi_per_transit * ntransit))
+    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + phi0
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((npts, -1))
+    rs = fieldR.reshape((npts, -1))
+
+    if fig is None:
+        fig = go.Figure()
+
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+    plot_data["R"] = []
+    plot_data["phi"] = phis
+    for i in range(rs.shape[1]):  # iterate over each field line
+        x = rs[:, i] * np.cos(phis)
+        y = rs[:, i] * np.sin(phis)
+        z = zs[:, i]
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["R"].append(rs[:, i])
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+                line=dict(
+                    color=color[i % len(color)],
+                    width=lw[i % len(lw)],
+                    dash=ls[i % len(ls)],
+                ),
+                marker=dict(size=0),
+                name=f"FieldLine[{i}]",
+                hovertext=f"FieldLine[{i}]",
+                showlegend=False,
+            )
+        )
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    if return_data:
+        return fig, plot_data
+    return fig
+
+
 def plot_logo(save_path=None, **kwargs):
     """Plot the DESC logo.
 
     Parameters
     ----------
     save_path : str or path-like
-        path to save the figure to.
+        Path to save the figure to.
         File format is inferred from the filename (Default value = None)
     **kwargs : dict, optional
-        additional plot formatting parameters.
+        Additional plot formatting parameters.
         options include ``'D_color'``, ``'D_color_rho'``, ``'D_color_theta'``,
         ``'E_color'``, ``'Scolor'``, ``'C_color'``, ``'BGcolor'``, ``'fig_width'``
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        handle to the figure used for plotting
+        Figure being plotted to.
     ax : matplotlib.axes.Axes
-        handle to the axis used for plotting
+        Axes being plotted to.
 
     Examples
     --------
@@ -3549,345 +4224,3 @@ def plot_logo(save_path=None, **kwargs):
         fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
 
     return fig, ax
-
-
-def plot_regcoil_outputs(
-    field,
-    data,
-    eq,
-    eval_grid=None,
-    source_grid=None,
-    return_data=False,
-    vacuum=False,
-    **kwargs,
-):
-    """Plot the output of REGCOIL.
-
-    Parameters
-    ----------
-    field : FourierCurrentPotentialField or list of FourierCurrentPotentialField
-        object(s) with which to plot the data from the REGCOIL output.
-        should have the correct resolutions and NFP to match the REGCOIL output.
-    data : dict
-        dictionary containing the output of a call to ``run_regcoil`` method
-        of ``FourierCurrentPotentiaField``
-    eq : Equilibrium
-        the equilibrium that the Bn error was evaluated on.
-    eval_grid : Grid, optional
-        grid to evaluate the magnetic field on, if not None, will plot the magnetic
-        field on the LinearGrid used by the `run_regcoil` method the data was made with
-    source_grid : Grid, optional
-        grid to evaluate the current potential on, if not None, will plot the current
-        potential on a default LinearGrid used by the `run_regcoil` method the data was
-        made with
-    return_data : bool, optional
-        if True, return the data plotted as well as fig,ax
-    vacuum : bool, optional
-        if True, will not calculate the contribution to the normal field from the
-        plasma currents.
-    **kwargs : dict, optional
-        Specify properties of the figure, axis, and plot appearance e.g.::
-
-            plot_X(figsize=(4,6))
-
-        Valid keyword arguments are:
-
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
-
-
-
-    Outputs
-    -------
-    fig : list of matplotlib.figure.Figure
-        list of figure being plotted to
-    ax : list of matplotlib.axes.Axes or list of ndarray of Axes
-        list of axes being plotted to
-    plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
-        This is the same as data_regcoil
-    """
-    try:
-        # if it is a list, just grab the first one
-        # as we change the attribute anyways so just need the correct
-        # geometry
-        field = field[0]
-    except TypeError:
-        # it was not a list, so proceed as usual
-        pass
-
-    field = (
-        field.copy()
-    )  # copy the field so that we are not changing the passed-in field
-    # TODO: check that field has correct NFP and resolutions?
-    scan = isinstance(data["Phi_mn"], list)
-    # TODO: add flags for each subplot, also add |K| plot
-    Bn_tot = data["Bn_total"]
-    alphas = data["alpha"]
-    chi2Bs = data["chi^2_B"]
-    chi2Ks = data["chi^2_K"]
-    phi_mns = data["Phi_mn"]
-    if eval_grid is None:
-        eval_grid = data["eval_grid"]
-        eval_grid = (
-            eval_grid
-            if not eval_grid.sym
-            else LinearGrid(M=eval_grid.M, N=eval_grid.N, sym=False, NFP=eval_grid.NFP)
-        )
-    if source_grid is None:
-        source_grid = data["source_grid"]
-
-    # check if we can use existing quantities in data
-    # or re-evaluate based off of the new grids passed-in
-    recalc_eval_grid_quantites = not eval_grid.equiv(
-        data["eval_grid"]
-    ) or not source_grid.equiv(data["source_grid"])
-
-    if "external_field" in data.keys() and recalc_eval_grid_quantites:
-        external_field = data["external_field"]
-        external_field_grid = data["external_field_grid"]
-        B_ext = external_field.compute_Bnormal(
-            eq.surface, eval_grid, external_field_grid
-        )[0]
-
-    else:
-        external_field = None
-
-    # TODO: if recalculating do we replace the data in the dict?
-
-    ncontours = kwargs.pop("ncontours", 20)
-    markersize = kwargs.pop("markersize", 12)
-    figdata = {}
-    axdata = {}
-    if not scan:
-        field.Phi_mn = data["Phi_mn"]
-        field.I = data["I"]
-        field.G = data["G"]
-        # TODO: replace with plot_2d call
-        phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
-        # Bnormal plot
-        thing_to_pass_to_Bnorm_compute = eq.surface if vacuum else eq
-        Bn_tot = (
-            Bn_tot
-            if not recalc_eval_grid_quantites
-            else field.compute_Bnormal(
-                thing_to_pass_to_Bnorm_compute, eval_grid, source_grid
-            )[0]
-        )
-        if external_field and recalc_eval_grid_quantites:
-            Bn_tot += B_ext
-            print("adding bext")
-        plt.rcParams.update({"font.size": 26})
-        plt.figure(figsize=(8, 8))
-        plt.contourf(
-            eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-            eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-            (Bn_tot).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
-        )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Bnormal on plasma surface")
-        plt.colorbar()
-        plt.xlim([0, 2 * np.pi / field.NFP])
-        figdata["fig_Bn"] = plt.gcf()
-        axdata["ax_Bn"] = plt.gca()
-
-        # TODO: replace with plot_2d call
-        # current potential contour plot
-        plt.figure(figsize=(10, 10))
-        plt.rcParams.update({"font.size": 18})
-        plt.contour(
-            source_grid.nodes[source_grid.unique_zeta_idx, 2],
-            source_grid.nodes[source_grid.unique_theta_idx, 1],
-            (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
-            levels=ncontours,
-            cmap="viridis",
-        )
-        plt.colorbar()
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Total Current Potential on winding surface")
-
-        plt.xlim([0, 2 * np.pi / field.NFP])
-        figdata["fig_Phi"] = plt.gcf()
-        axdata["ax_Phi"] = plt.gca()
-        if return_data:
-            return figdata, axdata, data
-        return figdata, axdata
-    else:  # show composite scan over alpha plots
-        # strongly based off of Landreman's REGCOIL plotting routine:
-        # github.com/landreman/regcoil/blob/master/
-        plt.figure(figsize=(16, 12))
-        plt.rcParams.update({"font.size": 20})
-        plt.scatter(alphas, chi2Bs, s=markersize)
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
-        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
-        plt.scatter(alphas, chi2Ks, s=markersize)
-        plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
-        plt.scatter(chi2Ks, chi2Bs, s=markersize)
-        plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
-
-        nalpha = len(chi2Bs)
-        max_nalpha_for_contour_plots = 16
-        numPlots = min(nalpha, max_nalpha_for_contour_plots)
-        ialpha_to_plot = np.sort(list(set(map(int, np.linspace(1, nalpha, numPlots)))))
-        numPlots = len(ialpha_to_plot)
-
-        numCols = int(np.ceil(np.sqrt(numPlots)))
-        numRows = int(np.ceil(numPlots * 1.0 / numCols))
-
-        ########################################################
-        # Plot total current potentials
-        ########################################################
-        plt.figure(figsize=(16, 12))
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
-            # TODO replace these with plot 2d calls with the ax of each
-            # subplot passed in
-            field.Phi_mn = phi_mn_opt
-            field.I = data["I"]
-            field.G = data["G"]
-            phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
-
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contour(
-                source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                source_grid.nodes[source_grid.unique_theta_idx, 1],
-                (phi_tot).reshape(
-                    source_grid.num_theta, source_grid.num_zeta, order="F"
-                ),
-                levels=ncontours,
-                cmap="viridis",
-            )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
-            )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        plt.figtext(
-            0.5,
-            0.995,
-            "Total Current Potential",
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_Phi"] = plt.gcf()
-        axdata["ax_scan_Phi"] = plt.gca()
-        ########################################################
-        # Plot Bn
-        ########################################################
-        plt.figure(figsize=(16, 12))
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
-            Bn = (
-                Bn_tot[ialpha_to_plot[whichPlot] - 1]
-                if not recalc_eval_grid_quantites
-                else field.compute_Bnormal(
-                    eq if not vacuum else eq.surface, eval_grid, source_grid
-                )[0]
-            )
-            if external_field and recalc_eval_grid_quantites:
-                Bn_tot += B_ext
-
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contourf(
-                eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-                eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-                (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
-                levels=ncontours,
-                cmap="viridis",
-            )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
-            )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        units = " (T)"
-        plt.figtext(
-            0.5,
-            0.995,
-            "Bnormal" + units,
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_Bn"] = plt.gcf()
-        axdata["ax_scan_Bn"] = plt.gca()
-        ########################################################
-        # Plot Surface Current |K|
-        ########################################################
-        plt.figure(figsize=(16, 12))
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
-            K = field.compute("K", grid=source_grid, basis="xyz")["K"]
-            K_mag = np.linalg.norm(K, axis=1)
-
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contourf(
-                source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                source_grid.nodes[source_grid.unique_theta_idx, 1],
-                (K_mag).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
-                levels=ncontours,
-            )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
-            )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        units = " (A/m)"
-        plt.figtext(
-            0.5,
-            0.995,
-            "|K|" + units,
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_K"] = plt.gcf()
-        axdata["ax_scan_K"] = plt.gca()
-        if return_data:
-            return (
-                figdata,
-                axdata,
-                data,
-            )
-        else:
-            return figdata, axdata

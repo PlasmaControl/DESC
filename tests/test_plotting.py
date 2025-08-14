@@ -5,22 +5,29 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from scipy.interpolate import interp1d
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
+    ZernikePolynomial,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
-from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    PoloidalMagneticField,
+    SumMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -33,19 +40,20 @@ from desc.plotting import (
     plot_coefficients,
     plot_coils,
     plot_comparison,
+    plot_field_lines,
     plot_fsa,
     plot_grid,
     plot_logo,
     plot_qs_error,
-    plot_regcoil_outputs,
     plot_section,
     plot_surfaces,
+    poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
-tol_1d = 7.8
-tol_2d = 15
-tol_3d = 15
+tol_1d = 4.5
+tol_2d = 10
+tol_3d = 10
 
 
 @pytest.mark.unit
@@ -85,7 +93,7 @@ class TestPlot1D:
     def test_1d_elongation(self):
         """Test plotting 1d elongation as a function of toroidal angle."""
         eq = get("precise_QA")
-        grid = LinearGrid(N=20, NFP=eq.NFP)
+        grid = LinearGrid(M=eq.M_grid, N=20, NFP=eq.NFP)
         fig, ax, data = plot_1d(
             eq, "a_major/a_minor", grid=grid, figsize=(4, 4), return_data=True
         )
@@ -215,10 +223,23 @@ class TestPlot2D:
         grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
-            eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+            eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
         )
-        for string in ["|F|", "theta", "zeta"]:
+        for string in ["|F|_normalized", "theta", "zeta"]:
             assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_2d_deprecated(self):
+        """Test deprecated 2d plot of normalized force."""
+        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_2d(eq, "|F|", figsize=(4, 4), norm_F=True, grid=grid)
         return fig
 
     @pytest.mark.unit
@@ -258,43 +279,47 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
-        return fig
 
     @pytest.mark.unit
     def test_3d_rz(self):
         """Test 3d plotting of pressure on toroidal cross section."""
         eq = get("DSHAPE_CURRENT")
         grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-        fig = plot_3d(eq, "p", grid=grid)
-        return fig
+        _ = plot_3d(eq, "p", grid=grid)
 
     @pytest.mark.unit
     def test_3d_rt(self):
         """Test 3d plotting of flux on poloidal ribbon."""
         eq = get("DSHAPE_CURRENT")
         grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-        fig = plot_3d(eq, "psi", grid=grid)
-        return fig
+        _ = plot_3d(eq, "psi", grid=grid)
 
     @pytest.mark.unit
     def test_plot_3d_surface(self):
         """Test 3d plotting of surface object."""
         surf = FourierRZToroidalSurface()
-        fig = plot_3d(surf, "curvature_H_rho")
-        return fig
+        _ = plot_3d(
+            surf,
+            "curvature_H_rho",
+            showgrid=False,
+            showscale=False,
+            zeroline=False,
+            showticklabels=False,
+            showaxislabels=False,
+        )
 
     @pytest.mark.unit
     def test_3d_plot_Bn(self):
         """Test 3d plotting of Bn on equilibrium surface."""
         eq = get("precise_QA")
-        eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
-        fig = plot_3d(
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
+        _ = plot_3d(
             eq,
             "B*n",
             field=ToroidalMagneticField(1, 1),
             grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
         )
-        return fig
 
 
 class TestPlotFSA:
@@ -329,7 +354,7 @@ class TestPlotFSA:
             plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         assert (
             "<" + name + ">"
             not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
@@ -365,7 +390,7 @@ class TestPlotFSA:
             rho=rho,
             M=eq.M_grid,
             N=eq.N_grid,
-            with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+            with_sqrt_g=False,  # test that does not compute data_index["<|B|>"]
             return_data=True,
         )
         data = eq.compute(names=name, grid=grid)
@@ -392,10 +417,22 @@ class TestPlotFSA:
     def test_fsa_F_normalized(self):
         """Test plotting flux surface average normalized force error on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_fsa(
-            eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol"
-        )
+        fig, ax = plot_fsa(eq, "|F|", log=True, normalize="<|grad(p)|>_vol")
         ax.set_ylim([1e-6, 1e-3])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_F_normalized_deprecated(self):
+        """Test plotting deprecated fsa normalized force error on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_fsa(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
         return fig
 
 
@@ -414,6 +451,14 @@ class TestPlotSection:
         assert "normalization" in data.keys()
         assert data["normalization"] == 1
 
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_section_chi_contour(self):
+        """Test plotting poincare section of poloidal flux, with fill=False."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_section(eq, "chi", fill=False, levels=20)
         return fig
 
     @pytest.mark.unit
@@ -437,7 +482,22 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
+        fig, ax = plot_section(eq, "|F|_normalized", log=True)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_section_deprecated(self):
+        """Test old section plot of normalized force on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_section(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_section(eq, "|F|", log=True, norm_F=True)
+
         return fig
 
 
@@ -502,17 +562,35 @@ class TestPlotBoundary:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_plot_boundaries(self):
         """Test plotting boundaries."""
         eq1 = get("SOLOVEV")
         eq2 = get("DSHAPE")
         eq3 = get("W7-X")
-        fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
+        eq4 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        _, _, data1 = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=4,
+            return_data=True,
+        )
+        fig, ax, data = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
+            return_data=True,
+        )
         assert "R" in data.keys()
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
         assert len(data["Z"]) == 3
+        assert (
+            data["R"][-1].shape == data1["R"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
+        assert (
+            data["Z"][-1].shape == data1["Z"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
 
         return fig
 
@@ -543,6 +621,22 @@ class TestPlotComparison:
         """Test plotting comparison of flux surfaces without theta contours."""
         eqf = get("DSHAPE_CURRENT", "all")
         fig, ax = plot_comparison(eqf, theta=0)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_comparison_different_NFPs(self):
+        """Test plotting comparison of flux surfaces with differing NFPs."""
+        eq = get("SOLOVEV")
+        eq_nonax = get("HELIOTRON")
+        eq_nonax2 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_comparison([eq_nonax, eq_nonax2], theta=0)
+        fig, ax = plot_comparison(
+            [eq, eq_nonax],
+            phi=np.linspace(0, 2 * np.pi / eq_nonax.NFP, 6, endpoint=False),
+            theta=0,
+        )
         return fig
 
 
@@ -615,6 +709,34 @@ class TestPlotBasis:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_basis_chebyshevpoly(self):
+        """Test plotting Chebyshev polynomial."""
+        basis = ChebyshevPolynomial(L=6)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly(self):
+        """Test plotting zernike polynomial."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly_derivative(self):
+        """Test plotting zernike polynomial derivative."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax = plot_basis(basis, derivative=[2, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
@@ -645,6 +767,26 @@ class TestPlotBasis:
             assert string in data.keys()
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_fourierzernike_derivative(self):
+        """Test plotting fourier-zernike basis derivative."""
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax = plot_basis(basis, derivative=[1, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_chebyshevdoublefourier(self):
+        """Test plotting chebyshev-double fourier basis."""
+        basis = ChebyshevDoubleFourierBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
 
 class TestPlotBoozerModes:
     """Tests for plot_boozer_modes."""
@@ -665,7 +807,7 @@ class TestPlotBoozerModes:
             rho=5,
         )
         ax.set_ylim([1e-6, 5e0])
-        for string in ["|B|_mn", "B modes", "rho"]:
+        for string in ["|B|_mn_B", "B modes", "rho"]:
             assert string in data.keys()
         return fig
 
@@ -693,7 +835,7 @@ class TestPlotBoozerModes:
     def test_plot_boozer_modes_max(self):
         """Test plotting symmetry breaking boozer spectrum."""
         eq = get("WISTELL-A")
-        fig, ax = plot_boozer_modes(
+        fig, ax, data = plot_boozer_modes(
             eq,
             M_booz=eq.M,
             N_booz=eq.N,
@@ -703,8 +845,11 @@ class TestPlotBoozerModes:
             color="r",
             norm=True,
             rho=5,
+            return_data=True,
         )
         ax.set_ylim([1e-6, 5e0])
+        for string in ["|B|_mn_B", "B modes", "rho"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -737,7 +882,11 @@ class TestPlotBoozerSurface:
         fig, ax, data = plot_boozer_surface(
             eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
         )
-        for string in ["|B|", "theta_B", "zeta_B"]:
+        for string in [
+            "|B|",
+            "theta_B",
+            "zeta_B",
+        ]:
             assert string in data.keys()
         return fig
 
@@ -795,6 +944,8 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
@@ -807,7 +958,39 @@ def test_plot_coils():
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)
-    return fig
+
+
+@pytest.mark.unit
+def test_plot_coils_no_grid():
+    """Test 3d plotting of coils with currents without any gridlines."""
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
+    fig, data = plot_coils(
+        coils,
+        unique=True,
+        return_data=True,
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        showaxislabels=False,
+    )
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils)
+    for string in ["X", "Y", "Z"]:
+        assert string in data.keys()
+        assert len(data[string]) == len(coil_list)
 
 
 @pytest.mark.unit
@@ -815,17 +998,15 @@ def test_plot_coils():
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
     psi = 0.5
+    rho = np.sqrt(psi)
     npol = 2
     nzgrid = 128
     alpha = 0
-    # compute and fit iota profile
+    # compute iota
     eq = get("W7-X")
-    data = eq.compute("iota")
-    fi = interp1d(data["rho"], data["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
-    rho = np.sqrt(psi)
-    iota = fi(rho)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )
@@ -833,7 +1014,7 @@ def test_plot_b_mag():
 
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
-    coords = eq.compute_theta_coords(c)
+    coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
     grid = Grid(coords)
 
     # compute |B| normalized in the usual flux tube way
@@ -856,142 +1037,88 @@ def test_plot_coefficients():
     return fig
 
 
-# TODO: change these plot tests as if they get split up, the regcoil stuff
-# has to run a bunch on different nodes for no reason. Should load in
-# a saved result instead.
-# FIXME: there is a warning if we open too many figures
-@pytest.mark.xfail
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
-    """Test Bn scan plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_scan_Bn"]
-
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.xfail
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
-    """Test Phi scan plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_scan_Phi"]
-    return fig
-
-
-# TODO: close any figs that are not being used in testing
-@pytest.mark.unit
-@pytest.mark.xfail
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
-    """Test chi^2_B vs alpha plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_chi^2_B_vs_alpha"]
-
-    return fig
-
-
-@pytest.mark.xfail
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
-    """Test chi^2_B vs chi^2_K plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_chi^2_B_vs_chi^2_K"]
-
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Bn_regcoil(regcoil_modular_coils):
-    """Test Bn plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_modular_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_Bn"]
-
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.slow
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Phi_regcoil(regcoil_modular_coils):
-    """Test Phi plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_modular_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_Phi"]
-    return fig
-
-
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-@pytest.mark.unit
-def test_2d_plot_Bn():
-    """Test 2d plotting of Bn on equilibrium surface."""
-    eq = get("HELIOTRON")
-    fig, _ = plot_2d(
-        eq,
-        "B*n",
-        field=ToroidalMagneticField(1, 1),
-        field_grid=LinearGrid(M=10, N=10),
-        grid=LinearGrid(M=30, N=30, NFP=eq.NFP, endpoint=True),
-    )
-    return fig
-
-
-@pytest.mark.unit
-def test_3d_plot_Bn():
-    """Test 3d plotting of Bn on equilibrium surface."""
-    eq = get("precise_QA")
-    eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
-    fig = plot_3d(
-        eq,
-        "B*n",
-        field=ToroidalMagneticField(1, 1),
-        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
-    )
-    return fig
-
-
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 @pytest.mark.unit
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()
     return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_poincare():
+    """Test making a poincare plot."""
+    ext_field = load("tests/inputs/precise_QA_helical_coils.h5")
+    eq = get("precise_QA")
+    grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_field_lines():
+    """Test plotting field lines."""
+    field = ToroidalMagneticField(B0=-1.0, R0=1.0)
+    fig, data = plot_field_lines(
+        field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
+    )
+    assert all(data["Z"][0] == 0)
+    assert np.allclose((data["X"][0] ** 2 + data["Y"][0] ** 2), 1)
+
+    field1 = ToroidalMagneticField(B0=1.0, R0=1.0)
+    field2 = PoloidalMagneticField(B0=1.0, R0=1.0, iota=3.0)
+    field = SumMagneticField([field1, field2])
+    _ = plot_field_lines(
+        field,
+        R0=[1.1, 1.3],
+        Z0=[0.0, 0.1],
+        nphi_per_transit=100,
+        ntransit=2,
+        endpoint=True,
+        chunk_size=10,
+    )
+
+
+@pytest.mark.unit
+def test_plot_field_lines_reversed():
+    """Test plotting field lines with reversed direction."""
+    field = load("tests/inputs/precise_QA_helical_coils.h5")
+    eq = get("precise_QA")
+    grid_trace = LinearGrid(rho=[1])
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, data1 = plot_field_lines(
+        field, r0, z0, nphi_per_transit=100, ntransit=1, return_data=True
+    )
+    # get the last point of the field line
+    pt_end = np.array([data1["X"][0][-1], data1["Y"][0][-1], data1["Z"][0][-1]])
+    # convert to RPZ coordinates (actually not necessary since phi0=0)
+    pt_end_rpz = xyz2rpz(pt_end)
+    # plot the field line in the reversed direction starting from the end point
+    # and going backwards, this should overlap with the previous field line
+    fig, data2 = plot_field_lines(
+        field,
+        pt_end_rpz[0],
+        pt_end_rpz[2],
+        nphi_per_transit=100,
+        ntransit=-1,
+        return_data=True,
+        fig=fig,
+        color="red",
+        lw=10,
+    )
+    x1 = data1["X"][0]
+    y1 = data1["Y"][0]
+    z1 = data1["Z"][0]
+    x2 = data2["X"][0]
+    y2 = data2["Y"][0]
+    z2 = data2["Z"][0]
+    # we should flip the second field line to compare with the first one
+    assert np.allclose(x1, np.flip(x2), atol=1e-7)
+    assert np.allclose(y1, np.flip(y2), atol=1e-7)
+    assert np.allclose(z1, np.flip(z2), atol=1e-7)

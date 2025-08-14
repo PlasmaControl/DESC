@@ -29,7 +29,7 @@ from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
@@ -2583,6 +2583,8 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    iota=False,
+    axis=None,
     **kwargs,
 ):
     """Trace field lines by integration, using diffrax package.
@@ -2621,17 +2623,29 @@ def field_line_integrate(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    iota: bool
+        Whether or not to also find the rotational transform of each field line. If
+        True, requires axis to be passed in. iota is computed assuming the poloidal
+        angle is increasing counter-clockwise about the axis as the field line
+        moves along increasing toroidal angle phi.
+    axis: Curve
+        The magnetic axis relative to which the rotational transform is computed. Only
+        required if iota=True.
     kwargs: dict
         keyword arguments to be passed into the ``diffrax.diffeqsolve``
 
     Returns
     -------
-    r, z : ndarray
+    r, z : ndarray of shape [n_phis, n_initial_points]
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
+    iotas : 1-D ndarray of shape [n_initial_points]
+        if iota=True, the rotational transform computed for each field line traced.
     """
-    r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
+    r0, z0, phis = map(jnp.atleast_1d, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    if iota is None:
+        assert axis is not None, "Must pass in an axis if iota=True"
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
@@ -2658,6 +2672,58 @@ def field_line_integrate(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
 
+    @jit
+    def odefun_iota(s, rpzt, args):
+        rpzt = rpzt.reshape((4, -1)).T  # R, phi, Z, polar theta
+        field = args[0]
+        axis = args[1]  # magnetic axis
+        r = rpzt[:, 0]
+        phi = rpzt[:, 1]
+        z = rpzt[:, 2]
+        trans = get_transforms(
+            ["x", "x_s"],
+            axis,
+            grid=Grid(
+                jnp.array([jnp.zeros_like(phi), jnp.zeros_like(phi), phi]).squeeze(),
+                jitable=True,
+            ),
+            jitable=True,
+        )
+        data_axis = axis.compute(
+            ["x", "x_s"], transforms=trans, params=axis.params_dict
+        )
+
+        br, bp, bz = (
+            scale
+            * field.compute_magnetic_field(
+                rpzt[:, :-1],
+                params,
+                basis="rpz",
+                source_grid=source_grid,
+                chunk_size=chunk_size,
+            ).T
+        )
+        dR_ds = r * br / bp * jnp.sign(bp)
+        dphi_ds = jnp.sign(bp)
+        dZ_ds = r * bz / bp * jnp.sign(bp)
+        # delta_X is the rel. position w.r.t. the magnetic axis
+        delta_R = r - data_axis["x"][:, 0].squeeze()
+        delta_Z = z - data_axis["x"][:, 2].squeeze()
+        d_delta_R_ds = dR_ds - data_axis["x_s"][:, 0].squeeze()
+        d_delta_Z_ds = dZ_ds - data_axis["x_s"][:, 2].squeeze()
+        # one negative sign bc this is based off taking a deriv of
+        # arctan(delta_Z/delta_R), and the arctan angle definition
+        # is opposite what we define as increasing poloidal angle
+        # (i.e. CCW field line rotation is decreasing arctan angle,
+        # but increasing DESC poloidal angle)
+        # sign(bp) to account for when s and Bphi are opposing
+        dtheta_ds = (
+            -jnp.sign(bp)
+            * (delta_R * d_delta_Z_ds - delta_Z * d_delta_R_ds)
+            / (delta_R**2 + delta_Z**2)
+        )
+        return jnp.array([dR_ds, dphi_ds, dZ_ds, dtheta_ds]).squeeze()
+
     # diffrax parameters
 
     def default_terminating_event_fxn(state, **kwargs):
@@ -2672,8 +2738,15 @@ def field_line_integrate(
         "discrete_terminating_event",
         DiscreteTerminatingEvent(default_terminating_event_fxn),
     )
-
-    term = ODETerm(odefun)
+    if iota:
+        term = ODETerm(odefun_iota)
+        data_ax = axis.compute(["R", "Z"], grid=LinearGrid(zeta=phis[0]))
+        dR = x0[:, 0] - data_ax["R"].squeeze()
+        dZ = x0[:, 2] - data_ax["Z"].squeeze()
+        theta0 = np.arctan2(dZ, dR)
+        x0 = np.hstack([x0, theta0[:, None]])
+    else:
+        term = ODETerm(odefun)
     saveat = SaveAt(ts=phis)
 
     intfun = lambda x: diffeqsolve(
@@ -2685,7 +2758,7 @@ def field_line_integrate(
         saveat=saveat,
         max_steps=maxstep * len(phis),
         dt0=min_step_size,
-        args=(field,),
+        args=(field, axis),
         **kwargs,
     ).ys
 
@@ -2700,6 +2773,12 @@ def field_line_integrate(
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
+    theta = x[:, :, 3].squeeze().T.reshape((phis.size, *rshape))
+    if iota:
+        # iota =  delta theta / delta phi, where the integration
+        # found the running sums delta x = sum(dx)
+        iota = theta[-1, :] / (phis[-1] - phis[0])
+        return r, z, iota
 
     return r, z
 

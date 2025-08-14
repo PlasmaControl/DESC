@@ -1638,7 +1638,7 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         A_source_grid=None,
         method="biot-savart",
-        curl_A_grid=None,
+        A_res=256,
         series=3,
     ):
         """
@@ -1667,7 +1667,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Defaults to the source_grid unless method == 'virtual casing'.
             Should NOT include endpoint at 2pi.
         method: string, optional
-            "biot-savart", "virtual casing" or "vector potential". "biot-savart"
+            "biot-savart" or "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates the magnetic field directly from the
             current density, whereas "vector potential" first calculates A, and then
             takes curl(A) to ensure a divergence-free field. 'virtual casing' is the
@@ -1677,25 +1677,37 @@ class Equilibrium(Optimizable, _MagneticField):
             final dataset will not contain the source current density values (which BMW
             normally contains) since the current density is not directly computed in the
             virtual casing method.
-        curl_A_grid : Grid, optional
-            If using method='vector potential', the grid that A will be evaluated on in
-            order to take B=curl(A). Does not affect the grid on which the vector
-            potential is evaluated to be saved.
         """
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
-        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-        coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+        if method in ["biot-savart", "vector potential"]:
+            [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
+            coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
-        B, data = self.compute_magnetic_field(
-            coords,
-            source_grid=source_grid,
-            chunk_size=chunk_size,
-            method=method,
-            A_grid=curl_A_grid,
-            return_data=True,
-        )
+            B, data = self.compute_magnetic_field(
+                coords,
+                source_grid=source_grid,
+                chunk_size=chunk_size,
+                method=method,
+                return_data=True,
+            )
+        else:
+            from .plasma_field import PlasmaField
+
+            R_bounds = [R.min() - 0.1, R.max() + 0.1]
+            Z_bounds = [Z.min() - 0.1, Z.max() + 0.1]
+            field = PlasmaField(
+                self,
+                source_grid,
+                R_bounds,
+                Z_bounds,
+                A_res,
+                chunk_size,
+                return_data=True,
+            )
+            B = field.compute_magnetic_grid(R, phi, Z, self.NFP).reshape(-1, 3)
+            data = field._data
 
         if source_grid is None:
             if method == "virtual casing":
@@ -1845,9 +1857,9 @@ class Equilibrium(Optimizable, _MagneticField):
         if save_pressure or replace_in_plasma:
             # For points inside the plasma, map R,phi,Z --> rho, theta, zeta
             plasma_mask = self.in_plasma(coords.reshape(nR, nphi, nZ, 3)).flatten()
-            guess = data["src_rtz"][plasma_mask]
+            guess = jnp.asarray(data["src_rtz"][plasma_mask])
             plasma_grid = coords[plasma_mask]
-            guess[:, 2] = plasma_grid[:, 1]  # zeta = phi
+            guess = guess.at[:, 2].set(plasma_grid[:, 1])  # zeta = phi
             rtz = Grid(
                 map_coordinates(
                     self,
@@ -1868,7 +1880,8 @@ class Equilibrium(Optimizable, _MagneticField):
             else:
                 pressure = None
             if replace_in_plasma:
-                B[plasma_mask, :] = self.compute("B", grid=rtz, basis="rpz")["B"]
+                B_plasma = self.compute("B", grid=rtz, basis="rpz")["B"]
+                B = B.at[plasma_mask, :].set(B_plasma)
 
         save_fieldlines_format(
             path=path,

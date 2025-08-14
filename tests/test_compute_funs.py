@@ -4,13 +4,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.utils import dot
+from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -96,7 +96,7 @@ def test_enclosed_volumes():
         8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
     np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
 
 
 @pytest.mark.unit
@@ -161,6 +161,12 @@ def test_surface_areas_2():
 @pytest.mark.unit
 def test_elongation():
     """Test that elongation approximation is correct."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[-1, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
     surf2 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
         Z_lmn=[-2, -0.2],
@@ -173,17 +179,15 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    eq1 = Equilibrium()  # elongation = 1
-    eq2 = Equilibrium(surface=surf2)  # elongation = 2
-    eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
-    data1 = eq1.compute(["a_major/a_minor"], grid=grid)
-    data2 = eq2.compute(["a_major/a_minor"], grid=grid)
-    data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    assert surf3.sym
+    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    data1 = surf1.compute(["a_major/a_minor"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
 
 
 @pytest.mark.slow
@@ -1104,10 +1108,10 @@ def test_BdotgradB(DummyStellarator):
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-    # TODO: add test with stellarator example
+    # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -1127,7 +1131,7 @@ def test_boozer_transform():
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
+        np.flipud(np.sort(np.abs(data["|B|_mn_B"]))),
         booz_xform,
         rtol=1e-3,
         atol=1e-4,
@@ -1141,14 +1145,14 @@ def test_boozer_transform_multiple_surfaces():
     grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
-    data2 = eq.compute("|B|_mn", grid=grid2, M_booz=eq.M, N_booz=eq.N)
-    data3 = eq.compute("|B|_mn", grid=grid3, M_booz=eq.M, N_booz=eq.N)
+    data1 = eq.compute("|B|_mn_B", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
+    data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
     np.testing.assert_allclose(
-        data1["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[0]
+        data1["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0]
     )
     np.testing.assert_allclose(
-        data2["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[1]
+        data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
 
 
@@ -1476,9 +1480,8 @@ def test_iota_components():
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
-    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
-    # TODO: expand this to include all angular derivatives once they are implemented
-    # for surfaces
+    # TODO (#1397): expand this to include all angular derivatives
+    #  once they are implemented for surfaces
     data_basis_vecs_fourierRZ = [
         "e_theta",
         "e_zeta",
@@ -1499,7 +1502,7 @@ def test_surface_equilibrium_geometry():
     ]
     for name in names:
         eq = get(name)
-        for key in data:
+        for key in ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]:
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()
             if key == "a_major/a_minor":
@@ -1540,32 +1543,110 @@ def test_surface_equilibrium_geometry():
 
 
 @pytest.mark.unit
-def test_parallel_grad():
-    """Test geometric and physical methods of computing parallel gradients agree."""
-    eq = get("W7-X")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(2, 2, 2, 4, 4, 4)
+def test_clebsch_sfl_funs():
+    """Test geometric and physical methods of computing B agree."""
+
+    def test(eq):
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        data = eq.compute(
+            [
+                "e_zeta|r,a",
+                "B",
+                "B^zeta",
+                "B^phi",
+                "|B|_z|r,a",
+                "grad(|B|)",
+                "|e_zeta|r,a|_z|r,a",
+                "B^zeta_z|r,a",
+                "|B|",
+                "sqrt(g)_Clebsch",
+                "sqrt(g)_PEST",
+                "psi_r",
+                "grad(psi)",
+                "grad(alpha)",
+                "grad(phi)",
+                "B_phi",
+                "gbdrift (secular)",
+                "gbdrift (secular)/phi",
+                "phi",
+            ],
+        )
+        np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+        np.testing.assert_allclose(
+            data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        )
+        np.testing.assert_allclose(
+            data["|e_zeta|r,a|_z|r,a"],
+            data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+            - data["|B|"]
+            * data["B^zeta_z|r,a"]
+            * np.sign(data["B^zeta"])
+            / data["B^zeta"] ** 2,
+        )
+        np.testing.assert_allclose(
+            data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
+        )
+        np.testing.assert_allclose(
+            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+        )
+        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
+        np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
+        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
+        np.testing.assert_allclose(
+            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
+        )
+
+    test(get("W7-X"))
+    test(get("NCSX"))
+
+
+@pytest.mark.unit
+def test_parallel_grad_fd(DummyStellarator):
+    """Test that the parallel gradients match with numerical gradients."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    grid = get_rtz_grid(eq, 0.5, 0, np.linspace(0, 2 * np.pi, 50), coordinates="raz")
     data = eq.compute(
         [
-            "e_zeta|r,a",
-            "B",
-            "B^zeta",
-            "|B|_z|r,a",
-            "grad(|B|)",
-            "|e_zeta|r,a|_z|r,a",
-            "B^zeta_z|r,a",
             "|B|",
+            "|B|_z|r,a",
+            "|e_zeta|r,a|",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta",
+            "B^zeta_z|r,a",
         ],
+        grid=grid,
     )
-    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+    dz = grid.source_grid.spacing[:, 2]
+    fd = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(
-        data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        data["|B|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_z|r,a"])),
     )
+    fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(
-        data["|e_zeta|r,a|_z|r,a"],
-        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
-        - data["|B|"]
-        * data["B^zeta_z|r,a"]
-        * np.sign(data["B^zeta"])
-        / data["B^zeta"] ** 2,
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
     )
+    fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["B^zeta_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
+    )
+
+
+@pytest.mark.unit
+def test_compute_deprecation_warning():
+    """Test DeprecationWarning for deprecated compute names."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("sqrt(g)_B", grid=grid)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)

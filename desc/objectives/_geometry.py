@@ -3,10 +3,18 @@
 import numpy as np
 
 from desc.backend import jnp, vmap
-from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
+from desc.utils import (
+    Timer,
+    copy_rpz_periods,
+    errorif,
+    parse_argname_change,
+    rpz2xyz,
+    safenorm,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -99,6 +107,7 @@ class AspectRatio(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -242,6 +251,7 @@ class Elongation(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -461,13 +471,6 @@ class PlasmaVesselDistance(_Objective):
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensures that softmin_alpha*values passed in is
-    at least >1, otherwise the softmin will return inaccurate approximations
-    of the minimum. Will automatically multiply array values by 2 / min_val if the min
-    of softmin_alpha*array is <1. This is to avoid inaccuracies when values <1
-    are present in the softmin, which can cause inaccurate mins or even incorrect
-    signs of the softmin versus the actual min.
-
     Parameters
     ----------
     eq : Equilibrium
@@ -496,12 +499,9 @@ class PlasmaVesselDistance(_Objective):
         False by default, so that self.things = [eq, surface]
         Both cannot be True.
     softmin_alpha: float, optional
-        Parameter used for softmin. The larger softmin_alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
-        if softmin_alpha*array < 1, the underlying softmin will automatically multiply
-        the array by 2/min_val to ensure that softmin_alpha*array>1. Making
-        softmin_alpha larger than this minimum value will make the softmin a
-        more accurate approximation of the true min.
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
 
     """
 
@@ -509,6 +509,15 @@ class PlasmaVesselDistance(_Objective):
         target_default="``bounds=(1,np.inf)``.",
         bounds_default="``bounds=(1,np.inf)``.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_equil_data_keys",
+        "_surface_fixed",
+        "_surface_data_keys",
+        "_use_signed_distance",
+        "_use_softmin",
+    ]
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -615,11 +624,23 @@ class PlasmaVesselDistance(_Objective):
             "Plasma grid includes interior points, should be rho=1.",
         )
 
-        # TODO: How to use with generalized toroidal angle?
+        # TODO(#568): How to use with generalized toroidal angle?
+        # first check that the number of zeta nodes are the same, which
+        # is a prerequisite to the zeta nodes themselves being the same
         errorif(
             self._use_signed_distance
             and not np.allclose(
-            #and np.allclose(
+                plasma_grid.num_zeta,
+                surface_grid.num_zeta,
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                # and np.allclose(
                 plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2],
                 surface_grid.nodes[surface_grid.unique_zeta_idx, 2],
             ),
@@ -680,7 +701,6 @@ class PlasmaVesselDistance(_Objective):
                 transforms=surface_transforms,
                 profiles={},
             )["x"]
-            surface_coords = rpz2xyz(surface_coords)
             self._constants["surface_coords"] = surface_coords
         elif self._eq_fixed:
             data_eq = compute_fun(
@@ -742,26 +762,30 @@ class PlasmaVesselDistance(_Objective):
         else:
             data = constants["data_equil"]
         plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-        plasma_coords = rpz2xyz(plasma_coords_rpz)
+        # we only copy the plasma data to the full torus, so that we still only
+        # consider a single period of the surface.
+        plasma_coords_nfp = copy_rpz_periods(
+            plasma_coords_rpz, constants["equil_transforms"]["grid"].NFP
+        )
+        plasma_coords = rpz2xyz(plasma_coords_nfp)
         if self._surface_fixed:
-            surface_coords = constants["surface_coords"]
+            surface_coords_rpz = constants["surface_coords"]
         else:
-            surface_coords = compute_fun(
+            surface_coords_rpz = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
             )["x"]
-            surface_coords = rpz2xyz(surface_coords)
+        surface_coords = rpz2xyz(surface_coords_rpz)
 
         diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
         d = safenorm(diff_vec, axis=-1)
 
         point_signs = jnp.ones(surface_coords.shape[0])
         if self._use_signed_distance:
-            surface_coords_rpz = xyz2rpz(surface_coords)
-
+            # for sign, we ignore other periods since the sign will be the same in each
             plasma_coords_rpz = plasma_coords_rpz.reshape(
                 constants["equil_transforms"]["grid"].num_zeta,
                 constants["equil_transforms"]["grid"].num_theta,
@@ -1348,12 +1372,12 @@ class GoodCoordinates(_Objective):
 
         return jnp.concatenate([g, constants["sigma"] * f])
 
-## Isothermic objective
+
 class IsothermicError(_Objective):
     """Target the "smoothness" of the solution to the PDEs that define an isothermic set of coordinates.
-    
+
     An isothermic surface is parameterized by a set of coordinates that generate
-    mutually orthogonal basis vectors. An initial guess of a surface is deformed 
+    mutually orthogonal basis vectors. An initial guess of a surface is deformed
     in order to obtain said set of coordinates.
 
     Parameters
@@ -1395,7 +1419,7 @@ class IsothermicError(_Objective):
         self._eval_grid = eval_grid
         self._eq = eq
         self._sqrt_area_weighting = sqrt_area_weighting
-        
+
         super().__init__(
             things=eq,
             target=target,
@@ -1420,34 +1444,37 @@ class IsothermicError(_Objective):
             Level of output.
 
         """
-        #eq = self.things[0]
+        # eq = self.things[0]
         eq = self._eq
-        
+
         if self._eval_grid is None:
             eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             eval_grid = self._eval_grid
 
         self._dim_f = eval_grid.num_nodes
-        self._data_keys = ["lhs1","lhs2",
-                           "rhs1","rhs2",
-                          ]
+        self._data_keys = [
+            "lhs1",
+            "lhs2",
+            "rhs1",
+            "rhs2",
+        ]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        #profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        #transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        # profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        # transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         w = eval_grid.weights
         w *= jnp.sqrt(eval_grid.num_nodes)
-        
+
         self._constants = {
             "quad_weights": w,
             "eval_grid": self._eval_grid,
-        #    "transforms": transforms,
-        #    "profiles": profiles,
+            #    "transforms": transforms,
+            #    "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -1479,35 +1506,187 @@ class IsothermicError(_Objective):
         """
         if constants is None:
             constants = self.constants
-        
-        eq = self._eq # Plasma Boundary treated as a fake equilibrium
-        
-        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=constants["eval_grid"])
-        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=constants["eval_grid"], jitable = True,)
-        
+
+        eq = self._eq  # Plasma Boundary treated as a fake equilibrium
+
+        eval_profiles = get_profiles(
+            self._data_keys, obj=eq, grid=constants["eval_grid"]
+        )
+        eval_transforms = get_transforms(
+            self._data_keys,
+            obj=eq,
+            grid=constants["eval_grid"],
+            jitable=True,
+        )
+
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
-            params= params,
+            params=params,
             transforms=eval_transforms,
             profiles=eval_profiles,
         )
-        
+
         data["area_weighting"] = (
             jnp.sqrt(data["|e_theta x e_zeta|"])
             if self._sqrt_area_weighting
             else data["|e_theta x e_zeta|"]
         )
-        
-        #return jnp.sqrt( ( ( data["lhs1"] - data["rhs1"] ) ** 2 
+
+        # return jnp.sqrt( ( ( data["lhs1"] - data["rhs1"] ) ** 2
         #                  + ( data["lhs2"] - data["rhs2"] ) ** 2 ) * data["area_weighting"]
         #               )
-        
-        return ( ( data["lhs1"] - data["rhs1"] ) ** 2 
-                + ( data["lhs2"] - data["rhs2"] ) ** 2 ) * data["area_weighting"]
+
+        return (
+            (data["lhs1"] - data["rhs1"]) ** 2 + (data["lhs2"] - data["rhs2"]) ** 2
+        ) * data["area_weighting"]
 
 
 ##### Objectives to target the curvatures
+
+
+class MirrorRatio(_Objective):
+    """Target a particular value mirror ratio.
+
+    The mirror ratio is defined as:
+
+    (Bₘₐₓ - Bₘᵢₙ) / (Bₘₐₓ + Bₘᵢₙ)
+
+    Where Bₘₐₓ and Bₘᵢₙ are the maximum and minimum values of ||B|| on a given surface.
+    Returns one value for each surface in ``grid``.
+
+    Parameters
+    ----------
+    eq : Equilibrium or OmnigenousField
+        Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0.2``.",
+        bounds_default="``target=0.2``.",
+    )
+
+    _coordinates = "r"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Mirror ratio: "
+
+    def __init__(
+        self,
+        eq,
+        *,
+        grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name="mirror ratio",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0.2
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        from desc.equilibrium import Equilibrium
+        from desc.magnetic_fields import OmnigenousField
+
+        if self._grid is None and isinstance(eq, Equilibrium):
+            grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        elif self._grid is None and isinstance(eq, OmnigenousField):
+            grid = LinearGrid(
+                theta=2 * eq.M_B,
+                N=2 * eq.N_x,
+                NFP=eq.NFP,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_rho
+        self._data_keys = ["mirror ratio"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute mirror ratio.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or field degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        M : ndarray
+            Mirror ratio on each surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return constants["transforms"]["grid"].compress(data["mirror ratio"])
+
 
 class Curv_k1(_Objective):
     """Target a particular value for the (unsigned) principal curvature.
@@ -1530,13 +1709,10 @@ class Curv_k1(_Objective):
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-
-    """
-
-    __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=1``.",
         bounds_default="``target=1``.",
     )
+    """
 
     _coordinates = "rtz"
     _units = "(m^-1)"
@@ -1595,9 +1771,10 @@ class Curv_k1(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k1_rho",
-                           "|e_theta x e_zeta|",
-                          ]
+        self._data_keys = [
+            "curvature_k1_rho",
+            "|e_theta x e_zeta|",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -1649,7 +1826,8 @@ class Curv_k1(_Objective):
             profiles=constants["profiles"],
         )
         return data["curvature_k1_rho"] * jnp.sqrt(data["|e_theta x e_zeta|"])
-        
+
+
 class Curv_k2(_Objective):
     """Target a particular value for the (unsigned) principal curvature.
 
@@ -1736,9 +1914,10 @@ class Curv_k2(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k2_rho",
-                           "|e_theta x e_zeta|",
-                          ]
+        self._data_keys = [
+            "curvature_k2_rho",
+            "|e_theta x e_zeta|",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -1790,6 +1969,7 @@ class Curv_k2(_Objective):
             profiles=constants["profiles"],
         )
         return data["curvature_k2_rho"] * jnp.sqrt(data["|e_theta x e_zeta|"])
+
 
 class Surf_Jacobian_Variation(_Objective):
     """Target a particular value for the (unsigned) principal curvature.
@@ -1877,10 +2057,11 @@ class Surf_Jacobian_Variation(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["|e_theta x e_zeta|",
-                           "|e_theta x e_zeta|_t",
-                           "|e_theta x e_zeta|_z",
-                          ]
+        self._data_keys = [
+            "|e_theta x e_zeta|",
+            "|e_theta x e_zeta|_t",
+            "|e_theta x e_zeta|_z",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -1931,8 +2112,10 @@ class Surf_Jacobian_Variation(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.sqrt( data["|e_theta x e_zeta|_t"] ** 2 
-                        + data["|e_theta x e_zeta|_z"] ** 2) * jnp.sqrt(data["|e_theta x e_zeta|"])
+        return jnp.sqrt(
+            data["|e_theta x e_zeta|_t"] ** 2 + data["|e_theta x e_zeta|_z"] ** 2
+        ) * jnp.sqrt(data["|e_theta x e_zeta|"])
+
 
 class Surf_Jacobian_Norm_Variation(_Objective):
     """Target a particular value for the (unsigned) principal curvature.
@@ -2020,11 +2203,15 @@ class Surf_Jacobian_Norm_Variation(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["e_theta","e_zeta",
-                           "e_theta_t","e_zeta_t",
-                           "e_theta_z","e_zeta_z",
-                           "|e_theta x e_zeta|",
-                          ]
+        self._data_keys = [
+            "e_theta",
+            "e_zeta",
+            "e_theta_t",
+            "e_zeta_t",
+            "e_theta_z",
+            "e_zeta_z",
+            "|e_theta x e_zeta|",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -2075,13 +2262,14 @@ class Surf_Jacobian_Norm_Variation(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.sqrt(0#jnp.sum(data["e_theta"] * data["e_theta"], axis = 1) ** 2 
-                        #+ jnp.sum(data["e_zeta"] * data["e_zeta"], axis = 1) ** 2 
-                        #+ jnp.sum(data["e_theta"] * data["e_zeta"], axis = 1) ** 2
-                        + jnp.sum(data["e_theta_t"] * data["e_zeta"], axis = 1) ** 2
-                        + jnp.sum(data["e_theta"] * data["e_zeta_t"], axis = 1) ** 2
-                        + jnp.sum(data["e_theta_z"] * data["e_zeta"], axis = 1) ** 2 
-                        + jnp.sum(data["e_theta"] * data["e_zeta_z"], axis = 1) ** 2  
-                        + jnp.sum(data["e_theta"] * data["e_theta_z"], axis = 1) ** 2
-                        + jnp.sum(data["e_zeta"] * data["e_zeta_t"], axis = 1) ** 2
-                       ) * jnp.sqrt(data["|e_theta x e_zeta|"])
+        return jnp.sqrt(
+            0  # jnp.sum(data["e_theta"] * data["e_theta"], axis = 1) ** 2
+            # + jnp.sum(data["e_zeta"] * data["e_zeta"], axis = 1) ** 2
+            # + jnp.sum(data["e_theta"] * data["e_zeta"], axis = 1) ** 2
+            + jnp.sum(data["e_theta_t"] * data["e_zeta"], axis=1) ** 2
+            + jnp.sum(data["e_theta"] * data["e_zeta_t"], axis=1) ** 2
+            + jnp.sum(data["e_theta_z"] * data["e_zeta"], axis=1) ** 2
+            + jnp.sum(data["e_theta"] * data["e_zeta_z"], axis=1) ** 2
+            + jnp.sum(data["e_theta"] * data["e_theta_z"], axis=1) ** 2
+            + jnp.sum(data["e_zeta"] * data["e_zeta_t"], axis=1) ** 2
+        ) * jnp.sqrt(data["|e_theta x e_zeta|"])

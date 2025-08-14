@@ -137,7 +137,7 @@ class InputReader:
         """
         return get_parser()
 
-    def parse_inputs(self, fname=None):  # noqa: C901 - FIXME: simplify this
+    def parse_inputs(self, fname=None):  # noqa: C901
         """Read input from DESC input file; converts from VMEC input if necessary.
 
         Parameters
@@ -386,7 +386,6 @@ class InputReader:
             if match:
                 inputs["bdry_mode"] = words[0].lower()
                 flag = True
-                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -682,6 +681,7 @@ class InputReader:
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
+            filename = os.path.expanduser(filename)
             f = open(filename, "w+")
         else:
             f = filename
@@ -695,7 +695,7 @@ class InputReader:
         f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
-        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
+        f.write("Psi = {:.8e} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -796,7 +796,7 @@ class InputReader:
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
-        threshold=1e-10,
+        threshold=0,
     ):
         """Generate a DESC input file from a DESC output file.
 
@@ -907,12 +907,12 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
-        prof_modes = np.zeros((L_profile, 3))
-        prof_modes[:, 0] = np.arange(L_profile)
+        prof_modes = np.zeros((L_profile + 1, 3))
+        prof_modes[:, 0] = np.arange(L_profile + 1)
         p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
         p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
-        for l in range(L_profile):
+        for l in range(L_profile + 1):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
                     int(l), p1[l], char, p2[l]
@@ -970,7 +970,7 @@ class InputReader:
         InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
-    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901 - FIXME: simplify this
+    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901
         """Parse a VMEC input file into a dictionary of DESC inputs.
 
         Parameters
@@ -1175,9 +1175,8 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
-            if match:
-                if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
+            if re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Pressure is not a power series!", "yellow"))
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:

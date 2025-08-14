@@ -35,6 +35,16 @@ Equilibrium
     desc.objectives.HelicalForceBalance
 
 
+Fast ion confinement
+--------------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.GammaC
+
+
 Geometry
 --------
 .. autosummary::
@@ -49,7 +59,18 @@ Geometry
     desc.objectives.PrincipalCurvature
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
+    desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+
+
+Neoclassical
+------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.EffectiveRipple
 
 
 Omnigenity
@@ -75,6 +96,7 @@ Stability
 
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
+    desc.objectives.BallooningStability
 
 
 Free boundary / Single stage optimization
@@ -97,16 +119,20 @@ Coil Optimization
 
 
     desc.objectives.QuadraticFlux
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.CoilLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilTorsion
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
+    desc.objectives.PlasmaCoilSetDistanceBound
     desc.objectives.PlasmaCoilSetMinDistance
+    desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
     desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
 
 
 Profiles
@@ -121,6 +147,17 @@ Profiles
     desc.objectives.ToroidalCurrent
     desc.objectives.Pressure
     desc.objectives.BootstrapRedlConsistency
+
+
+Power Balance
+-------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.FusionPower
+    desc.objectives.HeatingPowerISS04
 
 
 Fixing degrees of freedom
@@ -160,7 +197,7 @@ User defined objectives
     :recursive:
     :template: class.rst
 
-
+    desc.objectives.ExternalObjective
     desc.objectives.GenericObjective
     desc.objectives.ObjectiveFromUser
     desc.objectives.LinearObjectiveFromUser

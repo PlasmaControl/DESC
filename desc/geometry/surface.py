@@ -1,5 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
+import os
 import warnings
 
 import numpy as np
@@ -15,12 +16,20 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    rpz2xyz_vec,
+    setdefault,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Surface
 
@@ -65,6 +74,7 @@ class FourierRZToroidalSurface(Surface):
         "_NFP",
         "_rho",
     ]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -205,13 +215,14 @@ class FourierRZToroidalSurface(Surface):
         N = check_nonnegint(N, "N")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
-        self._sym = sym if sym is not None else self.sym
 
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
+            or ((sym is not None) and (sym != self.sym))
         ):
+            self._sym = sym if sym is not None else self.sym
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
@@ -315,14 +326,19 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
-                "boundary_ratio = {} != 1, surface may not be as expected".format(
-                    inputs["bdry_ratio"]
-                )
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other  "
+                "scalar value will scale the non-axisymmetric  modes by that "
+                "value. The final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created "
+                "FourierRZToroidalSurface will be a scaled version of the "
+                "input file boundary."
             )
         surf = cls(
             inputs["surface"][:, 3],
@@ -335,7 +351,7 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
-    # TODO: add k value for number of rotations per field period
+    # TODO (#1385): add k value for number of rotations per field period
     @classmethod
     def from_qp_model(
         cls,
@@ -694,10 +710,10 @@ class FourierRZToroidalSurface(Surface):
             dictionary containing  the following data, in the cylindrical basis:
                 ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
                     the base_surface evaluated at the input ``grid``
-                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
                     the base_surface evaluated at the input ``grid``
                 ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
-                    position vectors on the offset surface, corresponding to the
+                    coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
         info : tuple
@@ -741,10 +757,19 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
-        zetas, (res, niter) = vecroot(
-            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        vecroot = jit(
+            vmap(
+                lambda x0, *p: root_scalar(
+                    fun_jax, x0, jac=None, args=p, full_output=full_output
+                )
+            )
         )
+        if full_output:
+            zetas, (res, niter) = vecroot(
+                grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+            )
+        else:
+            zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
@@ -767,6 +792,49 @@ class FourierRZToroidalSurface(Surface):
             return offset_surface, data, (res, niter)
         else:
             return offset_surface
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees for a bunch of toroidal angles and
+        fitting a Fourier curve to it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        # over-sample to get a good axis fit
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
+        Rout = R[::2]
+        Rin = R[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = (
+            jnp.linspace(0, 2 * np.pi / self.NFP, len(Rmid), endpoint=False)
+            if self.N > 0
+            else jnp.zeros_like(Rmid)
+        )
+        axis = FourierRZCurve.from_values(
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+        )
+        return axis
 
 
 class ZernikeRZToroidalSection(Surface):
@@ -821,6 +889,12 @@ class ZernikeRZToroidalSection(Surface):
         "_Z_basis",
         "_spectral_indexing",
         "_zeta",
+    ]
+
+    _static_attrs = Surface._static_attrs + [
+        "_spectral_indexing",
+        "_R_basis",
+        "_Z_basis",
     ]
 
     @execute_on_cpu
@@ -962,9 +1036,13 @@ class ZernikeRZToroidalSection(Surface):
 
         L = check_nonnegint(L, "L")
         M = check_nonnegint(M, "M")
-        self._sym = sym if sym is not None else self.sym
 
-        if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
+        if (
+            ((L is not None) and (L != self.L))
+            or ((M is not None) and (M != self.M))
+            or ((sym is not None) and (sym != self.sym))
+        ):
+            self._sym = sym if sym is not None else self.sym
             L = int(L if L is not None else self.L)
             M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes
@@ -1050,9 +1128,11 @@ class ZernikeRZToroidalSection(Surface):
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
+
 ##########################################################################################################################
 ##########################################################################################################################
 ##########################################################################################################################
+
 
 # Let's make a class just to define two optimizable scalars for harmonic vectors on a surface
 class HarmonicCoefficients(Surface):
@@ -1075,25 +1155,24 @@ class HarmonicCoefficients(Surface):
         self,
         a_n=1,
         b_n=1,
-        #NFP = 1,
+        # NFP = 1,
         sym="auto",
         name="",
     ):
-        #super().__init__(name)
+        # super().__init__(name)
         a_n, b_n = np.atleast_1d(a_n), np.atleast_1d(b_n)
-        
+
         if a_n.size == 0:
             raise ValueError("At least 1 coefficient for a_n must be supplied")
         if b_n.size == 0:
             b_n = a_n
-            
+
         assert a_n.size == b_n.size, "a_n and b_n must be the same size"
-        
+
         self._sym = sym
 
         self._a_n = a_n
         self._b_n = b_n
-
 
     @optimizable_parameter
     @property
@@ -1103,7 +1182,7 @@ class HarmonicCoefficients(Surface):
 
     @a_n.setter
     def a_n(self, new):
-        if len(new) == len(self.a_n): #self.R_basis.num_modes:
+        if len(new) == len(self.a_n):  # self.R_basis.num_modes:
             self._a_n = jnp.asarray(new)
         else:
             raise ValueError(
@@ -1119,17 +1198,17 @@ class HarmonicCoefficients(Surface):
 
     @b_n.setter
     def b_n(self, new):
-        if len(new) == len(self.b_n): #self.Z_basis.num_modes:
+        if len(new) == len(self.b_n):  # self.Z_basis.num_modes:
             self._b_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"b_n should be size 1, got {len(new)} for "
                 + f"the size of the new b_n"
             )
-            
+
     def change_resolution(self, *args, **kwargs):
         pass
-    
+
     @property
     def NFP(self):
         pass
@@ -1145,6 +1224,7 @@ class HarmonicCoefficients(Surface):
     @property
     def rho(self):
         pass
+
 
 # Let's make a class just to define two optimizable scalars for harmonic vectors on a surface
 class Scalar(Surface):
@@ -1166,20 +1246,19 @@ class Scalar(Surface):
     def __init__(
         self,
         a_n,
-        #b_n=1,
-        #NFP = 1,
+        # b_n=1,
+        # NFP = 1,
         sym="auto",
         name="",
     ):
-        #super().__init__(name)
+        # super().__init__(name)
         a_n = np.atleast_1d(a_n)
-        
+
         if a_n.size == 0:
             raise ValueError("At least 1 coefficient for a_n must be supplied")
-        
+
         self._sym = sym
         self._a_n = a_n
-
 
     @optimizable_parameter
     @property
@@ -1189,17 +1268,17 @@ class Scalar(Surface):
 
     @a_n.setter
     def a_n(self, new):
-        if len(new) == len(self.a_n): #self.R_basis.num_modes:
+        if len(new) == len(self.a_n):  # self.R_basis.num_modes:
             self._a_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"a_n should be size 1, got {len(new)} for "
                 + f"the size of the new a_n."
             )
-            
+
     def change_resolution(self, *args, **kwargs):
         pass
-    
+
     @property
     def NFP(self):
         pass
@@ -1215,3 +1294,22 @@ class Scalar(Surface):
     @property
     def rho(self):
         pass
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        Computes the R and Z value at rho=0 and creates N=0 FourierRZCurve
+        to represent the axis of the cross section.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Circular axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        grid = LinearGrid(rho=0)
+        data = self.compute(["R", "Z"], grid=grid)
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
+        return axis

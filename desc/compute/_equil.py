@@ -526,6 +526,26 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|F|_normalized",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
+    + "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Magnitude of force balance error normalized by volume averaged "
+    + "magnetic pressure gradient",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|F|", "<|grad(|B|^2)|/2mu0>_vol"],
+)
+def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
+    data["|F|_normalized"] = data["|F|"] / data["<|grad(|B|^2)|/2mu0>_vol"]
+    return data
+
+
+@register_compute_fun(
     name="<|F|>_vol",
     label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
     units="N \\cdot m^{-3}",
@@ -658,12 +678,12 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["|B|", "sqrt(g)"],
+    data=["|B|^2", "sqrt(g)"],
     resolution_requirement="rtz",
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
+        data["|B|^2"] * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -824,12 +844,12 @@ def _beta_voltor(params, transforms, profiles, data, **kwargs):
 def _P_ISS04(params, transforms, profiles, data, **kwargs):
     rho = transforms["grid"].compress(data["rho"], surface_label="rho")
     iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+    method = kwargs.get("method", "cubic")
     fx = {}
-    if "iota_r" in data:
-        fx["fx"] = transforms["grid"].compress(
-            data["iota_r"]
-        )  # noqa: unused dependency
-    iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+    if "iota_r" in data and method == "cubic":
+        # noqa: unused dependency
+        fx["fx"] = transforms["grid"].compress(data["iota_r"])
+    iota_23 = interp1d(2 / 3, rho, iota, method=method, **fx)
     data["P_ISS04"] = 1e6 * (  # MW -> W
         jnp.abs(data["W_p"] / 1e6)  # J -> MJ
         / (
@@ -838,7 +858,7 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             * data["R0"] ** 0.64  # m
             * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
             * data["<|B|>_axis"] ** 0.84  # T
-            * iota_23**0.41
+            * jnp.abs(iota_23) ** 0.41
             * kwargs.get("H_ISS04", 1)
         )
     ) ** (1 / 0.39)
@@ -865,7 +885,7 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     fuel = kwargs.get("fuel", "DT")
     energy = energies.get(fuel)
 
-    reaction_rate = jnp.sum(
+    reaction_rate = 0.25 * jnp.sum(
         data["ni"] ** 2
         * data["<sigma*nu>"]
         * data["sqrt(g)"]
@@ -873,6 +893,7 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     )  # reactions/s
     data["P_fusion"] = reaction_rate * energy * elementary_charge  # J/s
     return data
+
 
 # Define surface divergence of magnetic field through alpha and |e^rho|
 @register_compute_fun(
@@ -887,15 +908,14 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n_rho","nabla_s(alpha)","nabla_s(|e^rho|)"],
+    data=["n_rho", "nabla_s(alpha)", "nabla_s(|e^rho|)"],
 )
 def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs):
-    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"] = dot(data["n_rho"],
-                                                      cross(data["nabla_s(alpha)"],
-                                                            data["nabla_s(|e^rho|)"]
-                                                            )
-                                                     )**(1)
+    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"] = dot(
+        data["n_rho"], cross(data["nabla_s(alpha)"], data["nabla_s(|e^rho|)"])
+    ) ** (1)
     return data
+
 
 # Define surface divergence of magnetic field through alpha and |e^rho|
 @register_compute_fun(
@@ -913,8 +933,11 @@ def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs)
     data=["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"],
 )
 def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs):
-    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]^2"] = data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]"]**(2)
+    data["n.[nabla_s(alpha) x nabla_s(|e^rho|)]^2"] = data[
+        "n.[nabla_s(alpha) x nabla_s(|e^rho|)]"
+    ] ** (2)
     return data
+
 
 @register_compute_fun(
     name="|e^rho|",
@@ -931,9 +954,10 @@ def _n_grad_s_alpha_x_grad_s_e_rho(params, transforms, profiles, data, **kwargs)
     data=["e^rho"],
 )
 def _norm_e_sup_rho(params, transforms, profiles, data, **kwargs):
-    
-    data["|e^rho|"] = jnp.sum( data["e^rho"] * data["e^rho"] , axis = 1) ** (1/2)
+
+    data["|e^rho|"] = jnp.sum(data["e^rho"] * data["e^rho"], axis=1) ** (1 / 2)
     return data
+
 
 @register_compute_fun(
     name="|e^rho|_t",
@@ -947,12 +971,15 @@ def _norm_e_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho","e^rho_t","|e^rho|"],
+    data=["e^rho", "e^rho_t", "|e^rho|"],
 )
 def _norm_e_sup_rho_t(params, transforms, profiles, data, **kwargs):
-    
-    data["|e^rho|_t"] = data["|e^rho|"]**(-1) * jnp.sum( data["e^rho"] * data["e^rho_t"] , axis = 1)
+
+    data["|e^rho|_t"] = data["|e^rho|"] ** (-1) * jnp.sum(
+        data["e^rho"] * data["e^rho_t"], axis=1
+    )
     return data
+
 
 @register_compute_fun(
     name="|e^rho|_z",
@@ -966,12 +993,15 @@ def _norm_e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho","e^rho_z","|e^rho|"],
+    data=["e^rho", "e^rho_z", "|e^rho|"],
 )
 def _norm_e_sup_rho_z(params, transforms, profiles, data, **kwargs):
-    
-    data["|e^rho|_z"] = data["|e^rho|"]**(-1) * jnp.sum( data["e^rho"] * data["e^rho_z"] , axis = 1)
+
+    data["|e^rho|_z"] = data["|e^rho|"] ** (-1) * jnp.sum(
+        data["e^rho"] * data["e^rho_z"], axis=1
+    )
     return data
+
 
 @register_compute_fun(
     name="nabla_s(|e^rho|)",
@@ -985,15 +1015,15 @@ def _norm_e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|e^rho|_t","|e^rho|_z", 
-          "e^theta_s","e^zeta_s"],
+    data=["|e^rho|_t", "|e^rho|_z", "e^theta_s", "e^zeta_s"],
 )
 def _nabla_s_e_rho_norm(params, transforms, profiles, data, **kwargs):
-    
-    data["nabla_s(|e^rho|)"] = (data["|e^rho|_t"] * data["e^theta_s"].T
-                                + data["|e^rho|_z"] * data["e^zeta_s"].T
-                                ).T
+
+    data["nabla_s(|e^rho|)"] = (
+        data["|e^rho|_t"] * data["e^theta_s"].T + data["|e^rho|_z"] * data["e^zeta_s"].T
+    ).T
     return data
+
 
 @register_compute_fun(
     name="nabla_s(alpha)",
@@ -1007,15 +1037,15 @@ def _nabla_s_e_rho_norm(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["alpha_t","alpha_z", 
-          "e^theta_s","e^zeta_s"],
+    data=["alpha_t", "alpha_z", "e^theta_s", "e^zeta_s"],
 )
 def _nabla_s_alpha(params, transforms, profiles, data, **kwargs):
-    
-    data["nabla_s(alpha)"] = (data["alpha_t"] * data["e^theta_s"].T
-                              + data["alpha_z"] * data["e^zeta_s"].T
-                              ).T
+
+    data["nabla_s(alpha)"] = (
+        data["alpha_t"] * data["e^theta_s"].T + data["alpha_z"] * data["e^zeta_s"].T
+    ).T
     return data
+
 
 @register_compute_fun(
     name="|nabla_s(alpha)|",
@@ -1031,8 +1061,10 @@ def _nabla_s_alpha(params, transforms, profiles, data, **kwargs):
     data=["nabla_s(alpha)"],
 )
 def _nabla_s_alpha_norm(params, transforms, profiles, data, **kwargs):
-    
-    data["|nabla_s(alpha)|"] = jnp.sum( data["nabla_s(alpha)"] * data["nabla_s(alpha)"] , axis = 1) ** (1/2)
+
+    data["|nabla_s(alpha)|"] = jnp.sum(
+        data["nabla_s(alpha)"] * data["nabla_s(alpha)"], axis=1
+    ) ** (1 / 2)
     return data
 
 
@@ -1047,15 +1079,18 @@ def _nabla_s_alpha_norm(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|e^rho|_t","|e^rho|_z", 
-          #"e^theta_s","e^zeta_s",
-         ],
+    data=[
+        "|e^rho|_t",
+        "|e^rho|_z",
+        # "e^theta_s","e^zeta_s",
+    ],
 )
 def _d_erho2(params, transforms, profiles, data, **kwargs):
-    
+
     data["d_|e^rho|^2"] = data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2
-    #data["d_|e^rho|^2"] = jnp.sqrt(data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2)
+    # data["d_|e^rho|^2"] = jnp.sqrt(data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2)
     return data
+
 
 @register_compute_fun(
     name="d_|e^rho|",
@@ -1068,11 +1103,13 @@ def _d_erho2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|e^rho|_t","|e^rho|_z", 
-         ],
+    data=[
+        "|e^rho|_t",
+        "|e^rho|_z",
+    ],
 )
 def _d_erho(params, transforms, profiles, data, **kwargs):
-    
+
     data["d_|e^rho|"] = jnp.sqrt(data["|e^rho|_t"] ** 2 + data["|e^rho|_z"] ** 2)
     return data
 
@@ -1088,26 +1125,34 @@ def _d_erho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["alpha_t","alpha_z", 
-          "alpha_tt","alpha_tz", 
-          "alpha_zz", 
-          "e^theta_s","e^zeta_s",
-          "e^theta_s_t","e^zeta_s_t",
-          "e^theta_s_z","e^zeta_s_z",
-         ],
+    data=[
+        "alpha_t",
+        "alpha_z",
+        "alpha_tt",
+        "alpha_tz",
+        "alpha_zz",
+        "e^theta_s",
+        "e^zeta_s",
+        "e^theta_s_t",
+        "e^zeta_s_t",
+        "e^theta_s_z",
+        "e^zeta_s_z",
+    ],
 )
 def _Laplace_Beltrami_alpha(params, transforms, profiles, data, **kwargs):
-    
-    data["Laplace_Beltrami(alpha)"] = (jnp.sum(data["e^theta_s"] * data["e^theta_s_t"], axis=-1) * data["alpha_t"]
-                                       + jnp.sum(data["e^theta_s"] * data["e^theta_s"], axis=-1) * data["alpha_tt"]
-                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s_t"], axis=-1) * data["alpha_z"]
-                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
-                                       + jnp.sum(data["e^zeta_s"] * data["e^theta_s_z"], axis=-1) * data["alpha_t"]
-                                       + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
-                                       + jnp.sum(data["e^zeta_s"] * data["e^zeta_s_z"], axis=-1) * data["alpha_z"]
-                                       + jnp.sum(data["e^zeta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_zz"]
-                                      ) 
+
+    data["Laplace_Beltrami(alpha)"] = (
+        jnp.sum(data["e^theta_s"] * data["e^theta_s_t"], axis=-1) * data["alpha_t"]
+        + jnp.sum(data["e^theta_s"] * data["e^theta_s"], axis=-1) * data["alpha_tt"]
+        + jnp.sum(data["e^theta_s"] * data["e^zeta_s_t"], axis=-1) * data["alpha_z"]
+        + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
+        + jnp.sum(data["e^zeta_s"] * data["e^theta_s_z"], axis=-1) * data["alpha_t"]
+        + jnp.sum(data["e^theta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_tz"]
+        + jnp.sum(data["e^zeta_s"] * data["e^zeta_s_z"], axis=-1) * data["alpha_z"]
+        + jnp.sum(data["e^zeta_s"] * data["e^zeta_s"], axis=-1) * data["alpha_zz"]
+    )
     return data
+
 
 @register_compute_fun(
     name="Laplace_Beltrami(alpha)^2",
@@ -1120,11 +1165,12 @@ def _Laplace_Beltrami_alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["Laplace_Beltrami(alpha)",
-         ],
+    data=[
+        "Laplace_Beltrami(alpha)",
+    ],
 )
 def _Laplace_Beltrami_alpha_square(params, transforms, profiles, data, **kwargs):
-    
-    data["Laplace_Beltrami(alpha)^2"] = data["Laplace_Beltrami(alpha)"]**2
-    
+
+    data["Laplace_Beltrami(alpha)^2"] = data["Laplace_Beltrami(alpha)"] ** 2
+
     return data

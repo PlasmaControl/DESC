@@ -18,7 +18,6 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -27,6 +26,7 @@ from desc.magnetic_fields import (
     ToroidalMagneticField,
     solve_regularized_surface_current,
 )
+from desc.utils import rpz2xyz_vec
 from desc.vmec import VMECIO
 
 plt.rcParams.update({"figure.max_open_warning": 0})
@@ -292,13 +292,13 @@ def DummyMixedCoilSet(tmpdir_factory):
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil(current=2)
-    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True)
     spline_coil = SplineXYZCoil(
         current=1,
         X=np.cos(phi),
         Y=np.sin(phi),
         Z=np.zeros_like(phi),
-        knots=np.linspace(0, 2 * np.pi, len(phi)),
+        knots=phi,
     )
     full_coilset = MixedCoilSet(
         (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
@@ -364,9 +364,10 @@ def regcoil_helical_coils_scan():
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
-        current_helicity=(1, -1),
+        current_helicity=(1 * eq.NFP, -1),
         vacuum=True,
         regularization_type="regcoil",
+        chunk_size=20,
     )
     surface_current_field = fields[0]
     return (data, surface_current_field, eq)
@@ -401,6 +402,7 @@ def regcoil_modular_coils():
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 
@@ -440,6 +442,7 @@ def regcoil_windowpane_coils():
         vacuum=True,
         current_helicity=(0, 0),
         external_field=ToroidalMagneticField(B0=G, R0=1),
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 
@@ -479,6 +482,7 @@ def regcoil_PF_coils():
         vacuum=True,
         current_helicity=(0, 1),
         external_field=ToroidalMagneticField(B0=G, R0=1),
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 
@@ -499,6 +503,8 @@ def VMEC_save_asym(tmpdir_factory):
         verbose=0,
         M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
         N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
+        M_grid=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_grid=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
     )
     desc = Dataset(filename, mode="r")
     return vmec, desc, eq

@@ -3748,6 +3748,11 @@ def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
         "|e_theta x e_zeta|_t",
         "n_rho",
     ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",
 )
 def _n_rho_t(params, transforms, profiles, data, **kwargs):
     data["n_rho_t"] = (

@@ -1363,12 +1363,12 @@ def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
 
 # TODO:Generalize for a general zeta before #568
 @register_compute_fun(
-    name="e^zeta_z|PEST",
-    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
+    name="e^zeta_p|PEST",
+    label="\\partial_{\\phi} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant toroidal basis vector, derivative wrt zeta poloidal"
-    " coordinate at constnat rho and vartheta",
+    description="Contravariant toroidal basis vector, derivative wrt cylindrical"
+    " toroidal coordinate phi at constnat rho and vartheta",
     dim=3,
     params=[],
     transforms={},
@@ -1376,8 +1376,8 @@ def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^zeta_t", "e^zeta_z", "theta_PEST_t", "theta_PEST_z"],
 )
-def _e_sup_zeta_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^zeta_z|PEST"] = (
+def _e_sup_zeta_p_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_p|PEST"] = (
         data["e^zeta_z"]
         - data["e^zeta_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
     )

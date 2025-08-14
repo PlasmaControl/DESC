@@ -2449,7 +2449,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "e^zeta", "e^rho_p|PEST", "e^phi_p|PEST"],
+    data=["e^rho", "e^zeta", "e^rho_p|PEST", "e^zeta_p|PEST"],
 )
 def _g_sup_rz_z_PEST(params, transforms, profiles, data, **kwargs):
     data["g^rz_z|PEST"] = dot(data["e^rho"], data["e^zeta_z|PEST"]) + dot(

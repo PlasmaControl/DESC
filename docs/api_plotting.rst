@@ -27,6 +27,7 @@ Plotting Flux Surfaces
     desc.plotting.plot_comparison
     desc.plotting.plot_boundary
     desc.plotting.plot_boundaries
+    desc.plotting.poincare_plot
 
 
 Contour Plots of 2-D data
@@ -47,6 +48,7 @@ Contour Plots of 2-D data
 
     desc.plotting.plot_3d
     desc.plotting.plot_coils
+    desc.plotting.plot_field_lines
 
 
 Specialized Plots for QS Metrics

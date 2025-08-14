@@ -57,6 +57,19 @@ class TestGrid:
             np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
 
     @pytest.mark.unit
+    def test_grid_LMN(self):
+        """Make sure grid attributes LMN are set correctly."""
+        theta = 5
+        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=True)
+        assert g1.num_theta == (theta + 1) // 2
+        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=True)
+        assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
+        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=False)
+        assert g1.num_theta == theta
+        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=False)
+        assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
+
+    @pytest.mark.unit
     def test_linear_grid_spacing_consistency(self):
         """Test consistency between alternate construction methods."""
 
@@ -813,6 +826,24 @@ class TestGrid:
         f = grid.meshgrid_reshape(r**2 + a, "raz")
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
+
+    @pytest.mark.unit
+    def test_meshgrid_flatten(self):
+        """Test that meshgrid_flatten is the inverse of meshgrid_reshape."""
+        grid = LinearGrid(2, 3, 4)
+        orders = ["rtz", "trz", "zrt", "rzt", "tzr", "ztr"]
+        rng = np.random.default_rng(123)
+        x = rng.random(grid.num_nodes)
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
+
+        x = rng.random((grid.num_nodes, 3))
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
 
 
 @pytest.mark.unit

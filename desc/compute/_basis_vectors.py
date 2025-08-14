@@ -627,7 +627,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
 
 # TODO:Generalize for a general zeta before #568
 @register_compute_fun(
-    name="e^vartheta_z|PEST",
+    name="e^vartheta_p|PEST",
     label="\\partial_{\\zeta}\\lvert_{PEST} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -649,10 +649,10 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
         "theta_PEST_tz",
         "theta_PEST_zz",
     ],
-    aliases=["e^theta_PEST_z|PEST"],
+    aliases=["e^theta_PEST_p|PEST"],
 )
-def _e_sup_vartheta_z_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^vartheta_z|PEST"] = (
+def _e_sup_vartheta_p_PEST(params, transforms, profiles, data, **kwargs):
+    data["e^vartheta_p|PEST"] = (
         data["e^theta_z"] * data["theta_PEST_t"][:, None]
         + data["e^zeta_z"] * data["theta_PEST_z"][:, None]
         + data["e^theta"] * data["theta_PEST_tz"][:, None]

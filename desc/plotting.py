@@ -4287,10 +4287,8 @@ def plot_gammac(
     else:
         rho = np.asarray(rho, dtype=float)
         if rho.size != 1:
-            raise ValueError("rho must be a scalar or length-1 array")
-        rho = rho.reshape(
-            1,
-        )
+            raise ValueError("rho must be a scalar or length-1 array for plot")
+        rho = rho.reshape(1)
 
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
@@ -4315,13 +4313,11 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    # Compute bounce integral
-    theta = Bounce2D.compute_theta(eq, X, Y, rho)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=theta,
+        theta=Bounce2D.compute_theta(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,
@@ -4329,7 +4325,6 @@ def plot_gammac(
         pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
-    data_full = grid.compress(data0["gamma_c"])
 
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
@@ -4344,7 +4339,7 @@ def plot_gammac(
     im = ax.contourf(
         inv_pitch,
         alphas,
-        data_full[0],
+        data0["gamma_c"][0],
         cmap=cmap,
     )
 
@@ -4371,7 +4366,7 @@ def plot_gammac(
         data = {
             "inv_pitch": inv_pitch,
             "alpha": alphas,
-            "gammac": data_full[0],
+            "gammac": data0["gamma_c"][0],
         }
         return fig, ax, data
 

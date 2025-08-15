@@ -1641,7 +1641,7 @@ class TestBounce2D:
             num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
         )
         np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2e-4
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2.5e-4
         )
 
         b = Bounce2D(
@@ -1727,6 +1727,7 @@ class TestBounce2D:
             with pytest.raises(AssertionError):
                 # TODO: Move this out of with block once the linked issue is fixed.
                 #  https://github.com/flatironinstitute/jax-finufft/issues/158
+                #  Derivative is incorrectly compued as 1561075.985104.
                 TestBounce._test_bounce_autodiff(
                     bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
                 )

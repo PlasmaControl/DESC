@@ -386,8 +386,17 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2(
-    a, xq0, xq1=None, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), eps=1e-6
+def nufft2_desc(
+    c,
+    xq0,
+    xq1=None,
+    domain0=(0, 2 * jnp.pi),
+    domain1=(0, 2 * jnp.pi),
+    shift0=None,
+    shift1=None,
+    rfft_axis=None,
+    vec=False,
+    eps=1e-6,
 ):
     """Non-uniform fast transform of second type.
 
@@ -397,24 +406,51 @@ def nufft2(
      - ``(f,c0),(x)->(f,x)``
      - ``(f,c0,c1),(x),(x)->(f,x)``
 
+    Examples
+    --------
+    The tests in the following directory provide excellent examples and clarification.
+
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_FFT``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT_2D``
+
     Parameters
     ----------
-    a : jnp.ndarray
+    c : jnp.ndarray
         Fourier coefficients
-        e.g. ``a=fft(f,norm="forward")`` or ``a=fft2(f,norm="forward")``.
+        e.g. ``c=fft(f,norm="forward")`` or ``c=fft2(f,norm="forward")``.
     xq0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         For a 2D transform, the coordinates stored here must be the same coordinate
-        enumerated across axis ``-2`` of ``a``.
+        enumerated across axis ``-2`` of ``c``.
     xq1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         If not given, performs a one-dimensional transform.
         For a 2D transform, the coordinates stored here must be the same coordinate
-        enumerated across axis ``-1`` of ``a``.
+        enumerated across axis ``-1`` of ``c``.
     domain0 : tuple[float]
         Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by ``xq1`` over which samples were taken.
+    shift0 : int
+        Shifts frequencies of the spectral basis for coordinate ``xq0`` by ``+shift0``.
+    shift1 : int
+        Shifts frequencies of the spectral basis for coordinate ``xq1`` by ``+shift1``.
+    rfft_axis : int
+        Axis along which real FFT was performed.
+        Default is to assume no real FFT was performed.
+        If given assumes ``c`` has coefficients along that axis
+        such that the real part of the function can be recovered
+        from ∑ₙ cₙ exp(i n θ) for n > 0.
+    vec : bool
+        Only has an effect if ``shift0``, ``shift1``, or ``rfft_axis`` is given.
+        If set to ``True``, then it is assumed that multiple Fourier series are
+        to be evaluated at the same non-uniform points. For example, see
+        ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec`.
+        In that case, the function signature has the form ``(f,c0),(x)->(f,x)``,
+        and this flag needs to set as ``vec=True`` to retain this signature
+        when ``shift0`` or ``shift1`` is given.
     eps : float
         Precision requested. Default is ``1e-6``.
 
@@ -425,37 +461,39 @@ def nufft2(
 
     """
     opts = options.Opts(modeord=1)
+
+    if rfft_axis is not None:
+        if rfft_axis == -2:
+            shift0 = c.shape[-2] // 2
+        elif rfft_axis == -1:
+            if xq1 is None:
+                shift0 = c.shape[-1] // 2
+            else:
+                shift1 = c.shape[-1] // 2
+        else:
+            raise NotImplementedError("rfft_axis must be -1 or -2.")
+        c = jnp.fft.ifftshift(c, axes=rfft_axis)
+
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     xq0 = (xq0 - domain0[0]) * scale0
+    shift0 = _shift(shift0, xq0, vec)
     if xq1 is None:
-        return _nufft2(a, xq0, iflag=1, eps=eps, opts=opts)
+        return _nufft2(c, xq0, iflag=1, eps=eps, opts=opts) * shift0
+
     scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
     xq1 = (xq1 - domain1[0]) * scale1
-    return _nufft2(a, xq0, xq1, iflag=1, eps=eps, opts=opts)
+    shift1 = _shift(shift1, xq1, vec)
+    return _nufft2(c, xq0, xq1, iflag=1, eps=eps, opts=opts) * (shift0 * shift1)
 
 
-def pad_for_fft(a, n, axis=-1):
-    """Pad output to form expected for FFT.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        Fourier coefficients of positive frequencies along ``axis``.
-    n : int
-        Number of positive frequencies + negative frequencies in
-        the output along ``axis``.
-    axis : int
-        Axis to pad with zeros.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Fourier coefficients for use with FFT.
-
-    """
-    pad_width = [(0, 0)] * a.ndim
-    pad_width[axis] = (0, n - a.shape[axis])
-    return jnp.pad(a, pad_width)
+def _shift(shift, xq, vec):
+    if shift is None:
+        shift = 1
+    else:
+        shift = jnp.exp(1j * shift * xq)
+        if vec:
+            shift = shift[:, jnp.newaxis]
+    return shift
 
 
 def cheb_from_dct(a, axis=-1):

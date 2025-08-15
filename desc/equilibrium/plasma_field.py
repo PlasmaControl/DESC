@@ -277,9 +277,11 @@ class PlasmaField(_MagneticField):
 
         # Interpolate the A grid
         A = jnp.stack(
-            out_transform.transform(self._A_coeff[:, 0]),
-            out_transform.transform(self._A_coeff[:, 1]),
-            out_transform.transform(self._A_coeff[:, 2]),
+            [
+                out_transform.transform(self._A_coeff[:, 0]),
+                out_transform.transform(self._A_coeff[:, 1]),
+                out_transform.transform(self._A_coeff[:, 2]),
+            ],
             axis=-1,
         )
 

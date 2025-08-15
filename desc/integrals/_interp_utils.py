@@ -464,15 +464,14 @@ def nufft2(
             errorif(rfft_axis != -1, NotImplementedError)
             s0 = c.shape[-1] // 2
             s1 = None
+        elif rfft_axis == -1:
+            s0 = None
+            s1 = c.shape[-1] // 2
+        elif rfft_axis == -2:
+            s0 = c.shape[-2] // 2
+            s1 = None
         else:
-            if rfft_axis == -1:
-                s0 = None
-                s1 = c.shape[-1] // 2
-            elif rfft_axis == -2:
-                s0 = c.shape[-2] // 2
-                s1 = None
-            else:
-                raise NotImplementedError
+            raise NotImplementedError
         c = jnp.fft.ifftshift(c, axes=rfft_axis)
 
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])

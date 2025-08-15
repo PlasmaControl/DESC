@@ -23,8 +23,7 @@ from desc.integrals._interp_utils import (
     interp_rfft,
     interp_rfft2,
     irfft_non_uniform,
-    nufft2,
-    pad_for_fft,
+    nufft2_desc,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
@@ -227,7 +226,7 @@ class TestFastInterp:
             np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
         r = ifft_non_uniform(xq, a, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
-        r = nufft2(a, xq, domain0=domain)
+        r = nufft2_desc(a, xq, domain0=domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
 
     @pytest.mark.unit
@@ -245,10 +244,12 @@ class TestFastInterp:
         vander = trig_vander(xq, M, domain)
         np.testing.assert_allclose((vander * coef).sum(axis=-1), fq)
 
-        a = np.fft.rfft(f, norm="forward")
+        a = 2 * np.fft.rfft(f, norm="forward")
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
-        a = pad_for_fft(2 * a, f.shape[-1])
-        np.testing.assert_allclose(nufft2(a, xq, domain0=domain).real, fq)
+        np.testing.assert_allclose(
+            nufft2_desc(a, xq, domain0=domain, rfft_axis=-1).real,
+            fq,
+        )
 
     @pytest.mark.unit
     def test_nufft_vec(self):
@@ -265,15 +266,16 @@ class TestFastInterp:
         xq = np.array([7.34, 1.10134, 2.28])
         fq = np.stack([func_2(xq), func_2(xq)])
 
-        a = np.fft.rfft(f, norm="forward")
+        a = 2 * np.fft.rfft(f, norm="forward")
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
-        a = pad_for_fft(2 * a, f.shape[-1])
 
-        def _nufft2(a, xq):
-            return nufft2(a, xq, domain0=domain, eps=1e-7).real
+        def _nufft2(a, xq, vec=False):
+            return nufft2_desc(
+                a, xq, domain0=domain, rfft_axis=-1, vec=vec, eps=1e-7
+            ).real
 
-        # multiple fourier series evaluated at the same points,
-        # so much more efficient than naive vectorization
+        # multiple (2) fourier series evaluated at the same (3) points.
+        # Much more efficient than naive vectorization for large # of points.
         np.testing.assert_allclose(_nufft2(a, xq), fq)
 
         # Below we confirm this is the vectorization style supported.
@@ -282,7 +284,9 @@ class TestFastInterp:
         xq = np.stack([xq, xq**2, xq**3, xq**4])
         a = np.stack([a, -a, 2 * a, 3 * a])
 
-        np.testing.assert_allclose(_nufft2(a, xq), nufft2_vec(a, xq))
+        # vectorized over batch of size 4, evaluating
+        # multiple (2) fourier series evaluated at the same (3) points
+        np.testing.assert_allclose(_nufft2(a, xq, vec=True), nufft2_vec(a, xq))
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -337,6 +341,8 @@ class TestFastInterp:
         )
 
         a = np.fft.rfft2(f, norm="forward")
+
+        # inefficient MMT method
         np.testing.assert_allclose(
             irfft_non_uniform(
                 yq,
@@ -346,9 +352,13 @@ class TestFastInterp:
             ),
             truth,
         )
+
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
-        a = pad_for_fft(2 * a, f.shape[-1])
-        np.testing.assert_allclose(nufft2(a, xq, yq, domain0, domain1).real, truth)
+        a *= 2
+        np.testing.assert_allclose(
+            nufft2_desc(a, xq, yq, domain0, domain1, rfft_axis=-1).real,
+            truth,
+        )
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

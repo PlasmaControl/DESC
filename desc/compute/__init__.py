@@ -33,6 +33,7 @@ from . import (
     _core,
     _curve,
     _equil,
+    _fast_ion,
     _field,
     _geometry,
     _metric,

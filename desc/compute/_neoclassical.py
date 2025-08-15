@@ -83,7 +83,15 @@ _bounce_doc = {
 
 
 def _compute(
-    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False, **kwargs
+    fun,
+    fun_data,
+    data,
+    theta,
+    grid,
+    num_pitch,
+    surf_batch_size=1,
+    simp=False,
+    expand_out=True,
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -110,6 +118,10 @@ def _compute(
         Default is ``1``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
+    expand_out : bool
+        Whether to expand output to full grid so that the first dimension
+        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
+        Default is True.
 
     """
     for name in Bounce2D.required_names:
@@ -126,8 +138,10 @@ def _compute(
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-
-    return grid.expand(out)
+    if expand_out:
+        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
+        return grid.expand(out)
+    return out
 
 
 def _dH_ripple(data, B, pitch):

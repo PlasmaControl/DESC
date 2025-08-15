@@ -7,7 +7,7 @@ from scipy import optimize, special
 
 from desc.backend import fori_loop, jnp, put, repeat, take
 from desc.io import IOAble
-from desc.utils import Index, check_nonnegint, check_posint, errorif
+from desc.utils import Index, check_nonnegint, check_posint, errorif, setdefault
 
 __all__ = [
     "Grid",
@@ -45,6 +45,23 @@ class _Grid(IOAble, ABC):
         "_inverse_zeta_idx",
         "_is_meshgrid",
         "_can_fft2",
+        "_fft_poloidal",
+        "_fft_toroidal",
+    ]
+
+    _static_attrs = [
+        "_endpoint",
+        "_can_fft2",
+        "_coordinates",
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_is_meshgrid",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_node_pattern",
+        "_sym",
     ]
 
     @abstractmethod
@@ -67,19 +84,19 @@ class _Grid(IOAble, ABC):
             del self._unique_theta_idx
 
     def _enforce_symmetry(self):
-        """Enforce stellarator symmetry.
+        """Remove unnecessary nodes assuming poloidal symmetry.
 
-        1. Remove nodes with theta > pi.
-        2. Rescale theta spacing to preserve dtheta weight.
-            Need to rescale on each theta coordinate curve by a different factor.
-            dtheta should = 2π / number of nodes remaining on that theta curve.
-            Nodes on the symmetry line should not be rescaled.
+        1. Remove nodes with θ > π.
+        2. Rescale θ spacing to preserve dθ weight.
+           Need to rescale on each θ coordinate curve by a different factor.
+           dθ = 2π / number of nodes remaining on that θ curve.
+           Nodes on the symmetry line should not be rescaled.
 
         """
         if not self.sym:
             return
         # indices where poloidal coordinate is off the symmetry line of
-        # poloidal coord=0 or pi
+        # poloidal coord=0 or π
         off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
         __, inverse, off_sym_line_per_rho_surf_count = np.unique(
             self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
@@ -110,7 +127,7 @@ class _Grid(IOAble, ABC):
         # The first two assumptions let _per_poloidal_curve = _per_rho_surf.
         # The third assumption lets the scale factor be constant over a
         # particular theta curve, so that each node in the open interval
-        # (0, pi) has its spacing scaled up by the same factor.
+        # (0, π) has its spacing scaled up by the same factor.
         # Nodes at endpoints 0, π should not be scaled.
         scale = off_sym_line_per_rho_surf_count / (
             off_sym_line_per_rho_surf_count - to_delete_per_rho_surf_count
@@ -228,7 +245,14 @@ class _Grid(IOAble, ABC):
 
     @property
     def sym(self):
-        """bool: True for stellarator symmetry, False otherwise."""
+        """bool: ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+
+        Whether the poloidal domain of this grid is truncated to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
+        """
         return self.__dict__.setdefault("_sym", False)
 
     @property
@@ -250,7 +274,9 @@ class _Grid(IOAble, ABC):
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         """
         # TODO: GitHub issue 1243?
-        return self.__dict__.setdefault("_can_fft2", self.is_meshgrid and not self.sym)
+        return self.__dict__.setdefault(
+            "_can_fft2", self.is_meshgrid and self.fft_poloidal and self.fft_toroidal
+        )
 
     @property
     def coordinates(self):
@@ -427,6 +453,20 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
     @property
+    def fft_poloidal(self):
+        """bool: whether this grid is compatible with fft in the poloidal direction."""
+        if not hasattr(self, "_fft_poloidal"):
+            self._fft_poloidal = False
+        return self._fft_poloidal
+
+    @property
+    def fft_toroidal(self):
+        """bool: whether this grid is compatible with fft in the toroidal direction."""
+        if not hasattr(self, "_fft_toroidal"):
+            self._fft_toroidal = False
+        return self._fft_toroidal
+
+    @property
     def spacing(self):
         """Quadrature weights for integration over surfaces.
 
@@ -471,8 +511,7 @@ class _Grid(IOAble, ABC):
             "Custom grids must have weights specified by user.\n"
             "Recall that the accurate computation of volume integral quantities "
             "requires a specific set of quadrature nodes.\n"
-            "It is recommended to compute such quantities on a QuadratureGrid and use "
-            "the ``copy_data_from_other`` method to transfer values to custom grids.",
+            "It is recommended to compute such quantities on a QuadratureGrid.",
         )
         return self._weights
 
@@ -686,6 +725,60 @@ class _Grid(IOAble, ABC):
         x = jnp.transpose(x, newax)
         return x
 
+    def meshgrid_flatten(self, x, order):
+        """Flatten data to match standard ordering. Inverse of grid.meshgrid_reshape.
+
+        Given data on a tensor product grid, flatten the data in the standard DESC
+        ordering.
+
+        Parameters
+        ----------
+        x : ndarray, shape(n1, n2, n3,...)
+            Data to reshape.
+        order : str
+            Order of axes for input data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the data
+            correspond to different rho coordinates, the second axis to different
+            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray, shape(n1*n2*n3,...)
+            Data flattened in standard DESC ordering.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_flatten doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        errorif(
+            not ((x.ndim == 3) or (x.ndim == 4)),
+            ValueError,
+            f"x should be 3d or 4d, got shape {x.shape}",
+        )
+        vec = x.ndim == 4
+        # reshape to radial/poloidal/toroidal
+        newax = tuple(order.index(c) for c in self.coordinates)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        # swap to change shape from rtz/raz to trz/arz etc.
+        x = jnp.swapaxes(x, 1, 0)
+
+        shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
+        if vec:
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        return x
+
 
 class Grid(_Grid):
     """Collocation grid with custom node placement.
@@ -728,13 +821,18 @@ class Grid(_Grid):
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
+    # if you're using a custom grid it almost always isnt uniform, or is under jit
+    # where we can't properly check this anyways, so just set to false
+    _fft_poloidal = False
+    _fft_toroidal = False
+
     def __init__(
         self,
         nodes,
         spacing=None,
         weights=None,
         coordinates="rtz",
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        period=None,
         NFP=1,
         source_grid=None,
         sort=False,
@@ -750,7 +848,14 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._coordinates = coordinates
-        self._period = period
+        self._period = setdefault(
+            period,
+            (
+                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
+                if coordinates == "rtz"
+                else (np.inf, np.inf, np.inf)
+            ),
+        )
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
@@ -780,7 +885,7 @@ class Grid(_Grid):
             # Don't do anything with symmetry since that changes # of nodes
             # avoid point at the axis, for now.
             r, t, z = self._nodes.T
-            r = jnp.where(r == 0, 1e-12, r)
+            r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
             self._nodes = jnp.column_stack([r, t, z])
             self._axis = np.array([], dtype=int)
             # allow for user supplied indices/inverse indices for special cases
@@ -810,7 +915,7 @@ class Grid(_Grid):
         nodes,
         spacing=None,
         coordinates="rtz",
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        period=None,
         NFP=1,
         jitable=True,
         **kwargs,
@@ -851,6 +956,14 @@ class Grid(_Grid):
 
         """
         NFP = check_posint(NFP, "NFP", False)
+        period = setdefault(
+            period,
+            (
+                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
+                if coordinates == "rtz"
+                else (np.inf, np.inf, np.inf)
+            ),
+        )
         a, b, c = jnp.atleast_1d(*nodes)
         if spacing is None:
             errorif(coordinates[0] != "r", NotImplementedError)
@@ -965,7 +1078,13 @@ class LinearGrid(_Grid):
         Change this only if your nodes are placed within one field period
         or should be interpreted as spanning one field period.
     sym : bool
-        True for stellarator symmetry, False otherwise (Default = False).
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
     endpoint : bool
@@ -986,6 +1105,11 @@ class LinearGrid(_Grid):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
+    _io_attrs_ = _Grid._io_attrs_ + [
+        "_toroidal_endpoint",
+        "_poloidal_endpoint",
+    ]
+
     def __init__(
         self,
         L=None,
@@ -996,10 +1120,13 @@ class LinearGrid(_Grid):
         sym=False,
         axis=True,
         endpoint=False,
-        rho=np.array(1.0),
-        theta=np.array(0.0),
-        zeta=np.array(0.0),
+        rho=None,
+        theta=None,
+        zeta=None,
     ):
+        assert (L is None) or (rho is None), "cannot specify both L and rho"
+        assert (M is None) or (theta is None), "cannot specify both M and theta"
+        assert (N is None) or (zeta is None), "cannot specify both N and zeta"
         self._L = check_nonnegint(L, "L")
         self._M = check_nonnegint(M, "M")
         self._N = check_nonnegint(N, "N")
@@ -1009,8 +1136,12 @@ class LinearGrid(_Grid):
         )
         self._sym = sym
         self._endpoint = bool(endpoint)
+        # these are just default values that may get overwritten in _create_nodes
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
+        self._fft_poloidal = False
+        self._fft_toroidal = False
+
         self._node_pattern = "linear"
         self._coordinates = "rtz"
 
@@ -1123,9 +1254,12 @@ class LinearGrid(_Grid):
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
             # choose dr such that each node has the same weight
             dr = np.ones_like(r) / r.size
-        else:
+        elif rho is not None:
             r = np.sort(np.atleast_1d(rho))
             dr = _midpoint_spacing(r, jnp=np)
+        else:
+            r = np.array(1.0, ndmin=1)
+            dr = np.ones_like(r)
 
         # theta
         if M is not None:
@@ -1153,7 +1287,9 @@ class LinearGrid(_Grid):
                 dt *= t.size / (t.size - 1)
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
-        else:
+            # if custom theta used usually safe to assume its non-uniform so no fft
+            self._fft_poloidal = (not endpoint) and (not self.sym)
+        elif theta is not None:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
             t[t != theta_period] %= theta_period
@@ -1204,6 +1340,10 @@ class LinearGrid(_Grid):
                         # The scale_weights() function will handle this.
             else:
                 dt = np.array([theta_period])
+        else:
+            t = np.array(0.0, ndmin=1)
+            dt = theta_period * np.ones_like(t)
+            self._fft_poloidal = not self.sym
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -1213,14 +1353,17 @@ class LinearGrid(_Grid):
             self._N = check_nonnegint(N, "N")
             zeta = 2 * N + 1
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
-            z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
+            zeta = int(zeta)
+            z = np.linspace(0, zeta_period, zeta, endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
             if endpoint and z.size > 1:
                 # increase node weight to account for duplicate node
                 dz *= z.size / (z.size - 1)
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
-        else:
+            # if custom zeta used usually safe to assume its non-uniform so no fft
+            self._fft_toroidal = not endpoint
+        elif zeta is not None:
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
             if z[0] == 0 and z[-1] == zeta_period:
@@ -1230,6 +1373,10 @@ class LinearGrid(_Grid):
                 # counteract the reduction that will be done there.
                 dz[0] += dz[-1]
                 dz[-1] = dz[0]
+        else:
+            z = np.array(0.0, ndmin=1)
+            dz = zeta_period * np.ones_like(z) * NFP
+            self._fft_toroidal = True  # trivially true
 
         self._poloidal_endpoint = (
             t.size > 0
@@ -1333,6 +1480,9 @@ class QuadratureGrid(_Grid):
     NFP : int
         number of field periods (Default = 1)
     """
+
+    _fft_poloidal = True
+    _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
@@ -1467,7 +1617,13 @@ class ConcentricGrid(_Grid):
     NFP : int
         number of field periods (Default = 1)
     sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
@@ -1483,16 +1639,10 @@ class ConcentricGrid(_Grid):
 
     """
 
-    def __init__(
-        self,
-        L,
-        M,
-        N,
-        NFP=1,
-        sym=False,
-        axis=False,
-        node_pattern="jacobi",
-    ):
+    _fft_poloidal = False
+    _fft_toroidal = True
+
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)

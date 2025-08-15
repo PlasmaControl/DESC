@@ -844,9 +844,9 @@ def make_boozmn_output(  # noqa: C901
     chi.units = "Wb"
     chi[:] = np.linspace(
         0,
-        eq.compute(
-            "chi", grid=LinearGrid(L=eq.L_grid, M=M_booz, N=N_booz, rho=1.0, NFP=eq.NFP)
-        )["chi"][-1]
+        eq.compute("chi", grid=LinearGrid(L=eq.L_grid, M=M_booz, N=N_booz, NFP=eq.NFP))[
+            "chi"
+        ][-1]
         * 2
         * np.pi,
         surfs,

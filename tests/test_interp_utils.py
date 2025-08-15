@@ -197,9 +197,12 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("M", [1, 8, 9])
-    def test_rfftfreq(self, M):
-        """Make sure numpy uses Nyquist interpolant frequencies."""
-        np.testing.assert_allclose(np.fft.rfftfreq(M, d=1 / M), np.arange(M // 2 + 1))
+    def test_fftfreq_and_nufft_trick(self, M):
+        """Test that frequency shifting manipulation works as expected."""
+        np.testing.assert_allclose(np.fft.rfftfreq(M, 1 / M), np.arange(M // 2 + 1))
+        a = np.fft.rfftfreq(M, 1 / M)
+        b = np.fft.fftfreq(a.size, 1 / a.size) + a.size // 2
+        np.testing.assert_allclose(np.fft.ifftshift(a), b)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

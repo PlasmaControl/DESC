@@ -227,7 +227,7 @@ def _poloidal_drift(data, B, pitch):
 
 @register_compute_fun(
     name="gamma_c",
-    label="(\\pi / 2) \\sum_{w} \\gamma_c(w)",
+    label="\\sum_{w} \\gamma_c(\\rho, \\alpha, \\lambda, w)",
     units="~",
     units_long="None",
     description="Fast ion confinement proxy",
@@ -274,8 +274,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     Returns
     -------
-    π/2 ∑_w γ_c(w) where w indexes a well.
-        Shape (num_rho, num alpha, num pitch).
+    ∑_w γ_c(ρ, α, λ, w) where w indexes a well.
+        Shape (num rho, num alpha, num pitch).
 
     """
     # noqa: unused dependency
@@ -323,7 +323,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                 points,
                 is_fourier=True,
             )
-            return jnp.arctan(
+            return (2 / jnp.pi) * jnp.arctan(
                 safediv(
                     drift1,
                     drift2

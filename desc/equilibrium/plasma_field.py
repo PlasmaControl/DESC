@@ -222,6 +222,9 @@ class PlasmaField(_MagneticField):
         B = B.reshape(Z.shape[0], R.shape[0], phi.shape[0], -1)
         B = B.transpose(1, 2, 0, 3)
 
+        # Roll B along the phi axis, since the transform will have reordered phi
+        B = jnp.roll(B, 1, axis=1)
+
         return B
 
     def compute_magnetic_vector_potential(

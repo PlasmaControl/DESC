@@ -142,6 +142,7 @@ class PlasmaField(_MagneticField):
         basis_obj = self._basis
 
         # Convert to RPZ if necessary
+        coords = jnp.atleast_2d(coords)
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
         # Normalize the coordinates
@@ -195,6 +196,7 @@ class PlasmaField(_MagneticField):
 
         # Normalize to be within the R and Z bounds
         RPZ = [R, phi, Z]
+        RPZ = [jnp.atleast_1d(arr) for arr in RPZ]
         R, phi, Z = tuple([(RPZ[i] - shifts[i]) / scales[i] for i in jnp.arange(3)])
 
         # Create a grid with the normalized coordinates

@@ -233,6 +233,9 @@ class PlasmaField(_MagneticField):
         B = B.reshape(Z.shape[0], R.shape[0], phi.shape[0], -1)
         B = B.transpose(1, 2, 0, 3)
 
+        # Roll B along the phi axis, since the transform will have reordered phi
+        B = jnp.roll(B, 1, axis=1)
+
         return B
 
     def compute_magnetic_vector_potential(
@@ -283,8 +286,15 @@ class PlasmaField(_MagneticField):
             out_grid, basis_obj, build_pinv=False, build=True, derivs=0
         )
 
-        # Create a transform object to interpolate the A grid
-        A = out_transform.transform(self._A_coeff)
+        # Interpolate the A grid
+        A = jnp.stack(
+            [
+                out_transform.transform(self._A_coeff[:, 0]),
+                out_transform.transform(self._A_coeff[:, 1]),
+                out_transform.transform(self._A_coeff[:, 2]),
+            ],
+            axis=-1,
+        )
 
         if basis.lower == "xyz":
             A = rpz2xyz_vec(A, phi=coords[:, 1])

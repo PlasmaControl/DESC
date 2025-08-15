@@ -830,21 +830,39 @@ def winding(curve, points, chunk_size=50):
         Winding numbers
     """
     errorif(curve.shape[0] != points.shape[0])
-    if not np.allclose(curve[:, 0], curve[:, -1]):
-        curve = np.concatenate([curve, curve[:, 0:1]], axis=1)
-    c1 = curve[:, None, :-1, :]
-    c2 = curve[:, None, 1:, :]
+    if not jnp.allclose(curve[:, 0], curve[:, -1]):
+        curve = jnp.concatenate([curve, curve[:, 0:1]], axis=1)
+
+    # Transpose curve and points to allow for batching
+    curve = curve[:, None, :, :]  # (n_curves, 1, M+1, 2)
+    points = points[:, :, None, :]  # (n_curves, N, 1, 2)
+    curve = curve.transpose(1, 0, 2, 3)  # (1, n_curves, M+1, 2)
+    points = points.transpose(1, 0, 2, 3)  # (N, n_curves, M+1, 2)
+
+    c1 = curve[:, :, :-1, :]  # First M points on the curve
+    c2 = curve[:, :, 1:, :]  # Last M points on the curve
 
     def wind(points):
+        # Describe X,Y distances as points in complex plane
         z = points - c1
         z_next = points - c2
         z = z[..., 0] + 1j * z[..., 1]
         z_next = z_next[..., 0] + 1j * z_next[..., 1]
-        angles = np.angle(z_next / z)
-        winding = np.sum(angles, axis=2)
+
+        # Calculate angle between adjacent line segments
+        angles = jnp.angle(z_next / z)
+
+        # Winding number is defined as sum over all angles
+        winding = jnp.sum(angles, axis=2)
+
         return winding
 
-    return batch_map(wind, points[:, :, None, :], batch_size=chunk_size)
+    w = batch_map(wind, points, batch_size=chunk_size)
+
+    # Transpose w back
+    w = w.transpose(1, 0)
+
+    return w
 
 
 def in_plasma(points, eq, M=24):
@@ -871,7 +889,7 @@ def in_plasma(points, eq, M=24):
     phi = points[0, :, 0, 1].copy()
 
     # Order phi in the same way that the grid will be ordered
-    period = 2 * np.pi / eq.NFP
+    period = 2 * jnp.pi / eq.NFP
     phi = jnp.where(phi == period, phi, phi % period)
     phi, idx, inv = jnp.unique(phi, sorted=True, return_index=True, return_inverse=True)
     phi = phi[idx]
@@ -893,7 +911,7 @@ def in_plasma(points, eq, M=24):
     # Take only the R and Z, transpose into (phi,R,Z), and then reshape as (phi,RZ)
     pts = points[..., [0, 2]].transpose(1, 0, 2, 3).reshape(points.shape[1], -1, 2)
 
-    out = jnp.isclose(np.abs(winding(curve, pts)), 2 * np.pi)
+    out = jnp.isclose(jnp.abs(winding(curve, pts)), 2 * jnp.pi)
     out = out.reshape(points.shape[1], points.shape[0], points.shape[2]).transpose(
         1, 0, 2
     )
@@ -924,7 +942,7 @@ def plasma_dist(points, eq, M=24):
     phi = points[0, :, 0, 1].copy()
 
     # Order phi in the same way that the grid will be ordered
-    period = 2 * np.pi / eq.NFP
+    period = 2 * jnp.pi / eq.NFP
     phi = jnp.where(phi == period, phi, phi % period)
     phi, idx, inv = jnp.unique(phi, sorted=True, return_index=True, return_inverse=True)
     phi = phi[idx]

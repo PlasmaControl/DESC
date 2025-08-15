@@ -4,7 +4,6 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
-
 import numpy as np
 from diffrax import (
     DiscreteTerminatingEvent,
@@ -70,7 +69,6 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-
     Returns
     -------
     B : ndarray
@@ -84,8 +82,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
     def biot(re):
         dr = rs - re
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        den = dr_norm**3
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
@@ -93,7 +92,11 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
 
 def biot_savart_general_vector_potential(
-    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
+    re,
+    rs,
+    J,
+    dV=jnp.array([1.0]),
+    chunk_size=None,
 ):
     """Biot-Savart law for arbitrary sources for vector potential.
 
@@ -116,6 +119,7 @@ def biot_savart_general_vector_potential(
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
+
     Returns
     -------
     A : ndarray
@@ -129,8 +133,10 @@ def biot_savart_general_vector_potential(
 
     def biot(re):
         dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        num = JdV
+        den = dr_norm
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
@@ -1043,6 +1049,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         transforms=None,
         compute_A_or_B="B",
         chunk_size=None,
+        method="virtual casing",
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1102,9 +1109,14 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         op = {"B": "compute_magnetic_field", "A": "compute_magnetic_vector_potential"}[
             compute_A_or_B
         ]
+        from desc.equilibrium import Equilibrium
 
         AB = 0
         for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
+            if isinstance(field, Equilibrium) and compute_A_or_B == "B":
+                kwargs = {"method": method}
+            else:
+                kwargs = {}
             AB += getattr(field, op)(
                 coords,
                 params[i % len(params)],
@@ -1112,6 +1124,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
                 source_grid=g,
                 transforms=tr,
                 chunk_size=chunk_size,
+                **kwargs,
             )
         return AB
 
@@ -1123,6 +1136,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        method="virtual casing",
     ):
         """Compute magnetic field at a set of points.
 
@@ -1158,6 +1172,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             transforms,
             compute_A_or_B="B",
             chunk_size=chunk_size,
+            method=method,
         )
 
     def compute_magnetic_vector_potential(
@@ -2589,6 +2604,7 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    method="virtual casing",
     **kwargs,
 ):
     """Trace field lines by integration, using diffrax package.
@@ -2657,7 +2673,12 @@ def field_line_integrate(
         br, bp, bz = (
             scale
             * field.compute_magnetic_field(
-                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
+                rpz,
+                params,
+                basis="rpz",
+                source_grid=source_grid,
+                chunk_size=chunk_size,
+                method=method,
             ).T
         )
         return jnp.array(
@@ -2691,6 +2712,7 @@ def field_line_integrate(
         saveat=saveat,
         max_steps=maxstep * len(phis),
         dt0=min_step_size,
+        throw=False,
         args=(field,),
         **kwargs,
     ).ys

@@ -30,7 +30,7 @@ from desc.integrals._interp_utils import (
     interp1d_Hermite_vec,
     interp1d_vec,
     irfft_non_uniform,
-    nufft2_desc,
+    nufft2,
     polyder_vec,
     rfft2_modes,
     rfft2_vander,
@@ -817,7 +817,7 @@ class Bounce2D(Bounce):
 
         """
         shape = zeta.shape
-        c = nufft2_desc(
+        c = nufft2(
             jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
             flatten_matrix(zeta, 4),
             flatten_matrix(theta, 4),
@@ -953,7 +953,7 @@ class Bounce2D(Bounce):
             else:
                 zeta = ext.ravel()
                 theta = theta.ravel()
-            f = nufft2_desc(
+            f = nufft2(
                 f.squeeze(-3),
                 zeta,
                 theta,

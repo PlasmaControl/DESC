@@ -23,7 +23,7 @@ from desc.integrals._interp_utils import (
     interp_rfft,
     interp_rfft2,
     irfft_non_uniform,
-    nufft2_desc,
+    nufft2,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
@@ -226,7 +226,7 @@ class TestFastInterp:
             np.testing.assert_allclose(a[n // 2].imag, 0, atol=1e-12)
         r = ifft_non_uniform(xq, a, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
-        r = nufft2_desc(a, xq, domain0=domain)
+        r = nufft2(a, xq, domain0=domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, fq)
 
     @pytest.mark.unit
@@ -247,7 +247,7 @@ class TestFastInterp:
         a = 2 * np.fft.rfft(f, norm="forward")
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
         np.testing.assert_allclose(
-            nufft2_desc(a, xq, domain0=domain, rfft_axis=-1).real,
+            nufft2(a, xq, domain0=domain, rfft_axis=-1).real,
             fq,
         )
 
@@ -270,9 +270,7 @@ class TestFastInterp:
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
 
         def _nufft2(a, xq, vec=False):
-            return nufft2_desc(
-                a, xq, domain0=domain, rfft_axis=-1, vec=vec, eps=1e-7
-            ).real
+            return nufft2(a, xq, domain0=domain, rfft_axis=-1, vec=vec, eps=1e-7).real
 
         # multiple (2) fourier series evaluated at the same (3) points.
         # Much more efficient than naive vectorization for large # of points.
@@ -356,7 +354,7 @@ class TestFastInterp:
         a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
         a *= 2
         np.testing.assert_allclose(
-            nufft2_desc(a, xq, yq, domain0, domain1, rfft_axis=-1).real,
+            nufft2(a, xq, yq, domain0, domain1, rfft_axis=-1).real,
             truth,
         )
 

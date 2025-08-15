@@ -15,7 +15,7 @@ from interpax import interp1d
 from termcolor import colored
 
 try:
-    from jax_finufft import nufft2 as _nufft2
+    from jax_finufft import nufft2 as jfi_nufft2
     from jax_finufft import options
 except ImportError:
     warnings.warn(
@@ -386,14 +386,12 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2_desc(
+def nufft2(
     c,
     xq0,
     xq1=None,
     domain0=(0, 2 * jnp.pi),
     domain1=(0, 2 * jnp.pi),
-    shift0=None,
-    shift1=None,
     rfft_axis=None,
     vec=False,
     eps=1e-6,
@@ -408,7 +406,9 @@ def nufft2_desc(
 
     Examples
     --------
-    The tests in the following directory provide excellent examples and clarification.
+    See the tests in the following directory.
+    See also whatever final tutorial results from my pull request at FINUFFT:
+    https://github.com/flatironinstitute/finufft/pull/722.
 
      - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_FFT``
      - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT``
@@ -433,10 +433,6 @@ def nufft2_desc(
         Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by ``xq1`` over which samples were taken.
-    shift0 : int
-        Shifts frequencies of the spectral basis for coordinate ``xq0`` by ``+shift0``.
-    shift1 : int
-        Shifts frequencies of the spectral basis for coordinate ``xq1`` by ``+shift1``.
     rfft_axis : int
         Axis along which real FFT was performed.
         Default is to assume no real FFT was performed.
@@ -444,13 +440,12 @@ def nufft2_desc(
         such that the real part of the function can be recovered
         from ∑ₙ cₙ exp(i n θ) for n > 0.
     vec : bool
-        Only has an effect if ``shift0``, ``shift1``, or ``rfft_axis`` is given.
+        Only has an effect if ``rfft_axis`` is given.
         If set to ``True``, then it is assumed that multiple Fourier series are
         to be evaluated at the same non-uniform points. For example, see
         ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec`.
         In that case, the function signature has the form ``(f,c0),(x)->(f,x)``,
-        and this flag needs to set as ``vec=True`` to retain this signature
-        when ``shift0`` or ``shift1`` is given.
+        and this flag needs to set as to retain this signature.
     eps : float
         Precision requested. Default is ``1e-6``.
 
@@ -462,38 +457,41 @@ def nufft2_desc(
     """
     opts = options.Opts(modeord=1)
 
-    if rfft_axis is not None:
-        if rfft_axis == -2:
-            shift0 = c.shape[-2] // 2
-        elif rfft_axis == -1:
-            if xq1 is None:
-                shift0 = c.shape[-1] // 2
-            else:
-                shift1 = c.shape[-1] // 2
+    if rfft_axis is None:
+        s0 = s1 = None
+    else:
+        if xq1 is None:
+            errorif(rfft_axis != -1, NotImplementedError)
+            s0 = c.shape[-1] // 2
+            s1 = None
         else:
-            raise NotImplementedError("rfft_axis must be -1 or -2.")
+            if rfft_axis == -1:
+                s0 = None
+                s1 = c.shape[-1] // 2
+            elif rfft_axis == -2:
+                s0 = c.shape[-2] // 2
+                s1 = None
+            else:
+                raise NotImplementedError
         c = jnp.fft.ifftshift(c, axes=rfft_axis)
 
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     xq0 = (xq0 - domain0[0]) * scale0
-    shift0 = _shift(shift0, xq0, vec)
+    s = _shift(s0, xq0, vec)
     if xq1 is None:
-        return _nufft2(c, xq0, iflag=1, eps=eps, opts=opts) * shift0
+        return jfi_nufft2(c, xq0, iflag=1, eps=eps, opts=opts) * s
 
     scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
     xq1 = (xq1 - domain1[0]) * scale1
-    shift1 = _shift(shift1, xq1, vec)
-    return _nufft2(c, xq0, xq1, iflag=1, eps=eps, opts=opts) * (shift0 * shift1)
+    s = s * _shift(s1, xq1, vec)
+    return jfi_nufft2(c, xq0, xq1, iflag=1, eps=eps, opts=opts) * s
 
 
-def _shift(shift, xq, vec):
-    if shift is None:
-        shift = 1
-    else:
-        shift = jnp.exp(1j * shift * xq)
-        if vec:
-            shift = shift[:, jnp.newaxis]
-    return shift
+def _shift(s, xq, vec):
+    if s is None:
+        return 1
+    s = jnp.exp(1j * s * xq)
+    return s[:, jnp.newaxis] if vec else s
 
 
 def cheb_from_dct(a, axis=-1):

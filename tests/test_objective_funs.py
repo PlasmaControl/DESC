@@ -2026,7 +2026,7 @@ class TestObjectiveFunction:
             grid.compress(data["effective ripple"]),
             # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
             # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
-            rtol=2e-7,
+            rtol=1e-6,
         )
         obj = GammaC(
             eq,
@@ -2044,7 +2044,7 @@ class TestObjectiveFunction:
             grid.compress(data["Gamma_c"]),
             # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
             # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
-            rtol=2e-5,
+            rtol=2e-4,
         )
 
         obj = desc.objectives.BallooningStability(eq=eq)

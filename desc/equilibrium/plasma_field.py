@@ -275,8 +275,13 @@ class PlasmaField(_MagneticField):
             out_grid, basis_obj, build_pinv=False, build=True, derivs=0
         )
 
-        # Create a transform object to interpolate the A grid
-        A = out_transform.transform(self._A_coeff)
+        # Interpolate the A grid
+        A = jnp.stack(
+            out_transform.transform(self._A_coeff[:, 0]),
+            out_transform.transform(self._A_coeff[:, 1]),
+            out_transform.transform(self._A_coeff[:, 2]),
+            axis=-1,
+        )
 
         if basis.lower == "xyz":
             A = rpz2xyz_vec(A, phi=coords[:, 1])

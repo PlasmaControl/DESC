@@ -16,7 +16,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ._neoclassical import _bounce_overwrite
+from ._neoclassical import _bounce_overwrite, _get_vander
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
@@ -51,11 +51,20 @@ class GammaC(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
+      * https://github.com/flatironinstitute/jax-finufft/issues/158
+      * https://github.com/jax-ml/jax/issues/30627
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
+
+    Warnings
+    --------
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
+    and reduces the memory consumption. However, due to bugs in upstream libraries
+    (https://github.com/flatironinstitute/jax-finufft/issues/158),
+    the automatic differentiation tool fails to compute the derivative correctly.
+    Therefore it is not recommended to use NUFFTs in optimization.
+    The current default setting of ``nufft_eps=0`` will not use NUFFTs.
 
     Parameters
     ----------
@@ -114,11 +123,15 @@ class GammaC(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
+        basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
+        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -177,6 +190,7 @@ class GammaC(_Objective):
         num_pitch=64,
         pitch_batch_size=None,
         surf_batch_size=1,
+        nufft_eps=0,  # TODO: Set to 1e-7 once JAX-finufft fixes AD.
         spline=False,
         Nemov=True,
     ):
@@ -200,6 +214,7 @@ class GammaC(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
         }
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 
@@ -236,7 +251,9 @@ class GammaC(_Objective):
         assert self._grid.can_fft2
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["_vander"] = _get_vander(self, x)
+        self._constants["fieldline quad"] = (x, w)
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
@@ -246,7 +263,6 @@ class GammaC(_Objective):
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", "Unequal number of field periods")
-            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
             self._constants["lambda"] = get_transforms(
                 "lambda",
                 eq,
@@ -309,6 +325,7 @@ class GammaC(_Objective):
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])
@@ -317,6 +334,7 @@ class GammaC(_Objective):
         Y_B = self._hyperparam.pop("Y_B")
         num_transit = self._hyperparam.pop("num_transit")
         num_quad = self._hyperparam.pop("num_quad")
+        self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
         self._constants["Y"] = np.linspace(
             0, 2 * np.pi * num_transit, Y_B * num_transit

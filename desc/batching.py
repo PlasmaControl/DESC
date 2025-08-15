@@ -43,7 +43,7 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan
-from desc.utils import errorif
+from desc.utils import errorif, identity
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -68,11 +68,6 @@ def _batch_and_remainder(x, batch_size: int):
     scan_tree = treedef.unflatten(scan_leaves)
     remainder_tree = treedef.unflatten(remainder_leaves)
     return scan_tree, remainder_tree
-
-
-def _identity(y):
-    """Returns the input."""
-    return y
 
 
 _unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
@@ -106,7 +101,7 @@ def _scan_reduce(
     return result
 
 
-def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
+def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     """A helper function to wrap f with a scan_fun.
 
     Adapted from the NetKet project.
@@ -139,7 +134,7 @@ def _evaluate_in_chunks(
     chunk_size,
     argnums,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
     *args,
     **kwargs,
 ):
@@ -189,7 +184,7 @@ def vmap_chunked(
     *,
     chunk_size=None,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
 ):
     """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
 
@@ -240,7 +235,7 @@ def batch_map(
     batch_size=None,
     *,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 

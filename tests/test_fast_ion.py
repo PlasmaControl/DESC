@@ -12,7 +12,8 @@ from desc.integrals import Bounce2D
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_Nemov_2D():
+@pytest.mark.parametrize("nufft_eps", [0, 1e-7])
+def test_Gamma_c_Nemov_2D(nufft_eps):
     """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
@@ -25,7 +26,7 @@ def test_Gamma_c_Nemov_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
-        surf_batch_size=1,
+        nufft_eps=nufft_eps,
     )
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
@@ -35,7 +36,8 @@ def test_Gamma_c_Nemov_2D():
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_Velasco_2D():
+@pytest.mark.parametrize("nufft_eps", [0, 1e-7])
+def test_Gamma_c_Velasco_2D(nufft_eps):
     """Test Γ_c Velasco with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
@@ -48,6 +50,7 @@ def test_Gamma_c_Velasco_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
+        nufft_eps=nufft_eps,
     )
     assert np.isfinite(data["Gamma_c Velasco"]).all()
     fig, ax = plt.subplots()

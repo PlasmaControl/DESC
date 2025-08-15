@@ -5,10 +5,11 @@ import warnings
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import cheb_pts, fourier_pts
+from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
 from desc.utils import setdefault
 
 from ..integrals.quad_utils import chebgauss2
@@ -51,11 +52,20 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
+      * https://github.com/flatironinstitute/jax-finufft/issues/158
+      * https://github.com/jax-ml/jax/issues/30627
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
+
+    Warnings
+    --------
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
+    and reduces the memory consumption. However, due to bugs in upstream libraries
+    (https://github.com/flatironinstitute/jax-finufft/issues/158),
+    the automatic differentiation tool fails to compute the derivative correctly.
+    Therefore it is not recommended to use NUFFTs in optimization.
+    The current default setting of ``nufft_eps=0`` will not use NUFFTs.
 
     Parameters
     ----------
@@ -114,11 +124,15 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
+        basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
+        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
 
     """
 
@@ -161,6 +175,7 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
+        nufft_eps=0,  # TODO: Set to 1e-6 once JAX-finufft fixes AD.
         spline=False,
     ):
         if target is None and bounds is None:
@@ -183,6 +198,7 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
         }
 
         super().__init__(
@@ -218,7 +234,9 @@ class EffectiveRipple(_Objective):
         assert self._grid.can_fft2
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["_vander"] = _get_vander(self, x)
+        self._constants["fieldline quad"] = (x, w)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
@@ -291,6 +309,7 @@ class EffectiveRipple(_Objective):
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
@@ -299,6 +318,7 @@ class EffectiveRipple(_Objective):
         Y_B = self._hyperparam.pop("Y_B")
         num_transit = self._hyperparam.pop("num_transit")
         num_quad = self._hyperparam.pop("num_quad")
+        self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
         self._constants["Y"] = np.linspace(
             0, 2 * np.pi * num_transit, Y_B * num_transit
@@ -374,3 +394,25 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
+
+
+def _get_vander(obj, x):
+    eq = obj.things[0]
+    Y_B = ((obj._hyperparam["Y_B"] + eq.NFP - 1) // eq.NFP) * eq.NFP
+    return {
+        "dct cfl": _vander_dct_cfl(x, obj._constants["Y"].size),
+        "dft cfl": _vander_dft_cfl(x, obj._grid),
+        "dct spline": _vander_dct_cfl(
+            jnp.linspace(-1, 1, Y_B, endpoint=False), obj._constants["Y"].size
+        ),
+    }
+
+
+def _vander_dft_cfl(x, grid):
+    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
+    zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
+    return jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis]
+
+
+def _vander_dct_cfl(x, Y):
+    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[:, jnp.newaxis])

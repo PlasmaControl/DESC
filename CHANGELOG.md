@@ -18,6 +18,11 @@ New Features
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
 
+Performance Improvements
+
+- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
+- [Nuffts in bounce integrals](https://github.com/PlasmaControl/DESC/pull/1834).
+
 Bug Fixes
 
 - Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.

@@ -35,7 +35,7 @@ from desc.utils import (
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _in_epigraph_and(is_intersect, df_dy_sign, /):
+def _in_epigraph_and(is_intersect, df_dy, /):
     """Set and epigraph of function f with the given set of points.
 
     Used to return only intersects where the straight line path between
@@ -45,7 +45,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     ----------
     is_intersect : jnp.ndarray
         Boolean array indicating whether index corresponds to an intersect.
-    df_dy_sign : jnp.ndarray
+    df_dy : jnp.ndarray
         Shape ``is_intersect.shape``.
         Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
 
@@ -61,23 +61,21 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     This is used there to ensure the domains of integration are magnetic wells.
 
     """
-    # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
-    # For the integrals to be over wells, it is required that the first intersect
-    # has a non-positive derivative. Now, by continuity,
-    # ``df_dy_sign[...,k]<=0`` implies ``df_dy_sign[...,k+1]>=0``,
-    # so there can be at most one inversion, and if it exists, the inversion
-    # must be at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under an edge case of a series of
-    # inflection points.
+    # The pairs y1 and y2 are boundaries of an integral only if y1 <= y2. For the
+    # to be over wells, it is required that the first intersect has a non-positive
+    # derivative. Now, by continuity, df_dy[...,k]<=0 implies df_dy[...,k+1]>=0, so
+    # there can be at most one inversion, and if it exists, it must be at the first
+    # pair. To correct the inversion, it suffices to disqualify the first intersect
+    # as a right boundary, except under an edge case of a series of inflection points.
     idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
-        (df_dy_sign[idx[0]] == 0)
-        & (df_dy_sign[idx[1]] < 0)
+        (df_dy[idx[0]] == 0)
+        & (df_dy[idx[1]] < 0)
         & is_intersect[idx[0]]
         & is_intersect[idx[1]]
         # In theory, we need to keep propagating this edge case, e.g.
-        # (df_dy_sign[..., 1] < 0) | (
-        #     (df_dy_sign[..., 1] == 0) & (df_dy_sign[..., 2] < 0)...
+        # (df_dy[..., 1] < 0) | (
+        #     (df_dy[..., 1] == 0) & (df_dy[..., 2] < 0)...
         # ).
         # At each step, the likelihood that an intersection has already been lost
         # due to floating point errors grows, so the real solution is to pick a less
@@ -148,7 +146,7 @@ class FourierChebyshevSeries(IOAble):
     def __init__(self, f, domain=(-1, 1), lobatto=False):
         """Interpolate Fourier-Chebyshev series to ``f``."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
+        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
         self.X = f.shape[-2]
         self.Y = f.shape[-1]
         self.domain = domain
@@ -235,10 +233,7 @@ class FourierChebyshevSeries(IOAble):
         ) * (Y - self.lobatto)
 
     def harmonics(self):
-        """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.
-
-        Transform Fourier interpolant harmonics to Nyquist trigonometric
-        interpolant harmonics so that the coefficients are all real.
+        """Real spectral coefficients aₘₙ of the interpolating polynomial.
 
         The order of the returned coefficient array
         matches the Vandermonde matrix formed by an outer
@@ -464,11 +459,12 @@ class PiecewiseChebyshevSeries(IOAble):
         # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
         y = jnp.where(mask, y.real, 0.0)
 
-        # TODO: Multipoint evaluation with FFT.
-        #   See note in integrals/_interp_utils.py.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
+        # Fast multipoint method would be better. Reduces to FFT. Cost is
+        # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
+        # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
         df_dy_sign = jnp.sign(
             jnp.linalg.vecdot(
                 n * jnp.sin(n * jnp.arccos(y)[..., jnp.newaxis]),
@@ -478,7 +474,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, mask, df_dy_sign
 
-    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples
@@ -501,9 +497,7 @@ class PiecewiseChebyshevSeries(IOAble):
 
             If not specified, then all intersects are returned. If there were fewer
             intersects detected than the size of the last axis of the returned arrays,
-            then that axis is padded with ``pad_value``.
-        pad_value : float
-            Value with which to pad array. Default 0.
+            then that axis is padded with zero.
 
         Returns
         -------
@@ -522,34 +516,35 @@ class PiecewiseChebyshevSeries(IOAble):
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, mask, df_dy_sign = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
+        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
         # Flatten so that last axis enumerates intersects along the piecewise spline.
         y = flatten_matrix(self._isomorphism_to_C1(y))
         mask = flatten_matrix(mask)
-        df_dy_sign = flatten_matrix(df_dy_sign)
+        df_dy = flatten_matrix(df_dy)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersection i.e. ``is_z1`` because the subset of
-        # pitch values that generate this edge case has zero measure. By ignoring
-        # this, for those subset of pitch values the integrations will be done in
-        # the hypograph of |B|, which will yield zero. If in future decide to
-        # not ignore this, note the solution is to
+        # polynomials is a left intersection because the subset of pitch values
+        # that generate this edge case has zero measure. By ignoring this, for those
+        # subset of pitch values the integrations will be done in the hypograph of
+        # |B|, which will yield zero. If in future decide to not ignore this, note
+        # the solution is to
         # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
         # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
         #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
         #    are not differentiable.
-        is_z1 = (df_dy_sign <= 0) & mask
-        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(mask, df_dy_sign)
+        z1 = (df_dy <= 0) & mask
+        z2 = (df_dy >= 0) & _in_epigraph_and(mask, df_dy)
 
         sentinel = self.domain[0] - 1.0
-        z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)
-        z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
+        z1 = take_mask(y, z1, size=num_intersect, fill_value=sentinel)
+        z2 = take_mask(y, z2, size=num_intersect, fill_value=sentinel)
 
         mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set outside mask to same value so integration is over set of measure zero.
-        z1 = jnp.where(mask, z1, pad_value)
-        z2 = jnp.where(mask, z2, pad_value)
+        # Set to zero so integration is over set of measure zero
+        # and basis functions are faster to evaluate in downstream routines.
+        z1 = jnp.where(mask, z1, 0.0)
+        z2 = jnp.where(mask, z2, 0.0)
         return z1, z2
 
     def _check_shape(self, z1, z2, k):
@@ -606,7 +601,6 @@ class PiecewiseChebyshevSeries(IOAble):
         if not (plot or jnp.any(err_1 | err_2 | err_3)):
             return plots
 
-        # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
         mask, z1, z2, f_midpoint = map(atleast_3d_mid, (mask, z1, z2, f_midpoint))
         err_1, err_2, err_3 = map(atleast_2d_end, (err_1, err_2, err_3))

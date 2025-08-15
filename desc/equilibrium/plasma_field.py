@@ -224,6 +224,62 @@ class PlasmaField(_MagneticField):
 
         return B
 
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Uses spectral methods to interpolate precomputed magnetic vector potential
+        onto the given coordinates.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        shifts = self._shifts
+        scales = self._scales
+        basis_obj = self._basis
+
+        # Convert to RPZ if necessary
+        coords = jnp.atleast_2d(coords)
+        coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
+
+        # Normalize the coordinates
+        out_grid = Grid((coords - shifts) / scales)
+        out_transform = Transform(
+            out_grid, basis_obj, build_pinv=False, build=True, derivs=0
+        )
+
+        # Create a transform object to interpolate the A grid
+        A = out_transform.transform(self._A_coeff)
+
+        if basis.lower == "xyz":
+            A = rpz2xyz_vec(A, phi=coords[:, 1])
+
+        return A
+
     @property
     def R_bounds(self):
         """The minimum and maximum R at which the field can be evaluated."""

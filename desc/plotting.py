@@ -53,6 +53,7 @@ __all__ = [
     "plot_surfaces",
     "plot_field_lines",
     "poincare_plot",
+    "plot_gammac",
 ]
 
 
@@ -4222,5 +4223,156 @@ def plot_logo(save_path=None, **kwargs):
 
     if save_path is not None:
         fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
+
+    return fig, ax
+
+
+def plot_gammac(
+    eq, rho=None, alphas=None, num_pitch=None, ax=None, return_data=False, **kwargs
+):
+    """Plot the energetic proxy metric γ_c for a single flux surface.
+
+    Parameters
+    ----------
+    eq : object
+        Equilibrium object containing magnetic field information
+    rho : float, optional
+        Flux surface radius. If float, plots single surface.
+        Default: 0.5
+    alphas : array_like, optional
+        Fieldline label values (toroidal angle).
+        Default: np.linspace(0, 2π, 32, endpoint=True)
+    num_pitch : int, optional
+        Number of pitch angle values for bounce integral calculation.
+        Default: 16
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``: int
+        * ``num_transit``, ``pitch_batch_size``: int
+
+        hyperparameters for bounce integration. See ``Bounce2D``
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the plot
+    ax : matplotlib.axes.Axes
+        The axes object for further customization
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_gammac.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_gammac
+        fig, ax = plot_gammac(eq, rho=0.5)
+    """
+    if rho is None:
+        rho = np.array([0.5], dtype=float)
+    else:
+        rho = np.asarray(rho, dtype=float)
+        if rho.size != 1:
+            raise ValueError("rho must be a scalar or length-1 array")
+        rho = rho.reshape(
+            1,
+        )
+
+    if alphas is None:
+        alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
+
+    if num_pitch is None:
+        num_pitch = 16
+
+    # TODO(#1352)
+    X = kwargs.pop("X", 16)
+    Y = kwargs.pop("Y", 32)
+    Y_B = kwargs.pop("Y_B", 24)
+    num_quad = kwargs.pop("num_quad", 20)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
+    num_transit = kwargs.pop("num_transit", 1)
+
+    figsize = kwargs.pop("figsize", (6, 5))
+    cmap = kwargs.pop("cmap", "plasma")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot gammac got unexpected keyword argument: {kwargs.keys()}"
+
+    from desc.integrals.bounce_integral import Bounce2D
+
+    # Compute bounce integral
+    theta = Bounce2D.compute_theta(eq, X, Y, rho)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    data0 = eq.compute(
+        "gamma_c",
+        grid=grid,
+        theta=theta,
+        Y_B=Y_B,
+        num_transit=num_transit,
+        num_quad=num_quad,
+        num_pitch=num_pitch,
+        pitch_batch_size=pitch_batch_size,
+        alpha=alphas,
+    )
+    data_full = grid.compress(data0["gamma_c"])
+
+    # Extract pitch angle range
+    minB = data0["min_tz |B|"][0]
+    maxB = data0["max_tz |B|"][0]
+    inv_pitch = np.linspace(minB, maxB, num_pitch)
+
+    # Create figure and prepare colormap
+    fig, ax = _format_ax(ax, figsize=figsize)
+    divider = make_axes_locatable(ax)
+
+    # Plot γ_c as function of α and 1/λ
+    im = ax.contourf(
+        inv_pitch,
+        alphas,
+        data_full[0],
+        cmap=cmap,
+    )
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    # Format scientific notation
+    import matplotlib.ticker as ticker
+
+    cbar.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
+    cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
+
+    ax.tick_params(axis="x", labelsize=22)
+    ax.tick_params(axis="y", labelsize=22)
+
+    # Add labels
+    ax.set_xlabel(r"$1/\lambda (T)$", fontsize=24)
+    ax.set_ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+    ax.set_title(r"$\gamma_c$", fontsize=26)
+    if return_data:
+        data = {
+            "inv_pitch": inv_pitch,
+            "alpha": alphas,
+            "gammac": data_full[0],
+        }
+        return fig, ax, data
 
     return fig, ax

@@ -87,7 +87,7 @@ _bounce_doc = {
 
 
 def _compute(
-    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False
+    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False, **kwargs
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -130,7 +130,7 @@ def _compute(
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-    assert out.ndim == 1
+
     return grid.expand(out)
 
 

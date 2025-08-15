@@ -23,50 +23,79 @@ class AbstractGrid(IOAble, ABC):
     """Base class for collocation grids."""
 
     _io_attrs_ = [
+        "_bounds",
         "_L",
         "_M",
         "_N",
-        "_NFP",
-        "_sym",
         "_nodes",
         "_spacing",
         "_weights",
-        "_axis",
-        "_node_pattern",
         "_coordinates",
         "_period",
         "_source_grid",
-        "_unique_rho_idx",
-        "_unique_poloidal_idx",
-        "_unique_zeta_idx",
-        "_inverse_rho_idx",
-        "_inverse_poloidal_idx",
-        "_inverse_zeta_idx",
+        "_unique_x0_idx",
+        "_unique_x1_idx",
+        "_unique_x2_idx",
+        "_inverse_x0_idx",
+        "_inverse_x1_idx",
+        "_inverse_x2_idx",
         "_is_meshgrid",
         "_can_fft2",
-        "_fft_poloidal",
-        "_fft_toroidal",
+        "_fft_x1",
+        "_fft_x2",
     ]
 
     _static_attrs = [
-        "_endpoint",
+        "_bounds",
         "_can_fft2",
         "_coordinates",
-        "_fft_poloidal",
-        "_fft_toroidal",
+        "_fft_x1",
+        "_fft_x2",
         "_is_meshgrid",
         "_L",
         "_M",
         "_N",
-        "_NFP",
-        "_node_pattern",
-        "_sym",
     ]
 
     @abstractmethod
-    def _create_nodes(self, *args, **kwargs):
-        """Allow for custom node creation."""
+    def get_label(self, label) -> str:
+        """Get general label that specifies the direction of given label."""
         pass
+
+    @abstractmethod
+    def get_label_axis(self, label) -> int:
+        """Get axis index that corresponds to given label."""
+        pass
+
+    @abstractmethod
+    def _create_nodes(self, *args, **kwargs):
+        """Create grid nodes."""
+        pass
+
+    @property
+    @abstractmethod
+    def coordinates(self):
+        """Coordinates specified by the nodes.
+
+        Examples
+        --------
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+        """
+        # TODO: update Examples for each new abstract grid class
+        pass
+
+    def __repr__(self):
+        """str: String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + (" (coordinates={}, L={}, M={}, N={}, is_meshgrid={})").format(
+                self.coordinates, self.L, self.M, self.N, self.is_meshgrid
+            )
+        )
 
     def _set_up(self):
         """Do things after loading."""
@@ -74,107 +103,34 @@ class AbstractGrid(IOAble, ABC):
         self._L = int(self._L)
         self._M = int(self._M)
         self._N = int(self._N)
-        self._NFP = int(self._NFP)
-        if hasattr(self, "_inverse_theta_idx"):
-            self._inverse_poloidal_idx = self._inverse_theta_idx
-            del self._inverse_theta_idx
-        if hasattr(self, "_unique_theta_idx"):
-            self._unique_poloidal_idx = self._unique_theta_idx
-            del self._unique_theta_idx
-
-    def _enforce_symmetry(self):
-        """Remove unnecessary nodes assuming poloidal symmetry.
-
-        1. Remove nodes with θ > π.
-        2. Rescale θ spacing to preserve dθ weight.
-           Need to rescale on each θ coordinate curve by a different factor.
-           dθ = 2π / number of nodes remaining on that θ curve.
-           Nodes on the symmetry line should not be rescaled.
-
-        """
-        if not self.sym:
-            return
-        # indices where poloidal coordinate is off the symmetry line of
-        # poloidal coord=0 or π
-        off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
-        __, inverse, off_sym_line_per_rho_surf_count = np.unique(
-            self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
-        )
-        # indices of nodes to be deleted
-        to_delete_idx = self.nodes[:, 1] > np.pi
-        __, to_delete_per_rho_surf_count = np.unique(
-            self.nodes[to_delete_idx, 0], return_counts=True
-        )
-        assert (
-            2 * np.pi not in self.nodes[:, 1]
-            and off_sym_line_per_rho_surf_count.size
-            >= to_delete_per_rho_surf_count.size
-        )
-        if off_sym_line_per_rho_surf_count.size > to_delete_per_rho_surf_count.size:
-            # edge case where surfaces closest to axis lack theta > π nodes
-            # The number of nodes to delete on those surfaces is zero.
-            pad_count = (
-                off_sym_line_per_rho_surf_count.size - to_delete_per_rho_surf_count.size
-            )
-            to_delete_per_rho_surf_count = np.pad(
-                to_delete_per_rho_surf_count, (pad_count, 0)
-            )
-        # The computation of this scale factor assumes
-        # 1. number of nodes to delete is constant over zeta
-        # 2. number of nodes off symmetry line is constant over zeta
-        # 3. uniform poloidal spacing between nodes
-        # The first two assumptions let _per_poloidal_curve = _per_rho_surf.
-        # The third assumption lets the scale factor be constant over a
-        # particular theta curve, so that each node in the open interval
-        # (0, π) has its spacing scaled up by the same factor.
-        # Nodes at endpoints 0, π should not be scaled.
-        scale = off_sym_line_per_rho_surf_count / (
-            off_sym_line_per_rho_surf_count - to_delete_per_rho_surf_count
-        )
-        # Arrange scale factors to match spacing's arbitrary ordering.
-        scale = scale[inverse]
-
-        # Scale up all nodes so that their spacing accounts for the node
-        # that is their reflection across the symmetry line.
-        self._spacing[off_sym_line_idx, 1] *= scale
-        self._nodes = self.nodes[~to_delete_idx]
-        self._spacing = self.spacing[~to_delete_idx]
-
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        self._spacing = self.spacing[sort_idx]
-
-    def _find_axis(self):
-        """Find indices of axis nodes."""
-        return np.nonzero(self.nodes[:, 0] == 0)[0]
 
     def _find_unique_inverse_nodes(self):
         """Find unique values of coordinates and their indices."""
-        __, unique_rho_idx, inverse_rho_idx = np.unique(
+        __, unique_x0_idx, inverse_x0_idx = np.unique(
             self.nodes[:, 0], return_index=True, return_inverse=True
         )
-        __, unique_poloidal_idx, inverse_poloidal_idx = np.unique(
+        __, unique_x1_idx, inverse_x1_idx = np.unique(
             self.nodes[:, 1], return_index=True, return_inverse=True
         )
-        __, unique_zeta_idx, inverse_zeta_idx = np.unique(
+        __, unique_x2_idx, inverse_x2_idx = np.unique(
             self.nodes[:, 2], return_index=True, return_inverse=True
         )
         return (
-            unique_rho_idx,
-            inverse_rho_idx,
-            unique_poloidal_idx,
-            inverse_poloidal_idx,
-            unique_zeta_idx,
-            inverse_zeta_idx,
+            unique_x0_idx,
+            inverse_x0_idx,
+            unique_x1_idx,
+            inverse_x1_idx,
+            unique_x2_idx,
+            inverse_x2_idx,
         )
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
-        nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
-        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+        # mod nodes by their periodicity
+        for k, period in enumerate(self.period):
+            if period < np.inf:
+                nodes = put(nodes, Index[:, k], nodes[:, k] % period)
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
@@ -183,8 +139,12 @@ class AbstractGrid(IOAble, ABC):
         temp_spacing = self.spacing.copy()
         temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
-        if temp_spacing.prod(axis=1).sum():
-            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        dx0 = self.bounds[0][1] - self.bounds[0][0]
+        dx1 = self.bounds[1][1] - self.bounds[1][0]
+        dx2 = self.bounds[2][1] - self.bounds[2][0]
+        volume = dx0 * dx1 * dx2
+        if temp_spacing.prod(axis=1).sum() and np.abs(volume) < np.inf:
+            temp_spacing *= (volume / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -201,91 +161,231 @@ class AbstractGrid(IOAble, ABC):
         # span the surface.
         return weights
 
-    @property
-    def L(self):
-        """int: Radial grid resolution."""
-        if getattr(self, "_L", None) is None:
-            # Setting default values for LinearGrid.
-            # This code will never run for Quadrature and Concentric grid.
-            self._L = self.num_rho - 1
-        return self._L
+    def compress(self, x, surface_label):
+        """Return elements of ``x`` at indices of unique surface label values.
 
-    @property
-    def M(self):
-        """int: Poloidal grid resolution."""
-        if getattr(self, "_M", None) is None:
-            # Setting default values for LinearGrid.
-            # This code will never run for Quadrature and Concentric grid.
-            self._M = self.num_poloidal - 1 if self.sym else self.num_poloidal // 2
-        return self._M
+        Parameters
+        ----------
+        x : ndarray
+            The array to compress. Should usually represent a surface function (constant
+            over a surface) in an array that matches the grid's pattern.
+        surface_label : str
+            The surface label. Must be one of the elements in self.coordinates.
 
-    @property
-    def N(self):
-        """int: Toroidal grid resolution."""
-        if getattr(self, "_N", None) is None:
-            # Setting default values for LinearGrid.
-            # This code will never run for Quadrature and Concentric grid.
-            self._N = self.num_zeta // 2
-        return self._N
+        Returns
+        -------
+        compress_x : ndarray
+            This array will be sorted such that the first element corresponds to
+            the value associated with the smallest surface, and the last element
+            corresponds to the value associated with the largest surface.
 
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self.__dict__.setdefault("_NFP", 1)
-
-    @property
-    def sym(self):
-        """bool: ``True`` for poloidal up/down symmetry, ``False`` otherwise.
-
-        Whether the poloidal domain of this grid is truncated to [0, π] ⊂ [0, 2π)
-        to take advantage of poloidal up/down symmetry,
-        which is a stronger condition than stellarator symmetry.
-        Still, when stellarator symmetry exists, flux surface integrals and
-        volume integrals are invariant to this truncation.
         """
-        return self.__dict__.setdefault("_sym", False)
-
-    @property
-    def is_meshgrid(self):
-        """bool: Whether this grid is a tensor-product grid.
-
-        Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
-        coordinate value. The is_meshgrid flag denotes whether any coordinate
-        can be iterated over along the relevant axis of the reshaped grid:
-        nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
-        """
-        return self.__dict__.setdefault("_is_meshgrid", False)
-
-    @property
-    def can_fft2(self):
-        """bool: Whether this grid is compatible with 2D FFT.
-
-        Tensor product grid with uniformly spaced points on
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-        """
-        # TODO: GitHub issue 1243?
-        return self.__dict__.setdefault(
-            "_can_fft2", self.is_meshgrid and self.fft_poloidal and self.fft_toroidal
+        surface_label = self.get_label(surface_label)
+        errorif(len(x) != self.num_nodes)
+        return take(
+            x, getattr(self, f"unique_{surface_label}_idx"), axis=0, unique_indices=True
         )
 
-    @property
-    def coordinates(self):
-        """Coordinates specified by the nodes.
+    def expand(self, x, surface_label):
+        """Expand ``x`` by duplicating elements to match the grid's pattern.
 
-        Examples
-        --------
-        raz : rho, alpha, zeta
-        rvp : rho, theta_PEST, phi
-        rtz : rho, theta, zeta
+        Parameters
+        ----------
+        x : ndarray
+            Stores the values of a surface function (constant over a surface) for all
+            unique surfaces of the specified label on the grid. The length of ``x``
+            should match the number of unique surfaces of the corresponding label in
+            this grid. ``x`` should be sorted such that the first element corresponds to
+            the value associated with the smallest surface, and the last element
+            corresponds to the value associated with the largest surface.
+        surface_label : str
+            The surface label. Must be one of the elements in self.coordinates.
+
+        Returns
+        -------
+        expand_x : ndarray
+            ``x`` expanded to match the grid's pattern.
+
         """
-        return self.__dict__.setdefault("_coordinates", "rtz")
+        surface_label = self.get_label(surface_label)
+        errorif(len(x) != getattr(self, f"num_{surface_label}"))
+        return x[getattr(self, f"inverse_{surface_label}_idx")]
+
+    def meshgrid_reshape(self, x, order):
+        """Reshape data to match grid coordinates.
+
+        Given flattened data on a tensor product grid, reshape the data such that
+        the axes of the array correspond to coordinate values on the grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(N,) or shape(N,3)
+            Data to reshape.
+        order : str
+            Desired order of axes for returned data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the returned
+            data correspond to different rho coordinates, the second axis to different
+            theta, etc. ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray
+            Data reshaped to align with grid nodes.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_reshape doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        shape = (self.num_x1, self.num_x0, self.num_x2)
+        vec = False
+        if x.ndim > 1:
+            vec = True
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
+        newax = tuple(self.coordinates.index(c) for c in order)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        return x
+
+    def meshgrid_flatten(self, x, order):
+        """Flatten data to match standard ordering. Inverse of grid.meshgrid_reshape.
+
+        Given data on a tensor product grid, flatten the data in the standard DESC
+        ordering.
+
+        Parameters
+        ----------
+        x : ndarray, shape(n1, n2, n3,...)
+            Data to reshape.
+        order : str
+            Order of axes for input data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the data
+            correspond to different rho coordinates, the second axis to different
+            theta, etc. ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray, shape(n1*n2*n3,...)
+            Data flattened in standard DESC ordering.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_flatten doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        errorif(
+            not ((x.ndim == 3) or (x.ndim == 4)),
+            ValueError,
+            f"x should be 3D or 4D, got shape {x.shape}",
+        )
+        vec = x.ndim == 4
+        # reshape to radial/poloidal/toroidal
+        newax = tuple(order.index(c) for c in self.coordinates)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        # swap to change shape from rtz/raz to trz/arz etc.
+        x = jnp.swapaxes(x, 1, 0)
+
+        shape = (self.num_x1 * self.num_x0 * self.num_x2,)
+        if vec:
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        return x
+
+    def copy_data_from_other(self, x, other_grid, surface_label, tol=1e-14):
+        """Copy data x from other_grid to this grid at matching surface label.
+
+        Given data x corresponding to nodes of other_grid, copy data to a new array that
+        corresponds to this grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(other_grid.num_nodes,...)
+            Data to copy. Assumed to be constant over the specified surface.
+        other_grid: Grid
+            Grid to copy from.
+        surface_label : str
+            The surface label. Must be one of the elements in self.coordinates.
+        tol : float
+            tolerance for considering nodes the same.
+
+        Returns
+        -------
+        y : ndarray, shape(grid2.num_nodes, ...)
+            Data copied to grid2
+
+        """
+        axis = self.get_label_axis(surface_label)
+        other_axis = other_grid.get_label_axis(surface_label)
+        errorif(self.coordinates[axis] != other_grid.coordinates[other_axis])
+
+        x = jnp.asarray(x)
+        try:
+            xc = other_grid.compress(x, surface_label)
+            y = self.expand(xc, surface_label)
+        except AttributeError:
+            self_nodes = jnp.asarray(self.nodes[:, axis])
+            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
+            y = jnp.zeros((self.num_nodes, *x.shape[1:]))
+
+            def body(i, y):
+                y = jnp.where(
+                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
+                    x[i],
+                    y,
+                )
+                return y
+
+            y = fori_loop(0, other_grid.num_nodes, body, y)
+        return y
+
+    @property
+    def bounds(self):
+        """Bounds of coordinates."""
+        return self.__dict__.setdefault(
+            "_bounds", ((-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf))
+        )
 
     @property
     def period(self):
         """Periodicity of coordinates."""
-        return self.__dict__.setdefault(
-            "_period", (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
-        )
+        return self.__dict__.setdefault("_period", (np.inf, np.inf, np.inf))
+
+    @property
+    def L(self):
+        """int: x0 coordinate resolution."""
+        return self._L
+
+    @property
+    def M(self):
+        """int: x1 coordinate resolution."""
+        return self._M
+
+    @property
+    def N(self):
+        """int: x2 coordinate resolution."""
+        return self._N
 
     @property
     def num_nodes(self):
@@ -293,190 +393,104 @@ class AbstractGrid(IOAble, ABC):
         return self.nodes.shape[0]
 
     @property
-    def num_rho(self):
-        """int: Number of unique rho coordinates."""
-        return self.unique_rho_idx.size
+    def num_x0(self):
+        """int: Number of unique x0 coordinates."""
+        return self.unique_x0_idx.size
 
     @property
-    def num_poloidal(self):
-        """int: Number of unique poloidal angle coordinates."""
-        return self.unique_poloidal_idx.size
+    def num_x1(self):
+        """int: Number of unique x1 coordinates."""
+        return self.unique_x1_idx.size
 
     @property
-    def num_alpha(self):
-        """ndarray: Number of unique field line poloidal angles."""
-        errorif(self.coordinates[1] != "a", AttributeError)
-        return self.num_poloidal
+    def num_x2(self):
+        """int: Number of unique x2 coordinates."""
+        return self.unique_x2_idx.size
 
     @property
-    def num_theta(self):
-        """ndarray: Number of unique theta coordinates."""
-        errorif(self.coordinates[1] != "t", AttributeError)
-        return self.num_poloidal
-
-    @property
-    def num_theta_PEST(self):
-        """ndarray: Number of unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "v", AttributeError)
-        return self.num_poloidal
-
-    @property
-    def num_zeta(self):
-        """int: Number of unique zeta coordinates."""
-        return self.unique_zeta_idx.size
-
-    @property
-    def unique_rho_idx(self):
-        """ndarray: Indices of unique rho coordinates."""
+    def unique_x0_idx(self):
+        """ndarray: Indices of unique x0 coordinates."""
         errorif(
-            not hasattr(self, "_unique_rho_idx"),
+            not hasattr(self, "_unique_x0_idx"),
             AttributeError,
             "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._unique_rho_idx
+        return self._unique_x0_idx
 
     @property
-    def unique_poloidal_idx(self):
-        """ndarray: Indices of unique poloidal angle coordinates."""
+    def unique_x1_idx(self):
+        """ndarray: Indices of unique x1 coordinates."""
         errorif(
-            not hasattr(self, "_unique_poloidal_idx"),
+            not hasattr(self, "_unique_x1_idx"),
             AttributeError,
             "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._unique_poloidal_idx
+        return self._unique_x1_idx
 
     @property
-    def unique_alpha_idx(self):
-        """ndarray: Indices of unique field line poloidal angles."""
-        errorif(self.coordinates[1] != "a", AttributeError)
-        return self.unique_poloidal_idx
-
-    @property
-    def unique_theta_idx(self):
-        """ndarray: Indices of unique theta coordinates."""
-        errorif(self.coordinates[1] != "t", AttributeError)
-        return self.unique_poloidal_idx
-
-    @property
-    def unique_theta_PEST_idx(self):
-        """ndarray: Indices of unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "v", AttributeError)
-        return self.unique_poloidal_idx
-
-    @property
-    def unique_zeta_idx(self):
-        """ndarray: Indices of unique zeta coordinates."""
+    def unique_x2_idx(self):
+        """ndarray: Indices of unique x2 coordinates."""
         errorif(
-            not hasattr(self, "_unique_zeta_idx"),
+            not hasattr(self, "_unique_x2_idx"),
             AttributeError,
             "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._unique_zeta_idx
+        return self._unique_x2_idx
 
     @property
-    def inverse_rho_idx(self):
-        """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
+    def inverse_x0_idx(self):
+        """ndarray: Indices of unique_x0_idx that recover the x0 coordinates."""
         errorif(
-            not hasattr(self, "_inverse_rho_idx"),
+            not hasattr(self, "_inverse_x0_idx"),
             AttributeError,
             "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._inverse_rho_idx
+        return self._inverse_x0_idx
 
     @property
-    def inverse_poloidal_idx(self):
-        """ndarray: Indices that recover the unique poloidal coordinates."""
+    def inverse_x1_idx(self):
+        """ndarray: Indices that recover the unique x1 coordinates."""
         errorif(
-            not hasattr(self, "_inverse_poloidal_idx"),
+            not hasattr(self, "_inverse_x1_idx"),
             AttributeError,
             "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._inverse_poloidal_idx
+        return self._inverse_x1_idx
 
     @property
-    def inverse_alpha_idx(self):
-        """ndarray: Indices that recover field line poloidal angles."""
-        errorif(self.coordinates[1] != "a", AttributeError)
-        return self.inverse_poloidal_idx
-
-    @property
-    def inverse_theta_idx(self):
-        """ndarray: Indices that recover unique theta coordinates."""
-        errorif(self.coordinates[1] != "t", AttributeError)
-        return self.inverse_poloidal_idx
-
-    @property
-    def inverse_theta_PEST_idx(self):
-        """ndarray: Indices that recover unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "v", AttributeError)
-        return self.inverse_poloidal_idx
-
-    @property
-    def inverse_zeta_idx(self):
-        """ndarray: Indices of unique_zeta_idx that recover the zeta coordinates."""
+    def inverse_x2_idx(self):
+        """ndarray: Indices of unique_x2_idx that recover the x2 coordinates."""
         errorif(
-            not hasattr(self, "_inverse_zeta_idx"),
+            not hasattr(self, "_inverse_x2_idx"),
             AttributeError,
             "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._inverse_zeta_idx
-
-    @property
-    def axis(self):
-        """ndarray: Indices of nodes at magnetic axis."""
-        return self.__dict__.setdefault("_axis", np.array([]))
-
-    @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
-        return self.__dict__.setdefault("_node_pattern", "custom")
+        return self._inverse_x2_idx
 
     @property
     def nodes(self):
-        """ndarray: Node coordinates, in (rho,theta,zeta)."""
+        """ndarray: Node coordinates, in (x0,x1,x2)."""
         return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
-
-    @property
-    def fft_poloidal(self):
-        """bool: whether this grid is compatible with fft in the poloidal direction."""
-        if not hasattr(self, "_fft_poloidal"):
-            self._fft_poloidal = False
-        return self._fft_poloidal
-
-    @property
-    def fft_toroidal(self):
-        """bool: whether this grid is compatible with fft in the toroidal direction."""
-        if not hasattr(self, "_fft_toroidal"):
-            self._fft_toroidal = False
-        return self._fft_toroidal
 
     @property
     def spacing(self):
         """Quadrature weights for integration over surfaces.
 
-        This is typically the distance between nodes when ``NFP=1``, as the quadrature
-        weight is by default a midpoint rule. The returned matrix has three columns,
-        corresponding to the radial, poloidal, and toroidal coordinate, respectively.
-        Each element of the matrix specifies the quadrature area associated with a
-        particular node for each coordinate. I.e. on a grid with coordinates
-        of "rtz", the columns specify dρ, dθ, dζ, respectively. An integration
-        over a ρ flux surface will assign quadrature weight dθ*dζ to each node.
-        Note that dζ is the distance between toroidal surfaces multiplied by ``NFP``.
-
-        On a LinearGrid with duplicate nodes, the columns of spacing no longer
-        specify dρ, dθ, dζ. Rather, the product of each adjacent column specifies
-        dρ*dθ, dθ*dζ, dζ*dρ, respectively.
+        This is typically the distance between nodes, as the quadrature weight is by
+        default a midpoint rule. The returned matrix has three columns, corresponding to
+        the x0, x1, x2 coordinates, respectively. Each element of the matrix specifies
+        the quadrature area associated with a particular node for each coordinate.
 
         Returns
         -------
         spacing : ndarray
-            Quadrature weights for integration over surface.
+            Quadrature weights for integration over a surface.
 
         """
         errorif(
@@ -505,271 +519,41 @@ class AbstractGrid(IOAble, ABC):
         )
         return self._weights
 
-    def __repr__(self):
-        """str: string form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + (
-                " (L={}, M={}, N={}, NFP={}, sym={}, is_meshgrid={},"
-                " node_pattern={}, coordinates={})"
-            ).format(
-                self.L,
-                self.M,
-                self.N,
-                self.NFP,
-                self.sym,
-                self.is_meshgrid,
-                self.node_pattern,
-                self.coordinates,
-            )
-        )
+    @property
+    def is_meshgrid(self):
+        """bool: Whether this grid is a tensor-product grid.
 
-    def get_label(self, label):
-        """Get general label that specifies direction given label."""
-        if label in {"rho", "poloidal", "zeta"}:
-            return label
-        rad = {"r": "rho"}[self.coordinates[0]]
-        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
-        tor = {"z": "zeta"}[self.coordinates[2]]
-        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
-
-    def compress(self, x, surface_label="rho"):
-        """Return elements of ``x`` at indices of unique surface label values.
-
-        Parameters
-        ----------
-        x : ndarray
-            The array to compress.
-            Should usually represent a surface function (constant over a surface)
-            in an array that matches the grid's pattern.
-        surface_label : {"rho", "poloidal", "zeta"}
-            The surface label of rho, poloidal, or zeta.
-
-        Returns
-        -------
-        compress_x : ndarray
-            This array will be sorted such that the first element corresponds to
-            the value associated with the smallest surface, and the last element
-            corresponds to the value associated with the largest surface.
-
+        Let the tuple (x0, x1, x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
+        denotes whether any coordinate can be iterated over along the relevant axis of
+        the reshaped grid:
+        nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
         """
-        surface_label = self.get_label(surface_label)
-        errorif(len(x) != self.num_nodes)
-        return take(
-            x, getattr(self, f"unique_{surface_label}_idx"), axis=0, unique_indices=True
-        )
+        return self.__dict__.setdefault("_is_meshgrid", False)
 
-    def expand(self, x, surface_label="rho"):
-        """Expand ``x`` by duplicating elements to match the grid's pattern.
+    @property
+    def fft_x1(self):
+        """bool: whether this grid is compatible with FFT in the x1 direction."""
+        if not hasattr(self, "_fft_x1"):
+            self._fft_x1 = False
+        return self._fft_x1
 
-        Parameters
-        ----------
-        x : ndarray
-            Stores the values of a surface function (constant over a surface)
-            for all unique surfaces of the specified label on the grid.
-            The length of ``x`` should match the number of unique surfaces of
-            the corresponding label in this grid. ``x`` should be sorted such
-            that the first element corresponds to the value associated with the
-            smallest surface, and the last element corresponds to the value
-            associated with the largest surface.
-        surface_label : {"rho", "poloidal", "zeta"}
-            The surface label of rho, poloidal, or zeta.
+    @property
+    def fft_x2(self):
+        """bool: whether this grid is compatible with FFT in the x2 direction."""
+        if not hasattr(self, "_fft_x2"):
+            self._fft_x2 = False
+        return self._fft_x2
 
-        Returns
-        -------
-        expand_x : ndarray
-            ``x`` expanded to match the grid's pattern.
+    @property
+    def can_fft2(self):
+        """bool: Whether this grid is compatible with 2D FFT.
 
+        Tensor product grid with uniformly spaced points in the x1 and x2 coordinates.
         """
-        surface_label = self.get_label(surface_label)
-        errorif(len(x) != getattr(self, f"num_{surface_label}"))
-        return x[getattr(self, f"inverse_{surface_label}_idx")]
-
-    def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
-        """Copy data x from other_grid to this grid at matching surface label.
-
-        Given data x corresponding to nodes of other_grid, copy data
-        to a new array that corresponds to this grid.
-
-        Parameters
-        ----------
-        x : ndarray, shape(other_grid.num_nodes,...)
-            Data to copy. Assumed to be constant over the specified surface.
-        other_grid: Grid
-            Grid to copy from.
-        surface_label : {"rho", "poloidal", "zeta"}
-            The surface label of rho, poloidal, or zeta.
-        tol : float
-            tolerance for considering nodes the same.
-
-        Returns
-        -------
-        y : ndarray, shape(grid2.num_nodes, ...)
-            Data copied to grid2
-        """
-        sl1 = self.get_label(surface_label)
-        sl2 = other_grid.get_label(surface_label)
-        axis = {"rho": 0, "poloidal": 1, "zeta": 2}
-        errorif(self.coordinates[axis[sl1]] != other_grid.coordinates[axis[sl2]])
-        axis = axis[sl1]
-
-        x = jnp.asarray(x)
-        try:
-            xc = other_grid.compress(x, surface_label)
-            y = self.expand(xc, surface_label)
-        except AttributeError:
-            self_nodes = jnp.asarray(self.nodes[:, axis])
-            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
-            y = jnp.zeros((self.num_nodes, *x.shape[1:]))
-
-            def body(i, y):
-                y = jnp.where(
-                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
-                    x[i],
-                    y,
-                )
-                return y
-
-            y = fori_loop(0, other_grid.num_nodes, body, y)
-        return y
-
-    def replace_at_axis(self, x, y, copy=False, **kwargs):
-        """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
-
-        Parameters
-        ----------
-        x : array-like
-            Values to selectively replace. Should have length ``grid.num_nodes``.
-        y : array-like
-            Replacement values. Should broadcast with arrays of size
-            ``grid.num_nodes``. Can also be a function that returns such an
-            array. Additional keyword arguments are then input to ``y``.
-        copy : bool
-            If some value of ``x`` is to be replaced by some value in ``y``,
-            then setting ``copy`` to true ensures that ``x`` will not be
-            modified in-place.
-
-        Returns
-        -------
-        out : ndarray
-            An array of size ``grid.num_nodes`` where elements at the indices
-            corresponding to the axis of this grid match those of ``y`` and all
-            others match ``x``.
-
-        """
-        if self.axis.size:
-            if callable(y):
-                y = y(**kwargs)
-            x = put(
-                x.copy() if copy else x,
-                self.axis,
-                y[self.axis] if jnp.ndim(y) else y,
-            )
-        return x
-
-    def meshgrid_reshape(self, x, order):
-        """Reshape data to match grid coordinates.
-
-        Given flattened data on a tensor product grid, reshape the data such that
-        the axes of the array correspond to coordinate values on the grid.
-
-        Parameters
-        ----------
-        x : ndarray, shape(N,) or shape(N,3)
-            Data to reshape.
-        order : str
-            Desired order of axes for returned data. Should be a permutation of
-            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the returned
-            data correspond to different rho coordinates, the second axis to different
-            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
-            and so on.
-
-        Returns
-        -------
-        x : ndarray
-            Data reshaped to align with grid nodes.
-
-        """
-        errorif(
-            not self.is_meshgrid,
-            ValueError,
-            "grid is not a tensor product grid, so meshgrid_reshape doesn't "
-            "make any sense",
+        # TODO: GitHub issue 1243?
+        return self.__dict__.setdefault(
+            "_can_fft2", self.is_meshgrid and self.fft_x1 and self.fft_x2
         )
-        errorif(
-            sorted(order) != sorted(self.coordinates),
-            ValueError,
-            f"order should be a permutation of {self.coordinates}, got {order}",
-        )
-        shape = (self.num_poloidal, self.num_rho, self.num_zeta)
-        vec = False
-        if x.ndim > 1:
-            vec = True
-            shape += (-1,)
-        x = x.reshape(shape, order="F")
-        # swap to change shape from trz/arz to rtz/raz etc.
-        x = jnp.swapaxes(x, 1, 0)
-        newax = tuple(self.coordinates.index(c) for c in order)
-        if vec:
-            newax += (3,)
-        x = jnp.transpose(x, newax)
-        return x
-
-    def meshgrid_flatten(self, x, order):
-        """Flatten data to match standard ordering. Inverse of grid.meshgrid_reshape.
-
-        Given data on a tensor product grid, flatten the data in the standard DESC
-        ordering.
-
-        Parameters
-        ----------
-        x : ndarray, shape(n1, n2, n3,...)
-            Data to reshape.
-        order : str
-            Order of axes for input data. Should be a permutation of
-            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the data
-            correspond to different rho coordinates, the second axis to different
-            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
-            and so on.
-
-        Returns
-        -------
-        x : ndarray, shape(n1*n2*n3,...)
-            Data flattened in standard DESC ordering.
-
-        """
-        errorif(
-            not self.is_meshgrid,
-            ValueError,
-            "grid is not a tensor product grid, so meshgrid_flatten doesn't "
-            "make any sense",
-        )
-        errorif(
-            sorted(order) != sorted(self.coordinates),
-            ValueError,
-            f"order should be a permutation of {self.coordinates}, got {order}",
-        )
-        errorif(
-            not ((x.ndim == 3) or (x.ndim == 4)),
-            ValueError,
-            f"x should be 3d or 4d, got shape {x.shape}",
-        )
-        vec = x.ndim == 4
-        # reshape to radial/poloidal/toroidal
-        newax = tuple(order.index(c) for c in self.coordinates)
-        if vec:
-            newax += (3,)
-        x = jnp.transpose(x, newax)
-        # swap to change shape from rtz/raz to trz/arz etc.
-        x = jnp.swapaxes(x, 1, 0)
-
-        shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
-        if vec:
-            shape += (-1,)
-        x = x.reshape(shape, order="F")
-        return x
 
 
 class Grid(AbstractGrid):

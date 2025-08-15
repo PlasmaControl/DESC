@@ -266,7 +266,6 @@ def _poloidal_drift(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
-        "nufft_eps",
         "spline",
     ],
 )
@@ -299,9 +298,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
-    nufft_eps = kwargs.get("nufft_eps", 1e-7)
     spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -312,10 +309,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
-            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
-            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -326,7 +321,6 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
-                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             return jnp.arctan(
@@ -336,7 +330,6 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                     * bounce.interp_to_argmin(
                         data["|grad(rho)|*|e_alpha|r,p|"],
                         points,
-                        nufft_eps=nufft_eps,
                         is_fourier=True,
                     ),
                 )

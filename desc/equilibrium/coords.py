@@ -10,7 +10,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.utils import check_posint, errorif, safenorm, setdefault, warnif, winding
+from desc.utils import check_posint, errorif, safenorm, setdefault, warnif
 
 
 def _periodic(x, period):
@@ -812,6 +812,39 @@ def compute_theta_coords(
     return eq.compute_theta_coords(
         flux_coords, L_lmn, tol, maxiter, full_output, **kwargs
     )
+
+
+def winding(curve, points, chunk_size=50):
+    """Compute the winding number of points and closed curves.
+
+    Parameters
+    ----------
+    curve : array-like, shape(n_curves,M,2)
+        X,Y coordinates of closed curves to be evaluated.
+    points : array-like, shape(n_curves,N,2)
+        X,Y coordinates of points to be evaluated.
+
+    Returns
+    -------
+    winding : array-like, shape(n_curves,N)
+        Winding numbers
+    """
+    errorif(curve.shape[0] != points.shape[0])
+    if not np.allclose(curve[:, 0], curve[:, -1]):
+        curve = np.concatenate([curve, curve[:, 0:1]], axis=1)
+    c1 = curve[:, None, :-1, :]
+    c2 = curve[:, None, 1:, :]
+
+    def wind(points):
+        z = points - c1
+        z_next = points - c2
+        z = z[..., 0] + 1j * z[..., 1]
+        z_next = z_next[..., 0] + 1j * z_next[..., 1]
+        angles = np.angle(z_next / z)
+        winding = np.sum(angles, axis=2)
+        return winding
+
+    return batch_map(wind, points[:, :, None, :], batch_size=chunk_size)
 
 
 def in_plasma(points, eq, M=24):

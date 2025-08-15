@@ -369,9 +369,17 @@ def _compute_modB(x, field, params, **kwargs):
             NFP=field.NFP,
         )
         profiles = get_profiles("|B|", field, grid)
+        transforms = get_transforms("|B|", field, grid, jitable=True)
         if "iota" in kwargs:
             profiles["iota"] = kwargs["iota"]
-        return field.compute("|B|", params=params, grid=grid, profiles=profiles)["|B|"]
+        return compute_fun(
+            field,
+            "|B|",
+            params=params,
+            grid=grid,
+            profiles=profiles,
+            transforms=transforms,
+        )["|B|"]
     source_grid = kwargs.pop("source_grid", None)
     return jnp.linalg.norm(
         field.compute_magnetic_field(x, params=params, source_grid=source_grid), axis=-1

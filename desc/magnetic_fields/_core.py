@@ -2644,7 +2644,7 @@ def field_line_integrate(
     """
     r0, z0, phis = map(jnp.atleast_1d, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
-    errorif(iota and axis is not None, ValueError, "Must pass in an axis if iota=True")
+    errorif(iota and axis is None, ValueError, "Must pass in an axis if iota=True")
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()

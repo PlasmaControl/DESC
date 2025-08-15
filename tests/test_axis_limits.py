@@ -64,7 +64,8 @@ not_finite_limits = {
     "g^tz_z",
     "g^aa",
     "g^ra",
-    "g^rv|PEST",
+    "g^rv",
+    "g^rv_p|PEST",
     "gbdrift",
     "grad(alpha)",
     "grad(alpha) (periodic)",
@@ -78,7 +79,7 @@ not_finite_limits = {
     "e^vartheta",
     "e^vartheta_t",
     "e^vartheta_v|PEST",
-    "e^vartheta_z|PEST",
+    "e^vartheta_p|PEST",
     "J^theta_t",
     "J^theta_z",
 }

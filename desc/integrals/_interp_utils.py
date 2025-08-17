@@ -133,13 +133,13 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None)
     """
     if _modes is None:
         _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-        if (n % 2) == 0:
+        if n % 2 == 0:
             i = (0, -1)
         else:
             i = 0
         a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
     vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
-    return (vander * a).real.sum(axis=-1)
+    return (vander * a).real.sum(-1)
 
 
 def ifft_non_uniform(

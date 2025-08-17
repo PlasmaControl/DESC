@@ -483,6 +483,46 @@ def _Phi_scalar_potential(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="Phi error",
+    label="\\Phi_{\\text{error}}",
+    units="T m",
+    units_long="Tesla meter",
+    description="Magnetic scalar potential error",
+    dim=0,
+    coordinates="",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["Phi_mn"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    public=False,
+)
+def _Phi_error(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    return data
+
+
+@register_compute_fun(
+    name="num iter",
+    label="\\text{number of iterations}",
+    units="",
+    units_long="",
+    description="Magnetic scalar potential number of iterations for inversion",
+    dim=0,
+    coordinates="",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["Phi_mn"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    public=False,
+)
+def _Phi_num_iter(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    return data
+
+
+@register_compute_fun(
     name="Phi_t",
     label="\\partial_{\\theta} \\Phi",
     units="T m",

@@ -457,7 +457,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
         Real function value at query points.
 
     """
-    errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
+    errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
     return idct_non_uniform(
         xq,
         cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
@@ -562,7 +562,7 @@ def polyval_vec(*, x, c):
     )
 
 
-# TODO (#1388): Eventually do a PR to move this stuff into interpax.
+# TODO (#1388): Move this stuff into interpax.
 
 
 def _subtract_first(c, k):

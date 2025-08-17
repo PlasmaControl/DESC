@@ -736,14 +736,18 @@ class TestLaplaceField:
         )
         assert field.M != grid.M and field.N != grid.N
         data, _ = field.compute(
-            "Phi (periodic)" if just_err else "γ potential",
+            ["Phi error", "num iter"] if just_err else "γ potential",
             grid,
             maxiter=maxiter,
             chunk_size=chunk_size,
             _full_output=True,
         )
-        if just_err:
-            return data["num iter"], data["Phi error"]
+        if maxiter > 0:
+            print()
+            print(data["num iter"])
+            print(data["Phi error"])
+            if just_err:
+                return data["num iter"], data["Phi error"]
         np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
         np.testing.assert_allclose(data["Phi_coil (periodic)"], data["Z"])
         np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
@@ -962,10 +966,13 @@ class TestLaplaceField:
         plt.savefig(f"{name}.pdf")
 
     @pytest.mark.unit
-    @pytest.mark.slow
-    def test_exterior_Neumann(self, maxiter=0, chunk_size=20):
-        """Test Laplacian solver in exterior."""
-        atol = 2e-3
+    def test_exterior_Neumann(self, maxiter=25, chunk_size=1000):
+        """Test Laplacian solver in exterior.
+
+        Singular integrals converge very slowly,
+        so grid.M and grid.N need to be large.
+        Iterations for inversion converges fast.
+        """
         R0 = 10
         surface = FourierRZToroidalSurface(
             R_lmn=[R0, 1, 0.2],
@@ -979,7 +986,8 @@ class TestLaplaceField:
         def G(x):
             return np.reciprocal(_1_over_G(x - x0))
 
-        grid = LinearGrid(M=35, N=35, NFP=surface.NFP)
+        assert surface.NFP == 1
+        grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
         data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
 
@@ -993,13 +1001,35 @@ class TestLaplaceField:
             chunk_size=chunk_size,
             maxiter=maxiter,
             basis="xyz",
+            _full_output=True,
         )
         assert data is RpZ_data
-        np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=atol)
+        print()
+        print("The literature has proven that Phi error is ")
+        print("nearly independent of quadrature accuracy.")
+        print("Indeed, this example validates this; as due our other tests.")
+        print("num iterations:", data["num iter"])
+        print("Phi error     :", data["Phi error"])
+
+        np.testing.assert_allclose(
+            np.ptp(G(data["x"]) - data["Phi"]),
+            0,
+            atol=4e-4,
+            err_msg="Phi computation needs more resolution.",
+        )
+
+        # This is to compute normal component of grad(Phi) which is
+        # not relevant for free surface optimization.
         np.testing.assert_allclose(
             dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
             0,
-            atol=atol,
+            # Map from Phi to the normal component of Phi is
+            # nonlinear interpolation problem, so if Phi.M,N is less
+            # than grid.M,N on which Phi was solved, then the max
+            # error in grad(Phi) may increase even though the higher
+            # harmonics of Phi have small contributtion to spectrum.
+            atol=4e-4,
+            err_msg="grad(Phi) computation needs more resolution.",
         )
 
     @pytest.mark.unit

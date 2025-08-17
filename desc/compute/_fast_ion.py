@@ -181,7 +181,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -464,7 +464,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

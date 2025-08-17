@@ -226,7 +226,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H**2 / I).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce2D(
             grid,
@@ -249,7 +249,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
+            return safediv(H**2, I).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

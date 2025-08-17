@@ -783,7 +783,7 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         data["theta"] = theta
 
-        # Strictly increasing zeta knots enforces dζ > 0.
+        # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
@@ -1484,7 +1484,7 @@ class Bounce1D(Bounce):
             for k, v in data.items()
         }
 
-        # Strictly increasing zeta knots enforces dζ > 0.
+        # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).

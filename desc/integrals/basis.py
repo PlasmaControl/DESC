@@ -99,6 +99,9 @@ def _chebcast(cheb, arr):
     return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
 
+# TODO: Move interpolation part to interpax. This is the only
+#       existing differentiable FourierChebyshev FFT interpolation
+#       in Python.
 class FourierChebyshevSeries(IOAble):
     """Real-valued Fourier-Chebyshev series.
 

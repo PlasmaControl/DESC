@@ -197,10 +197,10 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("M", [1, 8, 9])
-    def test_fftfreq_and_nufft_trick(self, M):
+    def test_fft_trick(self, M):
         """Test that frequency shifting manipulation works as expected."""
-        np.testing.assert_allclose(np.fft.rfftfreq(M, 1 / M), np.arange(M // 2 + 1))
         a = np.fft.rfftfreq(M, 1 / M)
+        np.testing.assert_allclose(a, np.arange(M // 2 + 1))
         b = np.fft.fftfreq(a.size, 1 / a.size) + a.size // 2
         np.testing.assert_allclose(np.fft.ifftshift(a), b)
 
@@ -248,7 +248,7 @@ class TestFastInterp:
         np.testing.assert_allclose((vander * coef).sum(axis=-1), fq)
 
         a = 2 * np.fft.rfft(f, norm="forward")
-        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a[..., (0, -1) if (f.shape[-1] % 2 == 0) else 0] /= 2
         np.testing.assert_allclose(
             nufft2(a, xq, domain0=domain, rfft_axis=-1).real,
             fq,
@@ -270,7 +270,7 @@ class TestFastInterp:
         fq = np.stack([func_2(xq), func_2(xq)])
 
         a = 2 * np.fft.rfft(f, norm="forward")
-        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a[..., (0, -1) if (f.shape[-1] % 2 == 0) else 0] /= 2
 
         def _nufft2(a, xq, vec=False):
             return nufft2(a, xq, domain0=domain, rfft_axis=-1, vec=vec, eps=1e-7).real
@@ -354,7 +354,7 @@ class TestFastInterp:
             truth,
         )
 
-        a[..., (0, -1) if ((f.shape[-1] % 2) == 0) else 0] /= 2
+        a[..., (0, -1) if (f.shape[-1] % 2 == 0) else 0] /= 2
         a *= 2
         np.testing.assert_allclose(
             nufft2(a, xq, yq, domain0, domain1, rfft_axis=-1).real,
@@ -429,7 +429,7 @@ class TestFastInterp:
             "yet the supplied test function was interpolated fine using this wrong "
             "domain. Pick a better test function."
         )
-        # test interpolation
+
         z = cheb_pts(M)
         fz = f(z)
         np.testing.assert_allclose(c0, cheb_from_dct(dct(fz, 2) / M), atol=1e-13)
@@ -439,7 +439,7 @@ class TestFastInterp:
                 np.array([-np.e, -1, 0, 1, 1, 0, -10]),
                 atol=1e-13,
             )
-        # test evaluation
+
         xq = np.arange(10 * 3 * 2).reshape(10, 3, 2)
         xq = bijection_to_disc(xq, 0, xq.size)
         fq = chebval(xq, c0, tensor=False)

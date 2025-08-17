@@ -279,7 +279,7 @@ def _irfft2_non_uniform(
     f, r = np.argsort(axes)
     modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
     vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, d[f][0], d[r][0])
-    return (vander * a).real.sum(axis=(-2, -1))
+    return (vander * a).real.sum((-2, -1))
 
 
 def rfft2_vander(
@@ -300,7 +300,7 @@ def rfft2_vander(
     reduce it. For example, to transform from spectral to real space do
       ``a=jnp.fft.rfft2(f).at[...,i].divide(2)*2``
 
-      ``(vander*a).real.sum(axis=(-2,-1))``
+      ``(vander*a).real.sum((-2,-1))``
 
     Performing the scaling on the Vandermonde array would triple the memory consumption.
     Perhaps this is required for the compiler to fuse operations.
@@ -472,7 +472,7 @@ def nufft2(
             s1 = None
         else:
             raise NotImplementedError
-        c = jnp.fft.ifftshift(c, axes=rfft_axis)
+        c = jnp.fft.ifftshift(c, rfft_axis)
 
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     xq0 = (xq0 - domain0[0]) * scale0

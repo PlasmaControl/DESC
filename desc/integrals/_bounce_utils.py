@@ -267,8 +267,8 @@ def _plot_check_interp(zeta, V, name=""):
     if zeta.shape[-2] == 1:
         # Just one well along the field line, so plot
         # interpolations for every pitch simultaneously.
-        zeta = zeta.squeeze(axis=-2)
-        V = V.squeeze(axis=-2)
+        zeta = zeta.squeeze(-2)
+        V = V.squeeze(-2)
         shape = zeta.shape[:2]
     else:
         shape = zeta.shape[:3]
@@ -470,7 +470,7 @@ def argmin(z1, z2, f, ext, g_ext):
         axis=-1,
         keepdims=True,
     )
-    return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(axis=-1)
+    return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
 def get_fieldline(alpha, iota, num_transit):
@@ -572,7 +572,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     # peeling off field lines
     fieldline = get_fieldline(alpha, iota, num_transit)
     if theta.ndim == 2:
-        fieldline = fieldline.squeeze(axis=1)
+        fieldline = fieldline.squeeze(1)
     # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
     T.stitch()
@@ -715,7 +715,7 @@ def cubic_spline(
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
         pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
-        f = jnp.fft.ifftshift(jnp.pad(jnp.fft.fftshift(f, axes=-2), pad), axes=-2)
+        f = jnp.fft.ifftshift(jnp.pad(jnp.fft.fftshift(f, -2), pad), -2)
         f = ifft(f, axis=-2, norm="forward")
     else:
         f = ifft_non_uniform(

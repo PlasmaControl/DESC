@@ -277,10 +277,10 @@ class TestFastInterp:
         # Below we confirm this is the vectorization style supported.
         nufft2r_vec = np.vectorize(_nufft2r, signature="(f,c),(x)->(f,x)")
 
-        xq = np.stack([xq, xq**2, xq**3, xq**4])
-        a = np.stack([a, -a, 2 * a, 3 * a])
+        xq = np.stack([xq, xq**2, xq**3, xq**4])[np.newaxis]
+        a = np.stack([a, -a, 2 * a, 3 * a])[np.newaxis]
 
-        # vectorized over batch of size 4, evaluating
+        # vectorized over batch of size (1, 4), evaluating
         # multiple (2) fourier series evaluated at the same (3) points
         np.testing.assert_allclose(_nufft2r(a, xq, vec=True), nufft2r_vec(a, xq))
 

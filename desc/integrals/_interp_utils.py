@@ -198,9 +198,9 @@ def interp_rfft2(
         Shape (..., f.shape[-2], f.shape[-1]).
         Real function values on uniform tensor-product grid over an open period.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``x0`` over which samples were taken.
+        Domain of coordinate specified by x₀ over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``x1`` over which samples were taken.
+        Domain of coordinate specified by x₁ over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
@@ -258,9 +258,9 @@ def _irfft2_non_uniform(
     n1 : int
         Spectral resolution of ``a`` for ``domain1``.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``x0`` over which samples were taken.
+        Domain of coordinate specified by x₀ over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``x1`` over which samples were taken.
+        Domain of coordinate specified by x₁ over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
 
@@ -445,7 +445,7 @@ def nufft2r(
 
     Returns
     -------
-    f : jnp.ndarray
+    c(x₀,x₁) : jnp.ndarray
         Real function value at query points.
 
     """
@@ -482,7 +482,7 @@ def _shift(s, x, vec):
     if s is None:
         return 1
     s = jnp.exp(1j * s * x)
-    return s[:, jnp.newaxis] if vec else s
+    return s[..., jnp.newaxis, :] if vec else s
 
 
 def cheb_from_dct(a, axis=-1):

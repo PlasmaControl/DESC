@@ -74,6 +74,62 @@ from desc.finite_diff2 import (first_derivative_t, first_derivative_z)
 
 from interpax import interp2d
 
+def K_decomp(p_M, p_N,
+           sdata1,
+           sdata2,
+           sdata3,
+           sgrid,
+           surface,
+           y,
+           dt, dz,
+           N,
+           d_0):
+
+    theta = jnp.linspace(2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1/2,
+                         2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1/2),
+                         p_M * 2 + 1)
+
+    zeta = jnp.linspace(2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1/2,
+                        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1/2),
+                        p_N * 2 + 1)
+
+    
+    name = "iso_coords/"
+    dl_data, dr_data, dd_data, du_data = shift_grid(theta, zeta, dt, dz, surface, name)
+
+    du_data["u_iso"] = jnp.asarray(du_data["u_iso"])
+    dd_data["u_iso"] = jnp.asarray(dd_data["u_iso"])
+    du_data["v_iso"] = jnp.asarray(du_data["v_iso"])
+    dd_data["v_iso"] = jnp.asarray(dd_data["v_iso"])
+    dr_data["u_iso"] = jnp.asarray(dr_data["u_iso"])
+    dr_data["v_iso"] = jnp.asarray(dr_data["v_iso"])
+    dl_data["u_iso"] = jnp.asarray(dl_data["u_iso"])
+    dl_data["v_iso"] = jnp.asarray(dl_data["v_iso"])
+
+    assert (p_M * 2+1)*(p_N * 2+1) == dl_data["theta"].shape[0] , "Check that the number of dipole locations coincide with the number of dipoles"
+    r = dl_data["theta"].shape[0]  # Make r a Python int for indexing
+
+    for i in range(0,r):
+
+        omega_total_real += y_pol * jnp.real(omega_pol3) + y_tor * jnp.real(omega_tor3)
+        omega_total_imag += y_pol * jnp.imag(omega_pol3) + y_tor * jnp.imag(omega_tor3)
+        return None
+        #omega_total_real, omega_total_imag
+
+    omega_total_real1, omega_total_imag1 = fori_loop(0, r, body_fun1, (jnp.zeros_like(sdata1["theta"]),
+                                                                       jnp.zeros_like(sdata1["theta"]))
+                                                    )
+
+    return ( ( ( sdata1["lambda_iso"] ** (-1) ) * ( omega_total_imag1 * cross(sdata1["n_rho"],sdata1["e_u"]).T
+                                                   + omega_total_real1 * cross(sdata1["n_rho"],sdata1["e_v"]).T
+                                                    + omega_total_imag2 * cross(sdata2["n_rho"],sdata2["e_u"]).T 
+                                                    + omega_total_real2 * cross(sdata2["n_rho"],sdata2["e_v"]).T
+                                                    + omega_total_imag3 * cross(sdata3["n_rho"],sdata3["e_u"]).T 
+                                                    + omega_total_real3 * cross(sdata3["n_rho"],sdata3["e_v"]).T
+                                                 )
+              ).T
+            )#.flatten()
+
 def bn_res(p_M, p_N, sdata1,
            sdata2,
            sdata3,

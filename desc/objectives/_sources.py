@@ -203,11 +203,11 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         # Define other grids
         field_grid2 = Grid(nodes = jnp.vstack((field_grid.nodes[:,0],
                                                 field_grid.nodes[:,1],
-                                                field_grid.nodes[:,2] + (2*jnp.pi/self._winding_surface.NFP)*1)).T
+                                                field_grid.nodes[:,2] + (2*jnp.pi/field[0].NFP)*1)).T
                             )
         field_grid3 = Grid(nodes = jnp.vstack((field_grid.nodes[:,0],
                                                field_grid.nodes[:,1],
-                                                field_grid.nodes[:,2] + (2*jnp.pi/self._winding_surface.NFP)*2)).T
+                                                field_grid.nodes[:,2] + (2*jnp.pi/field[0].NFP)*2)).T
                             )
 
         # Find transforms for the grids on the winding surface
@@ -282,8 +282,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_target": B_target,
-            'p_M': 10,#self._field.p_M,
-            'p_N': 10,#self._field.p_N,
+            #'p_M': 10,#self._field.p_M,
+            #'p_N': 10,#self._field.p_N,
             'sdata1':field_data1,
             'sdata2':field_data2,
             'sdata3':field_data3,
@@ -328,8 +328,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         #x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
         # B from sources: B_src
-        B_src = bn_res(constants['p_M']*2+1, 
-                       constants['p_N']*2+1,  
+        B_src = bn_res(params1['p_M']*2+1, #constants['p_M']*2+1, 
+                       params1['p_N']*2+1,
                        constants['sdata1'],
                        constants['sdata2'],
                        constants['sdata3'],

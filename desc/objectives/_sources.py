@@ -63,6 +63,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         "_source_keys",
         "_N",
         "_M",
+        "_N_sum",
     ]
 
     _scalar = False

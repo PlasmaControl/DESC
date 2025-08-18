@@ -4230,7 +4230,7 @@ def plot_logo(save_path=None, **kwargs):
 def plot_gammac(
     eq, rho=None, alphas=None, num_pitch=None, ax=None, return_data=False, **kwargs
 ):
-    """Plot the energetic proxy metric γ_c π/2 for a single flux surface.
+    """Plot the energetic proxy metric γ_c for a single flux surface.
 
     Parameters
     ----------

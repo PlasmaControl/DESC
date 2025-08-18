@@ -25,6 +25,8 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 from .utils import softmax, softmin
 
+from desc.objectives.find_sour import bn_res
+
 ##################### 
 # Sources and sinks #
 #####################
@@ -71,8 +73,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
     )
 
     _static_attrs = _Objective._static_attrs + [
-        #"_B_plasma_chunk_size",
-        #"_bs_chunk_size",
+        "_data_keys",
+        "_source_keys",
         #"_vacuum",
     ]
 
@@ -158,7 +160,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         """
         #from desc.magnetic_fields import SumMagneticField
         #from desc.fns_simp import _compute_magnetic_field_from_Current
-        from desc.objectives.find_sour import bn_res, iso_coords_interp
+        from desc.objectives.find_sour import iso_coords_interp
         
         eq = self._eq
         field = self._field
@@ -298,7 +300,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, #*field_params, 
-                params1 = None,
+                params1,# = None,
                 #params2 = None,
                 #params2 = None,
                 constants=None):

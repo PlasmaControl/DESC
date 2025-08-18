@@ -479,6 +479,7 @@ def v1_prime_eval(w0, N, d_0, data_or):
                       )
                    )
     
+    #return (p**(1/4)/1)*_product
     return jnp.where( abs( data_or["w"] - w0 ) > d_0, 
                      ( p ** ( 1 / 4 ) / 1 ) * _product, 
                      0 )

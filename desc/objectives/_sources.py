@@ -84,12 +84,12 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
     def __init__(
         self,
-        eq,
-        field, # Winding surface
-        sinks_and_sources, # Field for sinks and sources
+        field, # Field for sinks and sources
+        eq, # Equilibrium
+        winding_surface, # Winding surface
         iso_data, # Pass a dictionary to this objective with the information about the isothermal coordinates
         N_sum, # Nnumber of terms for the sum in the Jacobi-theta function
-        d0, # REgularization radius for Guenther's function
+        d0, # Regularization radius for Guenther's function
         target=None,
         bounds=None,
         weight=1,
@@ -106,33 +106,36 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         #B_plasma_chunk_size=None,
         **kwargs,
     ):
-        from desc.geometry import FourierRZToroidalSurface
 
         if target is None and bounds is None:
             target = 0
+        
         self._source_grid = source_grid # Locations of the cores of the sources/sinks
         self._eval_grid = eval_grid
         self._iso_data = iso_data # Info on isothermal coordinates
         self._eq = eq
-        self._field = [field] if not isinstance(field, list) else field
-        self._sinks_and_sources = sinks_and_sources # Array that stores the values of sinks/sources
+        self._field = [field] #if not isinstance(field, list) else field
+        self._winding_surface = winding_surface # Array that stores the values of sinks/sources
         self._field_grid = field_grid
         self._N_sum = N_sum
         self._d0 = d0
+        
         #self._vacuum = vacuum
         #self._bs_chunk_size = bs_chunk_size
         #self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+
+        #from desc.geometry import FourierRZToroidalSurface
+        #errorif(
+        #    isinstance(eq, FourierRZToroidalSurface),
+        #    TypeError,
+        #    "Detected FourierRZToroidalSurface object "
+        #    "if attempting to find a QFM surface, please use "
+        #    "SurfaceQuadraticFlux objective instead.",
+        #)
         
-        errorif(
-            isinstance(eq, FourierRZToroidalSurface),
-            TypeError,
-            "Detected FourierRZToroidalSurface object "
-            "if attempting to find a QFM surface, please use "
-            "SurfaceQuadraticFlux objective instead.",
-        )
         super().__init__(
-            things= [#self._field, 
-                     self._sinks_and_sources],
+            things= [field],
+            #[#self._field, #self._sinks_and_sources],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -158,7 +161,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         from find_sour import bn_res, iso_coords_interp
         
         eq = self._eq
-        sinks_and_sources = self._sinks_and_sources
+        field = self._field
         
         if self._eval_grid is None:
             eval_grid = LinearGrid(
@@ -174,7 +177,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
         field_grid = self._field_grid
         self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
-        self._source_keys = ['theta','zeta','e^theta_s','e^zeta_s'] # Info on the winding surface
+        self._source_keys = ["theta","zeta","e^theta_s","e^zeta_s"] # Info on the winding surface
         
         timer = Timer()
         if verbose > 0:
@@ -200,52 +203,58 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         # Define other grids
         field_grid2 = Grid(nodes = jnp.vstack((field_grid.nodes[:,0],
                                                 field_grid.nodes[:,1],
-                                                field_grid.nodes[:,2] + (2*jnp.pi/sinks_and_sources.NFP)*1)).T
+                                                field_grid.nodes[:,2] + (2*jnp.pi/self._winding_surface.NFP)*1)).T
                             )
         field_grid3 = Grid(nodes = jnp.vstack((field_grid.nodes[:,0],
                                                field_grid.nodes[:,1],
-                                                field_grid.nodes[:,2] + (2*jnp.pi/sinks_and_sources.NFP)*2)).T
+                                                field_grid.nodes[:,2] + (2*jnp.pi/self._winding_surface.NFP)*2)).T
                             )
 
         # Find transforms for the grids on the winding surface
-        source_profiles1 = get_profiles(self._source_keys, obj=self._field, grid=self._field_grid)
-        source_transforms1 = get_transforms(self._source_keys, obj=self._field, grid=self._field_grid)
+        #source_profiles1 = get_profiles(self._source_keys, obj=self._field, grid=self._field_grid)
+        source_transforms1 = get_transforms(self._source_keys, obj=self._winding_surface, grid=self._field_grid, 
+            has_axis=field_grid.axis.size,)
         
-        source_profiles2 = get_profiles(self._source_keys, obj=self._field, grid=field_grid2)
-        source_transforms2 = get_transforms(self._source_keys, obj=self._field, grid=field_grid2)
+        #source_profiles2 = get_profiles(self._source_keys, obj=self._field, grid=field_grid2)
+        source_transforms2 = get_transforms(self._source_keys, obj=self._winding_surface, grid=field_grid2, 
+            has_axis=field_grid2.axis.size,)
 
-        source_profiles3 = get_profiles(self._source_keys, obj=self._field, grid=field_grid3)
-        source_transforms3 = get_transforms(self._source_keys, obj=self._field, grid=field_grid3)
+        #source_profiles3 = get_profiles(self._source_keys, obj=self._field, grid=field_grid3)
+        source_transforms3 = get_transforms(self._source_keys, obj=self._winding_surface, grid=field_grid3, 
+            has_axis=field_grid3.axis.size,)
 
         # Build data on the grids on the winding surface
         field_data1 = compute_fun(
-            self._field,
+            self._winding_surface,
             self._source_keys,
-            params=self._field.params_dict,
+            params=self._winding_surface.params_dict,
             transforms=source_transforms1,
-            profiles=source_profiles1,
+            profiles={},#source_profiles1,
+            #has_axis=field_grid.axis.size,
         )
         
         field_data2 = compute_fun(
-            self._field,
+            self._winding_surface,
             self._source_keys,
-            params=self._field.params_dict,
+            params=self._winding_surface.params_dict,
             transforms=source_transforms2,
-            profiles=source_profiles2,
+            profiles={},#source_profiles2,
+            #has_axis=field_grid2.axis.size,
         )
 
         field_data3 = compute_fun(
-            self._field,
+            self._winding_surface,
             self._source_keys,
-            params=self._field.params_dict,
+            params=self._winding_surface.params_dict,
             transforms=source_transforms3,
-            profiles=source_profiles3,
+            profiles={},#source_profiles3,
+            #has_axis=field_grid3.axis.size,
         )
 
         # Now update each of the field_data dicts with the isothermal coordinates
-        field_data1 = iso_coords_interp(self._iso_data, field_data1, self._field_grid,)
-        field_data2 = iso_coords_interp(self._iso_data, field_data2, field_grid2,)
-        field_data3 = iso_coords_interp(self._iso_data, field_data3, field_grid2,)
+        field_data1 = iso_coords_interp(self._iso_data, field_data1, self._field_grid,self._winding_surface)
+        field_data2 = iso_coords_interp(self._iso_data, field_data2, field_grid2,self._winding_surface)
+        field_data3 = iso_coords_interp(self._iso_data, field_data3, field_grid2,self._winding_surface)
         
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -254,7 +263,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         
         # pre-compute B_target because we are assuming eq is fixed
-        B_target = constants["field"].compute_magnetic_field(
+        B_target = self._winding_surface.compute_magnetic_field(
             x,
             source_grid = self._field_grid,
             basis="rpz",
@@ -264,7 +273,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
         self._constants = {
             "eq": eq,
-            "field": self._field,#SumMagneticField(self._field),
+            "winding_surface": self._winding_surface,
+            #"field": self._field,#SumMagneticField(self._field),
             "eval_grid": self._eval_grid,
             "field_grid": self._field_grid,
             "quad_weights": w,
@@ -272,8 +282,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_target": B_target,
-            'p_M': sinks_and_sources.M*2+1,
-            'p_N': sinks_and_sources.M*2+1,
+            'p_M': sinks_and_sources.M,
+            'p_N': sinks_and_sources.N,
             'sdata1':sdata1,
             'sdata2':sdata2,
             'sdata3':sdata3,
@@ -315,7 +325,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         eval_data = constants["eval_data"]
         #B_plasma = constants["B_plasma"]
         
-        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        #x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
         # B from sources: B_src
         B_src = bn_res(constants['p_M']*2+1, 
@@ -323,7 +333,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
                        constants['sdata1'],
                        constants['sdata2'],
                        constants['sdata3'],
-                       constants['field_grid'], contants['field'], 
+                       constants['field_grid'], contants['winding_surface'], 
                        params1['x_mn'],
                        #self._sinks_and_sources.x_mn, 
                        constants['N_sum'], constants['d0'], 

@@ -40,9 +40,10 @@ from numpy import ndarray
 
 from desc.fns_simp import _compute_magnetic_field_from_Current, _compute_magnetic_field_from_Current_Contour
 
-#from scipy.interpolate import griddata
-from interpax import interp2d
+from scipy.interpolate import griddata
+from functools import partial
 
+@partial(jit, static_argnums=(0,1))
 def bn_res(p_M, p_N, 
            sdata1,
            sdata2,
@@ -82,6 +83,8 @@ def bn_res(p_M, p_N,
                             jnp.asarray([jnp.sum(y)]) # Sum of sources and sinks
                            ))
 
+#@jax.jit
+@partial(jit, static_argnums=(0,1))
 def B_sour(p_M, p_N,
                  sdata1,
                sdata2,
@@ -109,6 +112,7 @@ def B_sour(p_M, p_N,
                                                 surface, eq, Bgrid, basis="rpz")
 
 #@jax.jit
+@partial(jit, static_argnums=(0,1))
 def B_theta_contours(p_M, p_N,
                      sdata,
                      sgrid,
@@ -162,13 +166,14 @@ def B_theta_contours(p_M, p_N,
                                    dot(ss_data['e_theta'], ss_data['e_theta']) ** (-1/2) * ss_data['e_theta'].T).T
         return jax.lax.fori_loop(0, r_t, inner_body, K_cont)
 
-    K_cont = jax.lax.fori_loop(0, r_z, outer_body, jnp.zeros_like(ss_data["e_theta"]))
-    
+    K_cont = jax.lax.fori_loop(0, r_z, outer_body, 0)
     return _compute_magnetic_field_from_Current_Contour(ss_grid, 
                                                         K_cont,
                                                         surface, eq, Bgrid, basis="rpz")
     
 
+#@jax.jit
+@partial(jit, static_argnums=(0,1))
 def B_sticks(p_M, p_N,
                  sgrid,
                  surface,
@@ -195,7 +200,6 @@ def B_sticks(p_M, p_N,
     name = "iso_coords/"
     stick_grid = alt_grid_sticks(theta, zeta, sgrid)
     ss_data = surface.compute(['theta', 'x'], grid = stick_grid)
-    #interp_grid(theta, zeta, surface, name)
 
     eq_surf = eq.surface
     pls_points = eq_surf.compute(["x"], grid = Bgrid, basis = 'xyz')["x"]
@@ -227,9 +231,10 @@ def B_sticks(p_M, p_N,
                                  )
         return b_stick_
 
-    sticks_total = fori_loop(0, r, sticks_fun, jnp.zeros_like(pls_points))
+    sticks_total = fori_loop(0, r, sticks_fun, jnp.zeros_like(plasma_points))
     return sticks_total
 
+@jax.jit
 def stick(p2_, # second point of the stick
           p1_, # first point of the stick
           plasma_points, # points on the plasma surface
@@ -272,7 +277,7 @@ def stick(p2_, # second point of the stick
     return b_stick
 
 #@jax.jit
-#@jax.jit(static_argnums=(0,1))
+@partial(jit, static_argnums=(0,1))
 def K_sour(p_M, p_N,
            sdata1,
            sdata2,
@@ -297,7 +302,8 @@ def K_sour(p_M, p_N,
     #                    p_N * 2,)
 
     name = "iso_coords/"
-    ss_data = interp_grid(theta, zeta, surface, name)
+    ss_data = load_interp_grid()
+    #interp_grid(theta, zeta, surface, name)
 
     #r = int(ss_data["theta"].shape[0])  # Make r a Python int for indexing
     assert (p_M * 2)*(p_N * 2) == ss_data["theta"].shape[0] , "Check that the sources coincide with the number of sources/sinks"
@@ -307,7 +313,7 @@ def K_sour(p_M, p_N,
     ss_data["u_iso"] = jnp.asarray(ss_data["u_iso"])
     ss_data["v_iso"] = jnp.asarray(ss_data["v_iso"])
 
-    #@jax.jit
+    @jax.jit
     def body_fun1(i, carry):
         omega_total_real, omega_total_imag = carry
 
@@ -322,8 +328,7 @@ def K_sour(p_M, p_N,
         omega_total_real += y_ * jnp.real(omega_s1)
         omega_total_imag += y_ * jnp.imag(omega_s1)
         return omega_total_real, omega_total_imag
-    
-    #@jax.jit
+    @jax.jit
     def body_fun2(i, carry):
         omega_total_real, omega_total_imag = carry
 
@@ -338,8 +343,7 @@ def K_sour(p_M, p_N,
         omega_total_real += y_ * jnp.real(omega_s2)
         omega_total_imag += y_ * jnp.imag(omega_s2)
         return omega_total_real, omega_total_imag
-    
-    #@jax.jit
+    @jax.jit
     def body_fun3(i, carry):
         omega_total_real, omega_total_imag = carry
 
@@ -376,8 +380,7 @@ def K_sour(p_M, p_N,
                                                 + omega_total_real2 * sdata3["e_u"].T
                                                 )
             ).T
-
-#@jax.jit
+@jax.jit
 def f_sour(data_or,
            u1_, v1_, # first dipole
            N, d_0):
@@ -418,32 +421,40 @@ def omega_sour(data_or,
     
     return omega
 
+@jax.jit
 def v1_eval(w0, N, d_0, data_or):
-    
-    #gamma = data_or["du"] / ( 2 * jnp.pi )
-    #p = jnp.exp( - data_or["dv"] / ( 2 * gamma ) )
     
     gamma = data_or["omega_1"] / jnp.pi
     p = data_or["tau"]
     
-    product_ = 0
-
-    for n in range(0,N):
-
-        product_ = ( product_ 
-                    + ( ( ( (-1) ** n
-                        )*( p ** ( n **2 + n )
-                          )
-                       ) * jnp.sin( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma )
-                      )
-                   )
+    def body_fun(n, product_):
+        return product_ + ((((-1) ** n) * (p ** (n ** 2 + n))) * 
+                           jnp.sin((2 * n + 1) * (data_or["w"] - w0) / gamma))
+    
+    product_ = jax.lax.fori_loop(0, N, body_fun, jnp.zeros_like(data_or['theta']) + jnp.zeros_like(data_or['theta']) * 1j) 
     
     return jnp.where(jnp.abs(data_or["w"] - w0) > d_0,
-                     2 * p **(1/4)*product_ ,
-                     1 # Arbitraty value of 1 inside the circle around the vortex core
-                    )
+                     2 * p ** (1/4) * product_,
+                     1)  # Arbitrary value inside vortex core
 
-#@jax.jit
+@jax.jit
+def v1_prime_eval(w0, N, d_0, data_or):
+
+    gamma = data_or["omega_1"] / jnp.pi
+    p = data_or["tau"]
+    
+    def body_fun(n, _product):
+        return _product + ((((-1) ** n) * (p ** (n ** 2 + n))) * 
+                           (((2 * n + 1) / gamma) * 
+                            jnp.cos((2 * n + 1) * (data_or["w"] - w0) / gamma)))
+    
+    _product = jax.lax.fori_loop(0, N, body_fun, jnp.zeros_like(data_or['theta']) + jnp.zeros_like(data_or['theta']) * 1j)
+    
+    return jnp.where(jnp.abs(data_or["w"] - w0) > d_0, 
+                     (p ** (1 / 4) / 1) * _product, 
+                     0)
+
+@jax.jit
 def chi_reg(w0,# location of the vortex
             d_0, data_or):
     
@@ -451,37 +462,13 @@ def chi_reg(w0,# location of the vortex
                      - ( data_or["lambda_u"] / data_or["lambda_iso"]) + ( data_or["lambda_v"] / data_or["lambda_iso"] ) * 1j,
                      0)
 
-#@jax.jit
+@jax.jit
 def f_reg(w0,# location of the vortex
           d_0, data_or):
     
     return jnp.where(jnp.abs(data_or["w"] - w0) < d_0,
                      jnp.log(data_or["lambda_iso"]),
                      0)
-
-
-def v1_prime_eval(w0, N, d_0, data_or):
-
-    gamma = data_or["omega_1"] / jnp.pi
-    p = data_or["tau"]
-    
-    _product = 0
-    for n in range(0,N):
-
-        _product = ( _product 
-                    + ( ( ( (-1) ** n
-                        ) * ( p ** ( n ** 2 + n )
-                            )
-                        ) * ( ( ( 2 * n + 1 ) / gamma
-                              ) * jnp.cos( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma
-                                         )
-                            )
-                      )
-                   )
-    
-    return jnp.where( abs( data_or["w"] - w0 ) > d_0, 
-                     ( p ** ( 1 / 4 ) / 1 ) * _product, 
-                     0 )
 
 def comp_loc(theta_0_,phi_0_,):
     
@@ -540,27 +527,22 @@ def iso_coords_interp(name,_data, sgrid, eq):
     
     # Interpolate on theta_mod, zeta_mod
     points = jnp.array( (zeta_mod.flatten(), theta_mod.flatten()) ).T
-    
+
+    X0 = _data["zeta"].flatten()
+    Y0 = _data["theta"].flatten()
+
     # Interpolate isothermal coordinates
-    _data["u_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_mod, method="cubic")
-    #griddata( points, u_mod.flatten(), (X0,Y0), method='linear' )
-    _data["v_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_mod, method="cubic")
-    #griddata( points, v_mod.flatten(), (X0,Y0), method='linear' )
+    _data["u_iso"] = griddata( points, u_mod.flatten(), (X0,Y0), method='linear' )
+    _data["v_iso"] = griddata( points, v_mod.flatten(), (X0,Y0), method='linear' )
     
-    _data["lambda_u"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_u_mod, method="cubic")
-    #griddata( points, lamb_u_mod.flatten(), (X0,Y0), method='linear' )
-    _data["lambda_v"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_v_mod, method="cubic")
-    #griddata( points, lamb_v_mod.flatten(), (X0,Y0), method='linear' )
+    _data["lambda_u"] = griddata( points, lamb_u_mod.flatten(), (X0,Y0), method='linear' )
+    _data["lambda_v"] = griddata( points, lamb_v_mod.flatten(), (X0,Y0), method='linear' )
 
     # Interpolate derivatives of isothermal coordinates
-    u0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_t_mod, method="cubic")
-    #griddata( points, u_t_mod.flatten(), (X0,Y0), method='linear' )
-    u0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_z_mod, method="cubic")
-    #griddata( points, u_z_mod.flatten(), (X0,Y0), method='linear' )
-    v0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_t_mod, method="cubic")
-    #griddata( points, v_t_mod.flatten(), (X0,Y0), method='linear' )
-    v0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_z_mod, method="cubic")
-    #griddata( points, v_z_mod.flatten(), (X0,Y0), method='linear' )
+    u0_t = griddata( points, u_t_mod.flatten(), (X0,Y0), method='linear' )
+    u0_z = griddata( points, u_z_mod.flatten(), (X0,Y0), method='linear' )
+    v0_t = griddata( points, v_t_mod.flatten(), (X0,Y0), method='linear' )
+    v0_z = griddata( points, v_z_mod.flatten(), (X0,Y0), method='linear' )
     
     # Build harmonic vectors with interpolated data
     grad1 = ( u0_t * _data["e^theta_s"].T + u0_z * _data["e^zeta_s"].T ).T
@@ -579,6 +561,24 @@ def iso_coords_interp(name,_data, sgrid, eq):
     
     return _data
 
+
+def load_interp_grid():
+    
+    # Find grids for dipoles
+    #s_grid = alt_grid(theta,zeta)
+    
+    # Evaluate data on grids of dipoles
+    #s_data = w_surface.compute(["theta","zeta","e^theta_s","e^zeta_s","x",
+    #                           "e_theta", # extra vector needed for the poloidal wire contours
+    #                           ], grid = s_grid)
+
+    # Load the dictionary
+    with open('s_data.pkl', 'rb') as f:
+        s_data = pickle.load(f)
+        
+    return s_data
+
+    
 def interp_grid(theta, zeta, w_surface, name):
     
     # Find grids for dipoles

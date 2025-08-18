@@ -1,53 +1,15 @@
 """Classes for magnetic fields."""
 
-import os
-import warnings
-from abc import ABC, abstractmethod
-from collections.abc import MutableSequence
-
 import numpy as np
-from diffrax import (
-    DiscreteTerminatingEvent,
-    ODETerm,
-    PIDController,
-    SaveAt,
-    Tsit5,
-    diffeqsolve,
-)
-from interpax import approx_df, interp1d, interp2d, interp3d
-from netCDF4 import Dataset, chartostring, stringtochar
-from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign
-from desc.basis import (
-    ChebyshevDoubleFourierBasis,
-    ChebyshevPolynomial,
-    DoubleFourierSeries,
-)
-from desc.batching import batch_map
+from desc.basis import DoubleFourierSeries
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
-from desc.derivatives import Derivative
-from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
-from desc.integrals import compute_B_plasma
 from desc.io import IOAble
-from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.transform import Transform
-from desc.utils import (
-    copy_coeffs,
-    dot,
-    errorif,
-    flatten_list,
-    rpz2xyz,
-    rpz2xyz_vec,
-    safediv,
-    setdefault,
-    warnif,
-    xyz2rpz,
-    xyz2rpz_vec,
-)
-from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
+from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import copy_coeffs, setdefault
+
 
 class SinksSources(Optimizable, IOAble):
     """A magnetic field with perfect omnigenity (but is not necessarily analytic).
@@ -85,6 +47,11 @@ class SinksSources(Optimizable, IOAble):
         "_x_mn",
     ]
 
+    _static_attrs = Optimizable._static_attrs + [
+        "_p_M",
+        "_p_N",
+    ]
+
     def __init__(
         self,
         p_M=0,
@@ -99,9 +66,9 @@ class SinksSources(Optimizable, IOAble):
             M=self.p_M,
             N=self.p_N,
             NFP=self.NFP,
-            #sym="cos(t)",
+            # sym="cos(t)",
         )
-        
+
         if x_mn is None:
             self._x_mn = np.zeros(self.x_basis.num_modes)
         else:
@@ -126,16 +93,16 @@ class SinksSources(Optimizable, IOAble):
             Number of field periods.
 
         """
-        old_L_B = self.L_B
-
         self._NFP = setdefault(NFP, self.NFP)
-        self._p_M = setdefault(M_x, self.p_M)
-        self._p_N = setdefault(N_x, self.p_N)
+        self._p_M = setdefault(p_M, self.p_M)
+        self._p_N = setdefault(p_N, self.p_N)
 
         # change mapping parameters and basis
         old_modes_map = self.x_basis.modes
         self.x_basis.change_resolution(
-            self.p_M, self.p_N, NFP=self.NFP,# sym="cos(t)"
+            self.p_M,
+            self.p_N,
+            NFP=self.NFP,  # sym="cos(t)"
         )
         self._x_mn = copy_coeffs(self.x_mn, old_modes_map, self.x_basis.modes)
 
@@ -223,12 +190,12 @@ class SinksSources(Optimizable, IOAble):
     def p_M(self):
         """int: Number of (toroidal) sources."""
         return self._p_M
-        
+
     @property
     def p_N(self):
         """int: Number of (poloidal) sources."""
         return self._p_N
-        
+
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""

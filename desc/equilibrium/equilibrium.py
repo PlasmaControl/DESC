@@ -63,7 +63,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import (
+    _map_clebsch_coordinates,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -933,7 +939,8 @@ class Equilibrium(Optimizable, _MagneticField):
                 "z": "zeta",
                 "p": "phi",
             }
-            rtz_nodes = self.map_coordinates(
+            rtz_nodes = map_coordinates(
+                self,
                 grid.nodes,
                 inbasis=[inbasis[char] for char in grid.coordinates],
                 outbasis=("rho", "theta", "zeta"),
@@ -1460,61 +1467,67 @@ class Equilibrium(Optimizable, _MagneticField):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
-    def compute_theta_coords(
-        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    @staticmethod
+    def _map_clebsch_coordinates(
+        iota,
+        alpha,
+        zeta,
+        L_lmn,
+        lmbda,
+        guess=None,
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
+        return _map_clebsch_coordinates(
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            guess,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
+        )
+
+    def _compute_iota_under_jit(self, rho, params=None, profiles=None, **kwargs):
+        """Compute rotational transform in JITable manner.
 
         Parameters
         ----------
-        flux_coords : ndarray
-            Shape (k, 3).
-            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
+        rho : jnp.ndarray
+            Surface to compute rotational transform.
+        params : dict[str,jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
 
         Returns
         -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
+        iota : jnp.ndarray
+            Shape (len(rho), ).
 
         """
-        warnif(
-            True,
-            DeprecationWarning,
-            "Use map_coordinates instead of compute_theta_coords.",
-        )
-        return map_coordinates(
-            self,
-            coords=flux_coords,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
-        )
+        setdefault(params, self.params_dict)
+        if profiles is None:
+            profiles = get_profiles("iota", self)
+        if profiles["iota"] is None:
+            iota_profile = self.get_profile(["iota", "iota_r"], params=params, **kwargs)
+        else:
+            iota_profile = profiles["iota"]
+
+        if jnp.ndim(rho) < 2:
+            zero = jnp.zeros_like(rho)
+            rho = jnp.column_stack([rho, zero, zero])
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

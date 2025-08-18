@@ -158,7 +158,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         """
         #from desc.magnetic_fields import SumMagneticField
         #from desc.fns_simp import _compute_magnetic_field_from_Current
-        from find_sour import bn_res, iso_coords_interp
+        from desc.objectives.find_sour import bn_res, iso_coords_interp
         
         eq = self._eq
         field = self._field
@@ -252,9 +252,9 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         )
 
         # Now update each of the field_data dicts with the isothermal coordinates
-        field_data1 = iso_coords_interp(self._iso_data, field_data1, self._field_grid,self._winding_surface)
-        field_data2 = iso_coords_interp(self._iso_data, field_data2, field_grid2,self._winding_surface)
-        field_data3 = iso_coords_interp(self._iso_data, field_data3, field_grid2,self._winding_surface)
+        field_data1 = iso_coords_interp(self._iso_data, field_data1, self._field_grid)#,self._winding_surface)
+        field_data2 = iso_coords_interp(self._iso_data, field_data2, field_grid2)#,self._winding_surface)
+        field_data3 = iso_coords_interp(self._iso_data, field_data3, field_grid2)#,self._winding_surface)
         
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -267,7 +267,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             x,
             source_grid = self._field_grid,
             basis="rpz",
-            params=field_params,
+            #params=self._winding_surface.params_dict,
             #chunk_size=self._bs_chunk_size,
         )
 
@@ -282,8 +282,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_target": B_target,
-            'p_M': sinks_and_sources.M,
-            'p_N': sinks_and_sources.N,
+            'p_M': field.p_M,
+            'p_N': field.p_N,
             'sdata1':sdata1,
             'sdata2':sdata2,
             'sdata3':sdata3,

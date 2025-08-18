@@ -1,6 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=k-RQA        # create a short name for your job
-#SBATCH --time=00:15:00          # total run time limit (HH:MM:SS)
+#SBATCH --job-name=30rsA          # create a short name for your job
+#SBATCH --time=01:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --mem=80G
 #SBATCH --mail-type=begin        # send mail when process begins
 #SBATCH --mail-type=end          # send email when job ends
 #SBATCH --mail-user=fcastro@princeton.edu
@@ -12,4 +13,4 @@ conda activate desc-env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.93
 
-jupyter nbconvert --ExecutePreprocessor.timeout=None --to notebook --execute --inplace direct-k.ipynb
+jupyter nbconvert --ExecutePreprocessor.timeout=None --to notebook --execute --inplace reg-direct.ipynb

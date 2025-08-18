@@ -106,3 +106,5 @@ from .linear_objectives import (
     ShareParameters,
 )
 from .objective_funs import ObjectiveFunction
+
+from ._sources import SinksSourcesSurfaceQuadraticFlux

@@ -21,12 +21,8 @@ from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
 from desc.io import InputReader, load
 from desc.objectives import *
 from desc.objectives.objective_funs import _Objective
-from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
-
-from desc.plotting import *
 
 from desc.transform import Transform
-from desc.derivatives import Derivative
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -40,7 +36,6 @@ from numpy import ndarray
 
 from desc.fns_simp import _compute_magnetic_field_from_Current, _compute_magnetic_field_from_Current_Contour
 
-#from scipy.interpolate import griddata
 from interpax import interp2d
 
 def bn_res(p_M, p_N, 
@@ -88,7 +83,6 @@ def B_sour(p_M, p_N,
                sdata3,
                  sgrid,
                  surface,
-                 #w_surface,
                  y,
                  N,
                  d_0,
@@ -142,18 +136,6 @@ def B_theta_contours(p_M, p_N,
     ss_data = surface.compute(['theta','zeta','e_theta'], grid = ss_grid)
     
     sign_vals = jnp.where(ss_data['theta'] < jnp.pi, -1, 0) + jnp.where(ss_data['theta'] > jnp.pi, 1, 0) 
-    
-    #K_cont = 0
-    #for i in range(0,r_z):
-        
-    #    for j in range(0,r_t):
-        
-    #        k_fix = jnp.where((ss_data['zeta'] == zeta_coarse[i]) & (ss_data['theta'] > theta_coarse[j]), 1,0)
-    #        K_cont += (y[i*r_t + j] * sign_vals * k_fix * dot(ss_data['e_theta'],ss_data['e_theta'])**(-1/2) * ss_data['e_theta'].T).T
-
-    #return _compute_magnetic_field_from_Current_Contour(ss_grid, 
-    #                                                    K_cont,
-    #                                                    surface, eq, Bgrid, basis="rpz")
 
     def outer_body(i, K_cont):
         def inner_body(j, K_cont_inner):
@@ -187,15 +169,10 @@ def B_sticks(p_M, p_N,
     zeta = jnp.linspace(2 * jnp.pi / surface.NFP * (1 / (p_N * 2)) * 1/2,
                         2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2) * 1/2),
                         p_N * 2,)
-
-    #zeta = jnp.linspace(2 * jnp.pi / 1 * (1 / (p_N * 2)) * 1/2,
-    #                    2 * jnp.pi / 1 * (1 - 1 / (p_N * 2) * 1/2),
-    #                    p_N * 2,)
     
     name = "iso_coords/"
     stick_grid = alt_grid_sticks(theta, zeta, sgrid)
     ss_data = surface.compute(['theta', 'x'], grid = stick_grid)
-    #interp_grid(theta, zeta, surface, name)
 
     eq_surf = eq.surface
     pls_points = eq_surf.compute(["x"], grid = Bgrid, basis = 'xyz')["x"]
@@ -203,18 +180,6 @@ def B_sticks(p_M, p_N,
     assert (p_M * 2)*(p_N * 2) == ss_data["theta"].shape[0] , "Check that the sources coincide with the number of sources/sinks"
 
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
-    
-    #b_sticks_total = 0
-    #for i in range(0,r):
-    
-    #    b_stick_ = stick(ss_data["x"][i], # Location of the wire at the theta = pi cut, variable zeta position
-    #                     0 * ss_data["x"][i], # All wires at the center go to the origin
-    #                     pls_points,
-    #                     sgrid, 
-    #                     basis = "rpz",
-    #                     )
-
-     #   b_sticks_total +=  y[i] * b_stick_
 
     def sticks_fun(i, b_stick_):
         y_ = lax.dynamic_index_in_dim(y, i, axis=0)
@@ -292,14 +257,9 @@ def K_sour(p_M, p_N,
                         2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2) * 1/2),
                         p_N * 2,)
 
-    #zeta = jnp.linspace(2 * jnp.pi / 1 * (1 / (p_N * 2)) * 1/2,
-    #                    2 * jnp.pi / 1 * (1 - 1 / (p_N * 2) * 1/2),
-    #                    p_N * 2,)
-
     name = "iso_coords/"
     ss_data = interp_grid(theta, zeta, surface, name)
 
-    #r = int(ss_data["theta"].shape[0])  # Make r a Python int for indexing
     assert (p_M * 2)*(p_N * 2) == ss_data["theta"].shape[0] , "Check that the sources coincide with the number of sources/sinks"
     
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
@@ -382,9 +342,6 @@ def f_sour(data_or,
            u1_, v1_, # first dipole
            N, d_0):
     
-    #gamma = data_or["du"] / (2*jnp.pi)
-    
-    # Evaluate the dipoles on the grid of vortices
     w1 = comp_loc(u1_, v1_,)
     
     v_1_num = v1_eval(w1, N, d_0, data_or)
@@ -485,21 +442,129 @@ def v1_prime_eval(w0, N, d_0, data_or):
                      0 )
 
 def comp_loc(theta_0_,phi_0_,):
-    
     return theta_0_ + phi_0_*1j
     
-# Load isothermal coordinates and interpolate on a different grid
-def iso_coords_interp(name,_data, sgrid, eq):
+# Interpolate isothermal coordinates and interpolate on a different grid
+def iso_coords_interp(tdata,_data, sgrid):
+
+    # Temporary grid
+    tgrid = LinearGrid(M = 60, N = 60)
+    u = tdata['u_iso']
+    v = tdata['v_iso']
+    Phi = tdata['Phi_iso']
+    Psi = tdata['Psi_iso']
+    b0 = tdata['b_iso']
+    lamb_ratio = tdata['lambda_ratio']
+
+    _data["omega_1"] = tdata['omega_1']
+    _data["omega_2"] = tdata['omega_1']
+
+    _data["tau"] = tdata['tau']
+    _data["tau_1"] = tdata['tau_1']
+    _data["tau_2"] = tdata['tau_2']
+    
+    lamb_u = tdata['lambda_iso_u']
+    lamb_v = tdata['lambda_iso_v']
+
+    # Data on plasma surface
+    #tdata = eq.compute(["theta","zeta"], grid = tgrid)
+    
+    u_t = tdata['u_t'] 
+    u_z = tdata['u_z'] 
+    v_t = tdata['v_t']
+    v_z = tdata['v_z'] 
+    
+    # Build new grids to allow interpolation between last grid points and theta = 2*pi or zeta = 2*pi
+    m_size = tgrid.M * 2 + 1
+    n_size = tgrid.N * 2 + 1
+
+    # Rearrange variables
+    # Add extra rows and columns to represent theta = 2pi or zeta = 2pi
+    theta_mod = add_extra_coords(tdata["theta"], n_size,m_size,0)
+    zeta_mod = add_extra_coords(tdata["zeta"], n_size,m_size,1)
+    u_mod = zeta_mod - add_extra_periodic(Phi, n_size,m_size)
+    v_mod = lamb_ratio * ( theta_mod - add_extra_periodic(Psi, n_size,m_size) + b0 * u_mod )
+    u_t_mod = add_extra_periodic(u_t, n_size,m_size)
+    u_z_mod = add_extra_periodic(u_z, n_size,m_size)
+    v_t_mod = add_extra_periodic(v_t, n_size,m_size)
+    v_z_mod = add_extra_periodic(v_z, n_size,m_size)
+    lamb_u_mod = add_extra_periodic(lamb_u, n_size,m_size)
+    lamb_v_mod = add_extra_periodic(lamb_v, n_size,m_size)
+    
+    # Interpolate on theta_mod, zeta_mod
+    points = jnp.array( (zeta_mod.flatten(), theta_mod.flatten()) ).T
+    
+    # Interpolate isothermal coordinates
+    _data["u_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_mod, method="cubic")
+    _data["v_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_mod, method="cubic")
+        
+    _data["lambda_u"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_u_mod, method="cubic")
+    _data["lambda_v"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_v_mod, method="cubic")
+    
+    # Interpolate derivatives of isothermal coordinates
+    u0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_t_mod, method="cubic")
+    u0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_z_mod, method="cubic")
+    v0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_t_mod, method="cubic")
+    v0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_z_mod, method="cubic")
+    
+    # Build harmonic vectors with interpolated data
+    grad1 = ( u0_t * _data["e^theta_s"].T + u0_z * _data["e^zeta_s"].T ).T
+    grad2 = ( v0_t * _data["e^theta_s"].T + v0_z * _data["e^zeta_s"].T ).T
+    
+    _data["e^u_s"] = grad1
+    _data["e^v_s"] = grad2
+    
+    _data["e_u"] = ( dot(grad1,grad1) ** (-1) * grad1.T ).T
+    _data["e_v"] = ( dot(grad2,grad2) ** (-1) * grad2.T ).T
+
+    # Define the parameter "lambda" according to the paper
+    _data["lambda_iso"] = dot( _data["e_u"], _data["e_u"] ) ** ( 1 / 2 )
+
+    _data["w"] = comp_loc( _data["u_iso"], _data["v_iso"] )
+    
+    return _data
+
+# Load isothermal coordinates on the construction grid
+def iso_coords_load(name,eq):
+
+    # Temporary grid
+    tgrid = LinearGrid(M = 60, N = 60)
+
+    # Data on plasma surface
+    tdata = eq.compute(["theta","zeta"], grid = tgrid)
+    
+    tdata['u_iso'] = jnp.load(name + 'u.npy')
+    tdata['v_iso'] = jnp.load(name + 'v.npy')
+    tdata['Phi_iso'] = jnp.load(name + 'Phi.npy')
+    tdata['Psi_iso'] = jnp.load(name + 'Psi.npy')
+    tdata['b_iso'] = jnp.load(name + 'b.npy')
+    tdata['lambda_ratio'] = jnp.load(name + 'ratio.npy') 
+
+    tdata["omega_1"] = jnp.load(name + 'omega_1.npy')
+    tdata["omega_2"] = jnp.load(name + 'omega_2.npy')
+
+    tdata["tau"] = jnp.load(name + 'tau.npy')
+    tdata["tau_1"] = jnp.load(name + 'tau_1.npy')
+    tdata["tau_2"] = jnp.load(name + 'tau_2.npy')
+    
+    tdata['lambda_iso_u'] = jnp.load(name + 'lambda_u.npy')
+    tdata['lambda_iso_v'] = jnp.load(name + 'lambda_v.npy')
+    
+    tdata['u_t'] = jnp.load(name + 'u_t.npy') 
+    tdata['u_z'] = jnp.load(name + 'u_z.npy') 
+    tdata['v_t'] = jnp.load(name + 'v_t.npy') 
+    tdata['v_z'] = jnp.load(name + 'v_z.npy')
+    
+    return tdata
+
+def iso_coords_interp_old(name,_data, sgrid, eq):
 
     u = jnp.load(name + 'u.npy')
     v = jnp.load(name + 'v.npy')
-    Phi = jnp.load(name + 'Phi.npy') #first_derivative_t(u, tdata, tgrid,)
-    Psi = jnp.load(name + 'Psi.npy') #first_derivative_z(u, tdata, tgrid,)
-    b0 = jnp.load(name + 'b.npy') #first_derivative_z(u, tdata, tgrid,)
-    lamb_ratio = jnp.load(name + 'ratio.npy') #first_derivative_z(u, tdata, tgrid,)
-    
-    #_data["du"] = 2*jnp.pi#jnp.max(u.flatten()) - jnp.min(u.flatten())
-    #_data["dv"] = jnp.max(v.flatten()) - jnp.min(v.flatten())
+    Phi = jnp.load(name + 'Phi.npy')
+    Psi = jnp.load(name + 'Psi.npy')
+    b0 = jnp.load(name + 'b.npy')
+    lamb_ratio = jnp.load(name + 'ratio.npy') 
 
     _data["omega_1"] = jnp.load(name + 'omega_1.npy')
     _data["omega_2"] = jnp.load(name + 'omega_2.npy')
@@ -544,24 +609,16 @@ def iso_coords_interp(name,_data, sgrid, eq):
     
     # Interpolate isothermal coordinates
     _data["u_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_mod, method="cubic")
-    #griddata( points, u_mod.flatten(), (X0,Y0), method='linear' )
     _data["v_iso"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_mod, method="cubic")
-    #griddata( points, v_mod.flatten(), (X0,Y0), method='linear' )
-    
+        
     _data["lambda_u"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_u_mod, method="cubic")
-    #griddata( points, lamb_u_mod.flatten(), (X0,Y0), method='linear' )
     _data["lambda_v"] = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], lamb_v_mod, method="cubic")
-    #griddata( points, lamb_v_mod.flatten(), (X0,Y0), method='linear' )
-
+    
     # Interpolate derivatives of isothermal coordinates
     u0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_t_mod, method="cubic")
-    #griddata( points, u_t_mod.flatten(), (X0,Y0), method='linear' )
     u0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], u_z_mod, method="cubic")
-    #griddata( points, u_z_mod.flatten(), (X0,Y0), method='linear' )
     v0_t = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_t_mod, method="cubic")
-    #griddata( points, v_t_mod.flatten(), (X0,Y0), method='linear' )
     v0_z = interp2d(_data['theta'], _data['zeta'], theta_mod[:,0], zeta_mod[0,:], v_z_mod, method="cubic")
-    #griddata( points, v_z_mod.flatten(), (X0,Y0), method='linear' )
     
     # Build harmonic vectors with interpolated data
     grad1 = ( u0_t * _data["e^theta_s"].T + u0_z * _data["e^zeta_s"].T ).T

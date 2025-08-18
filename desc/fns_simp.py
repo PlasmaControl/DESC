@@ -125,7 +125,7 @@ def _compute_magnetic_field_from_Current(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -204,7 +204,7 @@ def _compute_magnetic_field_from_Current_Contour(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -287,7 +287,7 @@ def _compute_magnetic_field_from_Current_reg(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -367,7 +367,7 @@ def _compute_magnetic_field_from_potential(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -467,7 +467,7 @@ def _compute_surface_divergence_from_Current(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     Bdata = eq.compute(["e_theta","e_zeta"], grid = Bgrid,basis = "xyz")
     r_t = Bdata["e_theta"]#rpz2xyz_vec(ed["e_theta"], phi=phi)
@@ -565,7 +565,7 @@ def _compute_vector_potential_from_Current(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -646,7 +646,7 @@ def _compute_vector_potential_from_potential(Kgrid,
     """
 
     Bdata = eq.compute(["R","phi","Z"], grid = Bgrid)
-    coords = np.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):

@@ -4259,7 +4259,7 @@ def plot_gammac(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``X``, ``Y``, ``Y_B``, ``num_quad``: int
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
         * ``num_transit``, ``pitch_batch_size``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
@@ -4292,15 +4292,16 @@ def plot_gammac(
         alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
 
     if num_pitch is None:
-        num_pitch = 16
+        num_pitch = 28
 
     # TODO(#1352)
-    X = kwargs.pop("X", 16)
-    Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", 24)
-    num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
-    num_transit = kwargs.pop("num_transit", 1)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 64)
+    Y_B = kwargs.pop("Y_B", Y * 2)
+    num_quad = kwargs.pop("num_quad", 32)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
+    num_transit = kwargs.pop("num_transit", 2)
+    num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4320,6 +4321,7 @@ def plot_gammac(
         num_transit=num_transit,
         num_quad=num_quad,
         num_pitch=num_pitch,
+        num_well=num_well,
         pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
@@ -4327,7 +4329,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch = np.linspace(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

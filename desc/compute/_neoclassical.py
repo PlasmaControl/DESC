@@ -20,7 +20,7 @@ _bounce_doc = {
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``.
+        A reference value is 100. Default is double ``Y``.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).

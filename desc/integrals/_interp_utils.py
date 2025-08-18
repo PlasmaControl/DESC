@@ -15,8 +15,7 @@ from interpax import interp1d
 from termcolor import colored
 
 try:
-    from jax_finufft import nufft2 as jfi_nufft2
-    from jax_finufft import options
+    from jax_finufft import nufft2, options
 except ImportError:
     warnings.warn(
         colored(
@@ -78,14 +77,14 @@ def fourier_pts(n):
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
-def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
-    """Interpolate real-valued ``f`` to ``xq`` with FFT.
+def interp_rfft(x, f, domain=(0, 2 * jnp.pi), axis=-1):
+    """Interpolate real-valued ``f`` to ``x`` with FFT.
 
     Parameters
     ----------
-    xq : jnp.ndarray
+    x : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
+        Shape of ``x`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
         Real function values on uniform grid over an open period to interpolate.
     domain : tuple[float]
@@ -100,18 +99,18 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
 
     """
     return irfft_non_uniform(
-        xq, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis
+        x, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis
     )
 
 
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
-    """Evaluate Fourier coefficients ``a`` at ``xq``.
+def irfft_non_uniform(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
+    """Evaluate Fourier coefficients ``a`` at ``x``.
 
     Parameters
     ----------
-    xq : jnp.ndarray
+    x : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
+        Shape of ``x`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
         Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
     n : int
@@ -138,20 +137,18 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None)
         else:
             i = 0
         a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    vander = jnp.exp(1j * _modes * (x - domain[0])[..., jnp.newaxis])
     return (vander * a).real.sum(-1)
 
 
-def ifft_non_uniform(
-    xq, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None
-):
-    """Evaluate Fourier coefficients ``a`` at ``xq``.
+def ifft_non_uniform(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None):
+    """Evaluate Fourier coefficients ``a`` at ``x``.
 
     Parameters
     ----------
-    xq : jnp.ndarray
+    x : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
+        Shape of ``x`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
         Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
     domain : tuple[float]
@@ -174,25 +171,25 @@ def ifft_non_uniform(
         if modes is None:
             n = a.shape[axis]
             modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-        vander = jnp.exp(1j * modes * (xq - domain[0])[..., jnp.newaxis])
+        vander = jnp.exp(1j * modes * (x - domain[0])[..., jnp.newaxis])
         a = jnp.moveaxis(a, axis, -1)
         axis = -1
     return (vander * a).sum(axis)
 
 
 def interp_rfft2(
-    xq0, xq1, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+    x0, x1, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
-    """Interpolate real-valued ``f`` to coordinates ``(xq0,xq1)`` with FFT.
+    """Interpolate real-valued ``f`` to coordinates ``(x0,x1)`` with FFT.
 
     Parameters
     ----------
-    xq0 : jnp.ndarray
+    x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         Shape must broadcast with shape ``np.delete(a.shape,axes)``.
         The coordinates stored here must be the same coordinate enumerated
         across axis ``min(axes)`` of the function values ``f``.
-    xq1 : jnp.ndarray
+    x1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         Shape must broadcast with shape ``np.delete(a.shape,axes)``.
         The coordinates stored here must be the same coordinate enumerated
@@ -201,9 +198,9 @@ def interp_rfft2(
         Shape (..., f.shape[-2], f.shape[-1]).
         Real function values on uniform tensor-product grid over an open period.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``xq0`` over which samples were taken.
+        Domain of coordinate specified by ``x0`` over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``xq1`` over which samples were taken.
+        Domain of coordinate specified by ``x1`` over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
@@ -215,7 +212,7 @@ def interp_rfft2(
         Real function value at query points.
 
     """
-    if (f.shape[axes[1]] % 2) == 0:
+    if f.shape[axes[1]] % 2 == 0:
         i = (0, -1)
     else:
         i = 0
@@ -223,8 +220,8 @@ def interp_rfft2(
     a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
     return _irfft2_non_uniform(
-        xq0,
-        xq1,
+        x0,
+        x1,
         a,
         f.shape[n0],
         f.shape[n1],
@@ -235,18 +232,18 @@ def interp_rfft2(
 
 
 def _irfft2_non_uniform(
-    xq0, xq1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+    x0, x1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
-    """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
+    """Evaluate Fourier coefficients ``a`` at coordinates ``(x0,x1)``.
 
     Parameters
     ----------
-    xq0 : jnp.ndarray
+    x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         Shape must broadcast with shape ``np.delete(a.shape,axes)``.
         The coordinates stored here must be the same coordinate enumerated
         across axis ``min(axes)`` of the Fourier coefficients ``a``.
-    xq1 : jnp.ndarray
+    x1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         Shape must broadcast with shape ``np.delete(a.shape,axes)``.
         The coordinates stored here must be the same coordinate enumerated
@@ -261,9 +258,9 @@ def _irfft2_non_uniform(
     n1 : int
         Spectral resolution of ``a`` for ``domain1``.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``xq0`` over which samples were taken.
+        Domain of coordinate specified by ``x0`` over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``xq1`` over which samples were taken.
+        Domain of coordinate specified by ``x1`` over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
 
@@ -273,12 +270,12 @@ def _irfft2_non_uniform(
         Real function value at query points.
 
     """
-    xq = (xq0, xq1)
+    x = (x0, x1)
     n = (n0, n1)
     d = (domain0, domain1)
     f, r = np.argsort(axes)
     modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
-    vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, d[f][0], d[r][0])
+    vander = rfft2_vander(x[f], x[r], modes_f, modes_r, d[f][0], d[r][0])
     return (vander * a).real.sum((-2, -1))
 
 
@@ -386,17 +383,17 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2(
+def nufft2r(
     c,
-    xq0,
-    xq1=None,
+    x0,
+    x1=None,
     domain0=(0, 2 * jnp.pi),
     domain1=(0, 2 * jnp.pi),
-    rfft_axis=None,
+    rfft_axis=-1,
     vec=False,
     eps=1e-6,
 ):
-    """Non-uniform fast transform of second type.
+    """Non-uniform real fast Fourier transform of second type.
 
     Notes
     -----
@@ -418,53 +415,47 @@ def nufft2(
     Parameters
     ----------
     c : jnp.ndarray
-        Fourier coefficients
-        e.g. ``c=fft(f,norm="forward")`` or ``c=fft2(f,norm="forward")``.
-    xq0 : jnp.ndarray
+        Fourier coefficients cₙ of the map x ↦ c(x) such that c(x) = ∑ₙ cₙ exp(i n x)
+        where n >= 0. If ``x1`` is given, then expects the Fourier coefficients cₘₙ of
+        the map x₁,x₂ ↦ c(x₁,x₂) such that c(x₁,x₂) = ∑ₘₙ cₘₙ exp(i m x₁) exp(i n x₂).
+    x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         For a 2D transform, the coordinates stored here must be the same coordinate
         enumerated across axis ``-2`` of ``c``.
-    xq1 : jnp.ndarray
+    x1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         If not given, performs a one-dimensional transform.
         For a 2D transform, the coordinates stored here must be the same coordinate
         enumerated across axis ``-1`` of ``c``.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``xq0`` over which samples were taken.
+        Domain of coordinate specified by ``x0`` over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``xq1`` over which samples were taken.
+        Domain of coordinate specified by ``x1`` over which samples were taken.
     rfft_axis : int
         Axis along which real FFT was performed.
-        Default is to assume no real FFT was performed.
-        If given assumes ``c`` has coefficients along that axis
-        such that the real part of the function can be recovered
-        from ∑ₙ cₙ exp(i n θ) for n > 0.
+        If -1 (-2), assumes c(x₁,x₂) = ∑ₘₙ cₘₙ exp(i m x₁) exp(i n x₂) where
+            n ( m) >= 0, respectively.
     vec : bool
-        Only has an effect if ``rfft_axis`` is given.
         If set to ``True``, then it is assumed that multiple Fourier series are
-        to be evaluated at the same non-uniform points. For example, see
-        ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec`.
-        In that case, the function signature has the form ``(f,c0),(x)->(f,x)``,
-        and this flag needs to set as to retain this signature.
+        to be evaluated at the same non-uniform points. In that case, this flag
+        must be set to retain the function signature of ``(f,c0),(x)->(f,x)``.
+        For example, see ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec``.
     eps : float
         Precision requested. Default is ``1e-6``.
 
     Returns
     -------
-    fq : jnp.ndarray
-        Complex function value at query points.
+    f : jnp.ndarray
+        Real function value at query points.
 
     """
-    opts = options.Opts(modeord=1)
-
-    if rfft_axis is None:
-        s0 = s1 = None
+    if x1 is None:
+        errorif(rfft_axis != -1, NotImplementedError)
+        s0 = c.shape[-1] // 2
+        s1 = None
+        opts = options.Opts(modeord=0)
     else:
-        if xq1 is None:
-            errorif(rfft_axis != -1, NotImplementedError)
-            s0 = c.shape[-1] // 2
-            s1 = None
-        elif rfft_axis == -1:
+        if rfft_axis == -1:
             s0 = None
             s1 = c.shape[-1] // 2
         elif rfft_axis == -2:
@@ -472,24 +463,25 @@ def nufft2(
             s1 = None
         else:
             raise NotImplementedError
+        opts = options.Opts(modeord=1)
         c = jnp.fft.ifftshift(c, rfft_axis)
 
     scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
-    xq0 = (xq0 - domain0[0]) * scale0
-    s = _shift(s0, xq0, vec)
-    if xq1 is None:
-        return jfi_nufft2(c, xq0, iflag=1, eps=eps, opts=opts) * s
+    x0 = (x0 - domain0[0]) * scale0
+    s = _shift(s0, x0, vec)
+    if x1 is None:
+        return (nufft2(c, x0, iflag=1, eps=eps, opts=opts) * s).real
 
     scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
-    xq1 = (xq1 - domain1[0]) * scale1
-    s = s * _shift(s1, xq1, vec)
-    return jfi_nufft2(c, xq0, xq1, iflag=1, eps=eps, opts=opts) * s
+    x1 = (x1 - domain1[0]) * scale1
+    s = s * _shift(s1, x1, vec)
+    return (nufft2(c, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
 
-def _shift(s, xq, vec):
+def _shift(s, x, vec):
     if s is None:
         return 1
-    s = jnp.exp(1j * s * xq)
+    s = jnp.exp(1j * s * x)
     return s[:, jnp.newaxis] if vec else s
 
 
@@ -532,14 +524,14 @@ def dct_from_cheb(cheb, axis=-1):
     return cheb.at[Index.get(0, axis, cheb.ndim)].multiply(2)
 
 
-def interp_dct(xq, f, lobatto=False, axis=-1):
-    """Interpolate ``f`` to ``xq`` with discrete Chebyshev transform.
+def interp_dct(x, f, lobatto=False, axis=-1):
+    """Interpolate ``f`` to ``x`` with discrete Chebyshev transform.
 
     Parameters
     ----------
-    xq : jnp.ndarray
+    x : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with shape ``np.delete(f.shape,axis)``.
+        Shape of ``x`` must broadcast with shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
         Real function values on Chebyshev points to interpolate.
     lobatto : bool
@@ -556,7 +548,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     """
     errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
     return idct_non_uniform(
-        xq,
+        x,
         cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
         / (f.shape[axis] - lobatto),
         f.shape[axis],
@@ -564,14 +556,14 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     )
 
 
-def idct_non_uniform(xq, a, n, axis=-1, vander=None):
-    """Evaluate discrete Chebyshev transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
+def idct_non_uniform(x, a, n, axis=-1, vander=None):
+    """Evaluate discrete Chebyshev transform coefficients ``a`` at ``x`` ∈ [-1, 1].
 
     Parameters
     ----------
-    xq : jnp.ndarray
+    x : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with shape ``np.delete(a.shape,axis)``.
+        Shape of ``x`` must broadcast with shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
         Discrete Chebyshev transform coefficients.
     n : int
@@ -589,10 +581,10 @@ def idct_non_uniform(xq, a, n, axis=-1, vander=None):
 
     """
     if vander is None:
-        vander = jnp.cos(jnp.arange(n) * jnp.arccos(xq)[..., jnp.newaxis])
+        vander = jnp.cos(jnp.arange(n) * jnp.arccos(x)[..., jnp.newaxis])
         a = jnp.moveaxis(a, axis, -1)
         axis = -1
-    # Better than Clenshaw recursion ``chebval(xq,a,tensor=False)`` on GPU.
+    # Better than Clenshaw recursion ``chebval(x,a,tensor=False)`` on GPU.
     return (vander * a).sum(axis)
 
 

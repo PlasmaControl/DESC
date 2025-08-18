@@ -76,11 +76,11 @@ from interpax import interp2d
 
 def K_decomp(p_M, p_N,
            sdata1,
-           sdata2,
-           sdata3,
+           #sdata2,
+           #sdata3,
            sgrid,
            surface,
-           y,
+           #y,
            dt, dz,
            N,
            d_0):
@@ -96,39 +96,36 @@ def K_decomp(p_M, p_N,
     
     name = "iso_coords/"
     dl_data, dr_data, dd_data, du_data = shift_grid(theta, zeta, dt, dz, surface, name)
-
-    du_data["u_iso"] = jnp.asarray(du_data["u_iso"])
-    dd_data["u_iso"] = jnp.asarray(dd_data["u_iso"])
-    du_data["v_iso"] = jnp.asarray(du_data["v_iso"])
-    dd_data["v_iso"] = jnp.asarray(dd_data["v_iso"])
-    dr_data["u_iso"] = jnp.asarray(dr_data["u_iso"])
-    dr_data["v_iso"] = jnp.asarray(dr_data["v_iso"])
-    dl_data["u_iso"] = jnp.asarray(dl_data["u_iso"])
-    dl_data["v_iso"] = jnp.asarray(dl_data["v_iso"])
-
+    
     assert (p_M * 2+1)*(p_N * 2+1) == dl_data["theta"].shape[0] , "Check that the number of dipole locations coincide with the number of dipoles"
     r = dl_data["theta"].shape[0]  # Make r a Python int for indexing
 
+    x_sol = jnp.zeros(r)
     for i in range(0,r):
 
-        omega_total_real += y_pol * jnp.real(omega_pol3) + y_tor * jnp.real(omega_tor3)
-        omega_total_imag += y_pol * jnp.imag(omega_pol3) + y_tor * jnp.imag(omega_tor3)
-        return None
-        #omega_total_real, omega_total_imag
+        omega_pol1 = omega_pair(
+            sdata1,
+            du_data["u_iso"][i], du_data["v_iso"][i],
+            dd_data["u_iso"][i], dd_data["v_iso"][i],
+            N, d_0
+        )
 
-    omega_total_real1, omega_total_imag1 = fori_loop(0, r, body_fun1, (jnp.zeros_like(sdata1["theta"]),
-                                                                       jnp.zeros_like(sdata1["theta"]))
-                                                    )
+        omega_tor1 = omega_pair(
+            sdata1,
+            dr_data["u_iso"][i], dr_data["v_iso"][i],
+            dl_data["u_iso"][i], dl_data["v_iso"][i],
+            N, d_0
+        )
 
-    return ( ( ( sdata1["lambda_iso"] ** (-1) ) * ( omega_total_imag1 * cross(sdata1["n_rho"],sdata1["e_u"]).T
-                                                   + omega_total_real1 * cross(sdata1["n_rho"],sdata1["e_v"]).T
-                                                    + omega_total_imag2 * cross(sdata2["n_rho"],sdata2["e_u"]).T 
-                                                    + omega_total_real2 * cross(sdata2["n_rho"],sdata2["e_v"]).T
-                                                    + omega_total_imag3 * cross(sdata3["n_rho"],sdata3["e_u"]).T 
-                                                    + omega_total_real3 * cross(sdata3["n_rho"],sdata3["e_v"]).T
-                                                 )
-              ).T
-            )#.flatten()
+        A = jnp.real(omega_pol1)
+        B = jnp.real(omega_tor1)
+        C = jnp.imag(omega_pol1)
+        D = jnp.imag(omega_tor1)
+
+        x_sol = x_sol.at[i].set( ( A * D - B * C) ** (-1) * sdata1['lambda_iso'] ** (-1) * ( D * sdata['K.e_u'] - B * sdata['K.e_v']) )
+        x_sol =  x_sol.at[i + r].set( (A * D - B * C) ** (-1) * sdata1['lambda_iso'] ** (-1) * ( - C * sdata['K.e_u'] - A * sdata['K.e_v']) )
+
+    return x_sol
 
 def bn_res(p_M, p_N, sdata1,
            sdata2,

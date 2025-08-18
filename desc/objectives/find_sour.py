@@ -10,10 +10,12 @@ from desc.utils import cross, dot
 
 
 def bn_res(
-    p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid  # w_surface,
+    p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid,
+    tdata
 ):
 
-    B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid)
+    B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid,
+    tdata)
 
     B_wire_cont = B_theta_contours(
         p_M,
@@ -61,6 +63,7 @@ def B_sour(
     d_0,
     eq,
     Bgrid,
+    tdata,
 ):
 
     return _compute_magnetic_field_from_Current(
@@ -77,6 +80,7 @@ def B_sour(
             # dt, dz,
             N,
             d_0,
+            tdata,
         ),
         surface,
         eq,
@@ -280,6 +284,7 @@ def K_sour(
     # dt, dz,
     N,
     d_0,
+    tdata,
 ):
 
     theta = jnp.linspace(
@@ -294,7 +299,7 @@ def K_sour(
         p_N * 2,
     )
 
-    ss_data = interp_grid(theta, zeta, surface)
+    ss_data = interp_grid(theta, zeta, surface, tdata)
 
     assert (p_M * 2) * (p_N * 2) == ss_data["theta"].shape[
         0
@@ -815,7 +820,7 @@ def iso_coords_interp_old(name, _data, sgrid, eq):
     return _data
 
 
-def interp_grid(theta, zeta, w_surface):
+def interp_grid(theta, zeta, w_surface, tdata):
 
     # Find grids for dipoles
     s_grid = alt_grid(theta, zeta)
@@ -833,7 +838,7 @@ def interp_grid(theta, zeta, w_surface):
         grid=s_grid,
     )
 
-    return iso_coords_interp(s_data, s_grid, w_surface)
+    return iso_coords_interp(tdata, s_data, w_surface)
 
 
 def add_extra(data_, n_size, m_size):

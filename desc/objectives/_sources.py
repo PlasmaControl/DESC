@@ -302,6 +302,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "sdata3": field_data3,
             "N_sum": self._N_sum,
             "d0": self._d0,
+            'iso_data':self._iso_data,
         }
 
         if self._normalize:
@@ -352,6 +353,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants["d0"],
             constants["eq"],
             constants["eval_grid"],
+            constants['iso_data'],
         )
 
         error = B_src - constants["B_target"]

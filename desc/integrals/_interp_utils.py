@@ -416,8 +416,8 @@ def nufft2r(
     ----------
     c : jnp.ndarray
         Fourier coefficients cₙ of the map x ↦ c(x) such that c(x) = ∑ₙ cₙ exp(i n x)
-        where n >= 0. If ``x1`` is given, then expects the Fourier coefficients cₘₙ of
-        the map x₁,x₂ ↦ c(x₁,x₂) such that c(x₁,x₂) = ∑ₘₙ cₘₙ exp(i m x₁) exp(i n x₂).
+        where n >= 0. If x₁ is given, then expects the Fourier coefficients cₘₙ of
+        the map x₀,x₁ ↦ c(x₀,x₁) such that c(x₀,x₁) = ∑ₘₙ cₘₙ exp(i m x₀) exp(i n x₁).
     x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         For a 2D transform, the coordinates stored here must be the same coordinate
@@ -428,12 +428,12 @@ def nufft2r(
         For a 2D transform, the coordinates stored here must be the same coordinate
         enumerated across axis ``-1`` of ``c``.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``x0`` over which samples were taken.
+        Domain of coordinate specified by x₀ over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``x1`` over which samples were taken.
+        Domain of coordinate specified by x₁ over which samples were taken.
     rfft_axis : int
         Axis along which real FFT was performed.
-        If -1 (-2), assumes c(x₁,x₂) = ∑ₘₙ cₘₙ exp(i m x₁) exp(i n x₂) where
+        If -1 (-2), assumes c(x₀,x₁) = ∑ₘₙ cₘₙ exp(i m x₀) exp(i n x₁) where
             n ( m) >= 0, respectively.
     vec : bool
         If set to ``True``, then it is assumed that multiple Fourier series are

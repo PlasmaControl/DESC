@@ -282,12 +282,12 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_target": B_target,
-            'p_M': field.p_M,
-            'p_N': field.p_N,
-            'sdata1':sdata1,
-            'sdata2':sdata2,
-            'sdata3':sdata3,
-            'N_sum': N_sum,
+            'p_M': 10,#self._field.p_M,
+            'p_N': 10,#self._field.p_N,
+            'sdata1':field_data1,
+            'sdata2':field_data2,
+            'sdata3':field_data3,
+            'N_sum': self._N_sum,
             'd0':self._d0,
         }
 
@@ -298,7 +298,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, #*field_params, 
-                params1,
+                params1 = None,
                 #params2 = None,
                 #params2 = None,
                 constants=None):

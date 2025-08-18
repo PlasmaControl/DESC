@@ -9,7 +9,7 @@ import pickle
 
 import jax
 import jax.numpy as jnp
-from jax import jit, jacfwd, lax
+from jax import jacfwd, lax#,jit,
 
 from netCDF4 import Dataset
 import h5py

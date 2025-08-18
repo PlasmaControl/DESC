@@ -82,18 +82,16 @@ _bounce_doc = {
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
 
-        Due to bugs in upstream libraries
-        (https://github.com/flatironinstitute/jax-finufft/issues/158),
-        you must specify ``nufft_eps=0`` if you intend to use automatic differentiation
-        to differentiate the computation. Performance will improve significantly once
-        jax-finufft fixes this.
+        Due to bugs in upstream libraries, you should specify ``nufft_eps=0`` if
+        you intend to use automatic differentiation to differentiate the computation.
         """,
     "spline": """bool :
         Whether to use cubic splines to compute bounce points.
         The recommended setting is ``True``.
         """,
     "_vander": """dict[str,jnp.ndarray] :
-        Precomputed transform matrices.
+        Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
+        This parameter is intended to be used by objectives only.
         """,
 }
 

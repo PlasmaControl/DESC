@@ -2010,41 +2010,35 @@ class TestObjectiveFunction:
             num_quad=num_quad,
             num_pitch=num_pitch,
         )
-        obj = EffectiveRipple(
-            eq,
-            grid=grid,
-            X=X,
-            Y=Y,
-            num_transit=num_transit,
-            num_quad=num_quad,
-            num_pitch=num_pitch,
-            jac_chunk_size=1,
-        )
+        with pytest.warns(UserWarning):
+            obj = EffectiveRipple(
+                eq,
+                grid=grid,
+                X=X,
+                Y=Y,
+                num_transit=num_transit,
+                num_quad=num_quad,
+                num_pitch=num_pitch,
+                nufft_eps=1e-6,
+            )
         obj.build()
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict),
-            grid.compress(data["effective ripple"]),
-            # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
-            # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
-            rtol=1e-6,
+            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
         )
-        obj = GammaC(
-            eq,
-            grid=grid,
-            X=X,
-            Y=Y,
-            num_transit=num_transit,
-            num_quad=num_quad,
-            num_pitch=num_pitch,
-            jac_chunk_size=1,
-        )
+        with pytest.warns(UserWarning):
+            obj = GammaC(
+                eq,
+                grid=grid,
+                X=X,
+                Y=Y,
+                num_transit=num_transit,
+                num_quad=num_quad,
+                num_pitch=num_pitch,
+                nufft_eps=1e-7,
+            )
         obj.build()
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict),
-            grid.compress(data["Gamma_c"]),
-            # TODO: https://github.com/flatironinstitute/jax-finufft/issues/158
-            # obj.compute currently uses nufft_eps = 0 due to AD bug in jax-finufft
-            rtol=2e-4,
+            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
 
         obj = desc.objectives.BallooningStability(eq=eq)
@@ -3981,15 +3975,14 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
-        )
+        with pytest.warns(UserWarning):
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
+            )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
-            # TODO:Change default objective setting to use nuffts AD is fixed.
-            # https://github.com/flatironinstitute/jax-finufft/issues/158
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(
@@ -4012,15 +4005,14 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-7)
-        )
+        with pytest.warns(UserWarning):
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-7)
+            )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
-            # TODO:Change default objective setting to use nuffts AD is fixed.
-            # https://github.com/flatironinstitute/jax-finufft/issues/158
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))

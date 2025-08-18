@@ -21,7 +21,8 @@ New Features
 Performance Improvements
 
 - [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
-- [Nuffts in bounce integrals](https://github.com/PlasmaControl/DESC/pull/1834).
+- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
+  However, they are not used in optimization objectives yet due to bugs in upstream libraries.
 
 Bug Fixes
 

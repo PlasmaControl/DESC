@@ -350,7 +350,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants["winding_surface"],
             params1["x_mn"],
             # self._sinks_and_sources.x_mn,
-            constants["N_sum"],
+            self._N_sum,
             constants["d0"],
             constants["eq"],
             constants["eval_grid"],

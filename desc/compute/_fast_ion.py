@@ -231,7 +231,7 @@ def _poloidal_drift(data, B, pitch):
     units="~",
     units_long="None",
     description="Fast ion confinement proxy",
-    dim=3,
+    dim=2,
     params=[],
     transforms={"grid": []},
     profiles=[],

@@ -39,55 +39,71 @@ First download the repository from GitHub.
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+.. tab-set::
 
-`tested to work on M1 Macbook on May 3, 2023`
+    .. tab-item:: CPU
 
-.. code-block:: sh
+        .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.10, <=3.13'
-    conda activate desc-env
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
+            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda activate desc-env
+            pip install --editable .
+            # optionally install developer requirements (if you want to run tests)
+            pip install -r devtools/dev-requirements.txt
 
-**Or using uv instead of pip**
+        These instructions were tested to work on an M1 Macbook device on May 3, 2023.
 
-One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
-For a project that modifies DESC and also uses it to perform analysis,
-it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
-This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
-and with the ability to use DESC in a jupyter notebook.
+    .. tab-item:: CPU+GPU
 
-.. code-block:: sh
+        For GPU support, you must install the JAX library as discussed on the JAX GitHub.
+        For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
 
-    # download UV; it installs into .local/bin
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+        .. code-block:: sh
 
-    # the depth=1 option reduces the quantity of older data downloaded
-    git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda activate desc-env
+            sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+            pip install --editable .
+            # optionally install developer requirements (if you want to run tests)
+            pip install -r devtools/dev-requirements.txt
 
-    # initialize a project
-    uv init myproject
-    cd myproject
+    .. tab-item:: CPU with uv
 
-    # add dependencies
-    uv add --editable "../DESC"
+        One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
+        For a project that modifies DESC and also uses it to perform analysis,
+        it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
+        This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
+        and with the ability to use DESC in a jupyter notebook.
 
-    # test the installation
-    uv run python
+        .. code-block:: sh
 
-    >>> from desc.backend import print_backend_info
-    >>> print_backend_info()
+            # download UV; it installs into .local/bin
+            curl -LsSf https://astral.sh/uv/install.sh | sh
 
-    # Jupyter Notebooks
-    # ----------------
-    # install a jupyter kernel
-    uv add --dev ipykernel
-    uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
+            # the depth=1 option reduces the quantity of older data downloaded
+            git clone --depth=1 git@github.com:PlasmaControl/DESC.git
 
-    # run jupyter
-    uv run --with jupyter jupyter lab
+            # initialize a project
+            uv init myproject
+            cd myproject
+
+            # add dependencies
+            uv add --editable "../DESC"
+
+            # test the installation
+            uv run python
+
+            >>> from desc.backend import print_backend_info
+            >>> print_backend_info()
+
+            # Jupyter Notebooks
+            # ----------------
+            # install a jupyter kernel
+            uv add --dev ipykernel
+            uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
+
+            # run jupyter
+            uv run --with jupyter jupyter lab
 
 
 On Most Linux Computing Clusters
@@ -319,3 +335,26 @@ If you encounter issues during installation, please `leave us an issue on Github
         pip install nvidia-cublas-cu12==12.9.0.13
 
     in addition to the recommended install instructions.
+
+.. tip::
+
+    **Problem**: Calling ``pytest`` to run tests leads to import errors [as discussed here](https://github.com/PlasmaControl/DESC/issues/1859).
+
+    **Solution**:
+    This issue occurs because ``pip`` is an imperfect package manager, and the packages
+    it installs have a tendency to leak out of the environment when ``pip`` thinks
+    it can cache files globally to share among local environments.
+    One way to resolve the issue is to prepend ``python -m`` to any command with ``pytest``.
+    Alternatively one can fix their broken installation of ``pytest`` as follows.
+
+    Since ``pytest`` has leaked out of the environment, you must uninstall it globally.
+    If you use ``conda``, uninstall it from the ``base`` environment, then reinstall
+    in the local environment as follows.
+
+    .. code-block:: sh
+
+        conda deactivate
+        conda activate base
+        pip unistall pytest
+        conda activate desc-env
+        pip install pytest

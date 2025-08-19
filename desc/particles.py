@@ -126,6 +126,12 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         integration. Thus, it is not implemented. For that case, we recommend converting
         the final output to "lab" frame after the integration is done using
         Equilibrium.map_coordinates method.
+
+        If anytime during the integration, the particle's rho coordinate becomes
+        smaller than 1e-6, the magnetic field is computed at rho = 1e-6 to avoid
+        numerical issues with the rho = 0. Note that particle position doesn't have
+        discontinuity due to this, only the magnetic field is computed at a different
+        point.
     """
 
     vcoords = ["vpar"]

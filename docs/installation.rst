@@ -123,7 +123,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
         **Install from PyPI**
 
-        .. code-block:: console
+        .. code-block:: sh
 
             pip install desc-opt
 
@@ -289,13 +289,13 @@ You should see an output stating the DESC version, the JAX version, and your dev
 
 You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__):
 
-.. code-block:: console
+.. code-block:: sh
 
     python -m desc -vv desc/examples/SOLOVEV
 
 For GPU, one can use,
 
-.. code-block:: console
+.. code-block:: sh
 
     python -m desc -vv desc/examples/SOLOVEV -g
 
@@ -369,6 +369,6 @@ If you encounter issues during installation, please `leave us an issue on Github
 
         conda deactivate
         conda activate base
-        pip unistall pytest
+        pip uninstall pytest
         conda activate desc-env
         pip install pytest

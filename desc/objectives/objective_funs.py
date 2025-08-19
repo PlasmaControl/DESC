@@ -1475,10 +1475,8 @@ class _Objective(IOAble, ABC):
         "_print_value_fmt",
         "_scalar",
         "_units",
+        "_device",
     ]
-    # _device is of type 'jaxlib.xla_extension.Device' which cannot be an argument
-    # to a jitted function.
-    _static_attrs = ["_device"]
 
     def __init__(
         self,

@@ -146,7 +146,7 @@ class PlasmaField(_MagneticField):
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
         # Normalize the coordinates
-        out_grid = Grid((coords - shifts) / scales)
+        out_grid = Grid((coords - shifts) / scales, jitable=True)
         out_transform = Transform(
             out_grid, basis_obj, build_pinv=False, build=True, derivs=1
         )

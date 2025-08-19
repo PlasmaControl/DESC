@@ -1839,27 +1839,20 @@ class Equilibrium(Optimizable, _MagneticField):
             will be replaced by the equilibrium's internal magnetic field, as given by
             the equilibrium solve and assuming nested flux surfaces.
         """
+        assert method in ["biot-savart", "virtual casing", "vector potential"]
+
+        # Evenly spaced meshgrid with an endpoint at phi=2pi/NFP
         if NFP is None:
             NFP = self.NFP
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=True)
-        if source_grid is None:
-            if method == "virtual casing":
-                source_grid = LinearGrid(
-                    rho=jnp.array([1.0]),
-                    M=256,
-                    N=256,
-                    NFP=self.NFP if self.N > 0 else 64,
-                    sym=False,
-                )
-            else:
-                source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
-        # Direct methods for computing magnetic field
-        if method in ["biot-savart", "virtual casing"]:
-            [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-            coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
+        coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
+        # Direct methods for computing magnetic field
+
+        if method in ["biot-savart", "virtual casing"]:
             B, data = self.compute_magnetic_field(
                 coords,
                 source_grid=source_grid,
@@ -1867,7 +1860,7 @@ class Equilibrium(Optimizable, _MagneticField):
                 method=method,
                 return_data=True,
             )
-        else:
+        elif method == "vector potential":
             # curl(A) method
             from .plasma_field import PlasmaField
 
@@ -1912,8 +1905,8 @@ class Equilibrium(Optimizable, _MagneticField):
                 grid = ConcentricGrid(
                     self.L_grid, self.M_grid, max(self.N_grid, self.M_grid)
                 )
-                yg = grid.nodes
-                xg = self.compute("x", grid, basis="xyz")
+                yg = jnp.array(grid.nodes)
+                xg = self.compute("x", grid, basis="xyz")["x"]
                 eval_xyz = rpz2xyz(plasma_coords)
 
                 def _distance_body(x):

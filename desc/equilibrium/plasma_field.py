@@ -185,7 +185,7 @@ class PlasmaField(_MagneticField):
 
         Returns
         -------
-        field : ndarray, shape(n,3)
+        field : ndarray, shape(l,m,n,3)
             Magnetic field at specified points
         """
         if NFP is None:

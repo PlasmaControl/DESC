@@ -264,7 +264,7 @@ On computing clusters you must ensure to `module load anaconda` to use conda (in
 
 
 Verifying your Installation
-**************************
+***************************
 
 To verify your installation works, try the following.
 

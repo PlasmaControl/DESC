@@ -43,7 +43,7 @@ On Your Local Machine
             conda activate desc-env
             pip install --editable .
 
-        You may optionally install developer requirements (if you want to run tests).
+        If you installed from GitHub, you may optionally install developer requirements (if you want to run tests).
 
         .. code-block:: sh
 
@@ -146,7 +146,7 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
             conda activate desc-env
             pip install --editable .
 
-        You may optionally install developer requirements (if you want to run tests).
+        If you installed from GitHub, you may optionally install developer requirements (if you want to run tests).
 
         .. code-block:: sh
 
@@ -307,22 +307,18 @@ If you encounter issues during installation, please `leave us an issue on Github
 
 .. tip::
 
-    **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
+    **Problem**: My installation yields the error :code:`ModuleNotFoundError: No module named 'desc'`.
 
     **Solution**:
-
     This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
-
     Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file. You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
-
-    Try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
+    Also, try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
 
 .. tip::
 
     **Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
 
     **Solution**:
-
     You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
 
 .. tip::
@@ -331,9 +327,7 @@ If you encounter issues during installation, please `leave us an issue on Github
     desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatibilities.
 
     **Solution**:
-
     This may be caused by a version of DESC already having been installed in your base conda environment.
-
     Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.
 
 .. tip::
@@ -342,17 +336,15 @@ If you encounter issues during installation, please `leave us an issue on Github
 
     **Solution**:
     JAX version 0.6.1 may cause silent installation failures on GPU where the installation appears to succeed, but when running DESC, you will get an error like ``XlaRuntimeError: INTERNAL: cuSolver internal error``.
-    To solve this problem, it is recommended to upgrade the JAX version to a newer version than 0.6.1. If you for some reason must use version 0.6.1, then to avoid these errors you need to run
+    To solve this problem, it is recommended to upgrade the JAX version to a newer version than 0.6.1. If you for some reason must use version 0.6.1, then to avoid these errors you need to also install the following package.
 
     .. code-block:: sh
 
         pip install nvidia-cublas-cu12==12.9.0.13
 
-    in addition to the recommended install instructions.
-
 .. tip::
 
-    **Problem**: Calling ``pytest`` to run tests leads to import errors [as discussed here](https://github.com/PlasmaControl/DESC/issues/1859).
+    **Problem**: Using ``pytest`` to run tests leads to import errors `as discussed here <https://github.com/PlasmaControl/DESC/issues/1859>`__.
 
     **Solution**:
     This issue occurs because ``pip`` is an imperfect package manager, and the packages
@@ -360,7 +352,6 @@ If you encounter issues during installation, please `leave us an issue on Github
     it can cache files globally to share among local environments.
     One way to resolve the issue is to prepend ``python -m`` to any command with ``pytest``.
     Alternatively one can fix their broken installation of ``pytest`` as follows.
-
     Since ``pytest`` has leaked out of the environment, you must uninstall it globally.
     If you use ``conda``, uninstall it from the ``base`` environment, then reinstall
     in the local environment as follows.

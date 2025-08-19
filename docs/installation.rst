@@ -103,6 +103,9 @@ On Your Local Machine
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             pip install --editable .
 
+        Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``
+
         You may optionally install developer requirements if you want to run tests.
 
         .. code-block:: sh
@@ -113,7 +116,7 @@ On Your Local Machine
 On Most Linux Computing Clusters
 ********************************
 
-On computing clusters you must ensure to `module load anaconda` to use conda (in some clusters, you must specify the version of anaconda you need).
+On computing clusters you must call ``module load anaconda`` to use conda (in some clusters, you must specify the version of anaconda you need).
 
 
 .. tab-set::
@@ -149,14 +152,14 @@ On computing clusters you must ensure to `module load anaconda` to use conda (in
 
         For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         We will show instructions that work for the clusters we have tested.
-        Most of these clusters below are `x86_64` architectures
+        Most of these clusters below are `x86_64` architectures.
         You may try the instructions for the cluster most resembling your own, or see if your cluster has
-        specific JAX GPU installation instructions, as that is the main cause for installation differences among clusters.
+        JAX GPU installation instructions, as that is the main cause for installation differences among clusters.
 
         .. attention::
+
             DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet).
             Older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
-
 
         .. dropdown:: Perlmutter (NERSC)
 
@@ -311,7 +314,7 @@ If you encounter other problems, please `make an issue on Github <https://github
     **Problem**: My installation yields the error :code:`ModuleNotFoundError: No module named 'desc'`.
 
     **Solution**:
-    First ensure you have activated the conda environment where DESC is installed ( ``conda activate desc-env`` ).
+    First ensure you have activated the conda environment where DESC is installed (``conda activate desc-env``).
     If the issue persists, it is possible that DESC has not been added to your ``PYTHONPATH``.
     Try adding the DESC directory to your ``PYTHONPATH`` manually by adding ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` to the end of your ``~/.bashrc`` (or other shell configuration) file.
     Note that ``/path/to/DESC`` should be replaced with the actual path to the DESC directory on your machine.
@@ -322,7 +325,7 @@ If you encounter other problems, please `make an issue on Github <https://github
     **Problem**: My installation yields the error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
 
     **Solution**:
-    Ensure you have activated the conda environment where DESC is installed ( ``conda activate desc-env`` ).
+    Ensure you have activated the conda environment where DESC is installed (``conda activate desc-env``).
 
 .. tip::
 

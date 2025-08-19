@@ -1,0 +1,88 @@
+name: MPI tests
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression_tests:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'tests/test_mpi*'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+              - '.github/workflows/mpi_tests.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
+      - name: Install MPI (OpenMPI + compiler)
+        if: env.has_changes == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenmpi-dev openmpi-bin
+
+      - name: Set up virtual environment
+        run: |
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
+          # install mpi4py after OpenMPI is available
+          pip install mpi4py
+
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          mpirun --version
+          pip list
+
+      - name: Test with pytest using mpirun
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          python -m pytest -v -m mpi

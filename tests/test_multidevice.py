@@ -1,23 +1,31 @@
 """Tests for the multidevice capabilities."""
 
+import warnings
+
 # This file has to run on a separate process because it changes the number of CPUs
 from desc import _set_cpu_count, set_device
 
-num_device = 1
-_set_cpu_count(num_device)
-set_device(kind="cpu", num_device=num_device)
+num_device = 2
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    _set_cpu_count(num_device)
+    set_device(kind="cpu", num_device=num_device)
 
 import numpy as np
 import pytest
 
-from desc.backend import jax
+try:
+    from mpi4py import MPI
+except ModuleNotFoundError:
+    print("mpi4py is not installed, skipping MPI tests.")
+    pytest.skip("mpi4py is not installed, skipping MPI tests.", allow_module_level=True)
+
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import ForceBalance, ObjectiveFunction
 
 
-@pytest.mark.xfail(reason="We need to make a new action for these tests.")
-@pytest.mark.unit
+@pytest.mark.mpi
 def test_multidevice_jac():
     """Test that the Jacobian is the same for a single and multi device."""
     eq = get("HELIOTRON")
@@ -43,16 +51,14 @@ def test_multidevice_jac():
     objective3 = ForceBalance(eq2, grid=grid3, device_id=0)
     objective4 = ForceBalance(eq2, grid=grid4, device_id=0)
 
-    for obj in [objective1, objective2, objective3, objective4]:
-        obj.build()
-        obj = jax.device_put(obj, device=obj._device)
-    objective1.things[0] = eq1
-    objective2.things[0] = eq1
-    objective3.things[0] = eq2
-    objective4.things[0] = eq2
+    # need to pass MPI communicator to the ObjectiveFunction
+    with pytest.raises(ValueError):
+        # this one is multi-device, and grids have different sizes
+        obj1 = ObjectiveFunction([objective1, objective2])
 
-    # this one is multi-device, and grids have different sizes
-    obj1 = ObjectiveFunction([objective1, objective2])
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        obj1 = ObjectiveFunction([objective1, objective2], mpi=MPI)
     # this one is single device, and grids have different sizes
     obj2 = ObjectiveFunction([objective3, objective4])
     obj1.build()

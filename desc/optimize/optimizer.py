@@ -5,7 +5,6 @@ import io
 import warnings
 
 import numpy as np
-import nvtx
 from termcolor import colored
 
 from desc.io import IOAble
@@ -276,7 +275,6 @@ class Optimizer(IOAble):
 
         timer.start("Solution time")
 
-        rng_opt = nvtx.start_range(message="Actual Optimization", color="red")
         result = optimizers[method]["fun"](
             objective,
             nonlinear_constraint,
@@ -287,9 +285,7 @@ class Optimizer(IOAble):
             stoptol,
             options,
         )
-        nvtx.end_range(rng_opt)
 
-        rng_po = nvtx.start_range(message="Post Optimization", color="red")
         if isinstance(objective, LinearConstraintProjection):
             # remove wrapper to get at underlying objective
             result["allx"] = [objective.recover(x) for x in result["allx"]]
@@ -342,7 +338,6 @@ class Optimizer(IOAble):
                 t0.params_dict = final_params
             return things0, result
 
-        nvtx.end_range(rng_po)
         return things, result
 
 

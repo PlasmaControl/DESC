@@ -5,7 +5,6 @@ import os
 import warnings
 
 import numpy as np
-import nvtx
 from packaging.version import Version
 from termcolor import colored
 
@@ -573,7 +572,6 @@ if use_jax:  # noqa: C901
         """
         # we will use either CPU or GPU[0] for the matrix decompositions, so the
         # array of float64 should fit into single device
-        rng_pconcat = nvtx.start_range(message="Pconcat", color="blue")
         size = jnp.array([x.size for x in arrays])
         size = jnp.sum(size)
         if (
@@ -604,7 +602,6 @@ if use_jax:  # noqa: C901
         elif mode == "vstack":
             out = jnp.vstack([jax.device_put(x, device=device) for x in arrays])
 
-        nvtx.end_range(rng_pconcat)
         return out
 
 

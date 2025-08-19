@@ -1,6 +1,5 @@
 """Function for solving nonlinear least squares problems."""
 
-import nvtx
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp, qr
@@ -176,7 +175,6 @@ def lsqtr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    rng_comp = nvtx.start_range(message="First Compute/Jac", color="red")
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
@@ -185,7 +183,6 @@ def lsqtr(  # noqa: C901
     J = jac(x, *args).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
-    nvtx.end_range(rng_comp)
 
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
@@ -275,13 +272,10 @@ def lsqtr(  # noqa: C901
     alpha = 0.0  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
-        rng = nvtx.start_range(message="ITERATION", color="blue")
-
         # we don't want to factorize the extra stuff if we don't need to
         J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
         f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
-        rng_qr0 = nvtx.start_range(message="QR Newton", color="green")
         if tr_method == "svd":
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
@@ -299,7 +293,6 @@ def lsqtr(  # noqa: C901
             # Trust region solver will solve the augmented system
             # with a new Q and R
             del Q, R
-        nvtx.end_range(rng_qr0)
 
         actual_reduction = -1
 
@@ -311,7 +304,6 @@ def lsqtr(  # noqa: C901
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
-            rng_qr = nvtx.start_range(message="QR subproblem", color="green")
             if tr_method == "svd":
                 step_h, hits_boundary, alpha = trust_region_step_exact_svd(
                     f_a, U, s, Vt.T, trust_radius, alpha
@@ -324,10 +316,8 @@ def lsqtr(  # noqa: C901
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
                     p_newton, f_a, J_a, trust_radius, alpha
                 )
-            nvtx.end_range(rng_qr)
             step = d * step_h  # Trust-region solution in the original space.
 
-            rng_ss = nvtx.start_range(message="Select Step", color="red")
             step, step_h, predicted_reduction = select_step(
                 x,
                 J_h,
@@ -342,17 +332,12 @@ def lsqtr(  # noqa: C901
                 theta,
                 mode="jac",
             )
-            nvtx.end_range(rng_ss)
 
             step_h_norm = jnp.linalg.norm(step_h, ord=2)
             step_norm = jnp.linalg.norm(step, ord=2)
 
-            rng_fea = nvtx.start_range(message="Make feasible", color="red")
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            nvtx.end_range(rng_fea)
-            rng_fn = nvtx.start_range(message="Fnew", color="red")
             f_new = fun(x_new, *args)
-            nvtx.end_range(rng_fn)
             nfev += 1
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
@@ -402,11 +387,9 @@ def lsqtr(  # noqa: C901
             allx.append(x)
             f = f_new
             cost = cost_new
-            rng_jac = nvtx.start_range(message="Jac per iter", color="green")
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)
-            nvtx.end_range(rng_jac)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -441,13 +424,9 @@ def lsqtr(  # noqa: C901
 
         iteration += 1
         if verbose > 1:
-            rng_print = nvtx.start_range(message="Print Iter", color="red")
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm
             )
-            nvtx.end_range(rng_print)
-
-        nvtx.end_range(rng)
 
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
@@ -472,7 +451,6 @@ def lsqtr(  # noqa: C901
         alltr=alltr,
     )
     if verbose > 0:
-        rng_print = nvtx.start_range(message="Print Last", color="red")
         if result["success"]:
             print(result["message"])
         else:
@@ -484,6 +462,5 @@ def lsqtr(  # noqa: C901
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
-        nvtx.end_range(rng_print)
 
     return result

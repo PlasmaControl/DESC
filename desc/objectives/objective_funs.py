@@ -4,7 +4,6 @@ import functools
 from abc import ABC, abstractmethod
 
 import numpy as np
-import nvtx
 
 from desc.backend import (
     desc_config,
@@ -423,9 +422,7 @@ class ObjectiveFunction(IOAble):
             # message[1] is the state vector (for compute and jvp's)
             # message[2] is the tangents (for only jvp's)
             message = (None, None, None)
-            rng_wait = nvtx.start_range(message="Wait for message", color="red")
             message = self.comm.bcast(message, root=0)
-            nvtx.end_range(rng_wait)
             obj_idx_rank = self._obj_per_rank[self.rank]
             objs = [self.objectives[i] for i in obj_idx_rank]
 
@@ -433,10 +430,6 @@ class ObjectiveFunction(IOAble):
                 print(f"Rank {self.rank} STOPPING")
                 break
             elif "jvp" in message[0] and "proximal" not in message[0]:
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
                 xs = jax.device_put(
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
@@ -446,8 +439,6 @@ class ObjectiveFunction(IOAble):
 
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
-                rng_rank = nvtx.start_range(message="Worker Job JVP", color="green")
-                rng_xv = nvtx.start_range(message="form x and v", color="red")
                 xs = [
                     [xs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
@@ -456,7 +447,6 @@ class ObjectiveFunction(IOAble):
                     [vs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
-                nvtx.end_range(rng_xv)
 
                 J_rank = jit(
                     jvp_per_process,
@@ -467,19 +457,9 @@ class ObjectiveFunction(IOAble):
                     objs,
                     op=message[0],
                 ).block_until_ready()
-                rng_np = nvtx.start_range(message="numpy", color="red")
                 J_rank = np.asarray(J_rank)
-                nvtx.end_range(rng_np)
-                nvtx.end_range(rng_rank)
-                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
-                nvtx.end_range(rng)
             elif "compute" in message[0]:
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
-                rng_rank = nvtx.start_range(message="Worker Job Compute", color="green")
                 params = jax.device_put(
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
@@ -492,18 +472,9 @@ class ObjectiveFunction(IOAble):
                     objs,
                     op=message[0],
                 ).block_until_ready()
-                rng_np = nvtx.start_range(message="numpy", color="red")
                 f_rank = np.asarray(f_rank)
-                nvtx.end_range(rng_np)
-                nvtx.end_range(rng_rank)
-                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(f_rank, root=0)
-                nvtx.end_range(rng)
             elif "proximal_jvp" in message[0]:
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
                 op = message[0].replace("proximal_jvp_", "")
                 xs = jax.device_put(
                     message[1], self.objectives[obj_idx_rank[0]]._device
@@ -512,10 +483,6 @@ class ObjectiveFunction(IOAble):
                     message[2], self.objectives[obj_idx_rank[0]]._device
                 )
 
-                rng_rank = nvtx.start_range(
-                    message="Worker Job JVP Proximal", color="green"
-                )
-                rng_xv = nvtx.start_range(message="form x and v", color="red")
                 xs = [
                     [xs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
@@ -524,7 +491,6 @@ class ObjectiveFunction(IOAble):
                     [vs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
-                nvtx.end_range(rng_xv)
                 J_rank = jit(
                     jvp_proximal_per_process,
                     static_argnames="op",
@@ -534,13 +500,8 @@ class ObjectiveFunction(IOAble):
                     objs,
                     op=op,
                 ).block_until_ready()
-                rng_np = nvtx.start_range(message="numpy", color="red")
                 J_rank = np.asarray(J_rank)
-                nvtx.end_range(rng_np)
-                nvtx.end_range(rng_rank)
-                rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
-                nvtx.end_range(rng)
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -781,9 +742,7 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
-        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -796,19 +755,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
-                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_unscaled", params, None)
                 self.comm.bcast(message, root=0)
-                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
-                rng = nvtx.start_range(
-                    message="compute_unscaled on master", color="blue"
-                )
 
                 f_rank = jit(
                     compute_per_process,
@@ -818,11 +768,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
-                nvtx.end_range(rng)
-                print(f"Rank {self.rank} waiting to gather")
-                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
-                nvtx.end_range(rng_gather)
                 f = pconcat(fs)
         return f
 
@@ -843,9 +789,7 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
-        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -858,17 +802,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
-                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_scaled", params, None)
                 self.comm.bcast(message, root=0)
-                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
-                rng = nvtx.start_range(message="compute_scaled on master", color="blue")
 
                 f_rank = jit(
                     compute_per_process,
@@ -878,11 +815,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
-                nvtx.end_range(rng)
-                print(f"Rank {self.rank} waiting to gather")
-                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
-                nvtx.end_range(rng_gather)
                 f = pconcat(fs)
         return f
 
@@ -903,9 +836,7 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        rng_unpack = nvtx.start_range(message="unpack state", color="red")
         params = self.unpack_state(x)
-        nvtx.end_range(rng_unpack)
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
@@ -918,19 +849,10 @@ class ObjectiveFunction(IOAble):
             )
         else:  # pragma: no cover
             if self.rank == 0:
-                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("compute_scaled_error", params, None)
                 self.comm.bcast(message, root=0)
-                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
-                rng = nvtx.start_range(
-                    message="compute_scaled_error on master", color="blue"
-                )
 
                 f_rank = jit(
                     compute_per_process,
@@ -940,11 +862,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
-                nvtx.end_range(rng)
-                print(f"Rank {self.rank} waiting to gather")
-                rng_gather = nvtx.start_range(message="Gather to master", color="red")
                 fs = self.comm.gather(f_rank, root=0)
-                nvtx.end_range(rng_gather)
                 f = pconcat(fs)
         return f
 
@@ -1166,7 +1084,6 @@ class ObjectiveFunction(IOAble):
                 J += [Ji_]
         else:
             if self.rank == 0:
-                rng_unpack = nvtx.start_range(message="precheck", color="red")
                 v = ensure_tuple(v)
                 if len(v) > 1:
                     # using blocked for higher order derivatives is a pain, and only
@@ -1180,18 +1097,10 @@ class ObjectiveFunction(IOAble):
                 xs_splits = np.cumsum([t.dim_x for t in self.things])
                 xs = jnp.split(x, xs_splits)
                 vs = jnp.split(v[0], xs_splits, axis=-1)
-                nvtx.end_range(rng_unpack)
-                rng_bcast = nvtx.start_range(message="bcast to workers", color="red")
                 message = ("jvp_" + op, xs, vs)
                 self.comm.bcast(message, root=0)
-                nvtx.end_range(rng_bcast)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
-                print(
-                    f"Rank {self.rank} : {message[0]} for objectives ids: "
-                    + f"{obj_idx_rank}"
-                )
-                rng = nvtx.start_range(message="JVP on master", color="blue")
                 J_rank = jit(
                     jvp_per_process,
                     static_argnames="op",
@@ -1207,11 +1116,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 ).block_until_ready()
-                nvtx.end_range(rng)
-                rng_gather = nvtx.start_range(message="Gather to master", color="red")
-                print(f"Rank {self.rank} waiting to gather")
                 J = self.comm.gather(J_rank, root=0)
-                nvtx.end_range(rng_gather)
 
         # this is the transpose of the jvp when v is a matrix, for consistency with
         # jvp_batched

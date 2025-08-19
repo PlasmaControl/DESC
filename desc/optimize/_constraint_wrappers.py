@@ -3,7 +3,6 @@
 import functools
 
 import numpy as np
-import nvtx
 
 from desc.backend import jit, jnp, pconcat, put
 from desc.batching import batched_vectorize
@@ -1381,11 +1380,6 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         objective.comm.bcast(message, root=0)
 
         obj_idx_rank = objective._obj_per_rank[objective.rank]
-        print(
-            f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
-        )
-        rng_rank = nvtx.start_range(message="JVP Proximal on master", color="green")
-        rng_xv = nvtx.start_range(message="form x and v", color="red")
         xs = [
             [xgs[i] for i in objective._things_per_objective_idx[idx]]
             for idx in obj_idx_rank
@@ -1394,10 +1388,7 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
             [vgs[i] for i in objective._things_per_objective_idx[idx]]
             for idx in obj_idx_rank
         ]
-        nvtx.end_range(rng_xv)
-        rng_obj = nvtx.start_range(message="form objs and constants", color="red")
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        nvtx.end_range(rng_obj)
         J_rank = jit(
             jvp_proximal_per_process,
             static_argnames="op",
@@ -1407,12 +1398,6 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
             objs,
             op=op,
         )
-        nvtx.end_range(rng_rank)
-        print(f"Rank {objective.rank} waiting to gather")
-        rng_gat = nvtx.start_range(message="Gather to master", color="green")
         J = objective.comm.gather(J_rank, root=0)
-        nvtx.end_range(rng_gat)
-        rng_pcat = nvtx.start_range(message="Pconcat", color="blue")
         J = pconcat(J).T
-        nvtx.end_range(rng_pcat)
         return J.block_until_ready()

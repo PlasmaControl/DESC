@@ -262,6 +262,7 @@ class ObjectiveFunction(IOAble):
         "_name",
         "_things_per_objective_idx",
         "_use_jit",
+        "_is_mpi",
     ]
 
     def __init__(
@@ -357,7 +358,15 @@ class ObjectiveFunction(IOAble):
                 "There is at least one rank that does not have any objective assigned. "
                 f"Objectives per rank are {self._obj_per_rank}.",
             )
-            self._static_attrs += ["mpi", "comm", "rank", "size"]
+            self._static_attrs += [
+                "mpi",
+                "comm",
+                "rank",
+                "size",
+                "running",
+                "_obj_per_rank",
+                "_rank_per_objective",
+            ]
 
         if self._is_mpi and mpi is None:
             raise ValueError(

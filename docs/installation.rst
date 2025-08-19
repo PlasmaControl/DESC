@@ -3,12 +3,10 @@ Installation
 ============
 
 Follow these instructions to install DESC and its dependencies.
-Note that most of the installation options here do not install JAX with GPU support.
-We do include installation instructions to install JAX with GPU support on some computing clusters that we have tested.
-In general, to install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`__.
 
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
-Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
+Other package managers like venv could be used instead of conda.
+We only test with conda environments, so your mileage may vary with other managers.
 
 .. attention::
 
@@ -16,55 +14,61 @@ Other package managers like venv could be used instead of conda, we have just ch
 
 .. attention::
 
-    If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.
-
-    We don't test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results. For these reasons, we recommend using WSL if you have a Windows machine. For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
+    We do not test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results.
+    For these reasons, we recommend using Windows Subsystem for Linux (WSL) if you have a Windows machine.
+    For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__.
+    For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
 
 
 On Your Local Machine
 *********************
 
-**Install from PyPI**
-
-.. code-block:: console
-
-    pip install desc-opt
-
-**Or from GitHub (for development builds)**
-
-First download the repository from GitHub.
-
-.. code-block:: sh
-
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-
 .. tab-set::
 
     .. tab-item:: CPU
 
+        **Install from PyPI**
+
         .. code-block:: sh
 
+            pip install desc-opt
+
+        **Or from GitHub (for development builds)**
+
+        .. code-block:: sh
+
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
             conda create --name desc-env 'python>=3.10, <=3.13'
             conda activate desc-env
             pip install --editable .
-            # optionally install developer requirements (if you want to run tests)
+
+        You may optionally install developer requirements (if you want to run tests).
+
+        .. code-block:: sh
+
             pip install -r devtools/dev-requirements.txt
 
         These instructions were tested to work on an M1 Macbook device on May 3, 2023.
 
     .. tab-item:: CPU+GPU
 
-        For GPU support, you must install the JAX library as discussed on the JAX GitHub.
+        For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
 
         .. code-block:: sh
 
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
             conda create --name desc-env 'python>=3.10, <=3.13'
             conda activate desc-env
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             pip install --editable .
-            # optionally install developer requirements (if you want to run tests)
+
+        You may optionally install developer requirements (if you want to run tests).
+
+        .. code-block:: sh
+
             pip install -r devtools/dev-requirements.txt
 
     .. tab-item:: CPU with uv
@@ -141,7 +145,11 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
             conda create --name desc-env 'python>=3.10, <=3.13'
             conda activate desc-env
             pip install --editable .
-            # optionally install developer requirements (if you want to run tests)
+
+        You may optionally install developer requirements (if you want to run tests).
+
+        .. code-block:: sh
+
             pip install -r devtools/dev-requirements.txt
 
     .. tab-item:: CPU+GPU
@@ -187,12 +195,15 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                # installation for users
                 pip install --editable .
-                # optionally install developer requirements (if you want to run tests)
+
+            You may optionally install developer requirements (if you want to run tests).
+
+            .. code-block:: sh
+
                 pip install -r devtools/dev-requirements.txt
 
-            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initalization to work properly.
+            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initialization to work properly.
 
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
@@ -252,9 +263,12 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
             .. code-block:: sh
 
-                # installation for users
                 pip install --editable .
-                # optionally install developer requirements (if you want to run tests)
+
+            You may optionally install developer requirements (if you want to run tests).
+
+            .. code-block:: sh
+
                 pip install -r devtools/dev-requirements.txt
 
 
@@ -313,8 +327,8 @@ If you encounter issues during installation, please `leave us an issue on Github
 
 .. tip::
 
-    **Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-    desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatiblities.
+    **Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behavior is the source of the following dependency conflicts.
+    desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatibilities.
 
     **Solution**:
 

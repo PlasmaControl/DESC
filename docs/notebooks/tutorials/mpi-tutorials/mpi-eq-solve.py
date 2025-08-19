@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../../../"))
 sys.path.append(os.path.abspath("../../../../"))
 
+import numpy as np
 from mpi4py import MPI
 
 from desc import _set_cpu_count, set_device
@@ -33,10 +34,9 @@ elif kind == "gpu":
 from desc import config as desc_config
 from desc.backend import jax, print_backend_info
 from desc.examples import get
-from desc.objectives.getters import (
-    get_fixed_boundary_constraints,
-    get_parallel_forcebalance,
-)
+from desc.grid import LinearGrid
+from desc.objectives import ForceBalance, ObjectiveFunction
+from desc.objectives.getters import get_fixed_boundary_constraints
 
 if __name__ == "__main__":
     rank = MPI.COMM_WORLD.Get_rank()
@@ -68,10 +68,28 @@ if __name__ == "__main__":
         # for local testing use lower resolution
         eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
 
-    # this will create a parallel objective function
-    # user can create their own parallel objective function as well which will be
-    # shown in the next example
-    obj = get_parallel_forcebalance(eq, num_device=num_device, mpi=MPI, verbose=1)
+    # setup 2 grids for 2 objectives covering different flux surfaces
+    rhos = np.linspace(0.1, 1.0, eq.L_grid)
+    grid1 = LinearGrid(
+        rho=rhos[: rhos.size // 2],
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+    )
+    grid2 = LinearGrid(
+        rho=rhos[rhos.size // 2 :],
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+    )
+    obj = ObjectiveFunction(
+        [
+            ForceBalance(eq, grid=grid1, device_id=0),
+            ForceBalance(eq, grid=grid2, device_id=1),
+        ],
+        mpi=MPI,
+        deriv_mode="blocked",
+    )
     cons = get_fixed_boundary_constraints(eq)
 
     # Until this line, the code is performed on all ranks, so it might print some

@@ -1485,6 +1485,8 @@ class _Objective(IOAble, ABC):
         "_scalar",
         "_units",
         "_device",
+        "_device_id",
+        "_static_attrs",
     ]
 
     def __init__(

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  regression_tests:
+  mpi_tests:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -81,7 +81,7 @@ jobs:
           mpirun --version
           pip list
 
-      - name: Test with pytest using mpirun
+      - name: Test with pytest
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate

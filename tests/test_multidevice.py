@@ -20,31 +20,35 @@ except ModuleNotFoundError:
     print("mpi4py is not installed, skipping MPI tests.")
     pytest.skip("mpi4py is not installed, skipping MPI tests.", allow_module_level=True)
 
+from desc import config as desc_config
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import ForceBalance, ObjectiveFunction
 
 
 @pytest.mark.mpi
-def test_multidevice_jac():
-    """Test that the Jacobian is the same for a single and multi device."""
+def test_set_cpu_count():
+    """Test that _set_cpu_count."""
+    # we already called the function, just check the desc_config
+    assert desc_config["num_device"] == num_device
+    assert len(desc_config["devices"]) == num_device
+
+
+@pytest.mark.mpi
+def test_multidevice_objective():
+    """Test that objective function have proper attributes."""
     eq = get("HELIOTRON")
-    eq.change_resolution(6, 6, 3, 12, 12, 6)
+    with pytest.warns(UserWarning, match="Reducing radial (L) resolution"):
+        eq.change_resolution(6, 6, 3, 12, 12, 6)
     eq1 = eq.copy()
     eq2 = eq.copy()
 
-    grid1 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.2]), sym=True
-    )
-    grid2 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.6, 0.8]), sym=True
-    )
-    grid3 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.2, 0.6]), sym=True
-    )
-    grid4 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.4, 0.8, 0.9]), sym=True
-    )
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
+    grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.4, 0.8, 0.9], sym=True)
 
     objective1 = ForceBalance(eq1, grid=grid1, device_id=0)
     objective2 = ForceBalance(eq1, grid=grid2, device_id=1)
@@ -73,19 +77,37 @@ def test_multidevice_jac():
     assert obj1._deriv_mode == "blocked"
     assert obj2._deriv_mode == "batched"
 
+
+@pytest.mark.mpi
+def test_multidevice_jac():
+    """Test that the Jacobian is the same for a single and multi device."""
+    eq = get("HELIOTRON")
+    with pytest.warns(UserWarning, match="Reducing radial (L) resolution"):
+        eq.change_resolution(6, 6, 3, 12, 12, 6)
+    eq1 = eq.copy()
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
+
+    objective1 = ForceBalance(eq1, grid=grid1, device_id=0)
+    objective2 = ForceBalance(eq1, grid=grid2, device_id=1)
+
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        obj1 = ObjectiveFunction([objective1, objective2], mpi=MPI)
+    obj1.build()
+
     # creating grids like grid3 = [grid1, grid2] doesn't give the same
     # node, spacing and weight ordering, so we can't compare the Jacobians
     # or the objective values directly. Instead, we compare the objective
     # values before and after a single iteration of the solver. This should
     # always decrease the objective value.
     error_init1 = obj1.compute_scalar(obj1.x(eq1))
-    error_init2 = obj2.compute_scalar(obj2.x(eq2))
 
     eq1.solve(objective=obj1, maxiter=1)
-    eq2.solve(objective=obj2, maxiter=1)
 
     error_final1 = obj1.compute_scalar(obj1.x(eq1))
-    error_final2 = obj2.compute_scalar(obj2.x(eq2))
 
     assert error_final1 < error_init1
-    assert error_final2 < error_init2

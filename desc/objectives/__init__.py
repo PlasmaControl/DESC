@@ -107,4 +107,8 @@ from .linear_objectives import (
 )
 from .objective_funs import ObjectiveFunction
 
-from ._sources import SinksSourcesSurfaceQuadraticFlux
+from ._sources import ( 
+SinksSourcesSurfaceQuadraticFlux, 
+SinksSourcesSum,
+SinksSourcesRegularization,
+)

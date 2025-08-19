@@ -1145,7 +1145,7 @@ def _intfun_wrapper(
     """Wrapper for the integration function for vectorized inputs.
 
     Defining a lambda function inside the ``trace_particles`` function leads
-    to recompilations.
+    to recompilations, so instead we define the wrapper here.
     """
     return diffeqsolve(
         terms=model,

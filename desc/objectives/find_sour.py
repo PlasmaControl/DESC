@@ -10,45 +10,46 @@ from desc.utils import cross, dot
 
 
 def bn_res(
-    p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid,
+    p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, 
+        coords,#eq,Bgrid,
     tdata
 ):
 
-    B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, eq, Bgrid,
+    B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, 
+                #eq, Bgrid,
     tdata)
 
-    B_wire_cont = B_theta_contours(
-        p_M,
-        p_N,
-        sdata1,
-        sgrid,
-        surface,
-        y,
-        eq,
-        Bgrid,
-    )
+    #B_wire_cont = B_theta_contours(
+    #    p_M,
+    #    p_N,
+    #    sdata1,
+    #    sgrid,
+    #    surface,
+    #    y,
+    #    coords,#eq,Bgrid,
+    #)
 
-    B_sticks_ = B_sticks(
-        p_M,
-        p_N,
-        sgrid,
-        surface,
-        y,
-        eq,
-        Bgrid,
-    )
+    #B_sticks_ = B_sticks(
+    #    p_M,
+    #    p_N,
+    #    sgrid,
+    #    surface,
+    #    y,
+    #    coords,#eq,Bgrid,
+    #)
 
-    B_total = B0 + B_wire_cont + B_sticks_
+    B_total = B0 #+ B_wire_cont + B_sticks_
 
-    return jnp.concatenate(
-        (
-            B_total[:, 0],
-            B_total[:, 1],
-            B_total[:, 2],  # B field
-            jnp.asarray([jnp.sum(y)]),  # Sum of sources and sinks
-        )
-    )
+    #return jnp.concatenate(
+    #    (
+    #        B_total[:, 0],
+    #        B_total[:, 1],
+    #        B_total[:, 2],  # B field
+    #        jnp.asarray([jnp.sum(y)]),  # Sum of sources and sinks
+    #    )
+    #)
 
+    return B_total
 
 def B_sour(
     p_M,
@@ -61,8 +62,7 @@ def B_sour(
     y,
     N,
     d_0,
-    eq,
-    Bgrid,
+    coords,#eq,Bgrid,
     tdata,
 ):
 
@@ -83,8 +83,9 @@ def B_sour(
             tdata,
         ),
         surface,
-        eq,
-        Bgrid,
+        # Added line to avoid surface.compute
+        sdata1,
+        coords,#eq,Bgrid,
         basis="rpz",
     )
 
@@ -97,8 +98,7 @@ def B_theta_contours(
     sgrid,
     surface,
     y,
-    eq,
-    Bgrid,
+    coords,#eq,Bgrid,
 ):
 
     theta_coarse = jnp.linspace(
@@ -159,7 +159,9 @@ def B_theta_contours(
     K_cont = fori_loop(0, r_z, outer_body, jnp.zeros_like(ss_data["e_theta"]))
 
     return _compute_magnetic_field_from_Current_Contour(
-        ss_grid, K_cont, surface, eq, Bgrid, basis="rpz"
+        ss_grid, K_cont, surface, 
+        coords,#eq,Bgrid,
+        basis="rpz"
     )
 
 
@@ -169,8 +171,7 @@ def B_sticks(
     sgrid,
     surface,
     y,
-    eq,
-    Bgrid,
+    coords,#eq,Bgrid,
 ):
 
     theta = jnp.linspace(
@@ -193,7 +194,7 @@ def B_sticks(
     ss_data = surface.compute(["theta", "x"], grid=stick_grid)
 
     eq_surf = eq.surface
-    pls_points = eq_surf.compute(["x"], grid=Bgrid, basis="xyz")["x"]
+    pls_points = rpz2xyz(coords)#eq_surf.compute(["x"], grid=Bgrid, basis="xyz")["x"]
 
     assert (p_M * 2) * (p_N * 2) == ss_data["theta"].shape[
         0
@@ -531,7 +532,6 @@ def iso_coords_interp(tdata, _data, sgrid):
     lamb_v = tdata["lambda_iso_v"]
 
     # Data on plasma surface
-    # tdata = eq.compute(["theta","zeta"], grid = tgrid)
 
     u_t = tdata["u_t"]
     u_z = tdata["u_z"]
@@ -681,145 +681,6 @@ def iso_coords_load(name, eq):
     return tdata
 
 
-def iso_coords_interp_old(name, _data, sgrid, eq):
-
-    u = jnp.load(name + "u.npy")
-    v = jnp.load(name + "v.npy")
-    Phi = jnp.load(name + "Phi.npy")
-    Psi = jnp.load(name + "Psi.npy")
-    b0 = jnp.load(name + "b.npy")
-    lamb_ratio = jnp.load(name + "ratio.npy")
-
-    _data["omega_1"] = jnp.load(name + "omega_1.npy")
-    _data["omega_2"] = jnp.load(name + "omega_2.npy")
-
-    _data["tau"] = jnp.load(name + "tau.npy")
-    _data["tau_1"] = jnp.load(name + "tau_1.npy")
-    _data["tau_2"] = jnp.load(name + "tau_2.npy")
-
-    lamb_u = jnp.load(name + "lambda_u.npy")
-    lamb_v = jnp.load(name + "lambda_v.npy")
-
-    # Temporary grid
-    tgrid = LinearGrid(M=60, N=60)
-
-    # Data on plasma surface
-    tdata = eq.compute(["theta", "zeta"], grid=tgrid)
-
-    u_t = jnp.load(name + "u_t.npy")
-    u_z = jnp.load(name + "u_z.npy")
-    v_t = jnp.load(name + "v_t.npy")
-    v_z = jnp.load(name + "v_z.npy")
-
-    # Build new grids to allow interpolation between last grid points and theta = 2*pi or zeta = 2*pi
-    m_size = tgrid.M * 2 + 1
-    n_size = tgrid.N * 2 + 1
-
-    # Rearrange variables
-    # Add extra rows and columns to represent theta = 2pi or zeta = 2pi
-    theta_mod = add_extra_coords(tdata["theta"], n_size, m_size, 0)
-    zeta_mod = add_extra_coords(tdata["zeta"], n_size, m_size, 1)
-    u_mod = zeta_mod - add_extra_periodic(Phi, n_size, m_size)
-    v_mod = lamb_ratio * (
-        theta_mod - add_extra_periodic(Psi, n_size, m_size) + b0 * u_mod
-    )
-    u_t_mod = add_extra_periodic(u_t, n_size, m_size)
-    u_z_mod = add_extra_periodic(u_z, n_size, m_size)
-    v_t_mod = add_extra_periodic(v_t, n_size, m_size)
-    v_z_mod = add_extra_periodic(v_z, n_size, m_size)
-    lamb_u_mod = add_extra_periodic(lamb_u, n_size, m_size)
-    lamb_v_mod = add_extra_periodic(lamb_v, n_size, m_size)
-
-    # Interpolate on theta_mod, zeta_mod
-    points = jnp.array((zeta_mod.flatten(), theta_mod.flatten())).T
-
-    # Interpolate isothermal coordinates
-    _data["u_iso"] = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        u_mod,
-        method="cubic",
-    )
-    _data["v_iso"] = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        v_mod,
-        method="cubic",
-    )
-
-    _data["lambda_u"] = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        lamb_u_mod,
-        method="cubic",
-    )
-    _data["lambda_v"] = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        lamb_v_mod,
-        method="cubic",
-    )
-
-    # Interpolate derivatives of isothermal coordinates
-    u0_t = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        u_t_mod,
-        method="cubic",
-    )
-    u0_z = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        u_z_mod,
-        method="cubic",
-    )
-    v0_t = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        v_t_mod,
-        method="cubic",
-    )
-    v0_z = interp2d(
-        _data["theta"],
-        _data["zeta"],
-        theta_mod[:, 0],
-        zeta_mod[0, :],
-        v_z_mod,
-        method="cubic",
-    )
-
-    # Build harmonic vectors with interpolated data
-    grad1 = (u0_t * _data["e^theta_s"].T + u0_z * _data["e^zeta_s"].T).T
-    grad2 = (v0_t * _data["e^theta_s"].T + v0_z * _data["e^zeta_s"].T).T
-
-    _data["e^u_s"] = grad1
-    _data["e^v_s"] = grad2
-
-    _data["e_u"] = (dot(grad1, grad1) ** (-1) * grad1.T).T
-    _data["e_v"] = (dot(grad2, grad2) ** (-1) * grad2.T).T
-
-    # Define the parameter "lambda" according to the paper
-    _data["lambda_iso"] = dot(_data["e_u"], _data["e_u"]) ** (1 / 2)
-
-    _data["w"] = comp_loc(_data["u_iso"], _data["v_iso"])
-
-    return _data
-
-
 def interp_grid(theta, zeta, w_surface, tdata):
 
     # Find grids for dipoles
@@ -834,6 +695,7 @@ def interp_grid(theta, zeta, w_surface, tdata):
             "e^zeta_s",
             "x",
             "e_theta",  # extra vector needed for the poloidal wire contours
+            '|e_theta x e_zeta|',
         ],
         grid=s_grid,
     )
@@ -934,7 +796,10 @@ def densify_linspace(arr, points_per_interval=1):
 
 
 def _compute_magnetic_field_from_Current(
-    Kgrid, K_at_grid, surface, eq, Bgrid, basis="rpz"
+    Kgrid, K_at_grid, surface, data,
+    coords,
+    #eq, Bgrid, 
+    basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -960,8 +825,8 @@ def _compute_magnetic_field_from_Current(
 
     """
 
-    Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
-    coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
+    #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
+    #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -977,7 +842,7 @@ def _compute_magnetic_field_from_Current(
     # compute and store grid quantities
     # needed for integration
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
+    #data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
 
     _rs = xyz2rpz(data["x"])
     _K = K_at_grid
@@ -1014,7 +879,9 @@ def _compute_magnetic_field_from_Current(
 
 
 def _compute_magnetic_field_from_Current_Contour(
-    Kgrid, K_at_grid, surface, eq, Bgrid, basis="rpz"
+    Kgrid, K_at_grid, surface, coords,
+    #eq, Bgrid, 
+    basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -1040,8 +907,8 @@ def _compute_magnetic_field_from_Current_Contour(
 
     """
 
-    Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
-    coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
+    #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
+    #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):

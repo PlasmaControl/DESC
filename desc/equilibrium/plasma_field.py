@@ -200,7 +200,7 @@ class PlasmaField(_MagneticField):
         R, phi, Z = tuple([(RPZ[i] - shifts[i]) / scales[i] for i in jnp.arange(3)])
 
         # Create a grid with the normalized coordinates
-        B_grid = CylindricalGrid(R=R, phi=phi, Z=Z, NFP=NFP)
+        B_grid = Grid.create_meshgrid((R, phi, Z), jitable=True)
         B_coords = B_grid.nodes * scales + shifts
 
         # Create a transform object to pass to _curl_cylindrical

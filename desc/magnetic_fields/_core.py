@@ -1019,7 +1019,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
-    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
+    _static_attrs = _MagneticField._static_attrs
 
     def __init__(self, *fields):
         fields = flatten_list(fields, flatten_tuple=True)

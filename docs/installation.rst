@@ -27,29 +27,67 @@ On Your Local Machine
 
     .. tab-item:: CPU
 
-        **Install from PyPI**
+        .. dropdown:: PyPI
 
-        .. code-block:: sh
+            .. code-block:: sh
 
-            pip install desc-opt
+                pip install desc-opt
 
-        **Or from GitHub (for development builds)**
+        .. dropdown:: GitHub
 
-        .. code-block:: sh
+            .. code-block:: sh
 
-            git clone https://github.com/PlasmaControl/DESC.git
-            cd DESC
-            conda create --name desc-env 'python>=3.10, <=3.13'
-            conda activate desc-env
-            pip install --editable .
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
+                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda activate desc-env
+                pip install --editable .
 
-        If you installed from GitHub, you may optionally install developer requirements (if you want to run tests).
+            You may optionally install developer requirements (if you want to run tests).
 
-        .. code-block:: sh
+            .. code-block:: sh
 
-            pip install -r devtools/dev-requirements.txt
+                pip install -r devtools/dev-requirements.txt
 
-        These instructions were tested to work on an M1 Macbook device on May 3, 2023.
+            These instructions were tested to work on an M1 Macbook device on May 3, 2023.
+
+        .. dropdown:: uv
+
+            One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
+            For a project that modifies DESC and also uses it to perform analysis,
+            it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
+            This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
+            and with the ability to use DESC in a jupyter notebook.
+
+            .. code-block:: sh
+
+                # download UV; it installs into .local/bin
+                curl -LsSf https://astral.sh/uv/install.sh | sh
+
+                # the depth=1 option reduces the quantity of older data downloaded
+                git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+
+                # initialize a project
+                uv init myproject
+                cd myproject
+
+                # add dependencies
+                uv add --editable "../DESC"
+
+                # test the installation
+                uv run python
+
+                >>> from desc.backend import print_backend_info
+                >>> print_backend_info()
+
+                # Jupyter Notebooks
+                # ----------------
+                # install a jupyter kernel
+                uv add --dev ipykernel
+                uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
+
+                # run jupyter
+                uv run --with jupyter jupyter lab
 
     .. tab-item:: CPU+GPU
 
@@ -71,44 +109,6 @@ On Your Local Machine
 
             pip install -r devtools/dev-requirements.txt
 
-    .. tab-item:: CPU with uv
-
-        One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
-        For a project that modifies DESC and also uses it to perform analysis,
-        it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
-        This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
-        and with the ability to use DESC in a jupyter notebook.
-
-        .. code-block:: sh
-
-            # download UV; it installs into .local/bin
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-
-            # the depth=1 option reduces the quantity of older data downloaded
-            git clone --depth=1 git@github.com:PlasmaControl/DESC.git
-
-            # initialize a project
-            uv init myproject
-            cd myproject
-
-            # add dependencies
-            uv add --editable "../DESC"
-
-            # test the installation
-            uv run python
-
-            >>> from desc.backend import print_backend_info
-            >>> print_backend_info()
-
-            # Jupyter Notebooks
-            # ----------------
-            # install a jupyter kernel
-            uv add --dev ipykernel
-            uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
-
-            # run jupyter
-            uv run --with jupyter jupyter lab
-
 
 On Most Linux Computing Clusters
 ********************************
@@ -121,36 +121,30 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
     .. tab-item:: CPU
 
-        **Install from PyPI**
+        .. dropdown:: PyPI
 
-        .. code-block:: sh
+            .. code-block:: sh
 
-            pip install desc-opt
+                pip install desc-opt
 
-        **Or from GitHub (for development builds)**
+        .. dropdown:: GitHub
 
-        First download the repository from GitHub.
+            .. code-block:: sh
 
-        .. code-block:: sh
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
+                # load your python module; this command may vary depending on cluster
+                module load anaconda
 
-            git clone https://github.com/PlasmaControl/DESC.git
-            cd DESC
-            # load your python module
-            module load anaconda  # this command may vary depending on cluster
+                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda activate desc-env
+                pip install --editable .
 
-        Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+            You may optionally install developer requirements (if you want to run tests).
 
-        .. code-block:: sh
+            .. code-block:: sh
 
-            conda create --name desc-env 'python>=3.10, <=3.13'
-            conda activate desc-env
-            pip install --editable .
-
-        If you installed from GitHub, you may optionally install developer requirements (if you want to run tests).
-
-        .. code-block:: sh
-
-            pip install -r devtools/dev-requirements.txt
+                pip install -r devtools/dev-requirements.txt
 
     .. tab-item:: CPU+GPU
 
@@ -340,7 +334,7 @@ If you encounter issues during installation, please `leave us an issue on Github
 
     .. code-block:: sh
 
-        pip install nvidia-cublas-cu12==12.9.0.13
+        pip install 'nvidia-cublas-cu12==12.9.0.13'
 
 .. tip::
 

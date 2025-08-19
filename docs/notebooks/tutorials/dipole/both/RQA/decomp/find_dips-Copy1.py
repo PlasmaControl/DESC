@@ -74,6 +74,65 @@ from desc.finite_diff2 import (first_derivative_t, first_derivative_z)
 
 from interpax import interp2d
 
+def K_decomp2(p_M, p_N,
+           d_data,
+           #sdata2,
+           #sdata3,
+           sgrid,
+           surface,
+           #y,
+           dt, dz,
+           N,
+           d_0):
+
+    theta = jnp.linspace(2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1/2,
+                         2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1/2),
+                         p_M * 2 + 1)
+
+    zeta = jnp.linspace(2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1/2,
+                        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1/2),
+                        p_N * 2 + 1)
+
+    
+    name = "iso_coords/"
+    dl_data, dr_data, dd_data, du_data = shift_grid(theta, zeta, dt, dz, surface, name)
+    
+    assert (p_M * 2+1)*(p_N * 2+1) == dl_data["theta"].shape[0] , "Check that the number of dipole locations coincide with the number of dipoles"
+    r = dl_data["theta"].shape[0]  # Make r a Python int for indexing
+
+    x_sol = jnp.zeros(2*r)
+    temp_data = d_data.copy()
+    
+    for i in range(0,r):
+
+        temp_data['w'] = d_data['w'][i] # Reduce the dictionary to evaluate at the specific points of the dipole grid only
+        
+        omega_pol1 = omega_pair(
+            d_data,
+            du_data["u_iso"][i], du_data["v_iso"][i],
+            dd_data["u_iso"][i], dd_data["v_iso"][i],
+            N, d_0
+        )
+
+        omega_tor1 = omega_pair(
+            d_data,
+            dr_data["u_iso"][i], dr_data["v_iso"][i],
+            dl_data["u_iso"][i], dl_data["v_iso"][i],
+            N, d_0
+        )
+
+        A = jnp.real(omega_pol1)[i]
+        B = jnp.real(omega_tor1)[i]
+        C = jnp.imag(omega_pol1)[i]
+        D = jnp.imag(omega_tor1)[i]
+
+        x_sol = x_sol.at[i].set( ( A * D - B * C) ** (-1) * d_data['lambda_iso'][i] ** (-1) * ( D * d_data['K.e_u'][i] 
+                                                                                               - B * d_data['K.e_v'][i]) )
+        x_sol =  x_sol.at[i + r].set( (A * D - B * C) ** (-1) * d_data['lambda_iso'][i] ** (-1) * ( - C * d_data['K.e_u'][i] 
+                                                                                                   - A * d_data['K.e_v'][i]) )
+
+    return x_sol
+
 #@jit
 def K_decomp(p_M, p_N, d_data, sgrid, surface, dt, dz, N, d_0):
     theta = jnp.linspace(2 * jnp.pi * (1 / (p_M * 2 + 1)) * 0.5,
@@ -130,19 +189,18 @@ def bn_res(p_M, p_N, sdata1,
                      sgrid, surface, #w_surface, 
                 y, dt,dz, N, d_0, eq, Bgrid)
 
-    #B0_sticks = B_sticks(p_M, p_N,
-    #                     sdata1,
-    #                     sgrid,
-    #                     surface,
-    #                     y,
-    #                     dt,dz,
-    #                     eq,
-    #                     Bgrid,)
+    B0_sticks = B_sticks(p_M, p_N,
+                         sdata1,
+                         sgrid,
+                         surface,
+                         y,
+                         dt,dz,
+                         eq,
+                         Bgrid,)
 
     # Minus sign for sticks to change the polarity of the current in the sticks
     B0 = (B0_dips
-         # - B0_sticks
-         )
+          - B0_sticks)
     return jnp.concatenate((B0[:,0],B0[:,1],B0[:,2]))
     
 def B_dips(p_M, p_N,
@@ -392,29 +450,29 @@ def f_pair(data_or,
            )
 
 def omega_pair(data_or,
-                   u1_, v1_,  # first dipole (scalars)
-                   u2_, v2_,  # second dipole (scalars)
-                   N, d_0):
-    """
-    Evaluate the pair-induced omega *over the whole evaluation grid* (shape (r,))
-    for a single dipole pair defined by (u1_,v1_) and (u2_,v2_).
-    """
-    w_all = data_or["w"]          # (r,)
-    w1 = comp_loc(u1_, v1_)       # scalar
-    w2 = comp_loc(u2_, v2_)       # scalar
-
-    v1_num = v1_eval(w_all, w1, N, d_0, data_or)
-    v1_den = v1_eval(w_all, w2, N, d_0, data_or)
-    v1_num_p = v1_prime_eval(w_all, w1, N, d_0, data_or)
-    v1_den_p = v1_prime_eval(w_all, w2, N, d_0, data_or)
-
-    chi1 = _chi_reg(w_all, w1, d_0, data_or)
-    chi2 = _chi_reg(w_all, w2, d_0, data_or)
-
-    omega = ((v1_num_p / v1_num) - (v1_den_p / v1_den)
-             - 2 * jnp.pi * jnp.real(w1 - w2) / (data_or["omega_1"] ** 2 * data_or["tau_2"])
-             + 0.5 * (chi1 - chi2))
-    return omega  # (r,)
+               u1_, v1_, # first dipole
+               u2_, v2_, # second dipole
+               N,
+               d_0,
+              ):
+    
+    w1 = comp_loc(u1_, v1_,)
+    w2 = comp_loc(u2_, v2_,)
+    
+    v_1_num = v1_eval(w1, N,  d_0, data_or)
+    v_1_den = v1_eval(w2, N, d_0, data_or) 
+    v_1_num_prime = v1_prime_eval(w1, N, d_0, data_or)
+    v_1_den_prime = v1_prime_eval(w2, N, d_0, data_or)
+    
+    chi_reg_1 = chi_reg(w1, d_0, data_or)
+    chi_reg_2 = chi_reg(w2, d_0, data_or)
+    
+    omega = ( ( v_1_num_prime / v_1_num - v_1_den_prime / v_1_den ) # Regularized near the vortex cores
+             - 2 * jnp.pi * jnp.real( w1 - w2 ) / ( data_or["omega_1"] ** 2 * data_or["tau_2"]) 
+             + 1 / 2 * ( chi_reg_1 - chi_reg_2 ) # Additional terms with regularization close to the vortex core
+            )
+    
+    return omega
 
 def stick(p2_, # second point of the stick
           p1_, # first point of the stick
@@ -460,44 +518,35 @@ def stick(p2_, # second point of the stick
         
     return b_stick
 
-def v1_eval(w_all, w0, N, d_0, data_or):
-    """
-    Vectorized version of v1_eval over the evaluation grid (w_all has shape (r,)).
-    Returns shape (r,), the same as data_or["w"].
-    """
+def v1_eval(w0, N, d_0, data_or):
+    
     gamma = data_or["omega_1"] / jnp.pi
     p = data_or["tau"]
-    n = jnp.arange(N)
-    # terms shape: (N, r)
-    ang = (2 * n[:, None] + 1) * (w_all[None, :] - w0) / gamma
-    terms = ((-1) ** n)[:, None] * (p ** (n ** 2 + n))[:, None] * jnp.sin(ang)
-    s = jnp.sum(terms, axis=0)  # (r,)
+    
+    product_ = 0
 
-    out = 2 * (p ** 0.25) * s
-    return jnp.where(jnp.abs(w_all - w0) > d_0, out, 1.0)
+    for n in range(0,N):
 
-#@jit
-def v1_prime_eval(w_all, w0, N, d_0, data_or):
-    """
-    Vectorized derivative version over the evaluation grid.
-    Returns shape (r,).
-    """
-    gamma = data_or["omega_1"] / jnp.pi
-    p = data_or["tau"]
-    n = jnp.arange(N)
-    ang = (2 * n[:, None] + 1) * (w_all[None, :] - w0) / gamma
-    terms = ((-1) ** n)[:, None] * (p ** (n ** 2 + n))[:, None] * ((2 * n[:, None] + 1) / gamma) * jnp.cos(ang)
-    s = jnp.sum(terms, axis=0)
-    out = (p ** 0.25) * s
-    return jnp.where(jnp.abs(w_all - w0) > d_0, out, 0.0)
+        product_ = ( product_ 
+                    + ( ( ( (-1) ** n
+                        )*( p ** ( n **2 + n )
+                          )
+                       ) * jnp.sin( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma )
+                      )
+                   )
+    
+    return jnp.where(jnp.abs(data_or["w"] - w0) > d_0,
+                     2 * p **(1/4)*product_ ,
+                     1 # Arbitraty value of 1 inside the circle around the vortex core
+                    )
 
 #@jax.jit
-def _chi_reg(w_all, w0, d_0, data_or):
-    # w_all: (r,), w0: scalar
-    cond = jnp.abs(w_all - w0) < d_0
-    val = -(data_or["lambda_u"] / data_or["lambda_iso"]) + (data_or["lambda_v"] / data_or["lambda_iso"]) * 1j
-    return jnp.where(cond, val, 0.0)
-
+def chi_reg(w0,# location of the vortex
+            d_0, data_or):
+    
+    return jnp.where( jnp.abs( data_or["w"] - w0 ) < d_0,
+                     - ( data_or["lambda_u"] / data_or["lambda_iso"]) + ( data_or["lambda_v"] / data_or["lambda_iso"] ) * 1j,
+                     0)
 
 #@jax.jit
 
@@ -507,6 +556,30 @@ def f_reg(w0,# location of the vortex
     return jnp.where(jnp.abs(data_or["w"] - w0) < d_0,
                      jnp.log(data_or["lambda_iso"]),
                      0)
+
+
+def v1_prime_eval(w0, N, d_0, data_or):
+
+    gamma = data_or["omega_1"] / jnp.pi
+    p = data_or["tau"]
+    
+    _product = 0
+    for n in range(0,N):
+
+        _product = ( _product 
+                    + ( ( ( (-1) ** n
+                        ) * ( p ** ( n ** 2 + n )
+                            )
+                        ) * ( ( ( 2 * n + 1 ) / gamma
+                              ) * jnp.cos( ( 2 * n + 1 ) * ( data_or["w"] - w0 ) / gamma
+                                         )
+                            )
+                      )
+                   )
+    
+    return jnp.where( abs( data_or["w"] - w0 ) > d_0, 
+                     ( p ** ( 1 / 4 ) / 1 ) * _product, 
+                     0 )
 
 def comp_loc(theta_0_,phi_0_,):
     

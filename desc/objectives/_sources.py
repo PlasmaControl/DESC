@@ -64,6 +64,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         "_N",
         "_M",
         "_N_sum",
+        "_eq",
     ]
 
     _scalar = False
@@ -352,7 +353,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             # self._sinks_and_sources.x_mn,
             self._N_sum,
             constants["d0"],
-            constants["eq"],
+            self._eq,#constants["eq"],
             constants["eval_grid"],
             constants['iso_data'],
         )

@@ -137,6 +137,12 @@ Integrals
 
     desc.integrals.Bounce2D
     desc.integrals.Bounce1D
+    desc.integrals.compute_B_plasma
+    desc.integrals.surface_averages
+    desc.integrals.surface_integrals
+    desc.integrals.surface_max
+    desc.integrals.surface_min
+    desc.integrals.surface_variance
 
 IO
 ***

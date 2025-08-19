@@ -330,7 +330,7 @@ If you encounter other problems, please `make an issue on Github <https://github
     desc-opt ...`` with a list of incompatibilities.
 
     **Solution**:
-    This may be another version of DESC or ``jax`` installed in the conda ``base`` environment.
+    This may be due to another version of DESC or ``jax`` that is installed in the conda ``base`` environment.
     Try deleting the ``DESC`` folder, ensuring that ``pip list`` in the conda ``base`` environment no longer lists ``desc-opt`` or ``jax``, then repeating the installation.
 
 .. tip::

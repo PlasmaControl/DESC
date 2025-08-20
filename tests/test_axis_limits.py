@@ -76,6 +76,7 @@ not_finite_limits = {
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
     "J^theta_PEST",
+    "J^theta_PEST_v",
     "e^vartheta",
     "e^vartheta_t",
     "e^vartheta_v|PEST",

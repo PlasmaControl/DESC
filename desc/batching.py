@@ -283,8 +283,7 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
-    # Note that ``num_batches`` in ``_batch_and_remainder``
-    # is ``n_elements//chunk_size`` which is always positive.
+    # Note that num_batches in _batch_and_remainder is always positive.
     scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
         *scan_x, **kwargs
     )

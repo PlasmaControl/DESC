@@ -1,10 +1,12 @@
+import warnings
+
 import numpy as np
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid
-from desc.objectives.find_sour_test import bn_res
+from desc.objectives.find_sour import bn_res
 from desc.utils import Timer, errorif, safenorm, setdefault
 
 from .normalization import compute_scaling_factors
@@ -59,8 +61,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_data_keys",
         "_source_keys",
-        "_contour_keys",
-        "_stick_keys",
         "_N",
         "_M",
         "_N_sum",
@@ -89,11 +89,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         source_grid=None,
         eval_grid=None,
         field_grid=None,
-        countour_grid = None,
-        stick_grid = None,
-        #dt = 0, # Poloidal separation between sources
-        #dz = 0, # Toroidal separation between sources
-        #iso_name, # String with the location of the directory that stores the info of isothermal coordinates
         name="Sinks/Sources Quadratic flux",
         jac_chunk_size=None,
         *,
@@ -107,18 +102,13 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
         self._source_grid = source_grid  # Locations of the cores of the sources/sinks
         self._eval_grid = eval_grid
-        self._field_grid = field_grid
-        self._contour_grid = eval_grid
-        self._stick_grid = stick_grid
-
-        self._field = field
+        self._iso_data = iso_data  # Info on isothermal coordinates
         self._eq = eq
+        self._field = field
         self._winding_surface = (
             winding_surface  # Array that stores the values of sinks/sources
         )
-        
-        self._iso_data = iso_data  # Info on isothermal coordinates
-        
+        self._field_grid = field_grid
         self._N_sum = N_sum
         self._d0 = d0
 
@@ -150,7 +140,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         """
         # from desc.magnetic_fields import SumMagneticField
         # from desc.fns_simp import _compute_magnetic_field_from_Current
-        from desc.objectives.find_sour_test import iso_coords_interp
+        from desc.objectives.find_sour import iso_coords_interp
 
         eq = self._eq
         field = self._field
@@ -177,9 +167,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             'x',
             '|e_theta x e_zeta|',
         ]  # Info on the winding surface
-        
-        self._contour_keys = ["theta", "zeta", "e_theta",'x']
-        self._stick_keys = ["theta", "x"]
 
         timer = Timer()
         if verbose > 0:
@@ -286,39 +273,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             self._iso_data, field_data3, field_grid2
         )  # ,self._winding_surface)
 
-
-        contour_transforms = get_transforms(
-            self._contour_keys,
-            obj=self._winding_surface,
-            grid=self._contour_grid,
-            has_axis=field_grid.axis.size,
-        )
-
-        stick_transforms = get_transforms(
-            self._stick_keys,
-            obj=self._winding_surface,
-            grid=self._stick_grid,
-            has_axis=field_grid.axis.size,
-        )
-
-        contour_data = compute_fun(
-            self._winding_surface,
-            self._contour_keys,
-            params=self._winding_surface.params_dict,
-            transforms=contour_transforms,
-            profiles={},  # source_profiles1,
-            # has_axis=field_grid.axis.size,
-        )
-
-        stick_data = compute_fun(
-            self._winding_surface,
-            self._stick_keys,
-            params=self._winding_surface.params_dict,
-            transforms=contour_transforms,
-            profiles={},  # source_profiles1,
-            # has_axis=field_grid.axis.size,
-        )
-        
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -334,17 +288,14 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             # params=self._winding_surface.params_dict,
         )
 
-        self._M = field.p_M * 2 + 1
         self._N = field.p_N * 2 + 1
-    
+        self._M = field.p_M * 2 + 1
         self._constants = {
             "eq": eq,
             "winding_surface": self._winding_surface,
             # "field": self._field,#SumMagneticField(self._field),
             "eval_grid": self._eval_grid,
             "field_grid": self._field_grid,
-            "contour_grid": self._contour_grid,
-            "stick_grid": self._stick_grid,
             "quad_weights": w,
             "eval_data": eval_data,
             "eval_transforms": eval_transforms,
@@ -353,8 +304,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "sdata1": field_data1,
             "sdata2": field_data2,
             "sdata3": field_data3,
-            "contour_data": contour_data,
-            "stick_data": stick_data,
             "N_sum": self._N_sum,
             "d0": self._d0,
             'iso_data':self._iso_data,
@@ -409,9 +358,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants['coords'],#self._eq,#constants["eq"],
             #constants["eval_grid"],
             constants['iso_data'],
-            constants["contour_data"],
-            constants["stick_data"],
-            constants["contour_grid"],
         )
 
         error = B_src - constants["B_target"]
@@ -588,15 +534,65 @@ class SinksSourcesSum(_Objective):
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
+        #eval_data = compute_fun(
+        #    eq,
+        #    self._data_keys,
+        #    params=eq.params_dict,
+        #    transforms=eval_transforms,
+        #    profiles=eval_profiles,
+        #)
+
+        # Find transforms for the grids on the winding surface
+        # source_profiles1 = get_profiles(self._source_keys, obj=self._field, grid=self._field_grid)
+        #source_transforms1 = get_transforms(
+        #    self._source_keys,
+        #    obj=self._winding_surface,
+        #    grid=self._field_grid,
+        #    has_axis=field_grid.axis.size,
+        #)
+
+        # Build data on the grids on the winding surface
+        #field_data1 = compute_fun(
+        #    self._winding_surface,
+        #    self._source_keys,
+        #    params=self._winding_surface.params_dict,
+        #    transforms=source_transforms1,
+        #    profiles={},  # source_profiles1,
+        #    # has_axis=field_grid.axis.size,
+        #)
+
+        # Now update each of the field_data dicts with the isothermal coordinates
+        #field_data1 = iso_coords_interp(
+        #    self._iso_data, field_data1, self._field_grid
+        #)  # ,self._winding_surface)
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        #x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        
+        #self._N = field.p_N * 2 + 1
+        #self._M = field.p_M * 2 + 1
         
         self._constants = {
             "eq": eq,
+            #"winding_surface": self._winding_surface,
+            # "field": self._field,#SumMagneticField(self._field),
+            #"eval_grid": self._eval_grid,
+            #"field_grid": self._field_grid,
             "quad_weights": w,
+            #"eval_data": eval_data,
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
+            #"B_target": B_target,
+            #"sdata1": field_data1,
+            #"sdata2": field_data2,
+            #"sdata3": field_data3,
+            #"N_sum": self._N_sum,
+            #"d0": self._d0,
+            #'iso_data':self._iso_data,
+            #'coords':x,
         }
 
         if self._normalize:

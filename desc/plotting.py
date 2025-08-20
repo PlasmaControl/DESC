@@ -4241,10 +4241,10 @@ def plot_gammac(
         Default: 0.5
     alphas : array_like, optional
         Fieldline label values (toroidal angle).
-        Default: np.linspace(0, 2π, 32, endpoint=True)
+        Default: np.linspace(0, 2π, 25, endpoint=True)
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
-        Default: 16
+        Default: 28
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -4282,17 +4282,15 @@ def plot_gammac(
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rho is None:
-        rho = np.array([0.5], dtype=float)
-    else:
-        rho = np.asarray(rho, dtype=float).ravel()
-        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
-
+    rho = (
+        np.array([0.5], dtype=float)
+        if rho is None
+        else np.asarray(rho, dtype=float).ravel()
+    )
+    errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
     if alphas is None:
-        alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
-
-    if num_pitch is None:
-        num_pitch = 28
+        alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
+    num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
     X = kwargs.pop("X", 32)

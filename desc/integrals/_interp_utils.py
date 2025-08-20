@@ -383,10 +383,60 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2r(
-    c,
+def nufft2r_1d(f, x, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
+    """Non-uniform real fast Fourier transform of second type.
+
+    Notes
+    -----
+    Vectorization with signature ``(b,f),(x)->(b,x)`` is supported.
+
+    Examples
+    --------
+    [Tutorial](https://finufft.readthedocs.io/en/latest/tutorial/realinterp1d.html#id1).
+    Also see the tests in the following directory.
+
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft2_vec``
+
+    Parameters
+    ----------
+    f : jnp.ndarray
+        Fourier coefficients fₙ of the map x ↦ c(x) such that c(x) = ∑ₙ fₙ exp(i n x)
+        where n >= 0.
+    x : jnp.ndarray
+        Real query points of coordinate in ``domain`` where interpolation is desired.
+        The coordinates stored here must be the same coordinate enumerated across
+        axis ``-1`` of ``f``.
+    domain : tuple[float]
+        Domain of coordinate specified by x over which samples were taken.
+    vec : bool
+        If set to ``True``, then it is assumed that multiple Fourier series are
+        to be evaluated at the same non-uniform points. In that case, this flag
+        must be set to retain the function signature of ``(b,f),(x)->(b,x)``.
+    eps : float
+        Precision requested. Default is ``1e-6``.
+
+    Returns
+    -------
+    c(x) : jnp.ndarray
+        Real function value at query points.
+
+    """
+    s = 2 * jnp.pi / (domain[1] - domain[0])
+    x = (x - domain[0]) * s
+
+    s = f.shape[-1] // 2
+    s = jnp.exp(1j * s * x)
+    s = s[..., jnp.newaxis, :] if vec else s
+
+    opts = options.Opts(modeord=0)
+    return (nufft2(f, x, iflag=1, eps=eps, opts=opts) * s).real
+
+
+def nufft2r_2d(
+    f,
     x0,
-    x1=None,
+    x1,
     domain0=(0, 2 * jnp.pi),
     domain1=(0, 2 * jnp.pi),
     rfft_axis=-1,
@@ -397,49 +447,41 @@ def nufft2r(
 
     Notes
     -----
-    Vectorization with the following signatures are supported for 1D, 2D transforms.
-     - ``(f,c0),(x)->(f,x)``
-     - ``(f,c0,c1),(x),(x)->(f,x)``
+    Vectorization with signature ``(b,f0,f1),(x),(x)->(b,x)`` is supported.
 
     Examples
     --------
-    See the tests in the following directory.
-    See also whatever final tutorial results from my pull request at FINUFFT:
-    https://github.com/flatironinstitute/finufft/pull/722.
+    [Tutorial](https://finufft.readthedocs.io/en/latest/tutorial/realinterp1d.html#id1).
+    Also see the tests in the following directory.
 
-     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_FFT``
-     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT``
-     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec``
      - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT_2D``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft2_vec``
 
     Parameters
     ----------
-    c : jnp.ndarray
-        Fourier coefficients cₙ of the map x ↦ c(x) such that c(x) = ∑ₙ cₙ exp(i n x)
-        where n >= 0. If x₁ is given, then expects the Fourier coefficients cₘₙ of
-        the map x₀,x₁ ↦ c(x₀,x₁) such that c(x₀,x₁) = ∑ₘₙ cₘₙ exp(i m x₀) exp(i n x₁).
+    f : jnp.ndarray
+        Fourier coefficients fₘₙ of the map x₀,x₁ ↦ c(x₀,x₁) such that
+        c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁).
     x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
-        For a 2D transform, the coordinates stored here must be the same coordinate
-        enumerated across axis ``-2`` of ``c``.
+        The coordinates stored here must be the same coordinate
+        enumerated across axis ``-2`` of ``f``.
     x1 : jnp.ndarray
         Real query points of coordinate in ``domain1`` where interpolation is desired.
-        If not given, performs a one-dimensional transform.
-        For a 2D transform, the coordinates stored here must be the same coordinate
-        enumerated across axis ``-1`` of ``c``.
+        The coordinates stored here must be the same coordinate
+        enumerated across axis ``-1`` of ``f``.
     domain0 : tuple[float]
         Domain of coordinate specified by x₀ over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by x₁ over which samples were taken.
     rfft_axis : int
         Axis along which real FFT was performed.
-        If -1 (-2), assumes c(x₀,x₁) = ∑ₘₙ cₘₙ exp(i m x₀) exp(i n x₁) where
+        If -1 (-2), assumes c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁) where
             n ( m) >= 0, respectively.
     vec : bool
         If set to ``True``, then it is assumed that multiple Fourier series are
         to be evaluated at the same non-uniform points. In that case, this flag
-        must be set to retain the function signature of ``(f,c0),(x)->(f,x)``.
-        For example, see ``tests/test_interp_utils.py::TestFastInterp::test_nufft_vec``.
+        must be set to retain the function signature of ``(b,f0,f1),(x),(x)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
 
@@ -449,40 +491,23 @@ def nufft2r(
         Real function value at query points.
 
     """
-    if x1 is None:
-        errorif(rfft_axis != -1, NotImplementedError)
-        s0 = c.shape[-1] // 2
-        s1 = None
-        opts = options.Opts(modeord=0)
+    s0 = 2 * jnp.pi / (domain0[1] - domain0[0])
+    s1 = 2 * jnp.pi / (domain1[1] - domain1[0])
+    x0 = (x0 - domain0[0]) * s0
+    x1 = (x1 - domain1[0]) * s1
+
+    if rfft_axis is None:
+        s = 1
+    elif rfft_axis != -1 and rfft_axis != -2:
+        raise NotImplementedError(f"rfft_axis must be -1 or -2, but got {rfft_axis}.")
     else:
-        if rfft_axis == -1:
-            s0 = None
-            s1 = c.shape[-1] // 2
-        elif rfft_axis == -2:
-            s0 = c.shape[-2] // 2
-            s1 = None
-        else:
-            raise NotImplementedError
-        opts = options.Opts(modeord=1)
-        c = jnp.fft.ifftshift(c, rfft_axis)
+        s = f.shape[rfft_axis] // 2
+        s = jnp.exp(1j * s * (x1 if rfft_axis == -1 else x0))
+        s = s[..., jnp.newaxis, :] if vec else s
+        f = jnp.fft.ifftshift(f, rfft_axis)
 
-    scale0 = 2 * jnp.pi / (domain0[1] - domain0[0])
-    x0 = (x0 - domain0[0]) * scale0
-    s = _shift(s0, x0, vec)
-    if x1 is None:
-        return (nufft2(c, x0, iflag=1, eps=eps, opts=opts) * s).real
-
-    scale1 = 2 * jnp.pi / (domain1[1] - domain1[0])
-    x1 = (x1 - domain1[0]) * scale1
-    s = s * _shift(s1, x1, vec)
-    return (nufft2(c, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
-
-
-def _shift(s, x, vec):
-    if s is None:
-        return 1
-    s = jnp.exp(1j * s * x)
-    return s[..., jnp.newaxis, :] if vec else s
+    opts = options.Opts(modeord=1)
+    return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
 
 def cheb_from_dct(a, axis=-1):

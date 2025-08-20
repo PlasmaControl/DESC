@@ -3983,6 +3983,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
+            # https://github.com/flatironinstitute/jax-finufft/pull/159
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(
@@ -4013,6 +4014,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         with pytest.raises(AssertionError):
+            # https://github.com/flatironinstitute/jax-finufft/pull/159
             np.testing.assert_allclose(g, g_0)
 
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))

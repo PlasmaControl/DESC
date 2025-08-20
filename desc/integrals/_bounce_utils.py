@@ -11,7 +11,7 @@ from desc.integrals._interp_utils import (
     idct_non_uniform,
     ifft_non_uniform,
     irfft_non_uniform,
-    nufft2r,
+    nufft2r_1d,
     polyroot_vec,
     polyval_vec,
 )
@@ -741,7 +741,7 @@ def cubic_spline(
             theta = theta.transpose(1, 4, 0, 2, 3).reshape(shape[-1], num_zeta, -1)
         else:
             theta = theta.transpose(3, 0, 1, 2).reshape(num_zeta, -1)
-        f = nufft2r(f.squeeze(-3), theta, eps=nufft_eps).mT.reshape(
+        f = nufft2r_1d(f.squeeze(-3), theta, eps=nufft_eps).mT.reshape(
             shape[-1], *shape[:-1], -1
         )
         if len(shape) > 1:

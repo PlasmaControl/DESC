@@ -11,7 +11,7 @@ from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipk, ellipkm1
-from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyquist_freq
+from tests.test_interp_utils import _c_1d, _c_1d_nyquist_freq, _c_2d, _c_2d_nyquist_freq
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
@@ -696,7 +696,7 @@ class TestSingularities:
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
     def test_biest_interpolators(self, interpolator):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        grid = LinearGrid(0, *_c_2d_nyquist_freq())
         h_t = 2 * np.pi / grid.num_theta
         h_z = 2 * np.pi / grid.num_zeta / grid.NFP
 
@@ -710,9 +710,9 @@ class TestSingularities:
         interp = interpolator(grid, grid, st, sz, q)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
-        f = _f_2d(theta, zeta)
+        f = _c_2d(theta, zeta)
         for i in range(dt.size):
-            truth = _f_2d(theta + dt[i], zeta + dz[i])
+            truth = _c_2d(theta + dt[i], zeta + dz[i])
             np.testing.assert_allclose(interp(f, i), truth)
 
 
@@ -1511,8 +1511,8 @@ class TestBounce2D:
             return np.cos(z) ** 2 + np.sin(7 * z) - np.sin(z)
 
         argmin_g = np.pi / 2
-        h = _f_1d
-        nyquist = 2 * max(_f_1d_nyquist_freq(), 7) + 1
+        h = _c_1d
+        nyquist = 2 * max(_c_1d_nyquist_freq(), 7) + 1
         grid = LinearGrid(theta=1, zeta=nyquist, sym=False)
         bounce = Bounce2D(
             grid,
@@ -1725,9 +1725,7 @@ class TestBounce2D:
             )
         else:
             with pytest.raises(AssertionError):
-                # TODO: Move this out of with block once the linked issue is fixed.
-                #  https://github.com/flatironinstitute/jax-finufft/issues/158
-                #  Derivative is incorrectly compued as 1561075.985104.
+                # https://github.com/flatironinstitute/jax-finufft/pull/159
                 TestBounce._test_bounce_autodiff(
                     bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
                 )

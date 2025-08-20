@@ -1389,15 +1389,13 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
             for idx in obj_idx_rank
         ]
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        J_rank = jit(
-            jvp_proximal_per_process,
-            static_argnames="op",
-        )(
+        J_rank = jvp_proximal_per_process(
             xs,
             vs,
             objs,
             op=op,
         )
+        J_rank = np.asarray(J_rank)
         J = objective.comm.gather(J_rank, root=0)
         J = pconcat(J).T
-        return J.block_until_ready()
+        return J

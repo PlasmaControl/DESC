@@ -457,15 +457,12 @@ class ObjectiveFunction(IOAble):
                     for idx in obj_idx_rank
                 ]
 
-                J_rank = jit(
-                    jvp_per_process,
-                    static_argnames="op",
-                )(
+                J_rank = jvp_per_process(
                     xs,
                     vs,
                     objs,
                     op=message[0],
-                ).block_until_ready()
+                )
                 J_rank = np.asarray(J_rank)
                 self.comm.gather(J_rank, root=0)
             elif "compute" in message[0]:
@@ -473,14 +470,11 @@ class ObjectiveFunction(IOAble):
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
 
-                f_rank = jit(
-                    compute_per_process,
-                    static_argnames="op",
-                )(
+                f_rank = compute_per_process(
                     [params[i] for i in obj_idx_rank],
                     objs,
                     op=message[0],
-                ).block_until_ready()
+                )
                 f_rank = np.asarray(f_rank)
                 self.comm.gather(f_rank, root=0)
             elif "proximal_jvp" in message[0]:
@@ -500,15 +494,12 @@ class ObjectiveFunction(IOAble):
                     [vs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
-                J_rank = jit(
-                    jvp_proximal_per_process,
-                    static_argnames="op",
-                )(
+                J_rank = jvp_proximal_per_process(
                     xs,
                     vs,
                     objs,
                     op=op,
-                ).block_until_ready()
+                )
                 J_rank = np.asarray(J_rank)
                 self.comm.gather(J_rank, root=0)
 
@@ -769,14 +760,12 @@ class ObjectiveFunction(IOAble):
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
 
-                f_rank = jit(
-                    compute_per_process,
-                    static_argnames="op",
-                )(
+                f_rank = compute_per_process(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
-                ).block_until_ready()
+                )
+                f_rank = np.asarray(f_rank)
                 fs = self.comm.gather(f_rank, root=0)
                 f = pconcat(fs)
         return f
@@ -816,14 +805,12 @@ class ObjectiveFunction(IOAble):
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
 
-                f_rank = jit(
-                    compute_per_process,
-                    static_argnames="op",
-                )(
+                f_rank = compute_per_process(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
-                ).block_until_ready()
+                )
+                f_rank = np.asarray(f_rank)
                 fs = self.comm.gather(f_rank, root=0)
                 f = pconcat(fs)
         return f
@@ -863,14 +850,12 @@ class ObjectiveFunction(IOAble):
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
 
-                f_rank = jit(
-                    compute_per_process,
-                    static_argnames="op",
-                )(
+                f_rank = compute_per_process(
                     [params[i] for i in obj_idx_rank],
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
-                ).block_until_ready()
+                )
+                f_rank = np.asarray(f_rank)
                 fs = self.comm.gather(f_rank, root=0)
                 f = pconcat(fs)
         return f
@@ -1110,10 +1095,7 @@ class ObjectiveFunction(IOAble):
                 self.comm.bcast(message, root=0)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
-                J_rank = jit(
-                    jvp_per_process,
-                    static_argnames="op",
-                )(
+                J_rank = jvp_per_process(
                     [
                         [xs[i] for i in self._things_per_objective_idx[idx]]
                         for idx in obj_idx_rank
@@ -1124,7 +1106,8 @@ class ObjectiveFunction(IOAble):
                     ],
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
-                ).block_until_ready()
+                )
+                J_rank = np.asarray(J_rank)
                 J = self.comm.gather(J_rank, root=0)
 
         # this is the transpose of the jvp when v is a matrix, for consistency with

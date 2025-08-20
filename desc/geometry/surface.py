@@ -16,7 +16,6 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import ChebyshevFourierSeries, DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -34,7 +33,354 @@ from desc.utils import (
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
+__all__ = [
+    "FourierRZToroidalSurface",
+    "ChebyshevRZToroidalSurface",
+    "ZernikeRZToroidalSection",
+]
+
+
+class ChebyshevRZToroidalSurface(Surface):
+    """Toroidal surface represented by Fourier (theta) × Chebyshev (phi) series.
+
+    This mirrors FourierRZToroidalSurface, but replaces the toroidal Fourier
+    direction with a non-periodic Chebyshev coordinate ``phi``. Suitable for
+    tube-like / straight configurations where the toroidal angle is not periodic.
+
+    Parameters
+    ----------
+    R_lmn, Z_lmn : (k,) arrays
+        Spectral coefficients corresponding to modes_R / modes_Z.
+    modes_R, modes_Z : (k,2) int arrays
+        [m, n] per mode; m is poloidal Fourier index, n is Chebyshev degree.
+    M, N : int
+        Max poloidal order (Fourier) and max Chebyshev degree (phi).
+    rho : float
+        Flux label (kept for API parity; surface is at rho=1).
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_R_lmn",
+        "_Z_lmn",
+        "_R_basis",
+        "_Z_basis",
+        "_rho",
+        "_mirror",
+        "_length",
+    ]
+    _static_attrs = ["_R_basis", "_Z_basis"]
+
+    @execute_on_cpu
+    def __init__(
+        self,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        M=None,
+        N=None,
+        rho=1.0,
+        name="",
+        check_orientation=True,
+        mirror=False,
+        length=None,
+    ):
+        if R_lmn is None:
+            R_lmn = np.array([10.0, 1.0])
+            modes_R = np.array([[0, 0], [1, 0]])
+        if Z_lmn is None:
+            Z_lmn = np.array([0.0, -1.0])
+            modes_Z = np.array([[0, 0], [-1, 0]])
+        if modes_Z is None:
+            modes_Z = modes_R
+
+        R_lmn, Z_lmn, modes_R, modes_Z = map(
+            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+        )
+        assert R_lmn.size == modes_R.shape[0], "R_lmn and modes_R size mismatch"
+        assert Z_lmn.size == modes_Z.shape[0], "Z_lmn and modes_Z size mismatch"
+        assert issubclass(modes_R.dtype.type, np.integer)
+        assert issubclass(modes_Z.dtype.type, np.integer)
+
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        MR = int(np.max(abs(modes_R[:, 0]))) if modes_R.size else 0
+        NR = int(np.max(abs(modes_R[:, 1]))) if modes_R.size else 0
+        MZ = int(np.max(abs(modes_Z[:, 0]))) if modes_Z.size else 0
+        NZ = int(np.max(abs(modes_Z[:, 1]))) if modes_Z.size else 0
+        self._M = setdefault(M, max(MR, MZ))
+        self._N = setdefault(N, max(NR, NZ))
+
+        # Chebyshev toroidal coordinate is non-periodic; force NFP = 1
+        self._NFP = 1
+        self._rho = float(rho)
+        self._name = name
+        self._mirror = bool(mirror)
+        self._length = float(length) if length is not None else None
+
+        # For Chebyshev n >= 0 only, no stellarator symmetry in (m,n) pairs
+        self._sym = False
+
+        from desc.basis import ChebyshevFourierSeries
+
+        self._R_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=1, sym=False)
+        self._Z_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=1, sym=False)
+
+        # Map provided (m,n) -> current basis ordering (l=0)
+        R_full = np.zeros(self.R_basis.num_modes)
+        Z_full = np.zeros(self.Z_basis.num_modes)
+        for (mm, nn), RR in zip(modes_R, R_lmn):
+            idx = self.R_basis.get_idx(0, int(mm), int(nn))
+            R_full[idx] = RR
+        for (mm, nn), ZZ in zip(modes_Z, Z_lmn):
+            idx = self.Z_basis.get_idx(0, int(mm), int(nn))
+            Z_full[idx] = ZZ
+        self._R_lmn = jnp.asarray(R_full)
+        self._Z_lmn = jnp.asarray(Z_full)
+
+        self._check_orientation = bool(check_orientation)
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror."""
+        return self._mirror
+
+    @property
+    def length(self):
+        """float or None: length of the mirror."""
+        return self._length
+
+    @length.setter
+    def length(self, new):
+        self._length = new
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        # Non-periodic Chebyshev direction => treat as single field period
+        return self._NFP
+
+    @property
+    def R_basis(self):
+        """ChebyshevFourierSeries: Spectral basis for R."""
+        return self._R_basis
+
+    @property
+    def Z_basis(self):
+        """ChebyshevFourierSeries: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def rho(self):
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        """Radial coordinate"""
+        self._rho = rho
+
+    @execute_on_cpu
+    def change_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal (M) and Chebyshev (N) resolutions."""
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        _ = kwargs.pop("L", None)  # no radial variation on the surface
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        _NFP = kwargs.pop("NFP", None)  # ignored (forced to 1)
+        _sym = kwargs.pop("sym", None)  # no symmetry coupling in Chebyshev
+        assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
+
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            _, M, N = args
+
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+
+        if ((N is not None) and (N != self.N)) or ((M is not None) and (M != self.M)):
+            M = int(M if M is not None else self.M)
+            N = int(N if N is not None else self.N)
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(M=M, N=N, NFP=1, sym=False)
+            self.Z_basis.change_resolution(M=M, N=N, NFP=1, sym=False)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_lmn length {len(new)} does not match basis with {self.R_basis.num_modes} modes"
+            )
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn length {len(new)} does not match basis with {self.Z_basis.num_modes} modes"
+            )
+
+    def get_coeffs(self, m, n=0):
+        """Get coefficients for given (m, n_cheb)."""
+        n = np.atleast_1d(n).astype(int)
+        m = np.atleast_1d(m).astype(int)
+        m, n = np.broadcast_arrays(m, n)
+        R = np.zeros_like(m, dtype=float)
+        Z = np.zeros_like(m, dtype=float)
+        mn = np.array([m, n]).T
+        idxR = np.where(
+            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        idxZ = np.where(
+            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        R[idxR[0]] = self.R_lmn[idxR[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
+        return R, Z
+
+    def set_coeffs(self, m, n=0, R=None, Z=None):
+        """Set specific coefficients at (m, n_cheb)."""
+        m, n, R, Z = (
+            np.atleast_1d(m),
+            np.atleast_1d(n),
+            np.atleast_1d(R),
+            np.atleast_1d(Z),
+        )
+        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
+        for mm, nn, RR, ZZ in zip(m, n, R, Z):
+            if RR is not None:
+                idxR = self.R_basis.get_idx(0, int(mm), int(nn))
+                self.R_lmn = put(self.R_lmn, idxR, RR)
+            if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, int(mm), int(nn))
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    @classmethod
+    def from_values(
+        cls,
+        coords,
+        theta,
+        phi=None,
+        M=6,
+        N=6,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
+        """Fit a Chebyshev–Fourier surface from real-space samples.
+
+        Parameters
+        ----------
+        coords : (num_points, 3)
+            Cylindrical (R, phi_cyl, Z) samples on the surface. Only R and Z are used.
+        theta : (num_points,)
+            Poloidal locations of each sample.
+        phi : (num_points,) or None
+            General toroidal coordinate used for Chebyshev direction.
+            If None, defaults to cylindrical phi (coords[:, 1]).
+        M, N : int
+            Fourier(theta) order M and Chebyshev(phi) degree N.
+        check_orientation : bool
+            Whether to correct left-handed parameterization.
+        rcond : float or None
+            Relative cutoff for singular values in the fit.
+        w : (num_points,) or None
+            Optional weights. For Gaussian noise, use 1/sigma.
+
+        Returns
+        -------
+        ChebyshevRZToroidalSurface
+        """
+        M = check_nonnegint(M, "M", False)
+        N = check_nonnegint(N, "N", False)
+        theta = np.asarray(theta)
+        assert coords.shape[0] == theta.size, "coords and theta must have same length"
+        if phi is None:
+            phi = coords[:, 1]
+        else:
+            phi = np.asarray(phi)
+            assert phi.size == theta.size, "phi must match number of points"
+
+        from desc.grid import Grid
+
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, phi]).T,
+            sort=False,
+            jitable=True,
+        )
+
+        R = np.asarray(coords[:, 0])
+        Z = np.asarray(coords[:, 2])
+
+        from desc.backend import block_diag
+        from desc.basis import ChebyshevFourierSeries
+        from desc.transform import Transform
+
+        R_basis = ChebyshevFourierSeries(M=M, N=N, NFP=1, sym=False)
+        Z_basis = ChebyshevFourierSeries(M=M, N=N, NFP=1, sym=False)
+
+        if w is None:
+            tR = Transform(nodes, R_basis, build=False, build_pinv=True, rcond=rcond)
+            Rb = tR.fit(R)
+            tZ = Transform(nodes, Z_basis, build=False, build_pinv=True, rcond=rcond)
+            Zb = tZ.fit(Z)
+        else:
+            w = np.asarray(w)
+            assert w.size == R.size, "w must have same length as samples"
+            tR = Transform(
+                nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            )
+            tZ = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AR = tR.matrices[tR.method][0][0][0]
+            AZ = tZ.matrices[tZ.method][0][0][0]
+            W = np.diag(w)
+            A = block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            coef = np.linalg.lstsq(A, b, rcond=rcond)[0]
+            Rb = coef[: R_basis.num_modes]
+            Zb = coef[R_basis.num_modes :]
+
+        surf = cls(
+            R_lmn=Rb,
+            Z_lmn=Zb,
+            modes_R=R_basis.modes[:, 1:],
+            modes_Z=Z_basis.modes[:, 1:],
+            M=M,
+            N=N,
+            rho=1.0,
+            name="",
+            check_orientation=check_orientation,
+        )
+        return surf
 
 
 class FourierRZToroidalSurface(Surface):

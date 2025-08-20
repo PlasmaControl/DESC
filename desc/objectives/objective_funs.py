@@ -342,7 +342,7 @@ class ObjectiveFunction(IOAble):
             self.size = self.comm.Get_size()
             self.running = True
             errorif(
-                max(self._rank_per_objective) != self.size - 1,
+                max(self._rank_per_objective) + 1 != self.size,
                 ValueError,
                 "The maximum value of rank_per_objective "
                 f"({max(self._rank_per_objective)+1}, supplied as "
@@ -1021,18 +1021,28 @@ class ObjectiveFunction(IOAble):
         """Compute gradient vector of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
-        return jnp.atleast_1d(
-            Derivative(self.compute_scalar, mode="grad")(x, constants).squeeze()
-        )
+        if not self._is_mpi:
+            return jnp.atleast_1d(
+                Derivative(self.compute_scalar, mode="grad")(x, constants).squeeze()
+            )
+        else:
+            raise NotImplementedError(
+                "Gradient computation is not implemented for MPI ObjectiveFunction."
+            )
 
     @jit
     def hess(self, x, constants=None):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
-        return jnp.atleast_2d(
-            Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
-        )
+        if not self._is_mpi:
+            return jnp.atleast_2d(
+                Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
+            )
+        else:
+            raise NotImplementedError(
+                "Gradient computation is not implemented for MPI ObjectiveFunction."
+            )
 
     @jit
     def jac_scaled(self, x, constants=None):
@@ -1053,18 +1063,19 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
-        if not self._is_mpi:
-            v = ensure_tuple(v)
-            if len(v) > 1:
-                # using blocked for higher order derivatives is a pain, and only really
-                # is needed for perturbations. Just pass that to jvp_batched for now
-                return self._jvp_batched(v, x, constants, op)
+        v = ensure_tuple(v)
+        if len(v) > 1:
+            # using blocked for higher order derivatives is a pain, and only really
+            # is needed for perturbations. Just pass that to jvp_batched for now
+            return self._jvp_batched(v, x, constants, op)
 
-            if constants is None:
-                constants = self.constants
-            xs_splits = np.cumsum([t.dim_x for t in self.things])
-            xs = jnp.split(x, xs_splits)
-            vs = jnp.split(v[0], xs_splits, axis=-1)
+        if constants is None:
+            constants = self.constants
+
+        xs_splits = np.cumsum([t.dim_x for t in self.things])
+        xs = jnp.split(x, xs_splits)
+        vs = jnp.split(v[0], xs_splits, axis=-1)
+        if not self._is_mpi:
             J = []
             assert len(self.objectives) == len(self.constants)
             # basic idea is we compute the jacobian of each objective wrt each thing
@@ -1079,19 +1090,6 @@ class ObjectiveFunction(IOAble):
                 J += [Ji_]
         else:
             if self.rank == 0:
-                v = ensure_tuple(v)
-                if len(v) > 1:
-                    # using blocked for higher order derivatives is a pain, and only
-                    # really is needed for perturbations. Just pass that to
-                    # jvp_batched for now
-                    return self._jvp_batched(v, x, constants, op)
-
-                if constants is None:
-                    constants = self.constants
-
-                xs_splits = np.cumsum([t.dim_x for t in self.things])
-                xs = jnp.split(x, xs_splits)
-                vs = jnp.split(v[0], xs_splits, axis=-1)
                 message = ("jvp_" + op, xs, vs)
                 self.comm.bcast(message, root=0)
 
@@ -2131,7 +2129,7 @@ class _ThingFlattener(IOAble):
 
 # These will run on workers, and we wan to safely jit them
 @functools.partial(jit, static_argnames="op")
-def compute_per_process(params, objectives, op="compute_scaled_error"):
+def compute_per_process(params, objectives, op):
     """Compute the objective function on each process."""
     f_rank = jnp.concatenate(
         [
@@ -2145,7 +2143,7 @@ def compute_per_process(params, objectives, op="compute_scaled_error"):
 
 
 @functools.partial(jit, static_argnames="op")
-def jvp_per_process(x, v, objectives, op="jvp_scaled_error"):
+def jvp_per_process(x, v, objectives, op):
     """Compute the Jacobian-vector product on each process."""
     J_rank = jnp.hstack(
         [getattr(obj, op)(v[idx], x[idx]) for idx, obj in enumerate(objectives)]
@@ -2154,7 +2152,7 @@ def jvp_per_process(x, v, objectives, op="jvp_scaled_error"):
 
 
 @functools.partial(jit, static_argnames="op")
-def jvp_proximal_per_process(x, v, objectives, op="scaled_error"):
+def jvp_proximal_per_process(x, v, objectives, op):
     """Compute the Jacobian-vector product on each process, for proximal."""
     J_rank = []
     for idx, obj in enumerate(objectives):

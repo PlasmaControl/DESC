@@ -1220,20 +1220,13 @@ class ProximalProjection(ObjectiveFunction):
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
-        elif not self._objective._is_mpi:
-            return _proximal_jvp_blocked_pure(
-                self._objective,
-                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
-                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
-                op,
-            )
         else:
-            return _proximal_jvp_blocked_parallel(
-                self._objective,
-                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
-                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
-                op,
-            )
+            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            if not self._objective._is_mpi:
+                return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
+            else:
+                return _proximal_jvp_blocked_parallel(self._objective, vgs, xgs, op)
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array

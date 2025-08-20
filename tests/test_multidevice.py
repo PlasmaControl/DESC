@@ -41,18 +41,123 @@ from desc.optimize import Optimizer
 def test_set_cpu_count():
     """Test that _set_cpu_count."""
     # we already called the function, just check the desc_config
+    assert desc_config["kind"] == "cpu"
     assert desc_config["num_device"] == num_device
     assert len(desc_config["devices"]) == num_device
+    assert len(desc_config["avail_mems"]) == num_device
 
 
-@pytest.mark.mpi_setup
+@pytest.mark.mpi_run
+def test_multidevice_compute():
+    """Test that objective compute gives same results."""
+    rank = MPI.COMM_WORLD.Get_rank()
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Setting rotational transform"):
+        eq.iota = eq.get_profile("iota")
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
+
+    obj0 = ObjectiveFunction(ForceBalance(eq, grid=grid3))
+    obj0.build()
+    obj1 = ObjectiveFunction(
+        [
+            ForceBalance(eq, grid=grid1),
+            ForceBalance(eq, grid=grid2),
+        ],
+        deriv_mode="blocked",
+    )
+    obj1.build()
+
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        obj2 = ObjectiveFunction(
+            [
+                ForceBalance(eq, grid=grid1, device_id=0),
+                ForceBalance(eq, grid=grid2, device_id=1),
+            ],
+            mpi=MPI,
+        )
+        obj2.build()
+
+    f0 = obj0.compute_scalar(obj0.x(eq))
+    f1 = obj1.compute_scalar(obj1.x(eq))
+    with obj2:
+        if rank == 0:
+            f2 = obj2.compute_scalar(obj2.x(eq))
+
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+            np.testing.assert_allclose(f2, f0, atol=1e-7)
+
+            f1 = obj1.compute_scaled(obj1.x(eq))
+            f2 = obj2.compute_scaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = obj1.compute_scaled_error(obj1.x(eq))
+            f2 = obj2.compute_scaled_error(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+
+@pytest.mark.mpi_run
+def test_multidevice_derivatives():
+    """Test that objective derivatives gives same results."""
+    rank = MPI.COMM_WORLD.Get_rank()
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Setting rotational transform"):
+        eq.iota = eq.get_profile("iota")
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+
+    obj1 = ObjectiveFunction(
+        [
+            ForceBalance(eq, grid=grid1),
+            ForceBalance(eq, grid=grid2),
+        ],
+        deriv_mode="blocked",
+    )
+    obj1.build()
+
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        obj2 = ObjectiveFunction(
+            [
+                ForceBalance(eq, grid=grid1, device_id=0),
+                ForceBalance(eq, grid=grid2, device_id=1),
+            ],
+            mpi=MPI,
+        )
+        obj2.build()
+
+    with obj2:
+        if rank == 0:
+            with pytest.raises(NotImplementedError):
+                _ = obj2.grad(obj2.x(eq))
+
+            f1 = obj1.jac_unscaled(obj1.x(eq))
+            f2 = obj2.jac_unscaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            # figure out why this fails! One of them doesn't
+            # apply the scalign properly
+            f1 = obj1.jac_scaled(obj1.x(eq))
+            f2 = obj2.jac_scaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = obj1.jac_scaled_error(obj1.x(eq))
+            f2 = obj2.jac_scaled_error(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+
+@pytest.mark.mpi_run
 def test_multidevice_objective():
     """Test that objective function have proper attributes."""
     eq = get("HELIOTRON")
-    with pytest.warns(UserWarning, match="Reducing radial (L) resolution"):
-        eq.change_resolution(6, 6, 3, 12, 12, 6)
-    eq1 = eq.copy()
-    eq2 = eq.copy()
 
     gM = eq.M_grid
     gN = eq.N_grid
@@ -61,10 +166,10 @@ def test_multidevice_objective():
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
     grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.4, 0.8, 0.9], sym=True)
 
-    objective1 = ForceBalance(eq1, grid=grid1, device_id=0)
-    objective2 = ForceBalance(eq1, grid=grid2, device_id=1)
-    objective3 = ForceBalance(eq2, grid=grid3, device_id=0)
-    objective4 = ForceBalance(eq2, grid=grid4, device_id=0)
+    objective1 = ForceBalance(eq, grid=grid1, device_id=0)
+    objective2 = ForceBalance(eq, grid=grid2, device_id=1)
+    objective3 = ForceBalance(eq, grid=grid3, device_id=0)
+    objective4 = ForceBalance(eq, grid=grid4, device_id=0)
 
     # need to pass MPI communicator to the ObjectiveFunction
     with pytest.raises(ValueError):
@@ -82,7 +187,7 @@ def test_multidevice_objective():
     assert obj1._is_mpi
     assert not obj2._is_mpi
 
-    np.testing.assert_allclose(obj1.x(eq1), obj2.x(eq2))
+    np.testing.assert_allclose(obj1.x(eq), obj2.x(eq))
 
     # multi-device objective must be blocked
     assert obj1._deriv_mode == "blocked"
@@ -98,8 +203,7 @@ def test_multidevice_eq_solve():
     assert rank < 2
 
     eq = get("HELIOTRON")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(6, 6, 3, 12, 12, 6)
 
     gM = eq.M_grid
@@ -111,8 +215,7 @@ def test_multidevice_eq_solve():
     objective2 = ForceBalance(eq, grid=grid2, device_id=1)
 
     # deriv_mode will be set to "blocked" automatically
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with pytest.warns(UserWarning, match="When using multiple devices"):
         obj = ObjectiveFunction([objective1, objective2], mpi=MPI)
         obj.build()
 
@@ -139,9 +242,8 @@ def test_multidevice_eq_optimize():
     assert rank < 2
 
     eq = get("precise_QA")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
+    eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
+    surf = eq.surface
 
     # create two grids with different rho values, this will effectively separate
     # the quasisymmetry objective into two parts
@@ -176,14 +278,10 @@ def test_multidevice_eq_optimize():
     R_modes = np.vstack(
         (
             [0, 0, 0],
-            eq.surface.R_basis.modes[
-                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
-            ],
+            surf.R_basis.modes[np.max(np.abs(surf.R_basis.modes), 1) > k, :],
         )
     )
-    Z_modes = eq.surface.Z_basis.modes[
-        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
-    ]
+    Z_modes = surf.Z_basis.modes[np.max(np.abs(surf.Z_basis.modes), 1) > k, :]
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq, modes=R_modes),

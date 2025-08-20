@@ -22,15 +22,15 @@ from desc.integrals._bounce_utils import (
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
-    _irfft2_non_uniform,
+    _irfft2_mmt,
     cheb_pts,
     fourier_pts,
-    idct_non_uniform,
-    ifft_non_uniform,
+    idct_mmt,
+    ifft_mmt,
     interp1d_Hermite_vec,
     interp1d_vec,
-    irfft_non_uniform,
-    nufft2r_2d,
+    irfft_mmt,
+    nufft2d2r,
     polyder_vec,
     rfft2_modes,
     rfft2_vander,
@@ -817,10 +817,10 @@ class Bounce2D(Bounce):
 
         """
         shape = zeta.shape
-        c = nufft2r_2d(
-            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
+        c = nufft2d2r(
             flatten_matrix(zeta, 4),
             flatten_matrix(theta, 4),
+            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
             (0, 2 * jnp.pi / self._NFP),
             vec=True,
             eps=eps,
@@ -930,13 +930,13 @@ class Bounce2D(Bounce):
         theta = self._c["T(z)"].eval1d(ext)
 
         if nufft_eps < 1e-14:
-            f = _irfft2_non_uniform(
+            f = _irfft2_mmt(
                 ext,
                 theta,
                 f,
-                n0=self._num_zeta,
-                n1=self._num_theta,
-                domain0=(0, 2 * jnp.pi / self._NFP),
+                self._num_zeta,
+                self._num_theta,
+                (0, 2 * jnp.pi / self._NFP),
             )
             if ext.ndim > 2:
                 f = f.transpose(1, 0, 2)
@@ -952,10 +952,10 @@ class Bounce2D(Bounce):
             else:
                 zeta = ext.ravel()
                 theta = theta.ravel()
-            f = nufft2r_2d(
-                f.squeeze(-3),
+            f = nufft2d2r(
                 zeta,
                 theta,
+                f.squeeze(-3),
                 (0, 2 * jnp.pi / self._NFP),
                 eps=nufft_eps,
             ).reshape(shape[-2], *shape[:-2], shape[-1])
@@ -999,8 +999,8 @@ class Bounce2D(Bounce):
         x, w = quad
         vander = setdefault(vander, {})
 
-        B_sup_zeta = irfft_non_uniform(
-            idct_non_uniform(
+        B_sup_zeta = irfft_mmt(
+            idct_mmt(
                 x,
                 self._c["T(z)"].cheb[..., jnp.newaxis, :],
                 self._c["T(z)"].Y,
@@ -1022,7 +1022,7 @@ class Bounce2D(Bounce):
             if vander is None
             else None
         )
-        return ifft_non_uniform(
+        return ifft_mmt(
             x,
             self._c["B^zeta"],
             domain=(0, 2 * jnp.pi / self._NFP),

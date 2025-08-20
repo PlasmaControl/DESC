@@ -8,10 +8,10 @@ from desc.backend import dct, ifft, jnp
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
-    idct_non_uniform,
-    ifft_non_uniform,
-    irfft_non_uniform,
-    nufft2r_1d,
+    idct_mmt,
+    ifft_mmt,
+    irfft_mmt,
+    nufft1d2r,
     polyroot_vec,
     polyval_vec,
 )
@@ -624,7 +624,7 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
-    f = ifft_non_uniform(
+    f = ifft_mmt(
         cheb_pts(Y, domain=T.domain)[:, None] if vander is None else None,
         f,
         domain=(0, 2 * jnp.pi / NFP),
@@ -632,7 +632,7 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
         modes=n_modes,
         vander=vander,
     )
-    f = irfft_non_uniform(T.evaluate(Y), f[..., None, :, :], num_theta, _modes=m_modes)
+    f = irfft_mmt(T.evaluate(Y), f[..., None, :, :], num_theta, _modes=m_modes)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 
@@ -718,7 +718,7 @@ def cubic_spline(
         f = jnp.fft.ifftshift(jnp.pad(jnp.fft.fftshift(f, -2), pad), -2)
         f = ifft(f, axis=-2, norm="forward")
     else:
-        f = ifft_non_uniform(
+        f = ifft_mmt(
             zeta[:num_zeta, None],
             f,
             domain=(0, 2 * jnp.pi / NFP),
@@ -728,20 +728,20 @@ def cubic_spline(
         )[..., None, :, :]
 
     # θ at uniform ζ on field lines
-    theta = idct_non_uniform(x, T.cheb[..., None, :], T.Y, vander=vander_theta)
+    theta = idct_mmt(x, T.cheb[..., None, :], T.Y, vander=vander_theta)
     theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
 
     shape = theta.shape[:-3]
     if nufft_eps < 1e-14:
-        f = irfft_non_uniform(
-            theta, f[..., None, :, :], num_theta, _modes=m_modes
-        ).reshape(*shape, -1)
+        f = irfft_mmt(theta, f[..., None, :, :], num_theta, _modes=m_modes).reshape(
+            *shape, -1
+        )
     else:
         if len(shape) > 1:
             theta = theta.transpose(1, 4, 0, 2, 3).reshape(shape[-1], num_zeta, -1)
         else:
             theta = theta.transpose(3, 0, 1, 2).reshape(num_zeta, -1)
-        f = nufft2r_1d(f.squeeze(-3), theta, eps=nufft_eps).mT.reshape(
+        f = nufft1d2r(theta, f.squeeze(-3), eps=nufft_eps).mT.reshape(
             shape[-1], *shape[:-1], -1
         )
         if len(shape) > 1:

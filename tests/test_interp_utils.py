@@ -19,13 +19,13 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
-    ifft_non_uniform,
+    ifft_mmt,
     interp_dct,
     interp_rfft,
     interp_rfft2,
-    irfft_non_uniform,
-    nufft2r_1d,
-    nufft2r_2d,
+    irfft_mmt,
+    nufft1d2r,
+    nufft2d2r,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
@@ -143,7 +143,7 @@ class TestFastInterp:
         if n % 2 == 0:
             np.testing.assert_allclose(f[n // 2].imag, 0, atol=1e-12)
 
-        r = ifft_non_uniform(xq, f, domain)
+        r = ifft_mmt(xq, f, domain)
         np.testing.assert_allclose(r.real if imag_undersampled else r, func(xq))
 
     @pytest.mark.unit
@@ -156,11 +156,11 @@ class TestFastInterp:
 
         f = 2 * rfft(c, norm="forward")
         f = f.at[..., (0, -1) if (n % 2 == 0) else 0].divide(2)
-        np.testing.assert_allclose(nufft2r_1d(f, xq, domain), func(xq))
+        np.testing.assert_allclose(nufft1d2r(xq, f, domain), func(xq))
 
         @grad
         def g(xq):
-            return nufft2r_1d(f, xq, domain, eps=1e-7).sum()
+            return nufft1d2r(xq, f, domain, eps=1e-7).sum()
 
         @grad
         def true_g(xq):
@@ -169,11 +169,11 @@ class TestFastInterp:
         np.testing.assert_allclose(g(xq), true_g(xq))
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func, m, n, domain0, domain1", _test_inputs_2D)
-    def test_non_uniform_real_FFT_2D(self, func, m, n, domain0, domain1):
+    @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)
+    def test_non_uniform_real_FFT_2D(self, func, m, n, domain_x, domain_y):
         """Test non-uniform real FFT 2D interpolation."""
-        x = jnp.linspace(domain0[0], domain0[1], m, endpoint=False)
-        y = jnp.linspace(domain1[0], domain1[1], n, endpoint=False)
+        x = jnp.linspace(domain_x[0], domain_x[1], m, endpoint=False)
+        y = jnp.linspace(domain_y[0], domain_y[1], n, endpoint=False)
         x, y = map(jnp.ravel, tuple(jnp.meshgrid(x, y, indexing="ij")))
         c = func(x, y).reshape(m, n)
 
@@ -185,16 +185,16 @@ class TestFastInterp:
         f2 = jnp.fft.fft2(c, norm="forward")
 
         v = func(xq, yq)
-        np.testing.assert_allclose(nufft2r_2d(f1, xq, yq, domain0, domain1), v)
-        np.testing.assert_allclose(nufft2r_2d(f2, xq, yq, domain0, domain1, None), v)
+        np.testing.assert_allclose(nufft2d2r(xq, yq, f1, domain_x, domain_y), v)
+        np.testing.assert_allclose(nufft2d2r(xq, yq, f2, domain_x, domain_y, None), v)
 
         @partial(grad, argnums=(0, 1))
         def g1(xq, yq):
-            return nufft2r_2d(f1, xq, yq, domain0, domain1, eps=1e-7).sum()
+            return nufft2d2r(xq, yq, f1, domain_x, domain_y, eps=1e-7).sum()
 
         @partial(grad, argnums=(0, 1))
         def g2(xq, yq):
-            return nufft2r_2d(f2, xq, yq, domain0, domain1, None, eps=1e-7).sum()
+            return nufft2d2r(xq, yq, f2, domain_x, domain_y, None, eps=1e-7).sum()
 
         @partial(grad, argnums=(0, 1))
         def true_g(xq, yq):
@@ -221,11 +221,11 @@ class TestFastInterp:
         np.testing.assert_allclose((vand * coef).sum(-1), func(xq))
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func, m, n, domain0, domain1", _test_inputs_2D)
-    def test_non_uniform_real_MMT_2D(self, func, m, n, domain0, domain1):
+    @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)
+    def test_non_uniform_real_MMT_2D(self, func, m, n, domain_x, domain_y):
         """Test non-uniform real MMT 2D interpolation."""
-        x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
-        y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
+        x = np.linspace(domain_x[0], domain_x[1], m, endpoint=False)
+        y = np.linspace(domain_y[0], domain_y[1], n, endpoint=False)
         x, y = map(np.ravel, tuple(np.meshgrid(x, y, indexing="ij")))
         c = func(x, y).reshape(m, n)
         xq = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
@@ -233,23 +233,23 @@ class TestFastInterp:
 
         v = func(xq, yq)
         np.testing.assert_allclose(
-            interp_rfft2(xq, yq, c, domain0, domain1, (-2, -1)), v
+            interp_rfft2(xq, yq, c, domain_x, domain_y, (-2, -1)), v
         )
         np.testing.assert_allclose(
-            interp_rfft2(xq, yq, c, domain0, domain1, (-1, -2)), v
+            interp_rfft2(xq, yq, c, domain_x, domain_y, (-1, -2)), v
         )
         np.testing.assert_allclose(
-            interp_rfft2(yq, xq, c.T, domain1, domain0, (-2, -1)), v
+            interp_rfft2(yq, xq, c.T, domain_y, domain_x, (-2, -1)), v
         )
         np.testing.assert_allclose(
-            interp_rfft2(yq, xq, c.T, domain1, domain0, (-1, -2)), v
+            interp_rfft2(yq, xq, c.T, domain_y, domain_x, (-1, -2)), v
         )
         np.testing.assert_allclose(
-            irfft_non_uniform(
+            irfft_mmt(
                 yq,
-                ifft_non_uniform(xq[:, None], rfft2(c, norm="forward"), domain0, -2),
+                ifft_mmt(xq[:, None], rfft2(c, norm="forward"), domain_x, -2),
                 n,
-                domain1,
+                domain_y,
             ),
             v,
         )
@@ -268,7 +268,7 @@ class TestFastInterp:
         # multiple (2) fourier series evaluated at the same (3) points
         xq = np.array([7.34, 1.10134, 2.28])
         np.testing.assert_allclose(
-            nufft2r_1d(f, xq, domain),
+            nufft1d2r(xq, f, domain),
             np.stack([func_2(xq), func_2(xq)]),
         )
 
@@ -279,11 +279,11 @@ class TestFastInterp:
         # vectorized over batch with shape (1, 4),
         # multiple (2) fourier series evaluated at the same (3) points
         np.testing.assert_allclose(
-            nufft2r_1d(f, xq, domain, vec=True),
+            nufft1d2r(xq, f, domain, vec=True),
             np.vectorize(
-                partial(nufft2r_1d, domain=domain, vec=False),
-                signature="(b,f),(x)->(b,x)",
-            )(f, xq),
+                partial(nufft1d2r, domain=domain, vec=False),
+                signature="(x),(b,f)->(b,x)",
+            )(xq, f),
         )
 
     @pytest.mark.unit

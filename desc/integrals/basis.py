@@ -4,6 +4,7 @@ from functools import partial
 
 import numpy as np
 from matplotlib import pyplot as plt
+from orthax.chebyshev import chebroots
 
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
 from desc.integrals._interp_utils import (
@@ -12,11 +13,10 @@ from desc.integrals._interp_utils import (
     _subtract_first,
     cheb_from_dct,
     cheb_pts,
-    chebroots_vec,
     dct_from_cheb,
     fourier_pts,
-    idct_non_uniform,
-    irfft_non_uniform,
+    idct_mmt,
+    irfft_mmt,
     rfft_to_trig,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
@@ -32,6 +32,8 @@ from desc.utils import (
     take_mask,
     warnif,
 )
+
+_chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
@@ -273,7 +275,7 @@ class FourierChebyshevSeries(IOAble):
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         # Add axis to broadcast against multiple x values.
         cheb = cheb_from_dct(
-            irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
+            irfft_mmt(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
         )
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)
         return PiecewiseChebyshevSeries(cheb, self.domain)
@@ -422,9 +424,22 @@ class PiecewiseChebyshevSeries(IOAble):
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
         # are held in cheb with shape (..., num cheb series, Y).
         cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, Y)
+        f = idct_mmt(y, cheb, Y)
         assert f.shape == z.shape
         return f
+
+    #  The following changes would make root finding here more efficient.
+    #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+    #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
+    #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+    #  Use that once to find extrema of |B| if Y_B > 64.
+    #  2. Then to find roots of bounce points use the closed formula in Boyd's
+    #  spectral methods section 19.6. Can isolate interval to search for root by
+    #  observing whether |B|-1/λ changes sign at extrema. Only need to do
+    #  evaluate Chebyshev series at quadrature points once, and can use that to
+    #  compute the integral for every λ. The integral will converge rapidly
+    #  since a low order polynomial approximates |B| well in between adjacent
+    #  extrema. 2 is a larger improvement than 1.
 
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
@@ -452,7 +467,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         c = _subtract_first(_chebcast(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
-        y = chebroots_vec(c)
+        y = _chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.Y - 1)
 
         # Intersects must satisfy y ∈ [-1, 1].

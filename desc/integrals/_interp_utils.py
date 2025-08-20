@@ -27,8 +27,6 @@ except ImportError:
         )
     )
 
-from orthax.chebyshev import chebroots
-
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
@@ -73,12 +71,11 @@ def cheb_pts(n, domain=(-1, 1), lobatto=False):
 
 def fourier_pts(n):
     """Get ``n`` Fourier points in [0, 2π)."""
-    # [0, 2π) instead of [-π, π) required to match our definition of α.
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
 def interp_rfft(x, f, domain=(0, 2 * jnp.pi), axis=-1):
-    """Interpolate real-valued ``f`` to ``x`` with FFT.
+    """Interpolate real-valued ``f`` to ``x`` with FFT and MMT.
 
     Parameters
     ----------
@@ -98,13 +95,13 @@ def interp_rfft(x, f, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
-    return irfft_non_uniform(
-        x, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis
-    )
+    return irfft_mmt(x, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis)
 
 
-def irfft_non_uniform(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
+def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
     """Evaluate Fourier coefficients ``a`` at ``x``.
+
+    Uses matrix multiplication transform.
 
     Parameters
     ----------
@@ -141,8 +138,10 @@ def irfft_non_uniform(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
     return (vander * a).real.sum(-1)
 
 
-def ifft_non_uniform(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None):
+def ifft_mmt(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None):
     """Evaluate Fourier coefficients ``a`` at ``x``.
+
+    Uses matrix multiplication transform.
 
     Parameters
     ----------
@@ -180,7 +179,7 @@ def ifft_non_uniform(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, mode
 def interp_rfft2(
     x0, x1, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
-    """Interpolate real-valued ``f`` to coordinates ``(x0,x1)`` with FFT.
+    """Interpolate real-valued ``f`` to coordinates ``(x0,x1)`` with FFT and MMT.
 
     Parameters
     ----------
@@ -219,7 +218,7 @@ def interp_rfft2(
     a = rfft2(f, axes=axes, norm="forward")
     a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
-    return _irfft2_non_uniform(
+    return _irfft2_mmt(
         x0,
         x1,
         a,
@@ -231,10 +230,12 @@ def interp_rfft2(
     )
 
 
-def _irfft2_non_uniform(
+def _irfft2_mmt(
     x0, x1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
     """Evaluate Fourier coefficients ``a`` at coordinates ``(x0,x1)``.
+
+    Uses matrix multiplication transform.
 
     Parameters
     ----------
@@ -383,12 +384,8 @@ def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * j
     return modes_fft, modes_rfft
 
 
-def nufft2r_1d(f, x, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
-    """Non-uniform real fast Fourier transform of second type.
-
-    Notes
-    -----
-    Vectorization with signature ``(b,f),(x)->(b,x)`` is supported.
+def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
+    """Non-uniform 1D real fast Fourier transform of second type.
 
     Examples
     --------
@@ -400,19 +397,20 @@ def nufft2r_1d(f, x, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
 
     Parameters
     ----------
-    f : jnp.ndarray
-        Fourier coefficients fₙ of the map x ↦ c(x) such that c(x) = ∑ₙ fₙ exp(i n x)
-        where n >= 0.
     x : jnp.ndarray
         Real query points of coordinate in ``domain`` where interpolation is desired.
         The coordinates stored here must be the same coordinate enumerated across
         axis ``-1`` of ``f``.
+    f : jnp.ndarray
+        Fourier coefficients fₙ of the map x ↦ c(x) such that c(x) = ∑ₙ fₙ exp(i n x)
+        where n >= 0.
     domain : tuple[float]
         Domain of coordinate specified by x over which samples were taken.
     vec : bool
         If set to ``True``, then it is assumed that multiple Fourier series are
         to be evaluated at the same non-uniform points. In that case, this flag
-        must be set to retain the function signature of ``(b,f),(x)->(b,x)``.
+        must be set to retain the function signature for vectorization
+        of ``(x),(b,f)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
 
@@ -433,21 +431,17 @@ def nufft2r_1d(f, x, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
     return (nufft2(f, x, iflag=1, eps=eps, opts=opts) * s).real
 
 
-def nufft2r_2d(
-    f,
+def nufft2d2r(
     x0,
     x1,
+    f,
     domain0=(0, 2 * jnp.pi),
     domain1=(0, 2 * jnp.pi),
     rfft_axis=-1,
     vec=False,
     eps=1e-6,
 ):
-    """Non-uniform real fast Fourier transform of second type.
-
-    Notes
-    -----
-    Vectorization with signature ``(b,f0,f1),(x),(x)->(b,x)`` is supported.
+    """Non-uniform 2D real fast Fourier transform of second type.
 
     Examples
     --------
@@ -459,9 +453,6 @@ def nufft2r_2d(
 
     Parameters
     ----------
-    f : jnp.ndarray
-        Fourier coefficients fₘₙ of the map x₀,x₁ ↦ c(x₀,x₁) such that
-        c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁).
     x0 : jnp.ndarray
         Real query points of coordinate in ``domain0`` where interpolation is desired.
         The coordinates stored here must be the same coordinate
@@ -470,6 +461,9 @@ def nufft2r_2d(
         Real query points of coordinate in ``domain1`` where interpolation is desired.
         The coordinates stored here must be the same coordinate
         enumerated across axis ``-1`` of ``f``.
+    f : jnp.ndarray
+        Fourier coefficients fₘₙ of the map x₀,x₁ ↦ c(x₀,x₁) such that
+        c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁).
     domain0 : tuple[float]
         Domain of coordinate specified by x₀ over which samples were taken.
     domain1 : tuple[float]
@@ -481,7 +475,8 @@ def nufft2r_2d(
     vec : bool
         If set to ``True``, then it is assumed that multiple Fourier series are
         to be evaluated at the same non-uniform points. In that case, this flag
-        must be set to retain the function signature of ``(b,f0,f1),(x),(x)->(b,x)``.
+        must be set to retain the function signature for vectorization
+        of ``(x),(x),(b,f0,f1)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
 
@@ -572,7 +567,7 @@ def interp_dct(x, f, lobatto=False, axis=-1):
 
     """
     errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-    return idct_non_uniform(
+    return idct_mmt(
         x,
         cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
         / (f.shape[axis] - lobatto),
@@ -581,8 +576,10 @@ def interp_dct(x, f, lobatto=False, axis=-1):
     )
 
 
-def idct_non_uniform(x, a, n, axis=-1, vander=None):
-    """Evaluate discrete Chebyshev transform coefficients ``a`` at ``x`` ∈ [-1, 1].
+def idct_mmt(x, a, n, axis=-1, vander=None):
+    """Evaluate Chebyshev coefficients ``a`` at ``x`` ∈ [-1, 1].
+
+    Uses matrix multiplication transform.
 
     Parameters
     ----------
@@ -681,9 +678,6 @@ def polyval_vec(*, x, c):
     )
 
 
-# TODO (#1388): Move this stuff into interpax.
-
-
 def _subtract_first(c, k):
     """Subtract ``k`` from first index of last axis of ``c``.
 
@@ -714,6 +708,9 @@ def _subtract_last(c, k):
         ],
         axis=-1,
     )
+
+
+# TODO (#1388): Move this stuff into interpax.
 
 
 def _filter_distinct(r, sentinel, eps):
@@ -908,23 +905,6 @@ def _concat_sentinel(r, sentinel, num=1):
     """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)
-
-
-#  The default method for root finding for bounce points is to use splines
-#  then polish with Newton. If the root finding is selected to be done with
-#  the Chebyshev series, the following changes would make that more efficient.
-#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64.
-#  2. Then to find roots of bounce points use the closed formula in Boyd's
-#  spectral methods section 19.6. Can isolate interval to search for root by
-#  observing whether |B|-1/λ changes sign at extrema. Only need to do
-#  evaluate Chebyshev series at quadrature points once, and can use that to
-#  compute the integral for every λ. The integral will converge rapidly
-#  since a low order polynomial approximates |B| well in between adjacent
-#  extrema. 2 is a larger improvement than 1.
-chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 def rfft_to_trig(a, n, axis=-1):

@@ -272,6 +272,7 @@ def lsqtr(  # noqa: C901
     alpha = 0.0  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
+
         # we don't want to factorize the extra stuff if we don't need to
         J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
         f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f

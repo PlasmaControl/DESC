@@ -11,7 +11,7 @@ from desc.utils import cross, dot
 
 def bn_res(
     p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, 
-        coords,#eq,Bgrid,
+        coords,
     tdata,
     contour_data,
     stick_data,
@@ -19,8 +19,7 @@ def bn_res(
 ):
 
     B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, 
-                #eq, Bgrid,
-    tdata)
+                tdata)
 
     B_wire_cont = B_theta_contours(
         p_M,
@@ -29,7 +28,7 @@ def bn_res(
         sgrid,
         surface,
         y,
-        coords,#eq,Bgrid,
+        coords,
         contour_data,
         contour_grid
     )
@@ -40,11 +39,14 @@ def bn_res(
         sgrid,
         surface,
         y,
-        coords,#eq,Bgrid,
+        coords,
         stick_data,
     )
 
-    B_total = B0 + B_wire_cont + B_sticks_
+    B_total = (B0 
+               + B_wire_cont 
+               #B_sticks_
+              )
 
     #return jnp.concatenate(
     #    (
@@ -89,9 +91,8 @@ def B_sour(
             tdata,
         ),
         surface,
-        # Added line to avoid surface.compute
         sdata1,
-        coords,#eq,Bgrid,
+        coords,
         basis="rpz",
     )
 
@@ -104,7 +105,7 @@ def B_theta_contours(
     sgrid,
     surface,
     y,
-    coords,#eq,Bgrid,
+    coords,
     ss_data,
     ss_grid,
 ):
@@ -153,7 +154,7 @@ def B_theta_contours(
 
     return _compute_magnetic_field_from_Current_Contour(
         ss_grid, K_cont, surface, 
-        ss_data, coords,#eq,Bgrid,
+        ss_data, coords,
         basis="rpz"
     )
 
@@ -164,7 +165,7 @@ def B_sticks(
     sgrid,
     surface,
     y,
-    coords,#eq,Bgrid,
+    coords,
     ss_data,
 ):
 
@@ -284,8 +285,7 @@ def K_sour(
         omega_total_real, omega_total_imag = carry
 
         y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-
-        # Need to evlauate three omegas
+        
         omega_s1 = omega_sour(sdata1, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
 
         omega_total_real += y_ * jnp.real(omega_s1)
@@ -297,8 +297,7 @@ def K_sour(
         omega_total_real, omega_total_imag = carry
 
         y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-
-        # Need to evlauate three omegas
+        
         omega_s2 = omega_sour(sdata2, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
 
         omega_total_real += y_ * jnp.real(omega_s2)
@@ -356,7 +355,7 @@ def K_sour(
 
 
 # @jax.jit
-def f_sour(data_or, u1_, v1_, N, d_0):  # first dipole
+def f_sour(data_or, u1_, v1_, N, d_0): 
 
     w1 = comp_loc(
         u1_,
@@ -381,7 +380,7 @@ def f_sour(data_or, u1_, v1_, N, d_0):  # first dipole
 def omega_sour(
     data_or,
     u1_,
-    v1_,  # first dipole
+    v1_,
     N,
     d_0,
 ):
@@ -396,8 +395,6 @@ def omega_sour(
 
     chi_reg_1 = chi_reg(w1, d_0, data_or)
 
-    # gamma = data_or["du"] / ( 2 * jnp.pi )
-
     omega = (
         v_1_num_prime / v_1_num  # Regularized near the vortex cores
         - 2 * jnp.pi * jnp.real(w1) / (data_or["omega_1"] ** 2 * data_or["tau_2"])
@@ -410,10 +407,7 @@ def omega_sour(
 
 
 def v1_eval(w0, N, d_0, data_or):
-
-    # gamma = data_or["du"] / ( 2 * jnp.pi )
-    # p = jnp.exp( - data_or["dv"] / ( 2 * gamma ) )
-
+    
     gamma = data_or["omega_1"] / jnp.pi
     p = data_or["tau"]
 
@@ -729,7 +723,6 @@ def alt_grid_sticks(theta, zeta, sgrid):
         jitable=True,
     )
 
-
 def densify_linspace(arr, points_per_interval=1):
     """
     Given a jnp.linspace array, return a new array with additional points
@@ -766,7 +759,6 @@ def densify_linspace(arr, points_per_interval=1):
 def _compute_magnetic_field_from_Current(
     Kgrid, K_at_grid, surface, data,
     coords,
-    #eq, Bgrid, 
     basis="rpz"
 ):
     """Compute magnetic field at a set of points.
@@ -812,7 +804,7 @@ def _compute_magnetic_field_from_Current(
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
     #data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
 
-    _rs = xyz2rpz(data["x"])
+    _rs = data["x"]#xyz2rpz(data["x"])
     _K = K_at_grid
 
     # surface element, must divide by NFP to remove the NFP multiple on the
@@ -848,7 +840,6 @@ def _compute_magnetic_field_from_Current(
 
 def _compute_magnetic_field_from_Current_Contour(
     Kgrid, K_at_grid, surface, data, coords,
-    #eq, Bgrid, 
     basis="rpz"
 ):
     """Compute magnetic field at a set of points.
@@ -902,7 +893,7 @@ def _compute_magnetic_field_from_Current_Contour(
     #    basis="xyz",
     #)
 
-    _rs = xyz2rpz(data["x"])
+    _rs = data["x"]#xyz2rpz(data["x"])
     _K = K_at_grid
 
     # surface element, must divide by NFP to remove the NFP multiple on the

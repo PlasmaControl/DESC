@@ -33,7 +33,7 @@ def bn_res(
         contour_grid
     )
 
-    B_sticks_ = B_sticks(
+    B_sticks0 = B_sticks(
         p_M,
         p_N,
         sgrid,
@@ -43,19 +43,11 @@ def bn_res(
         stick_data,
     )
 
-    B_total = (B0 
-               + B_wire_cont 
-               #B_sticks_
-              )
-
-    #return jnp.concatenate(
-    #    (
-    #        B_total[:, 0],
-    #        B_total[:, 1],
-    #        B_total[:, 2],  # B field
-    #        jnp.asarray([jnp.sum(y)]),  # Sum of sources and sinks
-    #    )
-    #)
+    B_total = B_sticks0
+    #(#B0 
+               #+ B_wire_cont 
+    #           B_sticks_
+    #          )
 
     return B_total
 
@@ -173,17 +165,17 @@ def B_sticks(
 
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
-    def sticks_fun(i, b_stick_):
+    def sticks_fun(i, b_stick_fun):
         #y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
 
-        b_stick_ += y[i] * stick(
+        b_stick_fun += y[i] * stick(
             ss_data["x"][i],  # Location of the wire at the theta = pi cut, variable zeta position
             0 * ss_data["x"][i],  # All wires at the center go to the origin
             pls_points,
             sgrid,
             basis="rpz",
         )
-        return b_stick_
+        return b_stick_fun
 
     sticks_total = fori_loop(0, r, sticks_fun, jnp.zeros_like(pls_points))
     return sticks_total
@@ -197,10 +189,6 @@ def stick(
     basis="rpz",
 ):
 
-    # surface_grid = Kgrid
-    # p2_ = xyz2rpz(p2)
-
-    # print(p2_)
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
         phi2 = (p2_[2] + j * 2 * jnp.pi / surface_grid.NFP) % (2 * jnp.pi)
@@ -209,8 +197,6 @@ def stick(
 
         p2s = jnp.vstack((p2_[0], phi2, p2_[2])).T
         p2s = rpz2xyz(p2s)
-        # p1s = jnp.vstack((p1_[0], phi1, p1_[2])).T
-        # p1s = #rpz2xyz(p1s)
 
         a_s = p2s - p1_
         b_s = p1_ - plasma_points

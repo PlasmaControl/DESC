@@ -81,8 +81,14 @@ jobs:
           mpirun --version
           pip list
 
-      - name: Test with pytest
+      - name: Test with pytest (MPI setup)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          python -m pytest -v -m mpi
+          python -m pytest -v -m mpi_setup
+
+      - name: Test with pytest (MPI run)
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          mpirun -n 2 python -m pytest -v -m mpi_run

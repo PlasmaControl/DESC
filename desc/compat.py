@@ -5,7 +5,12 @@ import warnings
 import numpy as np
 
 from desc.grid import Grid, LinearGrid, QuadratureGrid
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import (
+    FourierZernikeProfile,
+    PowerSeriesProfile,
+    ScaledProfile,
+    SplineProfile,
+)
 from desc.utils import errorif, setdefault, warnif
 
 
@@ -180,6 +185,8 @@ def rescale(
     -------
     eq : Equilibrium or iterable of Equilibrium
         Same as input, but rescaled to the desired size and magnetic field strength.
+        The profiles will now be ``ScaledProfile` classes, with the ``scale`` being
+        the rescaling parameter computed in this function.
 
     """
     # maybe it's iterable:
@@ -217,7 +224,7 @@ def rescale(
     L_new = L_new or L_old
     cL = L_new / L_old
     cL = cL ** (1 / 3) if L_key == "V" else cL  # V = 2 π^2 R0 a^2
-
+    cL = float(cL.squeeze())
     # field scaling
     if B_key == "B0":
         grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
@@ -233,6 +240,7 @@ def rescale(
         B_old = np.max(data_B["|B|"])
     B_new = B_new or B_old
     cB = B_new / B_old
+    cB = float(cB.squeeze())
 
     # scaling factor = desired / actual
     if verbose:
@@ -247,15 +255,15 @@ def rescale(
     # scale pressure profile
     if scale_pressure:
         if eq.pressure is not None:
-            eq.p_l *= cB**2
+            eq.pressure = ScaledProfile(cB**2, eq.pressure)
         else:
-            eq.ne_l *= cB
-            eq.Te_l *= cB
-            eq.Ti_l *= cB
+            eq.electron_density = ScaledProfile(cB, eq.electron_density)
+            eq.electron_temperature = ScaledProfile(cB, eq.electron_temperature)
+            eq.ion_temperature = ScaledProfile(cB, eq.ion_temperature)
 
     # scale current profile
     if eq.current is not None:
-        eq.c_l *= cL * cB
+        eq.current = ScaledProfile(cL * cB, eq.current)
 
     # boundary & axis
     eq.axis = eq.get_axis()

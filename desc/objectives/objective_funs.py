@@ -754,7 +754,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:  # pragma: no cover
+        else:
             if self.rank == 0:
                 message = ("compute_unscaled", params, None)
                 self.comm.bcast(message, root=0)
@@ -799,7 +799,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:  # pragma: no cover
+        else:
             if self.rank == 0:
                 message = ("compute_scaled", params, None)
                 self.comm.bcast(message, root=0)
@@ -844,7 +844,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:  # pragma: no cover
+        else:
             if self.rank == 0:
                 message = ("compute_scaled_error", params, None)
                 self.comm.bcast(message, root=0)
@@ -931,7 +931,7 @@ class ObjectiveFunction(IOAble):
             for par, par0, obj, const in zip(
                 params, params0, self.objectives, constants
             ):
-                if self._is_mpi:  # pragma: no cover
+                if self._is_mpi:
                     par = jax.device_put(par, obj._device)
                     par0 = jax.device_put(par0, obj._device)
                 outi = obj.print_value(par, par0, constants=const)
@@ -939,7 +939,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt].append(outi)
                 else:
                     out[obj._print_value_fmt] = [outi]
-        else:  # pragma: no cover
+        else:
             for par, obj, const in zip(params, self.objectives, constants):
                 if self._is_mpi:
                     par = jax.device_put(par, obj._device)

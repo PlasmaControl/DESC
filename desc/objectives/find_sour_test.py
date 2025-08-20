@@ -18,7 +18,7 @@ def bn_res(
     contour_grid,
 ):
 
-    B0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, 
+    B_sour0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, 
                 tdata)
 
     B_wire_cont = B_theta_contours(
@@ -43,11 +43,7 @@ def bn_res(
         stick_data,
     )
 
-    B_total = B_sticks0
-    #(#B0 
-               #+ B_wire_cont 
-    #           B_sticks_
-    #          )
+    B_total = B_sour0 + B_wire_cont + B_sticks0
 
     return B_total
 
@@ -166,7 +162,6 @@ def B_sticks(
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
     def sticks_fun(i, b_stick_fun):
-        #y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
 
         b_stick_fun += y[i] * stick(
             ss_data["x"][i],  # Location of the wire at the theta = pi cut, variable zeta position
@@ -204,18 +199,13 @@ def stick(
 
         c_sxa_s = cross(c_s, a_s)
 
-        f += (
-            1e-7
-            * (
-                (
-                    jnp.sum(c_sxa_s * c_sxa_s, axis=1)
-                    * jnp.sum(c_s * c_s, axis=1) ** (1 / 2)
-                )
-                ** (-1)
+        f += 1e-7 * (
+                ( jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=1), a_min = 1e-8, a_max = None) * jnp.sum(c_s * c_s, axis=1) ** (1 / 2) 
+                ) ** (-1)
                 * (jnp.sum(a_s * c_s) - jnp.sum(a_s * b_s))
                 * c_sxa_s.T
             ).T
-        )
+
         return f
 
     b_stick = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(plasma_points))

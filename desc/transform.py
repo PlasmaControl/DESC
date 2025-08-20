@@ -329,10 +329,17 @@ class Transform(IOAble):
         self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
 
     def _check_inputs_partialrpz(self, grid, basis):
-        if not grid.is_meshgrid:
+        from desc.basis import DoubleChebyshevFourierBasis
+        from desc.grid import CylindricalGrid
+
+        if not isinstance(grid, CylindricalGrid) or not isinstance(
+            basis, DoubleChebyshevFourierBasis
+        ):
             warnings.warn(
                 colored(
-                    "Partial sum RPZ method requires a tensor product grid."
+                    "partialRPZ method requires the compatible basis and grid"
+                    + "got {} grid".format(grid)
+                    + " and {} basis".format(basis)
                     + "falling back to direct1 method",
                     "yellow",
                 )
@@ -351,31 +358,6 @@ class Transform(IOAble):
             )
             self.method = "direct1"
             return
-        if not grid.fft_poloidal or not basis.fft_poloidal:
-            warnings.warn(
-                colored(
-                    "RPZ method requires both the grid and basis to be able"
-                    + " to fft in the second dimension (assumed phi)."
-                    + " falling back to direct1 method."
-                    "yellow",
-                )
-            )
-            self.method = "direct1"
-            return
-        from desc.basis import DoubleChebyshevFourierBasis
-
-        if not isinstance(basis, DoubleChebyshevFourierBasis):
-            warnings.warn(
-                colored(
-                    "Direct RPZ method requires a basis of type"
-                    + " DoubleChebyshevFourierBasis."
-                    + "falling back to direct1 method",
-                    "yellow",
-                )
-            )
-            self.method = "direct1"
-            return
-
         # Coefficients for Fourier derivatives in spectral coordinates (phi basis)
         self.dk = self.basis.NFP * jnp.arange(-self.basis.M, self.basis.M + 1)
         self._method = "partialrpz"

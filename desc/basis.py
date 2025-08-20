@@ -1142,9 +1142,7 @@ class DoubleChebyshevFourierBasis(_Basis):
 
     """
 
-    # phi is actually the toroidal coordinate, but this refers to
-    # the second coordinate, which in our case is phi
-    _fft_poloidal = True
+    _fft_poloidal = False
     _fft_toroidal = False
 
     def __init__(self, L, M, N, NFP=1, sym=False):

@@ -1930,7 +1930,6 @@ class CylindricalGrid(_Grid):
             r_endpoint=r_endpoint,
             z_endpoint=z_endpoint,
         )
-        self._enforce_symmetry()
         self._sort_nodes()
         # For compatibility, these indices are still hardcoded as RTZ
         (

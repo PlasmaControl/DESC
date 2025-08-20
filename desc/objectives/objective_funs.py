@@ -263,6 +263,7 @@ class ObjectiveFunction(IOAble):
         "_things_per_objective_idx",
         "_use_jit",
         "_is_mpi",
+        "_static_attrs",
     ]
 
     def __init__(

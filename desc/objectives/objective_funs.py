@@ -546,7 +546,7 @@ class ObjectiveFunction(IOAble):
             Level of output.
 
         """
-        use_jit_wrapper = True
+        use_jit_wrapper = self._use_jit
         if use_jit is not None:
             self._use_jit = use_jit
             # use_jit_wrapper is used to determine if we jit the ObjectiveFunction

@@ -408,8 +408,11 @@ def test_overstepping():
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
+    # we need to build before we declare a new method to properly unjit
+    # the objective methods, so that _static_attrs is set correctly
+    objective.build()
     # make gradient super noisy so it stalls
-    objective.jac_scaled_error = lambda x, *args: objective._jac_scaled_error(
+    objective.jac_scaled_error = lambda x, *args: objective.jac_scaled_error(
         x
     ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
 

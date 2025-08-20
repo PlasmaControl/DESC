@@ -1299,24 +1299,6 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-# currently not in use but might be useful later
-def jit_if_not_parallel(func):
-    """Jit a function if not in parallel mode."""
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        obj = args[0]
-        if not getattr(obj, "_is_multi_device", False):
-            # Apply jit if jittable
-            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
-            return jitted_func(*args, **kwargs)
-        else:
-            # Run normally if not jittable
-            return func(*args, **kwargs)
-
-    return wrapper
-
-
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v

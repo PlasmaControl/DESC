@@ -2100,7 +2100,8 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
     label="g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
-    description="Radial/Radial element of covariant metric tensor" + "PEST_coordinates",
+    description="Radial/Radial element of covariant metric tensor"
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2119,7 +2120,7 @@ def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial-Poloidal element of covariant metric tensor"
-    + "PEST_coordinates",
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2139,7 +2140,7 @@ def _g_sub_rv_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial-Toroidal element of covariant metric tensor"
-    + "PEST_coordinates",
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2178,7 +2179,7 @@ def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Poloidal-Toroidal element of covariant metric tensor"
-    + "PEST_coordinates",
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2198,7 +2199,7 @@ def _g_sub_vp_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Toroidal-Toroidal element of covariant metric tensor"
-    + "PEST_coordinates",
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2217,7 +2218,7 @@ def _g_sub_pp_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial-Poloidal element of covariant metric tensor"
-    + "PEST_coordinates",
+    + " PEST_coordinates",
     dim=1,
     params=[],
     transforms={},
@@ -2230,9 +2231,9 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
     return data
 
 
-################################################################################
-###########------------METRIC ELEMENT DERIVATIVES PEST---------------###########
-################################################################################
+#################################################################################
+############------------METRIC ELEMENT DERIVATIVES PEST---------------###########
+#################################################################################
 
 
 @register_compute_fun(
@@ -2241,7 +2242,7 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of covariant metric tensor"
-    + "derivative w.r.t poloidal PEST coordinate",
+    + " derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2261,7 +2262,7 @@ def _g_sub_rr_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of covariant metric tensor"
-    + "derivative w.r.t toroidal cylindrical coordinate",
+    + " derivative w.r.t toroidal cylindrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2280,7 +2281,7 @@ def _g_sub_rr_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Poloidal/Poloidal element of covariant metric tensor"
-    + "derivative w.r.t radial coordinate",
+    + " derivative w.r.t radial coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2300,7 +2301,7 @@ def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Poloidal/Poloidal element of covariant metric tensor"
-    + "derivative w.r.t toroidal cylindrical coordinate",
+    + " derivative w.r.t toroidal cylindrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2319,7 +2320,7 @@ def _g_sub_vv_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of covariant metric tensor"
-    + "derivative w.r.t poloidal PEST coordinate",
+    + " derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2339,7 +2340,7 @@ def _g_sub_pp_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of covariant metric tensor"
-    + "derivative w.r.t toroidal cylindrical coordinate",
+    + " derivative w.r.t toroidal cylindrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2361,7 +2362,7 @@ def _g_sub_rv_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of contravariant metric tensor"
-    + "derivative w.r.t toroidal cylindrical coordinate",
+    + " derivative w.r.t toroidal cylindrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2380,7 +2381,7 @@ def _g_sup_rr_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of contravariant metric tensor"
-    + "derivative w.r.t poloidal PEST coordinate",
+    + " derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2400,7 +2401,7 @@ def _g_sup_rr_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Radial element of contravariant metric tensor"
-    + "derivative w.r.t toroidal cylidrical coordinate",
+    + " derivative w.r.t toroidal cylidrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2421,7 +2422,7 @@ def _g_sup_rv_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Poloidal element of contrvariant metric tensor"
-    + "derivative w.r.t poloidal PEST coordinate",
+    + " derivative w.r.t poloidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2443,7 +2444,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Toroidal element of contravariant metric tensor"
-    + "derivative w.r.t toroidal cylindrical coordinate",
+    + " derivative w.r.t toroidal cylindrical coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2464,7 +2465,7 @@ def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Toroidal element of contrvariant metric tensor"
-    + "derivative w.r.t toroidal PEST coordinate",
+    + " derivative w.r.t toroidal PEST coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2489,7 +2490,8 @@ def _g_sup_rz_v_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system",
+    description="Jacobian determinant of PEST coordinate system"
+    + " derivative w.r.t radial coordinate rho",
     dim=1,
     params=[],
     transforms={},
@@ -2518,8 +2520,8 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system"
-    + "derivative w.r.t PEST poloidal angle",
+    description="Jacobian determinant of PEST coordinate system"
+    + " derivative w.r.t PEST poloidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -2549,8 +2551,8 @@ def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\phi} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of flux coordinate system"
-    + "derivative w.r.t cylindrical toroidal angle",
+    description="Jacobian determinant of PEST coordinate system"
+    + " derivative w.r.t cylindrical toroidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -2584,7 +2586,7 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     label="\\nabla(\\nabla(\\rho))",
     units="m^{-2}",
     units_long="inverse square meters",
-    description="Gradient of gradient of rho tensor",
+    description="Gradient of gradient of rho tensor along the magnetic field",
     dim=3,
     params=[],
     transforms={},

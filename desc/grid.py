@@ -2053,7 +2053,6 @@ class CylindricalGrid(_Grid):
                 r_endpoint=(self._nodes[:, 0] == 0).any(),
                 z_endpoint=(self._nodes[:, 1] == 0).any(),
             )
-            self._enforce_symmetry()
             self._sort_nodes()
             (
                 self._unique_rho_idx,

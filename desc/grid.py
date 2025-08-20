@@ -917,7 +917,7 @@ class Grid(_Grid):
         ----------
         nodes : list of ndarray
             Three arrays, one for each coordinate.
-            Sorted unique values of each coordinate.
+            Unique values of each coordinate sorted in increasing order.
         spacing : list of ndarray
             Three arrays, one for each coordinate.
             Weights for integration. Defaults to a midpoint rule.
@@ -1207,10 +1207,10 @@ class LinearGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -1334,6 +1334,10 @@ class LinearGrid(_Grid):
             # if custom zeta used usually safe to assume its non-uniform so no fft
             self._fft_toroidal = not endpoint
         elif zeta is not None:
+            errorif(
+                np.any(np.asarray(zeta) > zeta_period),
+                msg="LinearGrid should be defined on 1 field period.",
+            )
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
             if z[0] == 0 and z[-1] == zeta_period:

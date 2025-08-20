@@ -22,7 +22,7 @@ def test_effective_ripple_2D(nufft_eps):
 
     If this test has a peak memory consumption of more than 2.7 GB on JAX version 0.5.0
     or more than 5.7 GB on JAX versions 0.5.3+, then there is another memory regression.
-    These values are for the test with where nufft_eps is zero.
+    These values are for the test where nufft_eps is zero.
     https://github.com/jax-ml/jax/issues/30627.
     """
     eq = get("W7-X")

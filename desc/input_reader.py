@@ -681,6 +681,7 @@ class InputReader:
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
+            filename = os.path.expanduser(filename)
             f = open(filename, "w+")
         else:
             f = filename
@@ -906,12 +907,12 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
-        prof_modes = np.zeros((L_profile, 3))
-        prof_modes[:, 0] = np.arange(L_profile)
+        prof_modes = np.zeros((L_profile + 1, 3))
+        prof_modes[:, 0] = np.arange(L_profile + 1)
         p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
         p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
-        for l in range(L_profile):
+        for l in range(L_profile + 1):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
                     int(l), p1[l], char, p2[l]
@@ -1174,9 +1175,8 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
-            if match:
-                if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
+            if re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Pressure is not a power series!", "yellow"))
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:

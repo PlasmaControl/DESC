@@ -63,6 +63,19 @@ def print_backend_info():
     )
 
 
+def _diag_to_full(d, e):
+    j = np.arange(d.shape[-1])
+    return (
+        jnp.zeros(d.shape + (d.shape[-1],))
+        .at[..., j, j]
+        .set(d, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+    )
+
+
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
@@ -134,8 +147,64 @@ if use_jax:  # noqa: C901
 
         return wrapper
 
-    # JAX implementation is not differentiable on gpu.
-    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
+    _eigh_tridiagonal = jnp.vectorize(
+        jax.scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
+    if desc_config["kind"] == "gpu":
+        # JAX eigh_tridiagonal is not differentiable on gpu.
+        # https://github.com/jax-ml/jax/issues/23650
+        # # TODO (#1750): Eventually use this once it supports kwargs.
+        # https://docs.jax.dev/en/latest/_autosummary/jax.lax.platform_dependent.html
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            return jax.scipy.linalg.eigh(
+                _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+            )
+
+    else:
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            # Reverse mode also not differentiable on CPU.
+            # TODO (#1750): Update logic when resolving the linked issue?
+            if True or not eigvals_only:
+                # https://github.com/jax-ml/jax/issues/14019
+                return jax.scipy.linalg.eigh(
+                    _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+                )
+            return _eigh_tridiagonal(
+                d,
+                e,
+                eigvals_only=eigvals_only,
+                select=select,
+                select_range=select_range,
+                tol=tol,
+            )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -316,6 +385,29 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
+    def _lstsq(A, y):
+        """Cholesky factorized least-squares.
+
+        jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+        so we use regularized cholesky.
+
+        For square systems, solves Ax=y directly.
+        """
+        A = jnp.atleast_2d(A)
+        y = jnp.atleast_1d(y)
+        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+        if A.shape[-2] == A.shape[-1]:
+            return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+        elif A.shape[-2] > A.shape[-1]:
+            P = A.T @ A + eps * jnp.eye(A.shape[-1])
+            return cho_solve(cho_factor(P), A.T @ y)
+        else:
+            P = A @ A.T + eps * jnp.eye(A.shape[-2])
+            return A.T @ cho_solve(cho_factor(P), y)
+
+    def _tangent_solve(g, y):
+        return _lstsq(jax.jacfwd(g)(y), y)
+
     def root(
         fun,
         x0,
@@ -381,18 +473,6 @@ if use_jax:  # noqa: C901
 
         res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
 
-        # want to use least squares for rank-defficient systems, but
-        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
-        # so we use the normal equations with regularized cholesky
-        def _lstsq(a, b):
-            a = jnp.atleast_2d(a)
-            b = jnp.atleast_1d(b)
-            tall = a.shape[-2] >= a.shape[-1]
-            A = a.T @ a if tall else a @ a.T
-            B = a.T @ b if tall else b @ a
-            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
-            return cho_solve(cho_factor(A), B)
-
         def solve(resfun, guess):
             def condfun_ls(state_ls):
                 xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
@@ -432,17 +512,13 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (safenorm(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
 
@@ -459,7 +535,6 @@ else:  # pragma: no cover
         block_diag,
         cho_factor,
         cho_solve,
-        eigh_tridiagonal,
         qr,
         solve_triangular,
     )
@@ -467,6 +542,12 @@ else:  # pragma: no cover
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+    eigh_tridiagonal = np.vectorize(
+        scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
 
     def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""

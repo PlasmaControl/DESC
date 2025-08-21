@@ -1,18 +1,20 @@
 """Tests for Equilibrium class."""
 
 import os
-import pickle
 import warnings
 
 import numpy as np
 import pytest
+from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
@@ -82,6 +84,35 @@ def test_map_coordinates():
 
 
 @pytest.mark.unit
+def test_map_clebsch_coordinates():
+    """Test root finding for (rho,alpha,zeta)."""
+    eq = get("NCSX")
+    assert eq.NFP > 1
+    rho = np.linspace(0.5, 1, 2)
+    alpha = np.linspace(0, 2 * np.pi, 3)
+    zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
+
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    out = eq.map_coordinates(
+        grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        lmbda = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+        )["L"]
+    assert lmbda.basis.NFP == eq.NFP
+    np.testing.assert_allclose(
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+    )
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        grid.meshgrid_reshape(out[:, 1], "raz"),
+    )
+
+
+@pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
@@ -117,34 +148,7 @@ def test_map_coordinates_derivative():
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
-
-    # Check map_coordinates with full_output is still runs without errors
-    # this time _map_clebsch_coordinates is called inside map_coordinates
-    inbasis2 = ["rho", "alpha", "zeta"]
-    in_data = eq.compute(inbasis2, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
-
-    @jax.jit
-    def foo(params, in_coords):
-        out, (_, _) = eq.map_coordinates(
-            in_coords,
-            inbasis2,
-            ("rho", "theta", "zeta"),
-            np.array([rho, theta, zeta]).T,
-            params,
-            period=(2 * np.pi, 2 * np.pi, np.inf),
-            maxiter=40,
-            full_output=True,
-        )
-        return out
-
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
-    for j1, j2 in zip(J1.values(), J2.values()):
-        assert ~np.any(np.isnan(j1))
-        assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
+        np.testing.assert_allclose(j1, j2, atol=1e-12)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -263,6 +267,9 @@ def test_eq_change_symmetry():
     assert eq.surface.sym
     assert eq.surface.R_basis.sym == "cos"
     assert eq.surface.Z_basis.sym == "sin"
+    assert eq.axis.sym
+    assert eq.axis.R_basis.sym == "cos"
+    assert eq.axis.Z_basis.sym == "sin"
 
     # undo symmetry
     eq.change_resolution(sym=False)
@@ -276,6 +283,9 @@ def test_eq_change_symmetry():
     assert not eq.surface.sym
     assert not eq.surface.R_basis.sym
     assert not eq.surface.Z_basis.sym
+    assert eq.axis.sym is False
+    assert eq.axis.R_basis.sym is False
+    assert eq.axis.Z_basis.sym is False
 
 
 @pytest.mark.unit
@@ -292,20 +302,58 @@ def test_resolution():
 @pytest.mark.unit
 def test_equilibrium_from_near_axis():
     """Test loading a solution from pyQSC/pyQIC."""
-    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
-    file = open(qsc_path, "rb")
-    na = pickle.load(file)
-    file.close()
+    na = Qic.from_paper("r2 section 5.5", rs=[0, 1e-5], zc=[0, 1e-5])
 
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     data = eq.compute("|B|", grid=grid)
 
+    # get the sin/cos modes
+    eq_rc = eq.Ra_n[
+        np.where(
+            np.logical_and(
+                eq.axis.R_basis.modes[:, 2] >= 0,
+                eq.axis.R_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_zc = eq.Za_n[
+        np.where(
+            np.logical_and(
+                eq.axis.Z_basis.modes[:, 2] >= 0,
+                eq.axis.Z_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_rs = np.flipud(
+        eq.Ra_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.R_basis.modes[:, 2] < 0,
+                    eq.axis.R_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+    eq_zs = np.flipud(
+        eq.Za_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.Z_basis.modes[:, 2] < 0,
+                    eq.axis.Z_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-    np.testing.assert_allclose(eq.Ra_n[:2], na.rc, atol=1e-10)
-    np.testing.assert_allclose(eq.Za_n[-2:], na.zs, atol=1e-10)
+    np.testing.assert_allclose(eq_rc, na.rc, atol=1e-10)
+    # na.zs[0] is always 0, which DESC doesn't include
+    np.testing.assert_allclose(eq_zs, na.zs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_rs, na.rs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_zc, na.zc, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
@@ -414,3 +462,17 @@ def test_assigning_profile_iota_current():
     with pytest.warns(UserWarning, match="existing toroidal"):
         eq.iota = PowerSeriesProfile()
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_eq_optimize_default_constraints_warning(DummyStellarator):
+    """Tests default constraints warning for eq.optimize."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

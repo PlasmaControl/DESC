@@ -24,3 +24,14 @@ tests/benchmarks/.benchmarks/
 *.swo
 .pymon
 .vscode/
+
+# see https://github.com/github/gitignore/blob/main/Python.gitignore
+# pyenv
+.python-version
+
+# UV
+uv.lock
+
+# Environments
+.env
+.venv

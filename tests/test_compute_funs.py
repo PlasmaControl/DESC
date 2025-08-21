@@ -1350,6 +1350,7 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
             base_bits = [parts[-1]]
             base = ["X", "Y", "Z"]
         else:  # like "e_rho_v"
+
             deriv_tokn = parts[-1]
             base_bits = parts[:-1]
             base = []
@@ -1374,6 +1375,9 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
             base_key = base_key + (
                 "|r,p" if deriv0 == "v" else ("|p,v" if deriv0 == "r" else "|r,v")
             )
+            # adding parenthesis to the higher-order vectors
+            list0 = key.split("|")
+            key = "(" + list0[0] + ")" + "|" + list0[1]
 
         req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
         data = eq.compute(req_keys, grid=grid_used)
@@ -1492,6 +1496,10 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
             base_key = None  # triggers Cartesian path
         else:
             base_key = "".join(base_bits)  # e_rho, e_vartheta,
+
+        # adding parenthesis to the higher-order vectors
+        list0 = key.split("|")
+        key = "(" + list0[0] + ")" + "|" + list0[1]
 
         req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
         data = eq.compute(req_keys, grid=grid_used)

@@ -1913,7 +1913,9 @@ class Equilibrium(Optimizable, _MagneticField):
                     distance = safenorm(x - xg, axis=-1)
                     return jnp.argmin(distance, axis=-1)
 
-                idx = batch_map(_distance_body, eval_xyz[..., jnp.newaxis, :], 50)
+                idx = batch_map(
+                    _distance_body, eval_xyz[..., jnp.newaxis, :], chunk_size
+                )
                 guess = yg[idx]
 
             # We know zeta = phi, so we can swap that out

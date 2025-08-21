@@ -24,10 +24,12 @@ def main(cl_args=sys.argv[1:]):
 
     import matplotlib.pyplot as plt
 
+    from desc.backend import print_backend_info
     from desc.equilibrium import EquilibriaFamily, Equilibrium
     from desc.plotting import plot_section, plot_surfaces
 
     if ir.args.verbose:
+        print_backend_info()
         print("Reading input from {}".format(ir.input_path))
         print("Outputs will be written to {}".format(ir.output_path))
 
@@ -37,7 +39,7 @@ def main(cl_args=sys.argv[1:]):
         and (inputs[-1]["pres_ratio"] is None)
         and (inputs[-1]["bdry_ratio"] is None)
     ):
-        eq = Equilibrium(**inputs[-1], check_kwargs=False)
+        eq = Equilibrium(**inputs[-1], check_kwargs=False, ensure_nested=False)
         equil_fam = EquilibriaFamily.solve_continuation_automatic(
             eq,
             objective=inputs[-1]["objective"],
@@ -76,13 +78,13 @@ def main(cl_args=sys.argv[1:]):
             print("Plotting solution at step {}".format(i + 1))
             _ = plot_surfaces(eq)
             plt.show()
-            _ = plot_section(eq, "|F|", log=True, norm_F=True)
+            _ = plot_section(eq, "|F|_normalized", log=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
         _ = plot_surfaces(equil_fam[-1])
         plt.show()
-        _ = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)
+        _ = plot_section(equil_fam[-1], "|F|_normalized", log=True)
         plt.show()
 
 

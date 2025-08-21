@@ -1,6 +1,7 @@
 """Utility functions, independent of the rest of DESC."""
 
 import functools
+import inspect
 import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
@@ -9,7 +10,18 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, take
+from desc.backend import (
+    flatnonzero,
+    fori_loop,
+    jax,
+    jit,
+    jnp,
+    pure_callback,
+    sign,
+    take,
+)
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 
 class Timer:
@@ -415,18 +427,17 @@ def svd_inv_null(A):
         Null space of A.
 
     """
-    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    u, s, vh = jnp.linalg.svd(A, full_matrices=True)
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)
-    tol = np.amax(s) * rcond
+    tol = jnp.amax(s) * rcond
     large = s > tol
-    num = np.sum(large, dtype=int)
+    num = jnp.sum(large, dtype=int)
     uk = u[:, :K]
     vhk = vh[:K, :]
-    s = np.divide(1, s, where=large, out=s)
-    s[(~large,)] = 0
-    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    s = jnp.where(large, 1 / s, 0)
+    Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
 
@@ -497,6 +508,12 @@ def get_instance(things, cls):
     return foo[0] if len(foo) else None
 
 
+def get_all_instances(things, cls):
+    """Get every thing from an iterable of things that is instance of cls."""
+    foo = [t for t in things if isinstance(t, cls)]
+    return foo if len(foo) else None
+
+
 def parse_argname_change(arg, kwargs, oldname, newname):
     """Warn and parse arguments whose names have changed."""
     if oldname in kwargs:
@@ -552,7 +569,7 @@ class ResolutionWarning(UserWarning):
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(colored(msg, "yellow"), err)
+        warnings.warn(msg, err)
 
 
 def check_nonnegint(x, name="", allow_none=True):
@@ -744,11 +761,110 @@ def atleast_nd(ndmin, ary):
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
-PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
+    """Make an external (python) function work with JAX.
+
+    Positional arguments to func can be differentiated,
+    use keyword args for static values and non-differentiable stuff.
+
+    Note: Only forward mode differentiation is supported currently.
+
+    Parameters
+    ----------
+    func : callable
+        Function to wrap. Should be a "pure" function, in that it has no side
+        effects and doesn't maintain state. Does not need to be JAX transformable.
+    abstract_eval : callable
+        Auxiliary function that computes the output shape and dtype of func.
+        **Must be JAX transformable**. Should be of the form
+
+            abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as
+            func(*args, **kwargs)
+
+        For example, if func always returns a scalar:
+
+            abstract_eval = lambda *args, **kwargs: jnp.array(1.)
+
+        Or if func takes an array of shape(n) and returns a dict of arrays of
+        shape(n-2):
+
+            abstract_eval = lambda arr, **kwargs:
+            {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
+    vectorized : bool, optional
+        Whether or not the wrapped function is vectorized. Default = False.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+
+    Returns
+    -------
+    func : callable
+        New function that behaves as func but works with jit/vmap/jacfwd etc.
+
+    """
+
+    def wrap_pure_callback(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result_shape_dtype = abstract_eval(*args, **kwargs)
+            return pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
+
+        return wrapper
+
+    def define_fd_jvp(func):
+        func = jax.custom_jvp(func)
+
+        @func.defjvp
+        def func_jvp(primals, tangents):
+            primal_out = func(*primals)
+
+            # flatten everything into 1D vectors for easier finite differences
+            y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
+            x, unflatx = jax.flatten_util.ravel_pytree(primals)
+            v, _______ = jax.flatten_util.ravel_pytree(tangents)
+
+            # finite difference step size
+            fd_step = abs_step + rel_step * jnp.mean(jnp.abs(x))
+
+            # scale tangents to unit norm if nonzero
+            normv = jnp.linalg.norm(v)
+            vh = jnp.where(normv == 0, v, v / normv)
+
+            def f(x):
+                return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
+
+            tangent_out = (f(x + fd_step * vh) - y) / fd_step * normv
+            tangent_out = unflaty(tangent_out)
+
+            return primal_out, tangent_out
+
+        return func
+
+    return define_fd_jvp(wrap_pure_callback(func))
+
+
+def atleast_3d_mid(ary):
+    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
+
+
+def atleast_2d_end(ary):
+    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 def dot(a, b, axis=-1):
-    """Batched vector dot product.
+    """Batched coordinate dot product.
+
+    This returns the dot product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal.
 
     Parameters
     ----------
@@ -765,11 +881,15 @@ def dot(a, b, axis=-1):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis)
 
 
 def cross(a, b, axis=-1):
-    """Batched vector cross product.
+    """Batched coordinate cross product.
+
+    This returns the cross product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal
+    and right-handed.
 
     Parameters
     ----------
@@ -789,7 +909,7 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     """Like jnp.linalg.norm, but without nan gradient at x=0.
 
     Parameters
@@ -804,12 +924,19 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
         Value to return where x is zero.
     threshold : float >= 0
         How small is x allowed to be.
+    keepdims : bool, optional
+        If this is set to True, the axes which are normed over are left in the result
+        as dimensions with size one. With this option the result will broadcast
+        correctly against the original x.
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
     n = jnp.linalg.norm(y, ord=ord, axis=axis)
     n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    if keepdims:
+        axis = 0 if axis is None else axis
+        n = jnp.expand_dims(n, axis)
     return n
 
 
@@ -832,7 +959,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims=True) * jnp.ones_like(x)
     # return unit vector with equal components if norm <= threshold
     return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 
@@ -848,6 +975,7 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)
@@ -855,80 +983,10 @@ def safediv(a, b, fill=0, threshold=0):
     return num / den
 
 
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):
@@ -938,3 +996,175 @@ def ensure_tuple(x):
     if isinstance(x, list):
         return tuple(x)
     return (x,)
+
+
+def getsource(obj):
+    """Get source code for an object, allowing for partials etc."""
+    if isinstance(obj, functools.partial):
+        return getsource(obj.func)
+    return inspect.getsource(obj)
+
+
+def reflection_matrix(normal):
+    """Matrix to reflect points across plane through origin with specified normal.
+
+    Parameters
+    ----------
+    normal : array-like, shape(3,)
+        Vector normal to plane of reflection, in cartesian (X,Y,Z) coordinates
+
+    Returns
+    -------
+    flip : ndarray, shape(3,3)
+        Matrix to flip points in cartesian (X,Y,Z) coordinates
+    """
+    normal = jnp.asarray(normal)
+    R = jnp.eye(3) - 2 * jnp.outer(normal, normal) / jnp.inner(normal, normal)
+    return R
+
+
+def rotation_matrix(axis, angle=None):
+    """Matrix to rotate points about axis by given angle.
+
+    Parameters
+    ----------
+    axis : array-like, shape(3,)
+        Axis of rotation, in cartesian (X,Y,Z) coordinates
+    angle : float or None
+        Angle to rotate by, in radians. If None, use norm of axis vector.
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    axis = jnp.asarray(axis)
+    norm = safenorm(axis)
+    axis = safenormalize(axis)
+    if angle is None:
+        angle = norm
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
+    R1 = jnp.cos(angle) * jnp.eye(3)
+    R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
+    R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+
+
+def xyz2rpz(pts):
+    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+
+    Parameters
+    ----------
+    pts : ndarray, shape(...,3)
+        points in cartesian (X,Y,Z) coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(...,3)
+        points in polar (R,phi,Z) coordinates
+
+    """
+    x, y, z = pts.T
+    r = jnp.hypot(x, y)
+    p = jnp.arctan2(y, x)
+    return jnp.array([r, p, z]).T
+
+
+def rpz2xyz(pts):
+    """Transform points from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+
+    Parameters
+    ----------
+    pts : ndarray, shape(...,3)
+        points in polar (R,phi,Z) coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(...,3)
+        points in cartesian (X,Y,Z) coordinates
+
+    """
+    r, p, z = pts.T
+    x = r * jnp.cos(p)
+    y = r * jnp.sin(p)
+    return jnp.array([x, y, z]).T
+
+
+def xyz2rpz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(...,3)
+        vectors, in cartesian (X,Y,Z) form
+    x, y, phi : ndarray, shape(...,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(...,3)
+        vectors, in polar (R,phi,Z) form
+
+    """
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+                [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        polar = jnp.matmul(rot, vec)
+        return polar
+
+    return inner(vec, phi)
+
+
+def rpz2xyz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(n,3)
+        vectors, in polar (R,phi,Z) form
+    x, y, phi : ndarray, shape(n,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(n,3)
+        vectors, in cartesian (X,Y,Z) form
+
+    """
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+                [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        cart = jnp.matmul(rot, vec)
+        return cart
+
+    return inner(vec, phi)
+
+
+def copy_rpz_periods(rpz, NFP):
+    """Copy an rpz coordinate triplet into multiple field periods."""
+    r, p, z = rpz.T
+    r = jnp.tile(r, NFP)
+    z = jnp.tile(z, NFP)
+    p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
+    return jnp.array([r, p.flatten(), z]).T

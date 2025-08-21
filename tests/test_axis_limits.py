@@ -35,6 +35,8 @@ not_finite_limits = {
     "D_geodesic",
     "D_well",
     "J^theta",
+    "J^theta_t",
+    "J^theta_z",
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -64,7 +66,8 @@ not_finite_limits = {
     "g^tz_z",
     "g^aa",
     "g^ra",
-    "g^rv|PEST",
+    "g^rv",
+    "(g^rv_p)|PEST",
     "gbdrift",
     "grad(alpha)",
     "grad(alpha) (periodic)",
@@ -74,8 +77,11 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
-    "B_dot_grad(grad(rho))",
     "J^theta_PEST",
+    "(J^theta_PEST_v)|PEST",
+    "(J^theta_PEST_p)|PEST",
+    "(e^vartheta_v)|PEST",
+    "(e^vartheta_p)|PEST",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -100,22 +106,17 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
-    "e^vartheta",
-    "e^vartheta_t",
-    "e^vartheta_v|PEST",
-    "e^vartheta_z|PEST",
-    "e^zeta_v|PEST",
-    "e^zeta_z|PEST",
-    "e^rho_v|PEST",
-    "e^rho_z|PEST",
-    "J^theta_t",
-    "J^theta_z",
+    "(e^zeta_v)|PEST",
+    "(e^zeta_z)|PEST",
+    "(e^rho_v)|PEST",
+    "(e^rho_z)|PEST",
     "J^zeta_t",
     "J^zeta_z",
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
     "gds2",
+    "B_dot_grad(grad(rho))",
 }
 
 

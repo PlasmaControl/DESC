@@ -1294,10 +1294,10 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
         "e_vartheta|r,p",
         "e_phi|r,v",
         "e_vartheta_v|PEST",
-        "e_vartheta_z|PEST",
+        "e_vartheta_p|PEST",
         "e_vartheta_r|PEST",
         "e_phi_r|PEST",
-        "e_phi_z|PEST",
+        "e_phi_p|PEST",
         "e_rho_r|PEST",
     ]
 
@@ -1350,6 +1350,7 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
             base_bits = [parts[-1]]
             base = ["X", "Y", "Z"]
         else:  # like "e_rho_v"
+
             deriv_tokn = parts[-1]
             base_bits = parts[:-1]
             base = []
@@ -1374,6 +1375,9 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
             base_key = base_key + (
                 "|r,p" if deriv0 == "v" else ("|p,v" if deriv0 == "r" else "|r,v")
             )
+            # adding parenthesis to the higher-order vectors
+            list0 = key.split("|")
+            key = "(" + list0[0] + ")" + "|" + list0[1]
 
         req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
         data = eq.compute(req_keys, grid=grid_used)
@@ -1433,11 +1437,11 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
 
     keys_PEST = [
         "e^vartheta_v|PEST",
-        "e^vartheta_z|PEST",
+        "e^vartheta_p|PEST",
         "e^zeta_v|PEST",
-        "e^zeta_z|PEST",
+        "e^zeta_p|PEST",
         "e^rho_v|PEST",
-        "e^rho_z|PEST",
+        "e^rho_p|PEST",
     ]
 
     N = 2000
@@ -1446,7 +1450,7 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
     grids_PEST = {
         "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
         "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
-        "z": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
+        "p": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
     }
 
     # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
@@ -1461,7 +1465,7 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
     # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
     rtz_nodes1 = map_coordinates(
         eq,
-        grids_PEST["z"].nodes,  # (ρ,θ_PEST,ζ)
+        grids_PEST["p"].nodes,  # (ρ,θ_PEST,ζ)
         inbasis=("rho", "theta_PEST", "zeta"),
         outbasis=("rho", "theta", "zeta"),
         period=(np.inf, 2 * np.pi, np.inf),
@@ -1493,13 +1497,17 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
         else:
             base_key = "".join(base_bits)  # e_rho, e_vartheta,
 
+        # adding parenthesis to the higher-order vectors
+        list0 = key.split("|")
+        key = "(" + list0[0] + ")" + "|" + list0[1]
+
         req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
         data = eq.compute(req_keys, grid=grid_used)
 
         # Determine reshape dimensions based on deriv
         reshape_dims = (
             (1, 1, grid_used.num_zeta, -1)
-            if deriv == "z"
+            if deriv == "p"
             else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
         )
 
@@ -1515,7 +1523,7 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
         spacing = {
             "r": grids_PEST[deriv].spacing[0, 0],
             "v": grids_PEST[deriv].spacing[0, 1] / 2,
-            "z": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+            "p": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
         }
 
         if deriv == "r":

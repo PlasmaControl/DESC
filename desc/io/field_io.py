@@ -1,11 +1,15 @@
+"""Formatting into BMW and FIELDLINES-style formats for precomputed arrays."""
+
 import os
+
+import h5py
 import numpy as np
 from netCDF4 import Dataset
-import h5py
-from desc.utils import rpz2xyz, rpz2xyz_vec, errorif
+
+from desc.utils import errorif, rpz2xyz, rpz2xyz_vec
 
 
-def save_bmw_format(
+def write_bmw_file(
     path,
     B,
     Rmin,
@@ -22,7 +26,41 @@ def save_bmw_format(
     series=3,
 ):
     """
-    BMW format: A and B indexed by (phi, Z, R) and J indexed by (v,u,s)~(zeta,theta,rho).
+    Save an array of magnetic field values in the same format as BMW.
+
+    Parameters
+    ----------
+    path : str
+        The filepath to save the magnetic field. Ends with .h5.
+    B : array-like, shape (nR*nphi*nZ,3)
+        Magnetic field values, assumed to be reshapeable to (nR, nphi, nZ, 3)
+    Rmin, Rmax, Zmin, Zmax : float, optional
+        Bounds for the R, phi, and Z coordinates of the desired evaluation points
+    nR, nZ, nphi : int, optional
+        Desired number of evaluation points in the radial, vertical, and toroidal
+        directions.
+    source_data : dict , optional
+        Dictionary containing data used to evaluate the magnetic field and vector
+        potential. If supplied, contains the following keys: ["J", "R", "phi", "Z"]
+    source_grid : _Grid , optional
+        Grid object used to discretize source_data integral. Must be supplied if
+        source_data is supplied.
+    NFP : int, optional
+        Number of field periods
+    A : array-like, shape (nR*nphi*nZ,3), optional
+        Vector potential values, assumed to be reshapeable to (nR, nphi, nZ, 3)
+    series: int, optional
+        The BMW series tag that is saved.
+
+    Notes
+    -----
+    This file accepts A and B as reshapeable to (R,phi,Z) indexing, but
+    are later transposed to (phi, Z, R), and likewise J is transposed to be
+    indexed by (v,u,s)~(zeta,theta,rho) instead of DESC's ordering of
+    (zeta, rho, theta).
+
+    Reference links
+    ---------------
     https://ornl-fusion.github.io/Stellarator-Tools-Docs/result_file_bmw.html
 
     """
@@ -137,7 +175,7 @@ def save_bmw_format(
     file.close()
 
 
-def save_fieldlines_format(
+def write_fieldlines_file(
     path,
     B,
     Rmin,
@@ -151,39 +189,60 @@ def save_fieldlines_format(
     nphi,
     pressure=None,
 ):
-    # FIELDLINES requires a minimum and maximum toroidal angle to be supplied, and the endpoint is included
-    # Older versions of FIELDLINES normalize B_R and B_Z as B_i*R/B_PHI, for i=R,Z, but the most recent version 
-    # returns B_R in units of T
-    # https://github.com/PrincetonUniversity/STELLOPT/blob/7a03761db9c408902669b3a34823ef2f3d6dba0e/pySTEL/libstell/fieldlines.py
-    # https://github.com/PrincetonUniversity/STELLOPT/commit/30bce7c339e66fa1ea1e1be4043fe8a19bdae400
-    # https://www.mathworks.com/matlabcentral/fileexchange/54931-read_fieldlines
-    # https://princetonuniversity.github.io/STELLOPT/FIELDLINES.html#output-data-format
+    """
+    Save an array of magnetic field values as a FIELDLINES-style file.
 
-    if phi_max is None:
-        phi_max = 2 * np.pi / NFP
+    Parameters
+    ----------
+    path : str
+        The filepath to save the magnetic field. Ends with .h5.
+    B : array-like, shape (nR*nphi*nZ,3)
+        Magnetic field values, assumed to be reshapeable to (nR, nphi, nZ, 3)
+    Rmin, Rmax, Zmin, Zmax, phimin, phimax : float, optional
+        Bounds for the R, phi, and Z coordinates of the desired evaluation points
+    nR, nZ, nphi : int, optional
+        Desired number of evaluation points in the radial, vertical, and toroidal
+        directions.
+    pressure : array-like, shape (nR*nphi*nZ), optional
+        Pressure values at the same evaluation points as B.
+
+    Notes
+    -----
+    FIELDLINES requires a minimum and maximum toroidal angle to be supplied, and
+    the endpoint is included. Older versions of FIELDLINES normalize B_R and B_Z
+    as B_i*R/B_PHI, for i=R,Z, but the most recent version returns B_R and B_Z
+    in units of T.
+
+    Reference links
+    ---------------
+    https://princetonuniversity.github.io/STELLOPT/FIELDLINES.html#output-data-format
+    https://github.com/PrincetonUniversity/STELLOPT/blob/7a03761db9c408902669b3a34823ef2f3d6dba0e/pySTEL/libstell/fieldlines.py
+    https://github.com/PrincetonUniversity/STELLOPT/commit/30bce7c339e66fa1ea1e1be4043fe8a19bdae400
+    https://www.mathworks.com/matlabcentral/fileexchange/54931-read_fieldlines
+    """
     # Reshape magnetic field on grid
     B = B.reshape(nR, nphi, nZ, 3)
     lpres = pressure is not None
     if lpres:
         pressure = pressure.reshape(nR, nphi, nZ)
     else:
-        pressure = np.zeros((nR,nphi,nZ))
+        pressure = np.zeros((nR, nphi, nZ))
 
     save_data = [
         {
             "key": "B_PHI",
             "description": np.bytes_(b"Toroidal Field (BPHI)"),
-            "value": B[...,1],
+            "value": B[..., 1],
         },
         {
             "key": "B_R",
             "description": np.bytes_(b"Radial Fieldline Eq. (BR)"),
-            "value": B[...,0],
+            "value": B[..., 0],
         },
         {
             "key": "B_Z",
             "description": np.bytes_(b"Vertical Fieldline Eq. (BZ)"),
-            "value": B[...,2],
+            "value": B[..., 2],
         },
         {
             "key": "PRES",
@@ -299,7 +358,7 @@ def save_fieldlines_format(
     f = h5py.File(path, "w")
 
     def add_ds(key, value, description):
-        if value.ndim>1:
+        if value.ndim > 1:
             # FIELDLINES is written in Fortran using R,phi,Z coordinates,
             # but since arrays are stored in column-major order in Fortran,
             # it's tranposed when loaded into python, where arrays are stored
@@ -311,6 +370,5 @@ def save_fieldlines_format(
 
     for ds in save_data:
         add_ds(ds["key"], ds["value"], ds["description"])
-    
+
     f.close()
-    

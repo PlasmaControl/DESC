@@ -23,3 +23,4 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
+from ._output_formats import save_bmw_format, save_fieldlines_format

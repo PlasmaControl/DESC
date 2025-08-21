@@ -12,7 +12,6 @@ from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, fori_loop, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
-from desc.batching import batch_map
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -28,15 +27,17 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.integrals.singularities import _kernel_biot_savart
 from desc.integrals.virtual_casing import integrate_surface
-from desc.io import IOAble, save_bmw_format, save_fieldlines_format
+from desc.io import IOAble
 from desc.magnetic_fields import (
     _MagneticField,
     biot_savart_general,
     biot_savart_general_vector_potential,
+    save_bmw_format,
+    save_fieldlines_format,
 )
 from desc.objectives import (
     ObjectiveFunction,
@@ -58,21 +59,13 @@ from desc.utils import (
     only1,
     rpz2xyz,
     rpz2xyz_vec,
-    safenorm,
     setdefault,
     warnif,
     xyz2rpz_vec,
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import (
-    _map_clebsch_coordinates,
-    get_rtz_grid,
-    in_plasma,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import _map_clebsch_coordinates, get_rtz_grid, in_plasma, is_nested, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1658,7 +1651,7 @@ class Equilibrium(Optimizable, _MagneticField):
         series=3,
     ):
         """
-        Save the plasma magnetic field in the same  format as BMW.
+        Save the plasma magnetic field in the same format as BMW.
 
         Parameters
         ----------
@@ -1693,89 +1686,32 @@ class Equilibrium(Optimizable, _MagneticField):
             final dataset will not contain the source current density values (which BMW
             normally contains) since the current density is not directly computed in the
             virtual casing method.
+        series: int, optional
+            The BMW series tag that is saved.
         """
-        R = np.linspace(Rmin, Rmax, nR)
-        Z = np.linspace(Zmin, Zmax, nZ)
-        phi = np.linspace(0, 2 * np.pi / self.NFP, nphi, endpoint=False)
-
-        # Default source grid values
-        if source_grid is None:
-            if method == "virtual casing":
-                source_grid = LinearGrid(
-                    rho=jnp.array([1.0]),
-                    M=256,
-                    N=256,
-                    NFP=self.NFP if self.N > 0 else 64,
-                    sym=False,
-                )
-            else:
-                source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
-
-        # For the direct methods, just use compute_magnetic_field
-        if method in ["biot-savart", "virtual casing"]:
-            [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-            coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
-
-            B, data = self.compute_magnetic_field(
-                coords,
-                source_grid=source_grid,
-                chunk_size=chunk_size,
-                method=method,
-                return_data=True,
-            )
-        else:
-            # To calculate field from vector potential, create a PlasmaField object
-            from .plasma_field import PlasmaField
-
-            R_bounds = [R.min() - 0.1, R.max() + 0.1]
-            Z_bounds = [Z.min() - 0.1, Z.max() + 0.1]
-            field = PlasmaField(
-                self,
-                source_grid,
-                R_bounds,
-                Z_bounds,
-                A_res,
-                chunk_size,
-                return_data=True,
-            )
-            B = field.compute_magnetic_grid(R, phi, Z, self.NFP).reshape(-1, 3)
-            data = field._data
-
-        # Compute the vector potential at the same grid, if necessary
-        if save_vector_potential:
-            if method != "virtual casing" and A_source_grid is None:
-                A_source_grid = source_grid
-            A, data = self.compute_magnetic_vector_potential(
-                coords,
-                chunk_size=chunk_size,
-                source_grid=A_source_grid,
-                return_data=True,
-            )
-        else:
-            A = None
-
-        # Pass data through to save_bmw_format for formatting
-        save_bmw_format(
+        return save_bmw_format(
             path,
-            B=B,
+            eq=self,
             Rmin=Rmin,
             Rmax=Rmax,
             Zmin=Zmin,
             Zmax=Zmax,
-            source_data=data,
-            source_grid=source_grid,
             nR=nR,
             nZ=nZ,
             nphi=nphi,
-            NFP=self.NFP,
-            A=A,
+            save_vector_potential=save_vector_potential,
+            chunk_size=chunk_size,
+            source_grid=source_grid,
+            A_source_grid=A_source_grid,
+            method=method,
+            A_res=A_res,
             series=series,
         )
 
     def save_fieldlines_format(
         self,
         path,
-        coils,
+        coils=None,
         Rmin=5,
         Rmax=11,
         Zmin=-5,
@@ -1787,7 +1723,7 @@ class Equilibrium(Optimizable, _MagneticField):
         chunk_size=50,
         coil_grid=None,
         source_grid=None,
-        method="biot-savart",
+        method="vector potential",
         NFP=None,
         replace_in_plasma=True,
         A_res=256,
@@ -1799,7 +1735,7 @@ class Equilibrium(Optimizable, _MagneticField):
         ----------
         path : str
             The filepath to save the magnetic field. Ends with .h5.
-        coils : _MagneticField or list of _MagneticField
+        coils : _MagneticField, optional
             The coils, which will create the magnetic field in addition to
             the Equilibrium.
         Rmin, Rmax, Zmin, Zmax : float, optional
@@ -1808,7 +1744,8 @@ class Equilibrium(Optimizable, _MagneticField):
             Desired number of evaluation points in the radial, vertical, and toroidal
             directions.
         save_pressure : bool, optional
-            Whether to also calculate the pressure and save it as well
+            Whether to also calculate the pressure and save it as well. Ignored if
+            eq=None.
         chunk_size : int or None, optional
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -1819,10 +1756,6 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize Equilibrium object. Should NOT include
             endpoint at 2pi.
-        A_source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object for calculating A.
-            Defaults to the source_grid unless method == 'virtual casing'.
-            Should NOT include endpoint at 2pi.
         method: string, optional
             "biot-savart", "virtual casing" or "vector potential". "biot-savart"
             and "virtual casing" calculates the magnetic field directly from the
@@ -1833,131 +1766,34 @@ class Equilibrium(Optimizable, _MagneticField):
             if passing method='virtual casing', replace_in_plasma is highly recommended.
         NFP : int, optional
             The NFP input only defines the maximum phi of the evaluation grid, i.e.
-            phimax = 2pi/NFP. Defaults to self.NFP
+            phimax = 2pi/NFP. Defaults to eq.NFP
         replace_in_plasma: bool, optional
             If True, the magnetic field computations as given by compute_magnetic_field
             will be replaced by the equilibrium's internal magnetic field, as given by
-            the equilibrium solve and assuming nested flux surfaces.
+            the equilibrium solve and assuming nested flux surfaces. Ignored if eq=None.
+        A_res : int, optional
+            If using method="vector potential", the resolution of the grid on which A
+            is evaluated.
         """
-        assert method in ["biot-savart", "virtual casing", "vector potential"]
-
-        # Evenly spaced meshgrid with an endpoint at phi=2pi/NFP
-        if NFP is None:
-            NFP = self.NFP
-        R = np.linspace(Rmin, Rmax, nR)
-        Z = np.linspace(Zmin, Zmax, nZ)
-        phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=True)
-        [RR, PHI, ZZ] = np.meshgrid(R, phi, Z, indexing="ij")
-        coords = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
-
-        # Direct methods for computing magnetic field
-
-        if method in ["biot-savart", "virtual casing"]:
-            B, data = self.compute_magnetic_field(
-                coords,
-                source_grid=source_grid,
-                chunk_size=chunk_size,
-                method=method,
-                return_data=True,
-            )
-        elif method == "vector potential":
-            # curl(A) method
-            from .plasma_field import PlasmaField
-
-            R_bounds = [R.min() - 0.1, R.max() + 0.1]
-            Z_bounds = [Z.min() - 0.1, Z.max() + 0.1]
-            field = PlasmaField(
-                self,
-                source_grid,
-                R_bounds,
-                Z_bounds,
-                A_res,
-                chunk_size,
-            )
-            B = field.compute_magnetic_grid(R, phi, Z, NFP).reshape(-1, 3)
-
-        # Add magnetic field from coils
-        from desc.magnetic_fields import SumMagneticField
-
-        coils = SumMagneticField(coils) if isinstance(coils, list) else coils
-        B += coils.compute_magnetic_field(
-            coords, source_grid=coil_grid, basis="rpz", chunk_size=chunk_size
-        )
-
-        # self.compute requires flux coordinates, so we need to map coordinates
-        if save_pressure or replace_in_plasma:
-            # Determine which coordinates are in the plasma
-            plasma_mask = self.in_plasma(coords.reshape(nR, nphi, nZ, 3)).flatten()
-            plasma_coords = coords[plasma_mask]
-
-            # Inputs for map_coordinates
-            inbasis = ("R", "phi", "Z")
-            period = (np.inf, 2 * np.pi / NFP, np.inf)
-
-            if method == "biot-savart":
-                # We already have to calculate distance from source grid points
-                # So we have a good initial guess for the (rho,theta,zeta) coordinates
-                guess = data["src_rtz"]
-                guess = jnp.asarray(guess[plasma_mask])
-
-            else:
-                # For the other two methods, have to do a nearest neighbor search
-                grid = ConcentricGrid(
-                    self.L_grid, self.M_grid, max(self.N_grid, self.M_grid)
-                )
-                yg = jnp.array(grid.nodes)
-                xg = self.compute("x", grid, basis="xyz")["x"]
-                eval_xyz = rpz2xyz(plasma_coords)
-
-                def _distance_body(x):
-                    distance = safenorm(x - xg, axis=-1)
-                    return jnp.argmin(distance, axis=-1)
-
-                idx = batch_map(
-                    _distance_body, eval_xyz[..., jnp.newaxis, :], chunk_size
-                )
-                guess = yg[idx]
-
-            # We know zeta = phi, so we can swap that out
-            guess = guess.at[:, 2].set(plasma_coords[:, 1])
-
-            rtz = Grid(
-                map_coordinates(
-                    self,
-                    plasma_coords,
-                    inbasis,
-                    ("rho", "theta", "zeta"),
-                    guess=guess,
-                    period=period,
-                ),
-                NFP=self.NFP,
-            )
-        if save_pressure:
-            # Calculate the pressure for points inside the plasma
-            p_plasma = self.compute("p", grid=rtz)["p"]
-
-            # Set points outside the plasma to have p=0
-            pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
-            pressure[plasma_mask] = p_plasma
-        else:
-            pressure = None
-        if replace_in_plasma:
-            B_plasma = self.compute("B", grid=rtz, basis="rpz")["B"]
-            B = B.at[plasma_mask, :].set(B_plasma)
-
         save_fieldlines_format(
-            path=path,
-            B=B,
+            path,
+            eq=self,
+            coils=coils,
             Rmin=Rmin,
             Rmax=Rmax,
             Zmin=Zmin,
             Zmax=Zmax,
-            phi_min=phi.min(),
-            phi_max=phi.max(),
             nR=nR,
             nZ=nZ,
             nphi=nphi,
-            pressure=pressure,
+            save_pressure=save_pressure,
+            chunk_size=chunk_size,
+            coil_grid=coil_grid,
+            source_grid=source_grid,
+            method=method,
+            NFP=NFP,
+            replace_in_plasma=replace_in_plasma,
+            A_res=A_res,
         )
 
     def in_plasma(self, points, M=24):

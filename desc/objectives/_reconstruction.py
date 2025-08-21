@@ -111,7 +111,8 @@ class FluxLoop(_Objective):
 
     _coordinates = "rtz"
     _units = "(Wb)"
-    _print_value_fmt = "Toroidal Flux: "
+    _print_value_fmt = "Diamagnetic Loop Error : "
+    _print_error = True
     _static_attrs = _Objective._static_attrs + [
         # TODO: should we add an intermediate flag to avoid using an array as static?
         "_sheet_current",
@@ -457,7 +458,8 @@ class RogowskiLoop(_Objective):
 
     _coordinates = "rtz"
     _units = "(Tm)"
-    _print_value_fmt = "Net Enclosed Current: "
+    _print_value_fmt = "Net Enclosed Current Error : "
+    _print_error = True
     _static_attrs = _Objective._static_attrs + [
         # TODO: should we add an intermediate flag to avoid using an array as static?
         "_sheet_current",

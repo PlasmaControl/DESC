@@ -7,13 +7,12 @@ import pytest
 from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
-    DoubleChebyshevFourierBasis,
     ChebyshevPolynomial,
+    DoubleChebyshevFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
-    PowerDoubleFourierBasis,
     ZernikePolynomial,
     _jacobi,
     chebyshev,
@@ -303,10 +302,6 @@ class TestBasis:
         dcf.change_resolution(L=3, M=2, N=1)
         assert dcf.num_modes == 40
 
-        pdf = PowerDoubleFourierBasis(L=2, M=0, N=2)
-        pdf.change_resolution(L=3, M=2, N=1)
-        assert pdf.num_modes == 60
-
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)
         assert fz.num_modes == 30
@@ -418,15 +413,7 @@ class TestBasis:
             _ = DoubleChebyshevFourierBasis(L=3, M=1, N=1.0)
         with pytest.raises(ValueError):
             _ = DoubleChebyshevFourierBasis(L=3, M=1, N=1, NFP=1.0)
-        
-        with pytest.raises(ValueError):
-            _ = PowerDoubleFourierBasis(L=3.0, M=1, N=1)
-        with pytest.raises(ValueError):
-            _ = PowerDoubleFourierBasis(L=3, M=1.0, N=1)
-        with pytest.raises(ValueError):
-            _ = PowerDoubleFourierBasis(L=3, M=1, N=1.0)
-        with pytest.raises(ValueError):
-            _ = PowerDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
+
     @pytest.mark.unit
     def test_basis_hash(self):
         """Test that all basis classes can be hashable."""

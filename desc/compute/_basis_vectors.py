@@ -1367,7 +1367,7 @@ def _e_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt cylindrical"
-    " toroidal coordinate phi at constnat rho and vartheta",
+    " toroidal coordinate phi at constant rho and vartheta",
     dim=3,
     params=[],
     transforms={},

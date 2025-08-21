@@ -227,7 +227,7 @@ def _J_sup_zeta_p_PEST(params, transforms, profiles, data, **kwargs):
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Derivative of contravariant poloidal component of plasma current"
-    "density w.r.t the poloidal coorindate",
+    "density w.r.t the poloidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -251,7 +251,7 @@ def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Derivative of Contravariant poloidal component of plasma current"
-    "density w.r.t the toroidal coorindate",
+    "density w.r.t the toroidal coordinate",
     dim=1,
     params=[],
     transforms={},

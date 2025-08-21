@@ -129,7 +129,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     aliases=["J^vartheta_v|PEST"],
 )
 def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
-    # J^ϑ = J^θ (1 + ∂ϑ/∂θ) + J^ζ ∂ζ/∂θ
+    # J^ϑ = J^θ (∂ϑ/∂θ) + J^ζ (∂ϑ/∂ζ)
     # and ∂/∂ϑ|ρ,ϕ = (∂θ/∂ϑ)|ρ,ϕ ∂/∂θ|ρ,ϕ
     data["(J^theta_PEST_v)|PEST"] = (
         data["J^theta_t"] * data["theta_PEST_t"]
@@ -167,7 +167,7 @@ def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
     aliases=["(J^vartheta_p)|PEST"],
 )
 def _J_sup_theta_PEST_p_PEST(params, transforms, profiles, data, **kwargs):
-    # J^ϑ = J^θ (1 + ∂ϑ/∂θ) + J^ζ ∂ζ/∂θ
+    # J^ϑ = J^θ (∂ϑ/∂θ) + J^ζ (∂ϑ/∂ζ)
     # ∂/∂ϕ|ρ,ϑ = ∂/∂ϕ|ρ,θ − (∂ϑ/∂ϕ) ∂/∂ϑ|ρ,ϕ
     # Even though the derivatives on the right side are in zeta
     # the derivative rule written above is only true for ϕ = ζ

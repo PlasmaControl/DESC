@@ -28,7 +28,11 @@ from desc.magnetic_fields import (
     SumMagneticField,
     ToroidalMagneticField,
 )
-from desc.particles import ManualParticleInitializerLab, VacuumGuidingCenterTrajectory
+from desc.particles import (
+    ManualParticleInitializerFlux,
+    ManualParticleInitializerLab,
+    VacuumGuidingCenterTrajectory,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -43,6 +47,7 @@ from desc.plotting import (
     plot_comparison,
     plot_field_lines,
     plot_fsa,
+    plot_gammac,
     plot_grid,
     plot_logo,
     plot_particle_trajectories,
@@ -1061,6 +1066,15 @@ def test_plot_poincare():
     return fig
 
 
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
+def test_plot_gammac():
+    """Test plotting gamma_c."""
+    eq = get("W7-X")
+    fig, ax = plot_gammac(eq, rho=0.5)
+    return fig
+
+
 @pytest.mark.unit
 def test_plot_field_lines():
     """Test plotting field lines."""
@@ -1137,3 +1151,22 @@ def test_plot_particle_trajectories():
     _, data = plot_particle_trajectories(field, model, particles, ts, return_data=True)
 
     assert all(data["R"][0] == R0)
+
+
+@pytest.mark.unit
+def test_plot_particle_trajectories_vacuum_eq():
+    """Test plotting particle trajectories using vacuum eq."""
+    # eq doesn't have iota profile
+    # plotting function will automatically compute iota and pass to
+    # the trace_particles function
+    eq = get("precise_QA")
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    particles = ManualParticleInitializerFlux(
+        rho0=0.5, theta0=0, zeta0=0, xi0=0.7, E=1e1
+    )
+    _, data = plot_particle_trajectories(
+        eq, model, particles, ts=np.linspace(0, 1e-9, 10), return_data=True
+    )
+
+    assert "rho" in data
+    assert "theta" in data

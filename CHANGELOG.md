@@ -16,6 +16,7 @@ New Features
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:
@@ -25,9 +26,8 @@ New Features
         - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
     - Implemented particle trajectory models are:
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
-        - ``SlowingDownGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs with slowing down on electrons and main ions.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
-    - ``trace_particles`` function is differentiable. Both modes of the automatic differentiation, forward or reverse, are possible by proper choice of ``adjoint`` argument of the function. See ``diffrax`` documentation for details.
+    - ``_trace_particles`` function is differentiable version of the ``trace_particles`` which takes in the outputs of the particle initializer instead of initializing internally. Both modes of the automatic differentiation, forward or reverse, are possible by proper choice of ``adjoint`` argument of the function. See ``diffrax`` documentation for details.
 
 Bug Fixes
 

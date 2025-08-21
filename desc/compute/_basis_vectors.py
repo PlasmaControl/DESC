@@ -581,7 +581,6 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "e^vartheta_t",
         "theta_PEST_t",
         "e^theta_t",
         "e^theta",
@@ -626,7 +625,6 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
         "e^theta",
         "e^zeta",
         "e^theta_z",
-        "e^vartheta_t",
         "e^zeta_z",
         "theta_PEST_t",
         "theta_PEST_z",
@@ -4036,7 +4034,7 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwargs):
     data["(e_theta_PEST_p)|PEST"] = (
         data["e_theta_z"]
-        - data["e_theta_PEST_v|PEST"]
+        - data["(e_theta_PEST_v)|PEST"]
         * data["theta_PEST_t"][:, jnp.newaxis]
         * data["theta_PEST_z"][:, jnp.newaxis]
         - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
@@ -4141,7 +4139,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
         "theta_PEST_z",
         "theta_PEST_rz",
     ],
-    aliases=["e_rho_p|PEST"],
+    aliases=["(e_rho_p)|PEST"],
 )
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
     data["(e_phi_r)|PEST"] = (
@@ -4150,7 +4148,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
         - data["(e_theta_PEST_v)|PEST"]
         * (data["theta_PEST_r"] * data["theta_PEST_z"])[:, jnp.newaxis]
         - data["e_theta_PEST"] * (data["theta_PEST_rz"])[:, jnp.newaxis]
-        - data["e_rho_v|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["(e_rho_v)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
     )
     return data
 
@@ -4174,19 +4172,19 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     coordinates="rtz",
     data=[
         "e_rho_r",
-        "e_rho_v|PEST",
+        "(e_rho_v)|PEST",
         "e_theta_PEST",
-        "e_theta_PEST_v|PEST",
+        "(e_theta_PEST_v)|PEST",
         "theta_PEST_r",
         "theta_PEST_rr",
     ],
 )
 def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
-    data["e_rho_r|PEST"] = (
+    data["(e_rho_r)|PEST"] = (
         data["e_rho_r"]
-        - data["e_rho_v|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["(e_rho_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
         - data["e_theta_PEST"] * data["theta_PEST_rr"][:, jnp.newaxis]
-        - data["e_theta_PEST_v|PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
+        - data["(e_theta_PEST_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
     )
     return data
 

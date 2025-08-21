@@ -67,7 +67,7 @@ not_finite_limits = {
     "g^aa",
     "g^ra",
     "g^rv",
-    "g^rv_p|PEST",
+    "(g^rv_p)|PEST",
     "gbdrift",
     "grad(alpha)",
     "grad(alpha) (periodic)",
@@ -78,12 +78,10 @@ not_finite_limits = {
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
     "J^theta_PEST",
-    "J^theta_PEST_v|PEST",
-    "J^theta_PEST_p|PEST",
-    "e^vartheta",
-    "e^vartheta_t",
-    "e^vartheta_v|PEST",
-    "e^vartheta_p|PEST",
+    "(J^theta_PEST_v)|PEST",
+    "(J^theta_PEST_p)|PEST",
+    "(e^vartheta_v)|PEST",
+    "(e^vartheta_p)|PEST",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -108,10 +106,10 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
-    "e^zeta_v|PEST",
-    "e^zeta_z|PEST",
-    "e^rho_v|PEST",
-    "e^rho_z|PEST",
+    "(e^zeta_v)|PEST",
+    "(e^zeta_z)|PEST",
+    "(e^rho_v)|PEST",
+    "(e^rho_z)|PEST",
     "J^zeta_t",
     "J^zeta_z",
     "K_vc",  # only defined on surface

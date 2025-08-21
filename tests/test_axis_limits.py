@@ -35,6 +35,8 @@ not_finite_limits = {
     "D_geodesic",
     "D_well",
     "J^theta",
+    "J^theta_t",
+    "J^theta_z",
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -82,8 +84,6 @@ not_finite_limits = {
     "e^vartheta_t",
     "e^vartheta_v|PEST",
     "e^vartheta_p|PEST",
-    "J^theta_t",
-    "J^theta_z",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically

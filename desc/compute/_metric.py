@@ -2465,7 +2465,7 @@ def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Radial/Toroidal element of contrvariant metric tensor"
-    + " derivative w.r.t toroidal PEST coordinate",
+    + " derivative w.r.t polodal PEST coordinate",
     dim=1,
     params=[],
     transforms={},

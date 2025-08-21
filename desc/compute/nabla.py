@@ -130,9 +130,9 @@ def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         real grid on which the divergence is to be evaluated.
         the transform must have been built, with derivs>=1.
     scales: jnp.ndarray, shape (3,)
-        This parameter adjusts the dimensions of the partial derivatives so they are
-        taken with respect to the normal coordinates, not the coordinates in the
-        transform.
+        This parameter adjusts the dimensions of the partial derivatives so they
+        are taken with respect to the normal coordinates, not the coordinates
+        in the transform.
 
     Returns
     -------

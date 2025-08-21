@@ -6,19 +6,22 @@ import warnings
 import numpy as np
 import pytest
 from qic import Qic
+from scipy.constants import mu_0
 
 from desc.__main__ import main
 from desc.backend import sign
 from desc.compute.utils import get_transforms
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
-from .utils import area_difference, compute_coords
+from .utils import area_difference, compute_coords, xyz2rpz, xyz2rpz_vec
 
 
 @pytest.mark.unit
@@ -475,4 +478,70 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
             constraints=(),
             optimizer="lsq-exact",
             maxiter=0,
+        )
+
+
+@pytest.mark.unit
+def test_eq_compute_magnetic_field():
+    """Test Biot-Savart and virtual casing methods of computing magnetic field."""
+    # Input parameters
+    I = 1e7  # Toroidal plasma current
+    R = 2  # Major radius
+    z = 10  # Z location of evaluation point
+
+    # Create a very high aspect ratio tokamak
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        surface=FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R,
+            aspect_ratio=2000,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=2,
+            sym=True,
+        ),
+        NFP=2,
+        current=PowerSeriesProfile([0, 0, I]),
+        pressure=PowerSeriesProfile([1.8e4, 0, -3.6e4, 0, 1.8e4]),
+        Psi=1.0,
+    )
+
+    # Biot-Savart method won't work without the equilibrium being solved
+    eq = solve_continuation_automatic(eq)[-1]
+
+    # Evaluate the magnetic field in a point on the z-axis
+    grid_xyz = np.atleast_2d([0, 0, z])
+    grid_rpz = xyz2rpz(grid_xyz)
+
+    # Analytically determine the true magnetic field
+    Bz_true = mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2)
+    B_true_xyz = np.atleast_2d([0, 0, Bz_true])
+    B_true_rpz_xy = xyz2rpz_vec(B_true_xyz, x=grid_xyz[:, 0], y=grid_xyz[:, 1])
+    B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz[:, 1])
+
+    # Compute the magnetic field using both methods
+    for method in ["biot-savart", "virtual casing"]:
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_xyz,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="xyz"),
+            rtol=1e-4,
+            atol=1e-10,
         )

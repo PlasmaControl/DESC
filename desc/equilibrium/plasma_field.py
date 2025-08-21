@@ -48,7 +48,14 @@ class PlasmaField(_MagneticField):
         save_bmw_format).
     """
 
-    _static_attrs = _MagneticField._static_attrs
+    _static_attrs = _MagneticField._static_attrs + [
+        "_A_coeff",
+        "_RA_phi_coeff",
+        "_scales",
+        "_shifts",
+        "_basis",
+        "_NFP",
+    ]
     _io_attrs_ = ["_A_coeff", "_RA_phi_coeff", "_scales", "_shifts", "_basis", "_NFP"]
 
     def __init__(

@@ -241,8 +241,11 @@ def _J_sup_zeta_p_PEST(params, transforms, profiles, data, **kwargs):
 )
 def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
     data["J^theta_t"] = (
-        (data["B_rho_zt"] - data["B_zeta_rt"]) / data["sqrt(g)"]
-        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_t"] / data["sqrt(g)"]
+        safediv((data["B_rho_zt"] - data["B_zeta_rt"]), data["sqrt(g)"])
+        - safediv(
+            (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_t"],
+            data["sqrt(g)"] ** 2,
+        )
     ) / mu_0
     return data
 
@@ -263,8 +266,11 @@ def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
 )
 def _J_sup_theta_z(params, transforms, profiles, data, **kwargs):
     data["J^theta_z"] = (
-        (data["B_rho_zz"] - data["B_zeta_rz"]) / data["sqrt(g)"]
-        - (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_z"] / data["sqrt(g)"]
+        safediv((data["B_rho_zz"] - data["B_zeta_rz"]), data["sqrt(g)"])
+        - safediv(
+            (data["B_rho_z"] - data["B_zeta_r"]) * data["sqrt(g)_z"],
+            data["sqrt(g)"] ** 2,
+        )
     ) / mu_0
     return data
 

@@ -830,6 +830,210 @@ class PowerSeriesProfile(_Profile):
         return cls(params, sym=sym, name=name)
 
 
+class PowerSeriesDerivativeProfile(_Profile):
+    """Profile derivative represented by a monic power series.
+
+    f'(x) = a[0] + a[1]*x + a[2]*x**2 + ...
+
+    s.t. f(x) = integral(f'(x)) + f0
+
+    Parameters
+    ----------
+    params: array-like
+        Coefficients of the series, as well as the integration constant.
+        Assumed to be zero if not specified.
+        If modes is not supplied, assumed to be in ascending order with no
+        missing values, with first being the integration constant.
+        If modes is given, coefficients (``params[1:]``) can be in any order or
+        indexing.
+    modes : array-like
+        Mode numbers for the associated coefficients. eg a[modes[i]] = params[i+1]
+    sym : bool
+        Whether the basis should only contain odd powers (True) or all powers (False).
+    name : str
+        Name of the profile.
+
+    """
+
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
+    _static_attrs = _Profile._static_attrs + ["_basis"]
+
+    def __init__(self, params=None, modes=None, sym="auto", name=""):
+        super().__init__(name)
+
+        if params is None:
+            params = [0, 0]
+        params = np.atleast_1d(params)
+
+        if sym == "auto":  # sym = "odd" if all even modes are zero, else sym = False
+            if modes is None:
+                modes = np.arange(params.size - 1)
+            else:
+                modes = np.atleast_1d(modes)
+            sym = np.all(params[modes % 2 == 0] == 0)
+        sym = "odd" if sym else False
+        if modes is None:
+            if sym:
+                modes = np.arange(1, 2 * params.size - 2, step=2)
+            else:
+                modes = np.arange(params.size - 1)
+        else:
+            modes = np.atleast_1d(modes)
+        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=sym)
+        self._params = np.zeros(self.basis.num_modes + 1, dtype=float)
+        self._params[0] = params[0]
+        for m, c in zip(modes, params[1:]):
+            idx = np.where(self.basis.modes[:, 0] == int(m))[0]
+            self._params[idx + 1] = c
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", basis={})".format(self.basis)
+        return s
+
+    @property
+    def sym(self):
+        """str: Symmetry type of the power series."""
+        return self.basis.sym
+
+    @property
+    def basis(self):
+        """PowerSeriesBasis: Spectral basis for power series."""
+        return self._basis
+
+    @property
+    def params(self):
+        """ndarray: Parameter values."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        new = jnp.atleast_1d(jnp.asarray(new))
+        if new.size == self._basis.num_modes + 1:
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "params should have the same size as the basis plus one, "
+                + f"got {len(new)} for basis with {self._basis.num_modes+1} modes"
+            )
+
+    def get_params(self, l):
+        """Get power series coefficients for given mode number(s)."""
+        l = np.atleast_1d(l).astype(int)
+        a = np.zeros_like(l).astype(float)
+
+        idx = np.where(l[:, np.newaxis] == self.basis.modes[:, 0])
+
+        a[idx[0]] = self.params[idx[1] + 1]
+        return a
+
+    def set_params(self, l, a=None):
+        """Set specific power series coefficients."""
+        l, a = np.atleast_1d(l, a)
+        a = np.broadcast_to(a, l.shape)
+        for ll, aa in zip(l, a):
+            idx = self.basis.get_idx(ll, 0, 0)
+            if aa is not None:
+                self.params = put(self.params, idx + 1, aa)
+
+    def change_resolution(self, L, M=None, N=None):
+        """Set a new maximum mode number."""
+        modes_old = self.basis.modes
+        self.basis.change_resolution(L)
+        new_coefs = copy_coeffs(self.params[1:], modes_old, self.basis.modes)
+        self.params = np.concatenate(
+            [np.array([self.params[0]]), np.atleast_1d(new_coefs)]
+        )
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid
+            locations to compute values at.
+        params : array-like
+            polynomial coefficients to use, in ascending order. If not given, uses the
+            values given by the params attribute
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        if params is None:
+            params = self.params
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(grid.num_nodes)
+        if self.sym:
+            # need to pad with even numbered modes
+            coefs = jnp.array([jnp.zeros_like(params[1:]), params[1:]]).flatten(
+                order="F"
+            )
+        else:
+            coefs = params[1:]
+        constant = params[0]
+        r = grid.nodes[:, 0]
+        coefs_integrated = jnp.insert(
+            coefs / jnp.arange(1, coefs.size + 1), jnp.array([0]), jnp.array([0.0])
+        )
+        f = (
+            polyval_vec(
+                polyder_vec(jnp.atleast_2d(coefs_integrated[::-1]), dr, False), r
+            )[0]
+            + constant
+        )
+        return f
+
+    @classmethod
+    def from_values(cls, x, y, order=6, rcond=None, w=None, sym="auto", name=""):
+        """Fit a PowerSeriesDerivativeProfile from function point data.
+
+        Parameters
+        ----------
+        x : array-like, shape(M,)
+            coordinate locations
+        y : array-like, shape(M,)
+            function values, NOT the function derivative's values.
+        order : int
+            order of the polynomial to fit
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(M,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+        sym : bool
+            Whether the basis for the derivative should only contain odd powers (T)
+            or all powers (F).
+        name : str
+            name of the profile
+
+        Returns
+        -------
+        profile : PowerSeriesDerivativeProfile
+            profile for derivative of power series basis fit to given data.
+
+        """
+        order = order + 1  # need one higher order for fit to get order in derivative
+        # FIXME: does not work for sym=True right now
+        if sym and sym != "auto":
+            x = x**2
+            order = order // 2
+        params = jnp.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
+        deriv_params = jnp.concatenate(
+            [jnp.atleast_1d([params[0]]), params[1:] * jnp.arange(1, params.size)]
+        )
+        return cls(deriv_params, sym=sym, name=name)
+
+
 class TwoPowerProfile(_Profile):
     """Profile represented by two powers.
 

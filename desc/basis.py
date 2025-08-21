@@ -98,6 +98,7 @@ class _Basis(IOAble, ABC):
             "cos",
             "cosine",
             "even",
+            "odd",
             "cos(t)",
             "no n=0",
             False,
@@ -113,6 +114,8 @@ class _Basis(IOAble, ABC):
             ]
         elif self.sym == "even":  # even powers of rho
             self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
+        elif self.sym == "odd":  # odd powers of rho
+            self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 != 0)]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
             self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
         elif self.sym == "no n=0":  # no n=0 mode
@@ -354,9 +357,10 @@ class PowerSeries(_Basis):
     ----------
     L : int
         Maximum radial resolution.
-    sym : {"even", False}
+    sym : {"even", "odd", False}
         Type of symmetry. "even" has only even powers of rho, for an analytic profile
-        on the disc. False uses the full (odd + even) powers.
+        on the disc, "odd" has only odd powers, corresponding to the derivative
+        of an analytic profileon the disc. False uses the full (odd + even) powers.
 
     """
 

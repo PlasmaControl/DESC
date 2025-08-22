@@ -23,3 +23,4 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
+from ._plasma_field import PlasmaField

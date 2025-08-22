@@ -63,7 +63,14 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import _map_clebsch_coordinates, get_rtz_grid, in_plasma, is_nested, to_sfl
+from .coords import (
+    _map_clebsch_coordinates,
+    get_rtz_grid,
+    in_plasma,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -933,7 +940,8 @@ class Equilibrium(Optimizable, _MagneticField):
                 "z": "zeta",
                 "p": "phi",
             }
-            rtz_nodes = self.map_coordinates(
+            rtz_nodes = map_coordinates(
+                self,
                 grid.nodes,
                 inbasis=[inbasis[char] for char in grid.coordinates],
                 outbasis=("rho", "theta", "zeta"),
@@ -1250,7 +1258,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Dictionary of optimizable parameters, eg field.params_dict.
         method: string
             "biot-savart" or "virtual casing". both methods calculate the magnetic
-            field directly from the current density. if you wish to use the curl(A)
+            field directly from the     nt density. if you wish to use the curl(A)
             method, create a PlasmaField object.
             NOTE: the virtual casing method does not work at all inside the plasma,
             but it is faster outside the plasma. the biot-savart method also doesn't
@@ -1406,7 +1414,7 @@ class Equilibrium(Optimizable, _MagneticField):
             magnetic vector potential at specified points
 
         """
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(coords).astype(jnp.float64)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         if source_grid is None:
             source_grid = QuadratureGrid(

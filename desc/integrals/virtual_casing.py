@@ -1,3 +1,5 @@
+"""Virtual casing surface integrals for points strictly outside the surface."""
+
 from desc.backend import fori_loop, jnp
 from desc.batching import batch_map
 from desc.utils import errorif, xyz2rpz_vec
@@ -5,7 +7,8 @@ from desc.utils import errorif, xyz2rpz_vec
 
 def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None):
     """
-    Integrate kernel over a constant flux surface at a point strictly outside that surface.
+    Integrate kernel over a surface at a point strictly outside that surface.
+
     For integration on the surface itself, see desc.singularities.singular_integral.
 
     Parameters
@@ -18,7 +21,7 @@ def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None)
         Grid in (r,t,z) coordinates containing the flux surface over which
         the kernel should be integrated.
     kernel : callable
-        Kernel function to evaluate and integrate over the surface described by source_grid.
+        Kernel function to evaluate and integrate over surface described by source_grid.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input

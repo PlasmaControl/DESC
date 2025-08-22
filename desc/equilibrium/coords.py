@@ -801,48 +801,6 @@ def get_rtz_grid(
     return desc_grid
 
 
-# TODO(#1383): deprecated, remove eventually
-def compute_theta_coords(
-    eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
-):
-    """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to use.
-    flux_coords : ndarray
-        Shape (k, 3).
-        Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-        Each row is a different point in space.
-    L_lmn : ndarray
-        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-    tol : float
-        Stopping tolerance.
-    maxiter : int
-        Maximum number of Newton iterations.
-    full_output : bool, optional
-        If True, also return a tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
-    kwargs : dict, optional
-        Additional keyword arguments to pass to ``root_scalar`` such as
-        ``maxiter_ls``, ``alpha``.
-
-    Returns
-    -------
-    coords : ndarray
-        Shape (k, 3).
-        DESC computational coordinates [ρ, θ, ζ].
-    info : tuple
-        2 element tuple containing residuals and number of iterations for each
-        point. Only returned if ``full_output`` is True.
-
-    """
-    return eq.compute_theta_coords(
-        flux_coords, L_lmn, tol, maxiter, full_output, **kwargs
-    )
-
-
 def winding(curve, points, chunk_size=50):
     """Compute the winding number of points and closed curves.
 

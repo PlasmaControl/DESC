@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=dip_decomp          # create a short name for your job
+#SBATCH --job-name=dtest          # create a short name for your job
 #SBATCH --time=01:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mem=80G
 #SBATCH --mail-type=begin        # send mail when process begins

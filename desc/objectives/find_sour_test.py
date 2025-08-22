@@ -14,7 +14,7 @@ def bn_res(
         coords,
     tdata,
     contour_data,
-    stick_data,
+    stick_data, 
     contour_grid,
 ):
 
@@ -102,15 +102,15 @@ def B_theta_contours(
     r_z = p_N*2+1#zeta_coarse.shape[0]
 
     theta_coarse = jnp.linspace(
-        2 * jnp.pi * (1 / (p_M * 2)) * 1 / 2,
-        2 * jnp.pi * (1 - 1 / (p_M * 2) * 1 / 2),
-        p_M * 2,
+        2 * jnp.pi * ( 1 / ( p_M * 2 + 1 ) ) * 1 / 2,
+        2 * jnp.pi * ( 1 - 1 / ( p_M * 2 + 1 ) * 1 / 2),
+        p_M * 2 + 1,
     )
 
     zeta_coarse = jnp.linspace(
-        2 * jnp.pi / surface.NFP * (1 / (p_N * 2)) * 1 / 2,
-        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2) * 1 / 2),
-        p_N * 2,
+        2 * jnp.pi / surface.NFP * (1 / ( p_N * 2 + 1 ) ) * 1 / 2,
+        2 * jnp.pi / surface.NFP * (1 - 1 / ( p_N * 2 + 1 ) * 1 / 2 ),
+        p_N * 2 + 1,
     )
     
     sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 0) + jnp.where(
@@ -227,7 +227,6 @@ def K_sour(
     sgrid,
     surface,
     y,
-    # dt, dz,
     N,
     d_0,
     tdata,
@@ -318,12 +317,10 @@ def K_sour(
     return (
         (sdata1["lambda_iso"] ** (-1))
         * (
-            -omega_total_imag1
-            * sdata1["e_v"].T  # - cross(sdata["n_rho"],sdata["e_u"]).T
+            -omega_total_imag1 * sdata1["e_v"].T  # - cross(sdata["n_rho"],sdata["e_u"]).T
             - omega_total_imag2 * sdata2["e_v"].T
             - omega_total_imag2 * sdata3["e_v"].T
-            + omega_total_real1
-            * sdata1["e_u"].T  # - cross(sdata["n_rho"],sdata["e_v"]).T
+            + omega_total_real1 * sdata1["e_u"].T  # - cross(sdata["n_rho"],sdata["e_v"]).T
             + omega_total_real2 * sdata2["e_u"].T
             + omega_total_real2 * sdata3["e_u"].T
         )
@@ -374,9 +371,7 @@ def omega_sour(
     omega = (
         v_1_num_prime / v_1_num  # Regularized near the vortex cores
         - 2 * jnp.pi * jnp.real(w1) / (data_or["omega_1"] ** 2 * data_or["tau_2"])
-        + 1
-        / 2
-        * (chi_reg_1)  # Additional terms with regularization close to the vortex core
+        + 1/2 * (chi_reg_1)  # Additional terms with regularization close to the vortex core
     )
 
     return omega
@@ -389,16 +384,22 @@ def v1_eval(w0, N, d_0, data_or):
 
     product_ = 0
 
-    for n in range(0, N):
+    #for n in range(0, N):
 
-        product_ = product_ + (
-            (((-1) ** n) * (p ** (n**2 + n)))
-            * jnp.sin((2 * n + 1) * (data_or["w"] - w0) / gamma)
-        )
+    #    product_ = product_ + (
+    #        (((-1) ** n) * (p ** (n**2 + n)))
+    #        * jnp.sin((2 * n + 1) * (data_or["w"] - w0) / gamma)
+    #    )
 
+    def body_fun(n,carry):
+        product_ = carry
+        term = product_ + (  ( ( (-1) ** n) * (p ** (n**2 + n) ) ) * jnp.sin( (2 * n + 1) * (data_or["w"] - w0) / gamma) )
+        
+        return product_ + term
+        
     return jnp.where(
         jnp.abs(data_or["w"] - w0) > d_0,
-        2 * p ** (1 / 4) * product_,
+        2 * p ** (1 / 4) * fori_loop(0,N,body_fun, jnp.zeros_like(data_or["w"])),
         1,  # Arbitraty value of 1 inside the circle around the vortex core
     )
 
@@ -427,19 +428,12 @@ def v1_prime_eval(w0, N, d_0, data_or):
     gamma = data_or["omega_1"] / jnp.pi
     p = data_or["tau"]
 
-    _product = 0
-    for n in range(0, N):
+    def body_fun(n, carry):
+        _product = carry
+        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"] - w0) / gamma ) )
+        return _product + term
 
-        _product = _product + (
-            (((-1) ** n) * (p ** (n**2 + n)))
-            * (
-                ((2 * n + 1) / gamma)
-                * jnp.cos((2 * n + 1) * (data_or["w"] - w0) / gamma)
-            )
-        )
-
-    # return (p**(1/4)/1)*_product
-    return jnp.where(abs(data_or["w"] - w0) > d_0, (p ** (1 / 4) / 1) * _product, 0)
+    return fori_loop(0, N, body_fun, jnp.zeros_like(data_or["w"]))
 
 
 def comp_loc(
@@ -699,6 +693,7 @@ def alt_grid_sticks(theta, zeta, sgrid):
         jitable=True,
     )
 
+
 def densify_linspace(arr, points_per_interval=1):
     """
     Given a jnp.linspace array, return a new array with additional points
@@ -855,19 +850,6 @@ def _compute_magnetic_field_from_Current_Contour(
         K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
 
     surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    #data = surface.compute(
-    #    [
-    #        "x",
-    #        "e_theta",
-            # "|e_theta x e_zeta|",
-    #    ],
-    #    grid=surface_grid,
-    #    basis="xyz",
-    #)
 
     _rs = data["x"]#xyz2rpz(data["x"])
     _K = K_at_grid

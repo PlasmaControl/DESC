@@ -23,3 +23,4 @@ from ._current_potential import (
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
 
 from ._sinkssources import SinksSources
+from ._dipoles import Dipoles

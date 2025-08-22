@@ -112,3 +112,8 @@ SinksSourcesSurfaceQuadraticFlux,
 SinksSourcesSum,
 SinksSourcesRegularization,
 )
+
+from ._dipoles import (
+DipolesSurfaceQuadraticFlux,
+DipolesRegularization,
+)

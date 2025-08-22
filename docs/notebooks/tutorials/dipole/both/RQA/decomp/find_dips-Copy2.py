@@ -104,25 +104,15 @@ def K_decomp(p_M, p_N, d_data, sgrid, surface, dt, dz, N, d_0):
                                 dl_data["u_iso"][i], dl_data["v_iso"][i],
                                 N, d_0)
 
-        #denom = (A*D - B*C) * lam
-        #x_u = ( D*e_u - B*e_v) / denom
-        #x_v = (-C*e_u + A*e_v) / denom
-        A = jnp.imag(omega_pol1)[i] * d_data['nxe_u.e_v'][i]
-        B = jnp.imag(omega_tor1)[i] * d_data['nxe_u.e_v'][i]
-        C = jnp.real(omega_pol1)[i] * d_data['nxe_v.e_u'][i]
-        D = jnp.real(omega_tor1)[i] * d_data['nxe_v.e_u'][i]
+        A = jnp.real(omega_pol1)[i]
+        B = jnp.real(omega_tor1)[i]
+        C = jnp.imag(omega_pol1)[i]
+        D = jnp.imag(omega_tor1)[i]
 
-        #denom = ( A * D - B * C ) #* lam
-        #x_u = ( D * e_u - B * e_v )# / denom
-        #x_v = ( - C * e_u + A * e_v ) #/ denom
-
-        # Define a matrix and do jnp.linalg
-        MA = jnp.array(([A,B],[C,D]))
-        bs = jnp.array((d_data['K.e_u'][i],d_data['K.e_v'][i]))
-        fs = jnp.linalg.pinv(MA) @ bs
-        x_u,x_v = fs[0],fs[1]
-        
-        return x_u,x_v
+        denom = (A*D - B*C) * lam
+        x_u = ( D*e_u - B*e_v) / denom
+        x_v = (-C*e_u - A*e_v) / denom
+        return x_u, x_v
 
     xs = jax.vmap(solve_single)(jnp.arange(r))
     return jnp.concatenate(xs, axis=0)

@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import os
 import numpy as np
 
 from desc.basis import DoubleFourierSeries
@@ -63,6 +64,11 @@ class SinksSources(Optimizable, IOAble):
         self._p_M = int(p_M)
         self._p_N = int(p_N)
         self._NFP = int(NFP)
+        self._x_basis = DoubleFourierSeries(
+            M=self.p_M,
+            N=self.p_N,
+            NFP=self.NFP,
+        )
         
         #self._x_basis = DoubleFourierSeries(
         #    M=self.p_M,
@@ -72,10 +78,16 @@ class SinksSources(Optimizable, IOAble):
         #)
 
         if x_mn is None:
-            self._x_mn = (self._p_M * 2 + 1) * (self._p_N * 2 + 1)#np.zeros(self.x_basis.num_modes)
+            self._x_mn = np.zeros(self.x_basis.num_modes)
         else:
-            assert len(x_mn) == (self._p_M * 2 + 1) * (self._p_N * 2 + 1) #self.x_basis.num_modes
+            assert len(x_mn) == self.x_basis.num_modes
             self._x_mn = x_mn
+            
+        #if x_mn is None:
+        #    self._x_mn = (self._p_M * 2 + 1) * (self._p_N * 2 + 1)#np.zeros(self.x_basis.num_modes)
+        #else:
+        #    assert len(x_mn) == (self._p_M * 2 + 1) * (self._p_N * 2 + 1) #self.x_basis.num_modes
+        #    self._x_mn = x_mn
 
     def change_resolution(
         self,
@@ -190,6 +202,27 @@ class SinksSources(Optimizable, IOAble):
 
         # Assign the info of isothermaal coordinates
 
+    def save(self, file_name, file_format=None, file_mode="w"):
+        """Save the object.
+
+        **Not supported for this object!**
+
+        Parameters
+        ----------
+        file_name : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if file_name is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if file_name is a file path
+
+        """
+        file_name = os.path.expanduser(file_name)
+        raise OSError(
+            "Saving CurrentPotentialField is not supported,"
+            " as the potential function cannot be serialized."
+        )
+        
     @property
     def p_M(self):
         """int: Number of (toroidal) sources."""
@@ -205,10 +238,10 @@ class SinksSources(Optimizable, IOAble):
         """int: Number of (toroidal) field periods."""
         return self._NFP
 
-    #@property
-    #def x_basis(self):
-    #    """ChebyshevDoubleFourierBasis: Spectral basis for x_mn."""
-    #    return self._x_basis
+    @property
+    def x_basis(self):
+        """ChebyshevDoubleFourierBasis: Spectral basis for x_mn."""
+        return self._x_basis
 
     @optimizable_parameter
     @property

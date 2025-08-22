@@ -120,6 +120,7 @@ class PlasmaField(_MagneticField):
         ----------
         coords : array-like shape(n,3)
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+            R and Z must be in R_bounds and Z_bounds, and R cannot be 0.
         params : dict or array-like of dict, optional
             Not used for this subclass.
         basis : {"rpz", "xyz"}
@@ -171,14 +172,14 @@ class PlasmaField(_MagneticField):
         Parameters
         ----------
         R : array-like shape(l,)
-            Unique R coordinates. Must be within self.R_bounds and
-            monotonically increasing.
+            Unique R coordinates. Must be monotonically increasing,
+            within self.R_bounds, and never 0.
         phi : array-like shape(m,)
             Unique phi coordinates. Must be within [0,2pi/NFP] and
             monotonically increasing.
         Z : array-like shape(n,)
-            Unique Z coordinates. Must be within self.Z_bounds and
-            monotonically increasing.
+            Unique Z coordinates. Must be within self.Z_bounds, excluding the
+            endpoints, and monotonically increasing.
         NFP : int, optional
             Number of field periods in phi. Defaults to the number of
             field periods in the equilibrium used to generate this object.
@@ -221,9 +222,6 @@ class PlasmaField(_MagneticField):
         # Reshape B to 4D and make indexing B[r,phi,z]
         B = B.reshape(Z.shape[0], R.shape[0], phi.shape[0], -1)
         B = B.transpose(1, 2, 0, 3)
-
-        # Roll B along the phi axis, since the transform will have reordered phi
-        B = jnp.roll(B, 1, axis=1)
 
         return B
 

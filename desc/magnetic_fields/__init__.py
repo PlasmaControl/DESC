@@ -24,3 +24,4 @@ from ._current_potential import (
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
 from ._output_formats import save_bmw_format, save_fieldlines_format
+from ._plasma_field import PlasmaField

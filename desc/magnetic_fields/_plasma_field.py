@@ -10,9 +10,10 @@ from desc.backend import jnp
 from desc.basis import DoubleChebyshevFourierBasis
 from desc.compute.nabla import _curl_cylindrical
 from desc.grid import CylindricalGrid, Grid, QuadratureGrid
-from desc.magnetic_fields import _MagneticField
 from desc.transform import Transform
 from desc.utils import rpz2xyz_vec, xyz2rpz
+
+from ._core import _MagneticField
 
 
 class PlasmaField(_MagneticField):

@@ -156,6 +156,8 @@ class PlasmaField(_MagneticField):
         B = _curl_cylindrical(
             self._A_coeff, self._RA_phi_coeff, coords[:, 0], out_transform, scales
         )
+
+        # Convert back to XYZ if necessary
         if basis.lower == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
 

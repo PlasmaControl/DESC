@@ -13,13 +13,14 @@ def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None)
 
     Parameters
     ----------
+    coords : array-like, shape (n,3)
+        Evaluation points, in cylindrical coordinates.
     source_data : dict
         Dictionary of data at source points (corresponding to source_grid). Keys
         should be those required by kernel as kernel.keys. Vector data should be in
         rpz basis.
     source_grid : _Grid
-        Grid in (r,t,z) coordinates containing the flux surface over which
-        the kernel should be integrated.
+        Grid in flux coordinates over which the kernel should be integrated.
     kernel : callable
         Kernel function to evaluate and integrate over surface described by source_grid.
     chunk_size : int or None
@@ -31,6 +32,7 @@ def integrate_surface(coords, source_data, source_grid, kernel, chunk_size=None)
         source_grid.num_rho == 1
     ), f"""source_grid must be on a flux surface.
             Got source_grid.num_rho = {source_grid.num_rho}"""
+
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])

@@ -1088,7 +1088,7 @@ class DirectParticleTracing(_Objective):
             Level of output.
 
         """
-        from desc.particles import trace_particles
+        from desc.particles import _trace_particles
 
         eq = self.things[0]
         if self._iota_grid is None:
@@ -1111,7 +1111,7 @@ class DirectParticleTracing(_Objective):
         self._event = Event(default_terminating_event)
 
         # avoid circular import
-        self._trace_particles = trace_particles
+        self._trace_particles = _trace_particles
 
         timer = Timer()
         if verbose > 0:

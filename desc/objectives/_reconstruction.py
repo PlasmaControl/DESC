@@ -78,6 +78,15 @@ class PointBMeasurement(_Objective):
     _units = "(T)"
     _print_value_fmt = "Point B Measurement Error: "
     _print_error = True
+    _static_attrs = _Objective._static_attrs + [
+        "_use_directions",
+        "_sheet_current",
+        "_vacuum",
+        "_eq_vc_data_keys",
+        "_field_fixed",
+        "_sheet_data_keys",
+        "_compute_A_or_B_from_CurrentPotentialField",
+    ]
 
     def __init__(
         self,
@@ -105,7 +114,9 @@ class PointBMeasurement(_Objective):
         self._field_grid = field_grid
         self._vc_source_grid = vc_source_grid
         measurement_coords = np.atleast_2d(measurement_coords)
+        self._use_directions = False
         if directions is not None:
+            self._use_directions = True
             directions = np.atleast_2d(directions)
             assert (
                 directions.shape == measurement_coords.shape
@@ -211,7 +222,7 @@ class PointBMeasurement(_Objective):
         # B measurement at (coords.shape[0])
         self._dim_f = (
             self._measurement_coords.size
-            if self._directions is None
+            if not self._use_directions
             else self._measurement_coords.shape[0]
         )
 
@@ -225,7 +236,7 @@ class PointBMeasurement(_Objective):
             # dot with directions if directions provided
             self._B_from_field = (
                 self._B_from_field
-                if self._directions is None
+                if not self._directions
                 else dot(self._B_from_field, self._directions)
             )
 
@@ -324,7 +335,7 @@ class PointBMeasurement(_Objective):
         else:
             Bplasma = jnp.zeros_like(self._measurement_coords)
         B = Bplasma + Bcoil
-        if self._directions is not None:
+        if self._use_directions:
             B = dot(B, self._directions)
 
         if self._field_fixed:

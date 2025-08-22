@@ -296,7 +296,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector"
-    + " derivative w.r.t the poloidal PEST coordinate",
+    + " derivative w.r.t the poloidal PEST coordinate.",
     dim=3,
     params=[],
     transforms={},
@@ -312,11 +312,11 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO:Generalize for a general zeta before #568
 @register_compute_fun(
     name="(e^rho_p)|PEST",  # ∇ρ is the same in any coordinate system.
-    label="\\partial_{\\phi}|_{\\theta, \\rho} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\phi}|_{\\vartheta, \\rho} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector"
-    + " derivative w.r.t the cylindrical toroidal angle",
+    + " derivative w.r.t the cylindrical toroidal angle.",
     dim=3,
     params=[],
     transforms={},
@@ -3974,7 +3974,8 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(e_theta_PEST_v)|PEST",
-    label="(\\partial_{\\vartheta} \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}"
+    label="(\\partial_{\\vartheta}|_{\\rho, \\phi}"
+    "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})"
     "= \\mathbf{e}_{\\theta_{PEST} \\theta_{PEST}}",
     units="m",
     units_long="meters",
@@ -4002,7 +4003,7 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 @register_compute_fun(
     name="(e_theta_PEST_p)|PEST",
     label="(\\partial_{\\phi} |_{\\rho, \\vartheta}"
-    " \\mathbf{e}_{\\vartheta}|_{\\rho, \\phi})"
+    " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))"
     "= {\\mathbf{e}_{\\theta_{PEST}}_{\\phi}}",
     units="m",
     units_long="meters",
@@ -4079,7 +4080,7 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
     "= {\\mathbf{e}_{\\theta_{PEST}}}_{\\rho}",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
+    description="Derivative of the covariant poloidal PEST basis vector in (ρ,ϑ,ϕ)"
     "coordinates or straight field line PEST coordinates w.r.t rho.",
     dim=3,
     params=[],

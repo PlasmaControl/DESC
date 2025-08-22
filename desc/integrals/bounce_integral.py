@@ -193,10 +193,13 @@ class Bounce2D(Bounce):
         whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
         F decreases whereas C increases. Also, Q >> F and Q >> C.
 
+        Performance will improve significantly by resolving GitHub issue ``1303``:
+        Patch for differentiable code with dynamic shapes.
+
     Warnings
     --------
-    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
-    and reduces the memory consumption. However, due to bugs in upstream libraries
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves
+    performance. However, due to bugs in upstream libraries
     (https://github.com/flatironinstitute/jax-finufft/issues/158),
     the automatic differentiation tool fails to compute the objective derivative.
     If you will use automatic differentiation to compute the derivative of a

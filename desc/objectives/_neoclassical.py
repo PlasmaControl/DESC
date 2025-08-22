@@ -31,8 +31,8 @@ _bounce_overwrite = {
         """
 }
 _nufft_warning = """
-    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves speed
-    and reduces the memory consumption. However, due to bugs in upstream libraries
+    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves
+    performance. However, due to bugs in upstream libraries
     (https://github.com/flatironinstitute/jax-finufft/issues/158),
     the automatic differentiation tool fails to compute the derivative correctly.
     Therefore it is not recommended to use NUFFTs in optimization.

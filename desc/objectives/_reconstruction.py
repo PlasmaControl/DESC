@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -231,33 +231,56 @@ class FluxLoop(_Objective):
             self._eq_vc_data_keys, self._eq, grid=self._vc_source_grid
         )
 
+        # dim_f is number of flux loops we have
+        # TODO: use coil utils and flatten this
+        # or enforce no coilsets inside of it
+        self._dim_f = self._flux_loops.num_coils
+
         flux_loop_data = self._flux_loops.compute(
             ["x", "x_s"], grid=self._flux_loop_grid
         )
+        flux_loop_all_x = jnp.vstack([data["x"] for data in flux_loop_data])
+        flux_loop_all_x_s = jnp.vstack([data["x_s"] for data in flux_loop_data])
+        self._flux_loop_all_x = flux_loop_all_x
+        self._flux_loop_all_x_s = flux_loop_all_x_s
 
-        # dim_f is number of flux loops we have
-        # TODO: use coil utils and flatten this
-        self._dim_f = self._flux_loops.num_coils
+        segment_ids = np.concatenate(
+            [
+                np.array(data["x"].shape[0] * [i])
+                for i, data in enumerate(flux_loop_data)
+            ]
+        )
+        self._flux_loop_all_x = flux_loop_all_x
+        self._flux_loop_all_x_s = flux_loop_all_x_s
+        self._flux_loop_grid_spacing_all = jnp.tile(
+            self._flux_loop_grid.spacing[:, 2], self.dim_f
+        )
+        # TODO: could combine the grid spacing multiply earlier by
+        # just scaling x_s
+        self._flux_loop_all_x_s_time_spacing = (
+            self._flux_loop_grid_spacing_all[:, None] * flux_loop_all_x_s
+        )
+        self._segment_ids = segment_ids
 
         # pre-calc coil contrib to flux loops if coils are fixed
         if self._coils_fixed:
-            fluxes = []
-            for i in range(self._dim_f):
-                A = self._coils.compute_magnetic_vector_potential(
-                    flux_loop_data[i]["x"],
-                    basis="rpz",
-                    source_grid=self._field_grid,
-                    chunk_size=self._bs_chunk_size,
-                )
-                A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
-                Psi = jnp.sum(self._flux_loop_grid.spacing[:, 2] * A_dot_dxds)
-                fluxes.append(Psi)
-            fluxes = jnp.array(fluxes)
+            A = self._coils.compute_magnetic_vector_potential(
+                flux_loop_all_x,
+                basis="rpz",
+                source_grid=self._field_grid,
+                chunk_size=self._bs_chunk_size,
+            )
+            A_dot_dxds = jnp.sum(A * flux_loop_all_x_s, axis=1)
+            fluxes = jax.ops.segment_sum(
+                self._flux_loop_grid_spacing_all * A_dot_dxds,
+                segment_ids=segment_ids,
+                num_segments=self._dim_f,
+                indices_are_sorted=True,
+            )
 
         self._constants = {
             "quad_weights": 1.0,
             "field_grid": self._field_grid,
-            "flux_loop_data": flux_loop_data,
             "equil_transforms": eq_transforms,
             "equil_profiles": eq_profiles,
             "vc_source_grid": self._vc_source_grid,
@@ -301,8 +324,6 @@ class FluxLoop(_Objective):
         if constants is None:
             constants = self.constants
 
-        flux_loop_data = constants["flux_loop_data"]
-        grid = self._flux_loop_grid
         plasma_surf_data = compute_fun(
             self._eq,
             self._eq_vc_data_keys,
@@ -332,36 +353,39 @@ class FluxLoop(_Objective):
         plasma_surf_data["K"] = plasma_surf_data["K_vc"]
         # loop over the flux loop coils
         fluxes = []
-        for i in range(self._dim_f):
-            if not self._coils_fixed:
-                Acoil = self._coils.compute_magnetic_vector_potential(
-                    flux_loop_data[i]["x"],
-                    basis="rpz",
-                    source_grid=constants["field_grid"],
-                    params=field_params,
-                    chunk_size=self._bs_chunk_size,
-                )
-            else:
-                Acoil = jnp.zeros_like(self._flux_loop_grid.nodes)
 
-            # get plasma contribution
-            if not self._vacuum:
-                Aplasma = self._compute_A_or_B_from_CurrentPotentialField(
-                    self._coils,  # this is unused, just pass a dummy variable in
-                    flux_loop_data[i]["x"],
-                    source_grid=constants["vc_source_grid"],
-                    compute_A_or_B="A",
-                    data=plasma_surf_data,
-                    chunk_size=self._B_plasma_chunk_size,
-                )
-            else:
-                Aplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
-            A = Aplasma + Acoil
+        # get plasma contribution
+        if not self._vacuum:
+            Aplasma = self._compute_A_or_B_from_CurrentPotentialField(
+                self._coils,  # this is unused, just pass a dummy variable in
+                self._flux_loop_all_x,
+                source_grid=constants["vc_source_grid"],
+                compute_A_or_B="A",
+                data=plasma_surf_data,
+                chunk_size=self._B_plasma_chunk_size,
+            )
+        else:
+            Aplasma = jnp.zeros_like(self._flux_loop_all_x)
+        A = Aplasma
 
-            A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
-            Psi = jnp.sum(grid.spacing[:, 2] * A_dot_dxds)
-            fluxes.append(Psi)
-        fluxes = jnp.asarray(fluxes)
+        if not self._coils_fixed:
+            Acoil = self._coils.compute_magnetic_vector_potential(
+                self._flux_loop_all_x,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
+            A += Acoil
+
+        A_dot_dxds = jnp.sum(A * self._flux_loop_all_x_s_time_spacing, axis=1)
+        fluxes = jax.ops.segment_sum(
+            A_dot_dxds,
+            segment_ids=self._segment_ids,
+            num_segments=self._dim_f,
+            indices_are_sorted=True,
+        )
+
         if self._coils_fixed:
             fluxes += constants["flux_from_coils"]
         return fluxes

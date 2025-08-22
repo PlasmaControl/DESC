@@ -252,14 +252,13 @@ class FluxLoop(_Objective):
         )
         self._flux_loop_all_x = flux_loop_all_x
         self._flux_loop_all_x_s = flux_loop_all_x_s
-        self._flux_loop_grid_spacing_all = jnp.tile(
-            self._flux_loop_grid.spacing[:, 2], self.dim_f
-        )
-        # TODO: could combine the grid spacing multiply earlier by
-        # just scaling x_s
+        # to be used later to do the A.dl integral
         self._flux_loop_all_x_s_time_spacing = (
-            self._flux_loop_grid_spacing_all[:, None] * flux_loop_all_x_s
-        )
+            self._flux_loop_grid.spacing[:, 2][:, None]
+            * flux_loop_all_x_s.reshape(
+                (self._dim_f, self._flux_loop_grid.num_nodes, 3)
+            )
+        ).reshape(flux_loop_all_x_s.shape)
         self._segment_ids = segment_ids
 
         # pre-calc coil contrib to flux loops if coils are fixed
@@ -270,9 +269,9 @@ class FluxLoop(_Objective):
                 source_grid=self._field_grid,
                 chunk_size=self._bs_chunk_size,
             )
-            A_dot_dxds = jnp.sum(A * flux_loop_all_x_s, axis=1)
+            A_dot_dxds = jnp.sum(A * self._flux_loop_all_x_s_time_spacing, axis=1)
             fluxes = jax.ops.segment_sum(
-                self._flux_loop_grid_spacing_all * A_dot_dxds,
+                A_dot_dxds,
                 segment_ids=segment_ids,
                 num_segments=self._dim_f,
                 indices_are_sorted=True,

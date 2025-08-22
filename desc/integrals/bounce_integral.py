@@ -15,8 +15,8 @@ from desc.integrals._bounce_utils import (
     _set_default_plot_kwargs,
     argmin,
     bounce_points,
-    chebyshev,
-    cubic_spline,
+    fast_chebyshev,
+    fast_cubic_spline,
     fourier_chebyshev,
     get_extrema,
     plot_ppoly,
@@ -367,7 +367,7 @@ class Bounce2D(Bounce):
 
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
-            self._c["B(z)"], self._c["knots"] = cubic_spline(
+            self._c["B(z)"], self._c["knots"] = fast_cubic_spline(
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
@@ -380,7 +380,7 @@ class Bounce2D(Bounce):
                 check=check,
             )
         else:
-            self._c["B(z)"] = chebyshev(
+            self._c["B(z)"] = fast_chebyshev(
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
@@ -768,9 +768,9 @@ class Bounce2D(Bounce):
     #     expensive JAX limitation in GitHub issue #1303 is avoided.
 
     def _integrate_nufft(self, x, w, integrand, pitch, data, z1, z2, check, plot, eps):
-        if pitch.ndim == 1:
+        if jnp.ndim(pitch) == 1:
             pitch = pitch[..., None, None]
-        elif pitch.ndim > 1:
+        elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, ..., None, None]
         cov = grad_bijection_from_disc(z1, z2)
 

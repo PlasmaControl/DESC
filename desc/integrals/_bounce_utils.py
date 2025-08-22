@@ -581,7 +581,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
+def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -637,7 +637,7 @@ def chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     return f
 
 
-def cubic_spline(
+def fast_cubic_spline(
     T,
     f,
     Y,

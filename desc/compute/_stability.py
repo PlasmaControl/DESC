@@ -441,33 +441,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         def _eval_1D(f, x, scale, shift):
             return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
 
-        # --no-verify  maps (-ntor*pi, ntor*pi) to [-1, 1]
-        ## the LGL nodes
-        # def _f(x, scale, shift):
-        #    y = x
-        #    m_1 = 2.0
-        #    m_2 = 2.0
-        #    lower = -jnp.exp(-m_1 * (y + 1)) + 0.5 * (y + 1) * jnp.exp(-2 * m_1)
-        #    upper = jnp.exp(m_2 * (y - 1)) + 0.5 * (y - 1) * jnp.exp(-2 * m_2)
-        #    return lower + upper
-
-        # def _f(x, scale, shift):
-        #    x_0 = 0.15
-        #    m_1 = 6.0
-        #    m_2 = 7.0
-
-        #    # left side (x ≤ x0)
-        #    left = (1 + x_0) * (
-        #        1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1)
-        #    )
-
-        #    # right side (x ≥ x0)
-        #    right = (1 - x_0) * (
-        #        jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2)
-        #    )
-
-        #    return left + right - 1
-
         def _f(x, scale, shift):
             x0 = 0.0
             x1 = 0.4
@@ -506,9 +479,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
             # Identity map contributes (1-x1) · x
             return (1.0 - x1) * x + x1 * (g_cluster + g_axisedge - x)
-
-        # --no-verify def _f(x, scale, shift):
-        # --no-verify     return x
 
         dx_f = jax.grad(_f, argnums=0)
 

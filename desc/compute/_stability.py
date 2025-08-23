@@ -803,6 +803,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
+
+    This version of the code expands all the derivatives of the form
+    partial_rho (iota psi' xi^rho) which means there are terms
+    that only have a single D_rho operator. Also, some of the terms
+    where we enforce symmetry may be wrong.
     """
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
@@ -1523,6 +1528,13 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
+
+    This version of the code expands all the derivatives of the form
+    partial_rho (iota psi' xi^rho) which means there are terms
+    that only have a single D_rho operator. Also, some of the terms
+    where we enforce symmetry may be wrong.
+    While mostly similar to v1, we have added functions to check
+    and forcibly ensure positive-definiteness.
     """
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
@@ -2342,6 +2354,12 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
+
+    This version of the code keeps the derivatives of the form
+    partial_rho (iota psi' xi^rho) more compact which leads to
+    fewer terms and even order derivatives. For this version
+    the PSD version of A is actually very close to PSD ~ 1e-12.
+    B is perfectly PSD
     """
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
@@ -2818,8 +2836,8 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     A3 = A2[jnp.ix_(keep, keep)] + Au2[jnp.ix_(keep, keep)]
 
-    #w2, _ = jnp.linalg.eigh((A3 + A3.T) / 2)
-    #print(w2)
+    # w2, _ = jnp.linalg.eigh((A3 + A3.T) / 2)
+    # print(w2)
 
     # tic = time.time()
     # w, v = jax.scipy.linalg.eigh(A3, B2[jnp.ix_(keep, keep)])
@@ -2829,30 +2847,30 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ### This will be the most expensive but easiest automatically differentiable way.
     ### TODO: Multiply B with a permutation matrix P so that it becomes block diagonal
     ### then Cholesky factorize each block. That will make cholesky ~ 3**3 x faster
-    #L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
+    # L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
     ## Linv = jnp.linalg.inv(L)
     ## Right-multiply by L^{-T}:  ALt = A L^{-T}
-    #ALt = solve_triangular(L, A3.T, lower=True).T
+    # ALt = solve_triangular(L, A3.T, lower=True).T
     ## Left-multiply by L^{-1}:   C = L^{-1} (A L^{-T})
-    #A3 = solve_triangular(L, ALt, lower=True)
+    # A3 = solve_triangular(L, ALt, lower=True)
 
-    #tic = time.time()
+    # tic = time.time()
     ### This will be the most expensive but easiest automatically differentiable way.
     ### TODO: Multiply B with a permutation matrix P so that it becomes block diagonal
     ### then Cholesky factorize each block. That will make cholesky ~ 3**3 x faster
-    #L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
+    # L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
     ## Linv = jnp.linalg.inv(L)
     ## Right-multiply by L^{-T}:  ALt = A L^{-T}
-    #ALt = solve_triangular(L, A3.T, lower=True).T
+    # ALt = solve_triangular(L, A3.T, lower=True).T
     ## Left-multiply by L^{-1}:   C = L^{-1} (A L^{-T})
-    #A4 = solve_triangular(L, ALt, lower=True)
-    #print(A4)
-    #toc = time.time()
-    #print("time taken by LU =", toc-tic)
+    # A4 = solve_triangular(L, ALt, lower=True)
+    # print(A4)
+    # toc = time.time()
+    # print("time taken by LU =", toc-tic)
 
     ### w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
-    #tic = time.time()
-    #w, v = jnp.linalg.eigh(A3)
+    # tic = time.time()
+    # w, v = jnp.linalg.eigh(A3)
 
     scale1 = 1e3
 
@@ -2860,15 +2878,17 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     B2 = np.asarray(B2[jnp.ix_(keep, keep)])
     print("arrays created!")
     tic = time.time()
-    #w, v = eigsh(A3, k=10, which="SA", sigma=-1e-3, tol=1e-5, maxiter=100)
-    w, v = eigsh(A3, M=B2, k=5, which="SA", sigma=-1., tol=1e-5, maxiter=200, mode="cayley")
+    # w, v = eigsh(A3, k=10, which="SA", sigma=-1e-3, tol=1e-5, maxiter=100)
+    w, v = eigsh(
+        A3, M=B2, k=5, which="SA", sigma=-1.0, tol=1e-5, maxiter=200, mode="cayley"
+    )
 
     print(w)
     toc = time.time()
     print(toc - tic)
     pdb.set_trace()
 
-    data["finite-n lambda3"] = w/scale1
+    data["finite-n lambda3"] = w / scale1
     data["finite-n eigenfunction3"] = v
 
     return data
@@ -2922,6 +2942,10 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
+
+    This version of the code keeps is similar to the previous one
+    except we don't scale xi^rho by psi_r or multiply the energey integral
+    by an extra sqrtg so a bunch of factors are different
     """
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
@@ -3412,8 +3436,6 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     return data
 
 
-
-
 @register_compute_fun(
     name="finite-n lambda5",
     label="low-\\n \\lambda = \\gamma^2",
@@ -3463,6 +3485,9 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     A finite-n stability eigenvalue solver.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution.
+
+    In this version, we add the incompressibility constraint,
+    reducing the size of the matrix.
     """
     a_N = data["a"]
     B_N = params["Psi"] / (jnp.pi * a_N**2)
@@ -3589,18 +3614,18 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
     sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
 
-
-    diagonal0 = jnp.reshape((sqrtg_p/sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max))
+    diagonal0 = jnp.reshape(
+        (sqrtg_p / sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max)
+    )
     diagonal0 = diagonal0[..., None] * jnp.eye(diagonal0.shape[-1])
 
     C_zeta = diagonal0 + D_zeta0[None, ...]
     C_zeta_inv = jnp.linalg.inv(C_zeta)
 
-
-    diagonal1 = (sqrtg_r/sqrtg).flatten()
+    diagonal1 = (sqrtg_r / sqrtg).flatten()
     C_rho = jnp.diagonal(diagonal1) + D_rho
 
-    diagonal2 = (sqrtg_v/sqrtg).flatten()
+    diagonal2 = (sqrtg_v / sqrtg).flatten()
     C_theta = jnp.diagonal(diagonal2) + D_theta
 
     # Can this multiplication be made faster if we use

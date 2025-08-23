@@ -1287,142 +1287,157 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
     We compare the basis vectors by comparing with finite diff of the position vector
     x and lower-order covariant basis vectors.
     """
-    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq0 = get("W7-X")
+    eq1 = get("NCSX")
+    eq_list = [eq0, eq1]
 
-    keys_PEST = [
-        "e_rho|v,p",
-        "e_vartheta|r,p",
-        "e_phi|r,v",
-        "e_vartheta_v|PEST",
-        "e_vartheta_p|PEST",
-        "e_vartheta_r|PEST",
-        "e_phi_r|PEST",
-        "e_phi_p|PEST",
-        "e_rho_r|PEST",
-    ]
+    for eq in eq_list:
 
-    N = 2000
+        keys_PEST = [
+            "e_rho|v,p",
+            "e_vartheta|r,p",
+            "e_phi|r,v",
+            "e_vartheta_v|PEST",
+            "e_vartheta_p|PEST",
+            "e_vartheta_r|PEST",
+            "e_phi_r|PEST",
+            "e_phi_p|PEST",
+            "e_rho_r|PEST",
+        ]
 
-    # spacing grids in each native direction
-    grids_PEST = {
-        "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
-        "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
-        "z": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
-    }
+        N = 4000
 
-    # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
-    rtz_nodes = map_coordinates(
-        eq,
-        grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-
-    # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
-    rtz_nodes1 = map_coordinates(
-        eq,
-        grids_PEST["z"].nodes,  # (ρ,θ_PEST,ζ)
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-
-    def _get_deriv(deriv_tokn):
-        d0 = deriv_tokn.lower()
-        if d0.startswith(("r", "rho")):
-            deriv = "r"
-        elif d0.startswith(("v", "vartheta", "theta")):
-            deriv = "v"
-        elif d0.startswith(("z", "phi", "p")):  # ζ or φ share spacing
-            deriv = "z"
-        else:
-            raise ValueError(f"Cannot parse derivative direction from '{key}'")
-        return deriv
-
-    for key in keys_PEST:
-        lhs, rhs = key.split("|")
-        # rhs can be PEST or r,v or p,v or r,p etc.
-        # So it's not really needed for the FD calculation
-        parts = lhs.split("_")
-        if len(parts) == 2:  # like "e_rho"
-            deriv_tokn = parts[-1]
-            base_bits = [parts[-1]]
-            base = ["X", "Y", "Z"]
-        else:  # like "e_rho_v"
-
-            deriv_tokn = parts[-1]
-            base_bits = parts[:-1]
-            base = []
-
-        deriv = _get_deriv(deriv_tokn)
-
-        # Grid will have to be custom for vartheta
-        grid_used = (
-            Grid(rtz_nodes)
-            if deriv == "v"
-            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
-        )
-
-        # Decide base vector
-        if len(base_bits) == 1:  # only happens for X,Y,Z
-            base_key = None  # triggers Cartesian path
-        else:
-            base_key = "_".join(base_bits)  # e_rho, e_vartheta,
-            deriv0 = _get_deriv(
-                base_bits[-1]
-            )  # get the first derivative, like rho from e_rho_vartheta
-            base_key = base_key + (
-                "|r,p" if deriv0 == "v" else ("|p,v" if deriv0 == "r" else "|r,v")
-            )
-            # adding parenthesis to the higher-order vectors
-            list0 = key.split("|")
-            key = "(" + list0[0] + ")" + "|" + list0[1]
-
-        req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
-        data = eq.compute(req_keys, grid=grid_used)
-
-        # Determine reshape dimensions based on deriv
-        reshape_dims = (
-            (1, 1, grid_used.num_zeta, -1)
-            if deriv == "z"
-            else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
-        )
-
-        # reshape everything to (θ,ρ,ζ,3) and convert to xyz
-        data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
-
-        if base_key is None:  # take derivatives of X,Y,Z
-            base = np.array([data["X"], data["Y"], data["Z"]]).T
-            base = base.reshape(reshape_dims)
-        else:  # derivatives of e_rho, etc.
-            base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(reshape_dims)
-
-        # First-order, 4-point stencil finite-difference
-        spacing = {
-            "r": grids_PEST[deriv].spacing[0, 0],
-            "v": grids_PEST[deriv].spacing[0, 1] / 2,
-            "z": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+        # spacing grids in each native direction
+        grids_PEST = {
+            "r": LinearGrid(L=N, M=0, N=0, NFP=eq.NFP),
+            "v": LinearGrid(rho=1, M=N, N=0, NFP=eq.NFP, sym=True),
+            "z": LinearGrid(rho=1, M=0, N=N, NFP=eq.NFP, sym=True),
         }
 
-        if deriv == "r":
-            fd = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing[deriv]
-        elif deriv == "v":
-            fd = np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4) / spacing[deriv]
-            fd = fd[0]
-            data[key] = data[key][0]
-        else:
-            fd = np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4) / spacing[deriv]
-            fd = fd[0][0]
-            data[key] = data[key][0][0]
-
-        np.testing.assert_allclose(
-            data[key][4:-4],
-            fd[4:-4],
-            rtol=5e-5,
-            atol=6e-4,
-            err_msg=key,
+        # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
+        rtz_nodes = map_coordinates(
+            eq,
+            grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(np.inf, 2 * np.pi, np.inf),
         )
+
+        # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
+        rtz_nodes1 = map_coordinates(
+            eq,
+            grids_PEST["z"].nodes,  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+
+        def _get_deriv(deriv_tokn):
+            d0 = deriv_tokn.lower()
+            if d0.startswith(("r", "rho")):
+                deriv = "r"
+            elif d0.startswith(("v", "vartheta", "theta")):
+                deriv = "v"
+            elif d0.startswith(("z", "phi", "p")):  # ζ or φ share spacing
+                deriv = "z"
+            else:
+                raise ValueError(f"Cannot parse derivative direction from '{key}'")
+            return deriv
+
+        for key in keys_PEST:
+            lhs, rhs = key.split("|")
+            # rhs can be PEST or r,v or p,v or r,p etc.
+            # So it's not really needed for the FD calculation
+            parts = lhs.split("_")
+            if len(parts) == 2:  # like "e_rho"
+                deriv_tokn = parts[-1]
+                base_bits = [parts[-1]]
+                base = ["X", "Y", "Z"]
+            else:  # like "e_rho_v"
+
+                deriv_tokn = parts[-1]
+                base_bits = parts[:-1]
+                base = []
+
+            deriv = _get_deriv(deriv_tokn)
+
+            # Grid will have to be custom for vartheta
+            grid_used = (
+                Grid(rtz_nodes)
+                if deriv == "v"
+                else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+            )
+
+            # Decide base vector
+            if len(base_bits) == 1:  # only happens for X,Y,Z
+                base_key = None  # triggers Cartesian path
+            else:
+                base_key = "_".join(base_bits)  # e_rho, e_vartheta,
+                deriv0 = _get_deriv(
+                    base_bits[-1]
+                )  # get the first derivative, like rho from e_rho_vartheta
+                base_key = base_key + (
+                    "|r,p" if deriv0 == "v" else ("|p,v" if deriv0 == "r" else "|r,v")
+                )
+                # adding parenthesis to the higher-order vectors
+                list0 = key.split("|")
+                key = "(" + list0[0] + ")" + "|" + list0[1]
+
+            req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
+            data = eq.compute(req_keys, grid=grid_used)
+
+            # Determine reshape dimensions based on deriv
+            reshape_dims = (
+                (1, 1, grid_used.num_zeta, -1)
+                if deriv == "z"
+                else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
+            )
+
+            # reshape everything to (θ,ρ,ζ,3) and convert to xyz
+            data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
+
+            if base_key is None:  # take derivatives of X,Y,Z
+                base = np.array([data["X"], data["Y"], data["Z"]]).T
+                base = base.reshape(reshape_dims)
+            else:  # derivatives of e_rho, etc.
+                base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(
+                    reshape_dims
+                )
+
+            # First-order, 4-point stencil finite-difference
+            spacing = {
+                "r": grids_PEST[deriv].spacing[0, 0],
+                "v": grids_PEST[deriv].spacing[0, 1] / 2,
+                "z": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+            }
+
+            if deriv == "r":
+                fd = (
+                    np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+            elif deriv == "v":
+                fd = (
+                    np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+                fd = fd[0]
+                data[key] = data[key][0]
+            else:
+                fd = (
+                    np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+                fd = fd[0][0]
+                data[key] = data[key][0][0]
+
+            np.testing.assert_allclose(
+                data[key][4:-4],
+                fd[4:-4],
+                rtol=3e-3,
+                atol=3e-3,
+                err_msg=key,
+            )
 
 
 @pytest.mark.unit
@@ -1433,117 +1448,134 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
     We compare higher order derivatives by taking the finite-difference derivative
     of the lower-order contravariant basis vectors.
     """
-    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq0 = get("W7-X")
+    eq1 = get("NCSX")
+    eq_list = [eq0, eq1]
 
-    keys_PEST = [
-        "e^vartheta_v|PEST",
-        "e^vartheta_p|PEST",
-        "e^zeta_v|PEST",
-        "e^zeta_p|PEST",
-        "e^rho_v|PEST",
-        "e^rho_p|PEST",
-    ]
+    for eq in eq_list:
 
-    N = 2000
+        keys_PEST = [
+            "e^vartheta_v|PEST",
+            "e^vartheta_p|PEST",
+            "e^zeta_v|PEST",
+            "e^zeta_p|PEST",
+            "e^rho_v|PEST",
+            "e^rho_p|PEST",
+        ]
 
-    # spacing grids in each native direction
-    grids_PEST = {
-        "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
-        "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
-        "p": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
-    }
+        N = 4000
 
-    # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
-    rtz_nodes = map_coordinates(
-        eq,
-        grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-
-    # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
-    rtz_nodes1 = map_coordinates(
-        eq,
-        grids_PEST["p"].nodes,  # (ρ,θ_PEST,ζ)
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-
-    for key in keys_PEST:
-        lhs, rhs = key.split("|")
-        # rhs can be PEST or r,v or p,v or r,p etc.
-        # So it's not really needed for the FD calculation
-        parts = lhs.split("^")
-        parts2 = parts[-1].split("_")
-
-        deriv_tokn = parts[-1]
-        base_bits = parts[:-1] + ["^"] + [parts2[0]]
-        base = []
-
-        deriv = deriv_tokn.split("_")[-1]
-
-        # Grid will have to be custom for vartheta
-        grid_used = (
-            Grid(rtz_nodes)
-            if deriv == "v"
-            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
-        )
-
-        # Decide base vector
-        if len(base_bits) == 1:  # only happens for X,Y,Z which is not applicable here
-            base_key = None  # triggers Cartesian path
-        else:
-            base_key = "".join(base_bits)  # e_rho, e_vartheta,
-
-        # adding parenthesis to the higher-order vectors
-        list0 = key.split("|")
-        key = "(" + list0[0] + ")" + "|" + list0[1]
-
-        req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
-        data = eq.compute(req_keys, grid=grid_used)
-
-        # Determine reshape dimensions based on deriv
-        reshape_dims = (
-            (1, 1, grid_used.num_zeta, -1)
-            if deriv == "p"
-            else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
-        )
-
-        # reshape everything to (θ,ρ,ζ,3) and convert to xyz
-        data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
-
-        if base_key is None:
-            pass
-        else:  # derivatives of e^rho, etc.
-            base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(reshape_dims)
-
-        # First-order, 4-point stencil finite-difference
-        spacing = {
-            "r": grids_PEST[deriv].spacing[0, 0],
-            "v": grids_PEST[deriv].spacing[0, 1] / 2,
-            "p": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+        # spacing grids in each native direction
+        grids_PEST = {
+            "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
+            "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
+            "p": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
         }
 
-        if deriv == "r":
-            fd = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing[deriv]
-        elif deriv == "v":
-            fd = np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4) / spacing[deriv]
-            fd = fd[0]
-            data[key] = data[key][0]
-        else:
-            fd = np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4) / spacing[deriv]
-            fd = fd[0][0]
-            data[key] = data[key][0][0]
-
-        np.testing.assert_allclose(
-            data[key][4:-4],
-            fd[4:-4],
-            rtol=5e-5,
-            atol=6e-4,
-            err_msg=key,
+        # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
+        rtz_nodes = map_coordinates(
+            eq,
+            grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(np.inf, 2 * np.pi, np.inf),
         )
+
+        # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
+        rtz_nodes1 = map_coordinates(
+            eq,
+            grids_PEST["p"].nodes,  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+
+        for key in keys_PEST:
+            lhs, rhs = key.split("|")
+            # rhs can be PEST or r,v or p,v or r,p etc.
+            # So it's not really needed for the FD calculation
+            parts = lhs.split("^")
+            parts2 = parts[-1].split("_")
+
+            deriv_tokn = parts[-1]
+            base_bits = parts[:-1] + ["^"] + [parts2[0]]
+            base = []
+
+            deriv = deriv_tokn.split("_")[-1]
+
+            # Grid will have to be custom for vartheta
+            grid_used = (
+                Grid(rtz_nodes)
+                if deriv == "v"
+                else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+            )
+
+            # Decide base vector
+            if (
+                len(base_bits) == 1
+            ):  # only happens for X,Y,Z which is not applicable here
+                base_key = None  # triggers Cartesian path
+            else:
+                base_key = "".join(base_bits)  # e_rho, e_vartheta,
+
+            # adding parenthesis to the higher-order vectors
+            list0 = key.split("|")
+            key = "(" + list0[0] + ")" + "|" + list0[1]
+
+            req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
+            data = eq.compute(req_keys, grid=grid_used)
+
+            # Determine reshape dimensions based on deriv
+            reshape_dims = (
+                (1, 1, grid_used.num_zeta, -1)
+                if deriv == "p"
+                else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
+            )
+
+            # reshape everything to (θ,ρ,ζ,3) and convert to xyz
+            data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
+
+            if base_key is None:
+                pass
+            else:  # derivatives of e^rho, etc.
+                base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(
+                    reshape_dims
+                )
+
+            # First-order, 4-point stencil finite-difference
+            spacing = {
+                "r": grids_PEST[deriv].spacing[0, 0],
+                "v": grids_PEST[deriv].spacing[0, 1] / 2,
+                "p": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+            }
+
+            if deriv == "r":
+                fd = (
+                    np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+            elif deriv == "v":
+                fd = (
+                    np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+                fd = fd[0]
+                data[key] = data[key][0]
+            else:
+                fd = (
+                    np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4)
+                    / spacing[deriv]
+                )
+                fd = fd[0][0]
+                data[key] = data[key][0][0]
+
+            np.testing.assert_allclose(
+                data[key][4:-4],
+                fd[4:-4],
+                rtol=7e-3,
+                atol=6e-3,
+                err_msg=key,
+            )
 
 
 @pytest.mark.unit

@@ -2236,6 +2236,7 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
 #################################################################################
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_rr_v)|PEST",
     label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
@@ -2275,6 +2276,7 @@ def _g_sub_rr_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_vv_r)|PEST",
     label="\\partial_{\\rho} g_{\\vartheta \\vartheta}|PEST",
@@ -2314,6 +2316,7 @@ def _g_sub_vv_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_pp_v)|PEST",
     label="\\partial_{\\theta_PEST} g_{\\zeta\\zeta}|PEST",
@@ -2375,6 +2378,7 @@ def _g_sup_rr_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rr_v)|PEST",
     label="\\partial_{\\vartheta} g^{\\rho\\rho}|PEST",
@@ -2416,6 +2420,7 @@ def _g_sup_rv_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rv_v)|PEST",
     label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
@@ -2459,6 +2464,7 @@ def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rz_v)|PEST",
     label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
@@ -2485,6 +2491,7 @@ def _g_sup_rz_v_PEST(params, transforms, profiles, data, **kwargs):
 ################################################################################
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(sqrt(g)_PEST_r)|PEST",
     label="\\partial_{\\rho} \\sqrt{g}_PEST",
@@ -2517,6 +2524,7 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(sqrt(g)_PEST_v)|PEST",
     label="\\partial_{\\vartheta} \\sqrt{g}_PEST",

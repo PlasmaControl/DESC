@@ -420,6 +420,7 @@ def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
         Real function value at query points.
 
     """
+    # This is optimized away under JIT if the operation is an idenity.
     s = 2 * jnp.pi / (domain[1] - domain[0])
     x = (x - domain[0]) * s
 
@@ -486,6 +487,7 @@ def nufft2d2r(
         Real function value at query points.
 
     """
+    # This is optimized away under JIT if the operation is an idenity.
     s0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     s1 = 2 * jnp.pi / (domain1[1] - domain1[0])
     x0 = (x0 - domain0[0]) * s0

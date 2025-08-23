@@ -326,8 +326,10 @@ def _e_sup_rho_v_PEST(params, transforms, profiles, data, **kwargs):
     data=["e^rho_t", "e^rho_z", "theta_PEST_t", "theta_PEST_z"],
 )
 def _e_sup_rho_p_PEST(params, transforms, profiles, data, **kwargs):
-    data["(e^rho_p)|PEST"] = data["e^rho_z"]
-    -data["e^rho_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
+    data["(e^rho_p)|PEST"] = (
+        data["e^rho_z"]
+        - data["e^rho_t"] * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None]
+    )
     return data
 
 

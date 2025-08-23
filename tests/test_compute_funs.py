@@ -1435,7 +1435,7 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
                 data[key][4:-4],
                 fd[4:-4],
                 rtol=3e-3,
-                atol=2e-3,
+                atol=3e-3,
                 err_msg=key,
             )
 

@@ -223,6 +223,7 @@ class _MagneticField(IOAble, ABC):
     """
 
     _io_attrs_ = []
+    _static_attrs = []
 
     def __mul__(self, x):
         if np.isscalar(x) or len(x) == 1:
@@ -767,6 +768,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
 
     """
 
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_fun"]
+
     def __init__(self, fun, params=None):
         errorif(not callable(fun), ValueError, "fun must be callable")
         self._params = jnp.asarray(setdefault(params, jnp.array([])))
@@ -887,6 +890,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
         scale = float(np.squeeze(scale))
@@ -1015,6 +1019,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
+    _static_attrs = _MagneticField._static_attrs
 
     def __init__(self, *fields):
         fields = flatten_list(fields, flatten_tuple=True)
@@ -1238,6 +1243,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0):
         self.B0 = float(np.squeeze(B0))
@@ -1382,6 +1388,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0):
         self.B0 = B0
@@ -1528,6 +1535,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0, iota):
         self.B0 = B0
@@ -1715,9 +1723,17 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_currents",
         "_NFP",
     ]
-    # by default floats are considered dynamic but for this to work with jit these
-    # need to be static
-    _static_attrs = ["_extrap", "_period"]
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + Optimizable._static_attrs
+        + [
+            "_extrap",
+            "_period",
+            "_method",
+            "_axisym",
+            "_NFP",
+        ]
+    )
 
     def __init__(
         self,
@@ -2252,6 +2268,8 @@ class ScalarPotentialField(_MagneticField):
 
     """
 
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
+
     def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
@@ -2376,6 +2394,8 @@ class VectorPotentialField(_MagneticField):
         or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
+
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
 
     def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
@@ -2628,6 +2648,7 @@ def field_line_integrate(
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
+        field = args[0]
         r = rpz[:, 0]
         br, bp, bz = (
             scale
@@ -2666,6 +2687,7 @@ def field_line_integrate(
         saveat=saveat,
         max_steps=maxstep * len(phis),
         dt0=min_step_size,
+        args=(field,),
         **kwargs,
     ).ys
 
@@ -2739,6 +2761,16 @@ class OmnigenousField(Optimizable, IOAble):
         "_x_basis",
         "_B_lm",
         "_x_lmn",
+    ]
+
+    _static_attrs = Optimizable._static_attrs + [
+        "_L_B",
+        "_M_B",
+        "_L_x",
+        "_M_x",
+        "_N_x",
+        "_NFP",
+        "_helicity",
     ]
 
     def __init__(

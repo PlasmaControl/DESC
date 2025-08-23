@@ -1263,7 +1263,7 @@ class InputReader:
                     warnings.warn(
                         colored(
                             f"Detected multiple inputs for {input_name}! "
-                            + "DESC will default to using the last one.",
+                            + "DESC will default to reading the last one.",
                             "yellow",
                         )
                     )
@@ -1281,9 +1281,6 @@ class InputReader:
         for line in vmec_no_multiline_no_duplicates:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
-            # global parameters
-
-            # rotational transform
 
             # boundary shape
             # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)

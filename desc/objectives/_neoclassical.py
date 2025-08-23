@@ -10,7 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
-from desc.utils import setdefault, warnif
+from desc.utils import setdefault
 
 from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
@@ -30,13 +30,6 @@ _bounce_overwrite = {
         to retain the default for that.
         """
 }
-_nufft_warning = """
-    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves
-    performance. However, due to bugs in upstream libraries
-    (https://github.com/flatironinstitute/jax-finufft/issues/158),
-    the automatic differentiation tool fails to compute the derivative correctly.
-    Therefore it is not recommended to use NUFFTs in optimization.
-"""
 
 
 class EffectiveRipple(_Objective):
@@ -59,7 +52,6 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * https://github.com/flatironinstitute/jax-finufft/issues/158
       * https://github.com/jax-ml/jax/issues/30627
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
@@ -128,9 +120,6 @@ class EffectiveRipple(_Objective):
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
-        Due to bugs in upstream libraries, you should specify ``nufft_eps=0`` if
-        you intend to use automatic differentiation to differentiate the computation.
     spline : bool
         Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
         basically replacing some pseudo-spectral methods with local splines.
@@ -170,7 +159,6 @@ class EffectiveRipple(_Objective):
         grid=None,
         X=16,
         Y=32,
-        # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
         alpha=np.array([0.0]),
         num_transit=20,
@@ -182,8 +170,6 @@ class EffectiveRipple(_Objective):
         nufft_eps=0,
         spline=False,
     ):
-        warnif(not spline and (nufft_eps >= 1e-14), msg=_nufft_warning)
-
         if target is None and bounds is None:
             target = 0.0
 

@@ -190,22 +190,19 @@ class TestFastInterp:
 
         @partial(grad, argnums=(0, 1))
         def g1(xq, yq):
-            return nufft2d2r(xq, yq, f1, domain_x, domain_y, eps=1e-7).sum()
+            return nufft2d2r(xq, yq, f1, domain_x, domain_y, eps=1e-8).sum()
 
         @partial(grad, argnums=(0, 1))
         def g2(xq, yq):
-            return nufft2d2r(xq, yq, f2, domain_x, domain_y, None, eps=1e-7).sum()
+            return nufft2d2r(xq, yq, f2, domain_x, domain_y, None, eps=1e-8).sum()
 
         @partial(grad, argnums=(0, 1))
         def true_g(xq, yq):
             return func(xq, yq).sum()
 
         g = true_g(xq, yq)
-        # https://github.com/flatironinstitute/jax-finufft/pull/159
-        with pytest.raises(AssertionError):
-            np.testing.assert_allclose(g1(xq, yq), g)
-        with pytest.raises(AssertionError):
-            np.testing.assert_allclose(g2(xq, yq), g)
+        np.testing.assert_allclose(g1(xq, yq), g, atol=1e-11)
+        np.testing.assert_allclose(g2(xq, yq), g, atol=1e-11)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)

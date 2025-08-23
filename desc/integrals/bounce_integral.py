@@ -196,20 +196,6 @@ class Bounce2D(Bounce):
         Performance will improve significantly by resolving GitHub issue ``1303``:
         Patch for differentiable code with dynamic shapes.
 
-    Warnings
-    --------
-    Use of non-uniform Fast Fourier transforms (NUFFT) significantly improves
-    performance. However, due to bugs in upstream libraries
-    (https://github.com/flatironinstitute/jax-finufft/issues/158),
-    the automatic differentiation tool fails to compute the objective derivative.
-    If you will use automatic differentiation to compute the derivative of a
-    function which calls any of the following methods, then you must specify
-    ``nufft_eps=0`` in those methods for correctness.
-
-      * ``Bounce2D.__init__``
-      * ``Bounce2D.integrate``
-      * ``Bounce2D.interp_to_argmin``
-
     Parameters
     ----------
     grid : Grid
@@ -269,8 +255,9 @@ class Bounce2D(Bounce):
     Lref : float
         Optional. Reference length scale for normalization.
     spline : bool
-        Whether to use cubic splines to compute bounce points.
-        The recommended setting is ``True``.
+        Whether to use cubic splines to compute bounce points instead of
+        Chebyshev series. Note the algorithm for efficient root-finding on
+        Chebyshev series has not been implemented.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 

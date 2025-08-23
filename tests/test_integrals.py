@@ -1140,19 +1140,12 @@ class TestBounce:
         # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
 
-        num = bounce.integrate(
-            integrand=TestBounce._example_numerator,
-            pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
+        num, den = bounce.integrate(
+            [TestBounce._example_numerator, TestBounce._example_denominator],
+            pitch_inv,
+            {"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
             points=points,
             check=True,
-        )
-        den = bounce.integrate(
-            integrand=TestBounce._example_denominator,
-            pitch_inv=pitch_inv,
-            points=points,
-            check=True,
-            batch=False,
         )
         avg = safediv(num, den)
         errorif(not np.isfinite(avg).all())
@@ -1176,7 +1169,21 @@ class TestBounce:
         print("(ρ, α):", nodes[l, m, 0])
 
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
+
+        self._not_part_of_tutorial_test(bounce, pitch_inv, points, den)
+
         return fig
+
+    @staticmethod
+    def _not_part_of_tutorial_test(bounce, pitch_inv, points, den):
+        den_no_batch = bounce.integrate(
+            TestBounce._example_denominator,
+            pitch_inv,
+            points=points,
+            check=True,
+            batch=False,
+        )
+        np.testing.assert_allclose(den_no_batch, den)
 
     @pytest.mark.unit
     def test_interp_to_argmin(self):
@@ -1266,7 +1273,7 @@ class TestBounce:
             by some scale factors for this unit test. These should be fed to the bounce
             integration as input.
         pitch_inv : jnp.ndarray
-            Shape (P, ).
+            Shape (num pitch, ).
             1/λ values used.
 
         """
@@ -1388,20 +1395,14 @@ class TestBounce:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {
+        data = {
             "cvdrift": Bounce1D.reshape(things["grid"].source_grid, cvdrift),
             "gbdrift": Bounce1D.reshape(things["grid"].source_grid, gbdrift),
         }
-        drift_numerical_num = bounce.integrate(
-            integrand=TestBounce.drift_num_integrand,
-            pitch_inv=pitch_inv,
-            data=interp_data,
-            points=points,
-            check=True,
-        )
-        drift_numerical_den = bounce.integrate(
-            integrand=TestBounce.drift_den_integrand,
-            pitch_inv=pitch_inv,
+        drift_numerical_num, drift_numerical_den = bounce.integrate(
+            [TestBounce.drift_num_integrand, TestBounce.drift_den_integrand],
+            pitch_inv,
+            data,
             points=points,
             check=True,
         )
@@ -1409,13 +1410,12 @@ class TestBounce:
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+
         np.testing.assert_allclose(
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce, TestBounce.drift_num_integrand, interp_data
-        )
+        TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, data)
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)
@@ -1570,19 +1570,10 @@ class TestBounce2D:
         # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
 
-        _data = {"g_zz": Bounce2D.reshape(grid, data["g_zz"])}
-
-        num = bounce.integrate(
-            integrand=TestBounce._example_numerator,
-            pitch_inv=pitch_inv,
-            data=_data,
-            points=points,
-            nufft_eps=0,
-            check=True,
-        )
-        den = bounce.integrate(
-            integrand=TestBounce._example_denominator,
-            pitch_inv=pitch_inv,
+        num, den = bounce.integrate(
+            [TestBounce._example_numerator, TestBounce._example_denominator],
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             nufft_eps=0,
             check=True,
@@ -1607,6 +1598,19 @@ class TestBounce2D:
         # for the Clebsch field line coordinates
         print("(ρ, α):", rho[l], alpha[m])
 
+        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
+        _, _ = bounce.plot_theta(l, m, show=False)
+
+        self._not_part_of_tutorial_test(
+            bounce, pitch_inv, points, num, data, grid, theta, alpha
+        )
+
+        return fig
+
+    @staticmethod
+    def _not_part_of_tutorial_test(
+        bounce, pitch_inv, points, num, data, grid, theta, alpha
+    ):
         np.testing.assert_allclose(
             bounce.compute_fieldline_length(),
             # Crossref w/ "fieldline length" in data index with 1000 points.
@@ -1621,14 +1625,11 @@ class TestBounce2D:
             rtol=1e-2,
         )
 
-        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
-        _, _ = bounce.plot_theta(l, m, show=False)
-
         # check for consistency with different options
         num_nufft = bounce.integrate(
-            integrand=TestBounce._example_numerator,
-            pitch_inv=pitch_inv,
-            data=_data,
+            TestBounce._example_numerator,
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             # ~1% of the integrals differ significantly at lower epsilon.
             nufft_eps=1e-12,
@@ -1648,9 +1649,8 @@ class TestBounce2D:
             grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
         )
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
+        l, m = 1, 0
         _, _ = b.plot(l, m, pitch_inv[l], show=False)
-
-        return fig
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):
@@ -1666,8 +1666,10 @@ class TestBounce2D:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    @pytest.mark.parametrize("nufft_eps", [0, 1e-6])
-    def test_binormal_drift_bounce2d(self, nufft_eps):
+    @pytest.mark.parametrize(
+        "nufft_eps, spline", [(0, False), (0, True), (1e-6, False), (1e-8, True)]
+    )
+    def test_binormal_drift_bounce2d(self, nufft_eps, spline):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytic_data()
         drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
@@ -1685,28 +1687,23 @@ class TestBounce2D:
             grid,
             grid_data,
             Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
+            Y_B=64 if spline else 16,
             alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
             num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],
             nufft_eps=nufft_eps,
-            spline=False,
+            spline=spline,
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
-        drift_numerical_num = bounce.integrate(
-            integrand=TestBounce2D.drift_num_integrand,
-            pitch_inv=pitch_inv,
-            data=interp_data,
-            points=points,
-            nufft_eps=nufft_eps,
-            check=True,
-        )
-        drift_numerical_den = bounce.integrate(
-            integrand=TestBounce.drift_den_integrand,
-            pitch_inv=pitch_inv,
+
+        data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
+        drift_numerical_num, drift_numerical_den = bounce.integrate(
+            [TestBounce2D.drift_num_integrand, TestBounce.drift_den_integrand],
+            pitch_inv,
+            data,
             points=points,
             nufft_eps=nufft_eps,
             check=True,
@@ -1715,20 +1712,14 @@ class TestBounce2D:
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+
         np.testing.assert_allclose(
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        if nufft_eps == 0:
-            TestBounce._test_bounce_autodiff(
-                bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
-            )
-        else:
-            with pytest.raises(AssertionError):
-                # https://github.com/flatironinstitute/jax-finufft/pull/159
-                TestBounce._test_bounce_autodiff(
-                    bounce, TestBounce2D.drift_num_integrand, interp_data, nufft_eps
-                )
+        TestBounce._test_bounce_autodiff(
+            bounce, TestBounce2D.drift_num_integrand, data, nufft_eps
+        )
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)

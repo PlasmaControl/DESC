@@ -2010,32 +2010,30 @@ class TestObjectiveFunction:
             num_quad=num_quad,
             num_pitch=num_pitch,
         )
-        with pytest.warns(UserWarning):
-            obj = EffectiveRipple(
-                eq,
-                grid=grid,
-                X=X,
-                Y=Y,
-                num_transit=num_transit,
-                num_quad=num_quad,
-                num_pitch=num_pitch,
-                nufft_eps=1e-6,
-            )
+        obj = EffectiveRipple(
+            eq,
+            grid=grid,
+            X=X,
+            Y=Y,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+            nufft_eps=1e-6,
+        )
         obj.build()
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
         )
-        with pytest.warns(UserWarning):
-            obj = GammaC(
-                eq,
-                grid=grid,
-                X=X,
-                Y=Y,
-                num_transit=num_transit,
-                num_quad=num_quad,
-                num_pitch=num_pitch,
-                nufft_eps=1e-7,
-            )
+        obj = GammaC(
+            eq,
+            grid=grid,
+            X=X,
+            Y=Y,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+            nufft_eps=1e-7,
+        )
         obj.build()
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
@@ -3975,16 +3973,13 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        with pytest.warns(UserWarning):
-            obj = ObjectiveFunction(
-                _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
-            )
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-7)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        with pytest.raises(AssertionError):
-            # https://github.com/flatironinstitute/jax-finufft/pull/159
-            np.testing.assert_allclose(g, g_0)
+        np.testing.assert_allclose(g, g_0, atol=1e-9)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
@@ -4006,16 +4001,13 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        with pytest.warns(UserWarning):
-            obj = ObjectiveFunction(
-                _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-7)
-            )
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-8)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        with pytest.raises(AssertionError):
-            # https://github.com/flatironinstitute/jax-finufft/pull/159
-            np.testing.assert_allclose(g, g_0)
+        np.testing.assert_allclose(g, g_0, atol=2e-7)
 
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
         obj.build(verbose=0)

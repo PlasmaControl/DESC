@@ -503,7 +503,14 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    opts = options.Opts(modeord=1)
+    JF_BUG = True
+    if JF_BUG:
+        # https://github.com/flatironinstitute/jax-finufft/pull/159
+        opts = options.Opts(modeord=0)
+        f = jnp.fft.fftshift(f, (-2, -1))
+    else:
+        opts = options.Opts(modeord=1)
+
     return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
 

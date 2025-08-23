@@ -81,13 +81,9 @@ _bounce_doc = {
     "nufft_eps": """float :
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
-        Due to bugs in upstream libraries, you should specify ``nufft_eps=0`` if
-        you intend to use automatic differentiation to differentiate the computation.
         """,
     "spline": """bool :
         Whether to use cubic splines to compute bounce points.
-        The recommended setting is ``True``.
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".

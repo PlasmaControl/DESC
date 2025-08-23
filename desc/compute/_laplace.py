@@ -337,7 +337,7 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
@@ -622,8 +622,9 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     on_boundary="bool : Whether RpZcoords are on boundary surface.",
+    public=False,
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency

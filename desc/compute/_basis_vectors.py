@@ -589,8 +589,12 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
         "e^theta",
         "e^zeta",
         "e^zeta_t",
+        "e^rho",
+        "e^rho_t",
+        "theta_PEST_r",
         "theta_PEST_t",
         "theta_PEST_z",
+        "theta_PEST_rt",
         "theta_PEST_tz",
         "theta_PEST_tt",
     ],
@@ -603,8 +607,10 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     e_sup_vartheta_t = (
         data["e^theta_t"] * data["theta_PEST_t"][:, None]
         + data["e^zeta_t"] * data["theta_PEST_z"][:, None]
+        + data["e^rho_t"] * data["theta_PEST_r"][:, None]
         + data["e^theta"] * data["theta_PEST_tt"][:, None]
         + data["e^zeta"] * data["theta_PEST_tz"][:, None]
+        + data["e^rho"] * data["theta_PEST_rt"][:, None]
     )
 
     data["(e^vartheta_v)|PEST"] = e_sup_vartheta_t / (data["theta_PEST_t"])[:, None]
@@ -625,13 +631,20 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
+        "e^rho",
         "e^theta",
         "e^zeta",
+        "e^rho_z",
         "e^theta_z",
         "e^zeta_z",
+        "e^rho_t",
+        "e^rho_z",
+        "theta_PEST_r",
         "theta_PEST_t",
         "theta_PEST_z",
+        "theta_PEST_rt",
         "theta_PEST_tz",
+        "theta_PEST_rz",
         "theta_PEST_tt",
         "theta_PEST_zz",
         "e^theta_t",
@@ -646,16 +659,23 @@ def _e_sup_vartheta_p_PEST(params, transforms, profiles, data, **kwargs):
     e_sup_vartheta_t = (
         data["e^theta_t"] * data["theta_PEST_t"][:, None]
         + data["e^zeta_t"] * data["theta_PEST_z"][:, None]
+        + data["e^rho_t"] * data["theta_PEST_r"][:, None]
         + data["e^theta"] * data["theta_PEST_tt"][:, None]
         + data["e^zeta"] * data["theta_PEST_tz"][:, None]
+        + data["e^rho"] * data["theta_PEST_rt"][:, None]
     )
-    data["(e^vartheta_p)|PEST"] = (
+    e_sup_vartheta_z = (
         data["e^theta_z"] * data["theta_PEST_t"][:, None]
         + data["e^zeta_z"] * data["theta_PEST_z"][:, None]
+        + data["e^rho_z"] * data["theta_PEST_r"][:, None]
         + data["e^theta"] * data["theta_PEST_tz"][:, None]
         + data["e^zeta"] * data["theta_PEST_zz"][:, None]
+        + data["e^rho"] * data["theta_PEST_rz"][:, None]
     )
-    -(data["theta_PEST_z"] / data["theta_PEST_t"])[:, None] * e_sup_vartheta_t
+    data["(e^vartheta_p)|PEST"] = (
+        e_sup_vartheta_z
+        - (data["theta_PEST_z"] / data["theta_PEST_t"])[:, None] * e_sup_vartheta_t
+    )
     return data
 
 

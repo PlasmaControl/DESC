@@ -290,6 +290,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(e^rho_v)|PEST",  # ∇ρ is the same in any coordinate system.
     label="\\partial_{\\vartheta}|_{\\rho, \\phi} \\mathbf{e}^{\\rho}",
@@ -568,6 +569,7 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(e^vartheta_v)|PEST",
     label="\\partial_{\\vartheta}|_{\\rho, \\phi} \\mathbf{e}^{\\vartheta}",
@@ -1335,6 +1337,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(e^zeta_v)|PEST",
     label="\\partial_{\\vartheta}_{\\rho,\\phi} \\mathbf{e}^{\\zeta}",

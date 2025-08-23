@@ -104,6 +104,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^theta_PEST_v)|PEST",
     label="\\partial_{\\vartheta} J^{\\theta_{PEST}}",
@@ -178,6 +179,7 @@ def _J_sup_theta_PEST_p_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^zeta_v)|PEST",
     label="\\partial_{\\vartheta}|_{\\rho, \\phi} J^{\\zeta}",
@@ -197,6 +199,7 @@ def _J_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^zeta_p)|PEST",
     label="\\partial_{\\phi}|_{\\rho, \\phi} J^{\\zeta}",

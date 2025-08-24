@@ -719,6 +719,7 @@ def fast_cubic_spline(
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
     if num_zeta >= f.shape[-2]:
+        f = f.squeeze(-3)
         p = num_zeta - f.shape[-2]
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
@@ -733,7 +734,7 @@ def fast_cubic_spline(
             axis=-2,
             modes=n_modes,
             vander=vander_zeta,
-        )[..., None, :, :]
+        )
 
     # θ at uniform ζ on field lines
     theta = idct_mmt(x, T.cheb[..., None, :], vander=vander_theta).reshape(
@@ -741,13 +742,13 @@ def fast_cubic_spline(
     )
 
     if nufft_eps < 1e-14:
-        f = irfft_mmt(theta, f[..., None, None, :, :], num_theta, _modes=m_modes)
+        f = irfft_mmt(theta, f[..., None, None, None, :, :], num_theta, _modes=m_modes)
     else:
         if len(lines) > 1:
             theta = theta.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_zeta, -1)
         else:
             theta = theta.transpose(3, 0, 1, 2).reshape(num_zeta, -1)
-        f = nufft1d2r(theta, f.squeeze(-3), eps=nufft_eps).mT
+        f = nufft1d2r(theta, f, eps=nufft_eps).mT
     f = f.reshape(*lines, -1)
 
     zeta = jnp.ravel(zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, None])

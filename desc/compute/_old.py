@@ -119,7 +119,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H² / I).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         H, I = bounce.integrate(
@@ -130,7 +130,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             num_well=num_well,
         )
         return jnp.sum(
-            safediv(H**2, I).sum(axis=-1).mean(axis=-2)
+            safediv(H**2, I).sum(-1).mean(-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
@@ -272,7 +272,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             )
         )
         return jnp.sum(
-            jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            (v_tau * gamma_c**2).sum(-1).mean(-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
@@ -363,7 +363,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         # This is γ_c π/2.
         gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(
-            jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            (v_tau * gamma_c**2).sum(-1).mean(-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,

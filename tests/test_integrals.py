@@ -41,7 +41,7 @@ from desc.integrals._bounce_utils import (
     get_extrema,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -904,6 +904,7 @@ class TestBouncePoints:
         cheb = FourierChebyshevSeries(f(zeta).reshape(M, N)).compute_cheb(
             fourier_pts(M)
         )
+        cheb = PiecewiseChebyshevSeries(cheb)
         pitch_inv = 3
         z1, z2 = cheb.intersect1d(pitch_inv)
         cheb.check_intersect1d(z1, z2, pitch_inv)
@@ -1667,9 +1668,10 @@ class TestBounce2D:
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
-        "nufft_eps, spline", [(0, False), (0, True), (1e-6, False), (1e-8, True)]
+        "nufft_eps, spline, Y_B",
+        [(0, False, 16), (0, True, 64), (1e-6, False, 16), (1e-8, True, 64)],
     )
-    def test_binormal_drift_bounce2d(self, nufft_eps, spline):
+    def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytic_data()
         drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
@@ -1687,8 +1689,8 @@ class TestBounce2D:
             grid,
             grid_data,
             Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
-            Y_B=64 if spline else 16,
-            alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
+            Y_B,
+            data["alpha"] - 2.5 * np.pi * data["iota"],
             num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],

@@ -26,7 +26,7 @@ from desc.utils import (
     atleast_3d_mid,
     atleast_nd,
     errorif,
-    flatten_matrix,
+    flatten_mat,
     isposint,
     setdefault,
     take_mask,
@@ -84,21 +84,6 @@ def _in_epigraph_and(is_intersect, df_dy, /):
         # degenerate pitch value - one that does not ride the global extrema of f.
     )
     return is_intersect.at[idx[0]].set(edge_case)
-
-
-def _chebcast(cheb, arr):
-    """Add leftmost axis to ``cheb`` depending on ``arr.ndim``.
-
-    Input ``arr`` should not have rightmost dimension of cheb that iterates
-    coefficients, but may have additional leftmost dimension for batch operation.
-    """
-    errorif(
-        jnp.ndim(arr) > cheb.ndim,
-        NotImplementedError,
-        msg=f"Only one additional axis for batch dimension is allowed. "
-        f"Got {jnp.ndim(arr) - cheb.ndim + 1} additional axes.",
-    )
-    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
 
 # TODO: Move interpolation part to interpax. This is the only
@@ -267,18 +252,31 @@ class FourierChebyshevSeries(IOAble):
 
         Returns
         -------
-        cheb : PiecewiseChebyshevSeries
+        cheb : jnp.ndarray
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
         # Add axis to broadcast against Chebyshev coefficients.
-        x = jnp.atleast_1d(x)[..., jnp.newaxis]
+        x = jnp.atleast_1d(x)[..., None]
         # Add axis to broadcast against multiple x values.
-        cheb = cheb_from_dct(
-            irfft_mmt(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
-        )
+        cheb = cheb_from_dct(irfft_mmt(x, self._c[..., None, :, :], self.X, axis=-2))
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)
-        return PiecewiseChebyshevSeries(cheb, self.domain)
+        return cheb
+
+
+def _add_lead_axis(cheb, arr):
+    """Add leading axis for batching ``cheb`` depending on ``arr.ndim``.
+
+    Input ``arr`` should not have rightmost dimension of cheb that iterates
+    coefficients, but may have one leading axis for batching.
+    """
+    errorif(
+        jnp.ndim(arr) > cheb.ndim,
+        NotImplementedError,
+        msg=f"Only one leading axis for batching is allowed. "
+        f"Got {jnp.ndim(arr) - cheb.ndim + 1} leading axes.",
+    )
+    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[None]
 
 
 class PiecewiseChebyshevSeries(IOAble):
@@ -294,14 +292,17 @@ class PiecewiseChebyshevSeries(IOAble):
         Chebyshev coefficients αₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
+    tag : str
+        Optional tag to remind shape of input.
 
     """
 
-    def __init__(self, cheb, domain=(-1, 1)):
+    def __init__(self, cheb, domain=(-1, 1), tag="?"):
         """Make piecewise series from given Chebyshev coefficients."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.cheb = jnp.atleast_2d(cheb)
         self.domain = domain
+        self._tag = tag
 
     @property
     def X(self):
@@ -312,6 +313,11 @@ class PiecewiseChebyshevSeries(IOAble):
     def Y(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
+
+    @property
+    def tag(self):
+        """Optional string tag specified by user to remind shape of input."""
+        return self._tag + f" = {self.cheb.shape}"
 
     def stitch(self):
         """Enforce continuity of the piecewise series."""
@@ -369,7 +375,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         assert y.ndim >= 2
         z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        return y + z_shift[:, jnp.newaxis]
+        return y + z_shift[:, None]
 
     def _isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
@@ -403,8 +409,8 @@ class PiecewiseChebyshevSeries(IOAble):
             Shape (..., *cheb.shape[:-2], z.shape[-1]).
             Coordinates in [self.domain[0], ∞).
             The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
-            ``z // domain`` yields the index into the proper Chebyshev series
-            along the second to last axis of ``cheb`` and ``z % domain`` is
+            ``z//domain`` yields the index into the proper Chebyshev series
+            along the second to last axis of ``cheb`` and ``z%domain`` is
             the coordinate value on the domain of that Chebyshev series.
         cheb : jnp.ndarray
             Shape (..., X, Y).
@@ -413,20 +419,16 @@ class PiecewiseChebyshevSeries(IOAble):
         Returns
         -------
         f : jnp.ndarray
-            Shape z.shape.
             Chebyshev series evaluated at z.
 
         """
-        cheb = _chebcast(setdefault(cheb, self.cheb), z)
-        Y = cheb.shape[-1]
+        cheb = _add_lead_axis(setdefault(cheb, self.cheb), z)
         x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in cheb with shape (..., num cheb series, Y).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_mmt(y, cheb, Y)
-        assert f.shape == z.shape
-        return f
+        # are in cheb array whose shape is (..., num cheb series, spectral resolution).
+        cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
+        return idct_mmt(y, cheb)
 
     #  The following changes would make root finding here more efficient.
     #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
@@ -460,12 +462,12 @@ class PiecewiseChebyshevSeries(IOAble):
         mask : jnp.ndarray
             Shape y.shape.
             Boolean array into ``y`` indicating whether element is an intersect.
-        df_dy_sign : jnp.ndarray
+        df_dy : jnp.ndarray
             Shape y.shape.
             Sign of ∂f/∂y (x, yᵢ).
 
         """
-        c = _subtract_first(_chebcast(self.cheb, k), k)
+        c = _subtract_first(_add_lead_axis(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = _chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.Y - 1)
@@ -483,14 +485,14 @@ class PiecewiseChebyshevSeries(IOAble):
         # Fast multipoint method would be better. Reduces to FFT. Cost is
         # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
         # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-        df_dy_sign = jnp.sign(
+        df_dy = jnp.sign(
             jnp.linalg.vecdot(
-                n * jnp.sin(n * jnp.arccos(y)[..., jnp.newaxis]),
-                self.cheb[..., jnp.newaxis, :],
+                n * jnp.sin(n * jnp.arccos(y)[..., None]),
+                self.cheb[..., None, :],
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
-        return y, mask, df_dy_sign
+        return y, mask, df_dy
 
     def intersect1d(self, k=0.0, num_intersect=None):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
@@ -534,11 +536,11 @@ class PiecewiseChebyshevSeries(IOAble):
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
+        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., None])
         # Flatten so that last axis enumerates intersects along the piecewise spline.
-        y = flatten_matrix(self._isomorphism_to_C1(y))
-        mask = flatten_matrix(mask)
-        df_dy = flatten_matrix(df_dy)
+        y = flatten_mat(self._isomorphism_to_C1(y))
+        mask = flatten_mat(mask)
+        df_dy = flatten_mat(df_dy)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent
@@ -569,7 +571,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
         assert z1.shape == z2.shape
         # Ensure pitch batch dim exists and add back dim to broadcast with wells.
-        k = atleast_nd(self.cheb.ndim - 1, k)[..., jnp.newaxis]
+        k = atleast_nd(self.cheb.ndim - 1, k)[..., None]
         # Same but back dim already exists.
         z1 = atleast_nd(self.cheb.ndim, z1)
         z2 = atleast_nd(self.cheb.ndim, z2)
@@ -585,7 +587,7 @@ class PiecewiseChebyshevSeries(IOAble):
         ----------
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
-            Tuple of length two (z1, z2) of coordinates of intersects.
+            Coordinates of intersects.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of f.
         k : jnp.ndarray
@@ -593,6 +595,8 @@ class PiecewiseChebyshevSeries(IOAble):
             k such that fₓ(yᵢ) = k.
         plot : bool
             Whether to plot the piecewise spline and intersects for the given ``k``.
+            For the plotting labels of ρ(l), α(m), it is assumed that the axis that
+            enumerates the index l preceds the axis that enumerates the index m.
         kwargs : dict
             Keyword arguments into ``self.plot``.
 
@@ -637,7 +641,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z2=_z2,
                         k=k[idx],
                         title=title
-                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
+                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
                         **kwargs,
                     )
                 print("      z1    |    z2")
@@ -658,7 +662,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z2=z2[idx],
                         k=k[idx],
                         title=title
-                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
+                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
                         **kwargs,
                     )
                 )

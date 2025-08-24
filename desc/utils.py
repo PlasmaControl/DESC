@@ -749,7 +749,7 @@ def take_mask(a, mask, /, *, size=None, fill_value=None):
     )
 
 
-def flatten_matrix(y, axes=2):
+def flatten_mat(y, axes=2):
     """Flatten matrix to vector.
 
     Parameters

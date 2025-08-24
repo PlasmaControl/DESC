@@ -580,12 +580,11 @@ def interp_dct(x, f, lobatto=False, axis=-1):
         x,
         cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
         / (f.shape[axis] - lobatto),
-        f.shape[axis],
         axis,
     )
 
 
-def idct_mmt(x, a, n, axis=-1, vander=None):
+def idct_mmt(x, a, axis=-1, vander=None):
     """Evaluate Chebyshev coefficients ``a`` at ``x`` ∈ [-1, 1].
 
     Uses matrix multiplication transform.
@@ -597,8 +596,6 @@ def idct_mmt(x, a, n, axis=-1, vander=None):
         Shape of ``x`` must broadcast with shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
         Discrete Chebyshev transform coefficients.
-    n : int
-        Spectral resolution of ``a``.
     axis : int
         Axis along which to transform.
     vander : jnp.ndarray
@@ -612,7 +609,7 @@ def idct_mmt(x, a, n, axis=-1, vander=None):
 
     """
     if vander is None:
-        vander = jnp.cos(jnp.arange(n) * jnp.arccos(x)[..., jnp.newaxis])
+        vander = jnp.cos(jnp.arange(a.shape[axis]) * jnp.arccos(x)[..., jnp.newaxis])
         a = jnp.moveaxis(a, axis, -1)
         axis = -1
     # Better than Clenshaw recursion ``chebval(x,a,tensor=False)`` on GPU.
@@ -690,7 +687,7 @@ def polyval_vec(*, x, c):
 def _subtract_first(c, k):
     """Subtract ``k`` from first index of last axis of ``c``.
 
-    Semantically same as ``return c.at[...,0].add(-k)``,
+    Semantically same as ``return c.at[...,0].subtract(k)``,
     but allows dimension to increase.
     """
     c_0 = c[..., 0] - k
@@ -706,7 +703,7 @@ def _subtract_first(c, k):
 def _subtract_last(c, k):
     """Subtract ``k`` from last index of last axis of ``c``.
 
-    Semantically same as ``return c.at[...,-1].add(-k)``,
+    Semantically same as ``return c.at[...,-1].subtract(k)``,
     but allows dimension to increase.
     """
     c_1 = c[..., -1] - k

@@ -517,7 +517,7 @@ def test_objective_grad_ripple_spline(benchmark):
     _test_objective_ripple(benchmark, True, "jac_scaled_error")
 
 
-def _test_objective_ripple(benchmark, spline, method):
+def _test_objective_ripple(benchmark, use_bounce1d, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
@@ -529,7 +529,7 @@ def _test_objective_ripple(benchmark, spline, method):
                 num_transit=num_transit,
                 num_well=10 * num_transit,
                 num_quad=16,
-                spline=spline,
+                use_bounce1d=use_bounce1d,
                 jac_chunk_size=1,
             )
         ]

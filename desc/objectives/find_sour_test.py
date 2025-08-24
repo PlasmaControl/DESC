@@ -1,6 +1,6 @@
 from interpax import interp2d
 
-from desc.backend import fori_loop, jax, jit, jnp
+from desc.backend import fori_loop, jax, jit, jnp, scan
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.find_dips import biot_savart_general
 
@@ -10,27 +10,29 @@ from desc.utils import cross, dot
 
 
 def bn_res(
-    p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, 
-        coords,
+    p_M,
+    p_N,
+    sdata1,
+    sdata2,
+    sdata3,
+    sgrid,
+    surface,
+    y,
+    N,
+    d_0,
+    coords,
     tdata,
     contour_data,
-    stick_data, 
+    stick_data,
     contour_grid,
 ):
 
-    B_sour0 = B_sour(p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, 
-                tdata)
+    B_sour0 = B_sour(
+        p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, tdata
+    )
 
     B_wire_cont = B_theta_contours(
-        p_M,
-        p_N,
-        sdata1,
-        sgrid,
-        surface,
-        y,
-        coords,
-        contour_data,
-        contour_grid
+        p_M, p_N, sdata1, sgrid, surface, y, coords, contour_data, contour_grid
     )
 
     B_sticks0 = B_sticks(
@@ -47,6 +49,7 @@ def bn_res(
 
     return B_total
 
+
 def B_sour(
     p_M,
     p_N,
@@ -58,7 +61,7 @@ def B_sour(
     y,
     N,
     d_0,
-    coords,#eq,Bgrid,
+    coords,  # eq,Bgrid,
     tdata,
 ):
 
@@ -98,21 +101,21 @@ def B_theta_contours(
     ss_grid,
 ):
 
-    r_t = p_M*2+1#theta_coarse.shape[0]
-    r_z = p_N*2+1#zeta_coarse.shape[0]
+    r_t = p_M * 2 + 1  # theta_coarse.shape[0]
+    r_z = p_N * 2 + 1  # zeta_coarse.shape[0]
 
     theta_coarse = jnp.linspace(
-        2 * jnp.pi * ( 1 / ( p_M * 2 + 1 ) ) * 1 / 2,
-        2 * jnp.pi * ( 1 - 1 / ( p_M * 2 + 1 ) * 1 / 2),
+        2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1 / 2,
+        2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1 / 2),
         p_M * 2 + 1,
     )
 
     zeta_coarse = jnp.linspace(
-        2 * jnp.pi / surface.NFP * (1 / ( p_N * 2 + 1 ) ) * 1 / 2,
-        2 * jnp.pi / surface.NFP * (1 - 1 / ( p_N * 2 + 1 ) * 1 / 2 ),
+        2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1 / 2,
+        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1 / 2),
         p_N * 2 + 1,
     )
-    
+
     sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 0) + jnp.where(
         ss_data["theta"] > jnp.pi, 1, 0
     )
@@ -141,9 +144,7 @@ def B_theta_contours(
     K_cont = fori_loop(0, r_z, outer_body, jnp.zeros_like(ss_data["e_theta"]))
 
     return _compute_magnetic_field_from_Current_Contour(
-        ss_grid, K_cont, surface, 
-        ss_data, coords,
-        basis="rpz"
+        ss_grid, K_cont, surface, ss_data, coords, basis="rpz"
     )
 
 
@@ -157,14 +158,16 @@ def B_sticks(
     ss_data,
 ):
 
-    pls_points = rpz2xyz(coords)#eq_surf.compute(["x"], grid=Bgrid, basis="xyz")["x"]
+    pls_points = rpz2xyz(coords)  # eq_surf.compute(["x"], grid=Bgrid, basis="xyz")["x"]
 
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
-    def sticks_fun(i, b_stick_fun):
-
-        b_stick_fun += y[i] * stick(
-            ss_data["x"][i],  # Location of the wire at the theta = pi cut, variable zeta position
+    def sticks_fun(carry, x):
+        i = x
+        b_stick_fun = carry + y[i] * stick(
+            ss_data["x"][
+                i
+            ],  # Location of the wire at the theta = pi cut, variable zeta position
             0 * ss_data["x"][i],  # All wires at the center go to the origin
             pls_points,
             sgrid,
@@ -172,7 +175,13 @@ def B_sticks(
         )
         return b_stick_fun
 
-    sticks_total = fori_loop(0, r, sticks_fun, jnp.zeros_like(pls_points))
+    def sticks_map(i):
+        return scan(sticks_fun, init=jnp.array([0]), xs=i)
+
+    len0 = len(y)
+    i = jnp.arange(0, len0)
+    sticks_total = vmap(lambda j: sticks_map(j))(i)
+
     return sticks_total
 
 
@@ -199,12 +208,18 @@ def stick(
 
         c_sxa_s = cross(c_s, a_s)
 
-        f += 1e-7 * (
-                ( jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=1), a_min = 1e-8, a_max = None) * jnp.sum(c_s * c_s, axis=1) ** (1 / 2) 
-                ) ** (-1)
+        f += (
+            1e-7
+            * (
+                (
+                    jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=1), a_min=1e-8, a_max=None)
+                    * jnp.sum(c_s * c_s, axis=1) ** (1 / 2)
+                )
+                ** (-1)
                 * (jnp.sum(a_s * c_s) - jnp.sum(a_s * b_s))
                 * c_sxa_s.T
             ).T
+        )
 
         return f
 
@@ -260,7 +275,7 @@ def K_sour(
         omega_total_real, omega_total_imag = carry
 
         y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-        
+
         omega_s1 = omega_sour(sdata1, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
 
         omega_total_real += y_ * jnp.real(omega_s1)
@@ -272,7 +287,7 @@ def K_sour(
         omega_total_real, omega_total_imag = carry
 
         y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-        
+
         omega_s2 = omega_sour(sdata2, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
 
         omega_total_real += y_ * jnp.real(omega_s2)
@@ -317,10 +332,12 @@ def K_sour(
     return (
         (sdata1["lambda_iso"] ** (-1))
         * (
-            -omega_total_imag1 * sdata1["e_v"].T  # - cross(sdata["n_rho"],sdata["e_u"]).T
+            -omega_total_imag1
+            * sdata1["e_v"].T  # - cross(sdata["n_rho"],sdata["e_u"]).T
             - omega_total_imag2 * sdata2["e_v"].T
             - omega_total_imag2 * sdata3["e_v"].T
-            + omega_total_real1 * sdata1["e_u"].T  # - cross(sdata["n_rho"],sdata["e_v"]).T
+            + omega_total_real1
+            * sdata1["e_u"].T  # - cross(sdata["n_rho"],sdata["e_v"]).T
             + omega_total_real2 * sdata2["e_u"].T
             + omega_total_real2 * sdata3["e_u"].T
         )
@@ -328,7 +345,7 @@ def K_sour(
 
 
 # @jax.jit
-def f_sour(data_or, u1_, v1_, N, d_0): 
+def f_sour(data_or, u1_, v1_, N, d_0):
 
     w1 = comp_loc(
         u1_,
@@ -371,35 +388,40 @@ def omega_sour(
     omega = (
         v_1_num_prime / v_1_num  # Regularized near the vortex cores
         - 2 * jnp.pi * jnp.real(w1) / (data_or["omega_1"] ** 2 * data_or["tau_2"])
-        + 1/2 * (chi_reg_1)  # Additional terms with regularization close to the vortex core
+        + 1
+        / 2
+        * (chi_reg_1)  # Additional terms with regularization close to the vortex core
     )
 
     return omega
 
 
 def v1_eval(w0, N, d_0, data_or):
-    
+
     gamma = data_or["omega_1"] / jnp.pi
     p = data_or["tau"]
 
     product_ = 0
 
-    #for n in range(0, N):
+    # for n in range(0, N):
 
     #    product_ = product_ + (
     #        (((-1) ** n) * (p ** (n**2 + n)))
     #        * jnp.sin((2 * n + 1) * (data_or["w"] - w0) / gamma)
     #    )
 
-    def body_fun(n,carry):
+    def body_fun(n, carry):
         product_ = carry
-        term = product_ + (  ( ( (-1) ** n) * (p ** (n**2 + n) ) ) * jnp.sin( (2 * n + 1) * (data_or["w"] - w0) / gamma) )
-        
+        term = product_ + (
+            (((-1) ** n) * (p ** (n**2 + n)))
+            * jnp.sin((2 * n + 1) * (data_or["w"] - w0) / gamma)
+        )
+
         return product_ + term
-        
+
     return jnp.where(
         jnp.abs(data_or["w"] - w0) > d_0,
-        2 * p ** (1 / 4) * fori_loop(0,N,body_fun, jnp.zeros_like(data_or["w"])),
+        2 * p ** (1 / 4) * fori_loop(0, N, body_fun, jnp.zeros_like(data_or["w"])),
         1,  # Arbitraty value of 1 inside the circle around the vortex core
     )
 
@@ -430,7 +452,9 @@ def v1_prime_eval(w0, N, d_0, data_or):
 
     def body_fun(n, carry):
         _product = carry
-        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"] - w0) / gamma ) )
+        term = (((-1) ** n) * (p ** (n**2 + n))) * (
+            ((2 * n + 1) / gamma) * jnp.cos((2 * n + 1) * (data_or["w"] - w0) / gamma)
+        )
         return _product + term
 
     return fori_loop(0, N, body_fun, jnp.zeros_like(data_or["w"]))
@@ -627,7 +651,7 @@ def interp_grid(theta, zeta, w_surface, tdata):
             "e^zeta_s",
             "x",
             "e_theta",  # extra vector needed for the poloidal wire contours
-            '|e_theta x e_zeta|',
+            "|e_theta x e_zeta|",
         ],
         grid=s_grid,
     )
@@ -728,9 +752,7 @@ def densify_linspace(arr, points_per_interval=1):
 
 
 def _compute_magnetic_field_from_Current(
-    Kgrid, K_at_grid, surface, data,
-    coords,
-    basis="rpz"
+    Kgrid, K_at_grid, surface, data, coords, basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -756,8 +778,8 @@ def _compute_magnetic_field_from_Current(
 
     """
 
-    #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
-    #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
+    # Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
+    # coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -773,9 +795,9 @@ def _compute_magnetic_field_from_Current(
     # compute and store grid quantities
     # needed for integration
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    #data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
+    # data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
 
-    _rs = data["x"]#xyz2rpz(data["x"])
+    _rs = data["x"]  # xyz2rpz(data["x"])
     _K = K_at_grid
 
     # surface element, must divide by NFP to remove the NFP multiple on the
@@ -810,8 +832,7 @@ def _compute_magnetic_field_from_Current(
 
 
 def _compute_magnetic_field_from_Current_Contour(
-    Kgrid, K_at_grid, surface, data, coords,
-    basis="rpz"
+    Kgrid, K_at_grid, surface, data, coords, basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -837,8 +858,8 @@ def _compute_magnetic_field_from_Current_Contour(
 
     """
 
-    #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
-    #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
+    # Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
+    # coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -851,7 +872,7 @@ def _compute_magnetic_field_from_Current_Contour(
 
     surface_grid = Kgrid
 
-    _rs = data["x"]#xyz2rpz(data["x"])
+    _rs = data["x"]  # xyz2rpz(data["x"])
     _K = K_at_grid
 
     # surface element, must divide by NFP to remove the NFP multiple on the

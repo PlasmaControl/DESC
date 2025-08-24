@@ -77,7 +77,9 @@ def _diag_to_full(d, e):
 
 
 if use_jax:  # noqa: C901
-    from jax import custom_jvp, jit, vmap
+    #from jax import custom_jvp, jit, vmap
+    from jax import custom_jvp,  vmap
+    jit = lambda func, *args, **kwargs: func
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax

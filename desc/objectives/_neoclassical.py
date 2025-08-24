@@ -10,7 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
-from desc.utils import setdefault
+from desc.utils import parse_argname_change, setdefault
 
 from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
@@ -120,7 +120,7 @@ class EffectiveRipple(_Objective):
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-    spline : bool
+    use_bounce1d : bool
         Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
         basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
@@ -137,7 +137,11 @@ class EffectiveRipple(_Objective):
         overwrite=_bounce_overwrite,
     )
 
-    _static_attrs = _Objective._static_attrs + ["_hyperparam", "_keys_1dr", "_spline"]
+    _static_attrs = _Objective._static_attrs + [
+        "_hyperparam",
+        "_keys_1dr",
+        "_use_bounce1d",
+    ]
 
     _coordinates = "r"
     _units = "~"
@@ -168,12 +172,15 @@ class EffectiveRipple(_Objective):
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=0,
-        spline=False,
+        use_bounce1d=False,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0.0
 
-        self._spline = spline
+        self._use_bounce1d = parse_argname_change(
+            use_bounce1d, kwargs, "spline", "use_bounce1d"
+        )
         self._grid = grid
         self._constants = {
             "quad_weights": 1.0,
@@ -217,8 +224,8 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        if self._spline:
-            return self._build_spline(use_jit, verbose)
+        if self._use_bounce1d:
+            return self._build_bounce1d(use_jit, verbose)
 
         eq = self.things[0]
         if self._grid is None:
@@ -270,8 +277,8 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        if self._spline:
-            return self._compute_spline(params, constants)
+        if self._use_bounce1d:
+            return self._compute_bounce1d(params, constants)
 
         if constants is None:
             constants = self.constants
@@ -306,7 +313,7 @@ class EffectiveRipple(_Objective):
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
-    def _build_spline(self, use_jit=True, verbose=1):
+    def _build_bounce1d(self, use_jit=True, verbose=1):
         Y_B = self._hyperparam.pop("Y_B")
         num_transit = self._hyperparam.pop("num_transit")
         num_quad = self._hyperparam.pop("num_quad")
@@ -345,7 +352,7 @@ class EffectiveRipple(_Objective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _compute_spline(self, params, constants=None):
+    def _compute_bounce1d(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]

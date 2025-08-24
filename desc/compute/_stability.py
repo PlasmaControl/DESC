@@ -3614,27 +3614,28 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
     sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
 
-    diagonal0 = jnp.reshape(
+    partial_z_log_sqrtg = jnp.reshape(
         (sqrtg_p / sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max)
     )
-    diagonal0 = diagonal0[..., None] * jnp.eye(diagonal0.shape[-1])
+    partial_z_log_sqrtg = partial_z_log_sqrtg[..., None] * jnp.eye(n_zeta_max)
 
-    C_zeta = diagonal0 + D_zeta0[None, ...]
+    C_zeta = partial_z_log_sqrtg + D_zeta0[None, ...]
     C_zeta_inv = jnp.linalg.inv(C_zeta)
 
-    diagonal1 = (sqrtg_r / sqrtg).flatten()
-    C_rho = jnp.diagonal(diagonal1) + D_rho
+    partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
+    C_rho = jnp.diagonal(partial_r_log_sqrtg) + D_rho
 
-    diagonal2 = (sqrtg_v / sqrtg).flatten()
-    C_theta = jnp.diagonal(diagonal2) + D_theta
+    partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
+    C_theta = jnp.diagonal(partial_v_log_sqrtg) + D_theta
 
     # Can this multiplication be made faster if we use
     # the bandedness of C_zeta_inv.
     C_zeta_inv_C_rho = C_zeta_inv @ C_rho
     C_zeta_inv_C_theta = C_zeta_inv @ C_theta
 
-    # All the instances of xi^zeta will be replaced by
-    # -C_zeta_inv_C_rho xi^rho - C_zeta_inv_C_theta xi^theta
+    # Incompressibility gives us
+    # \xi^\zeta = -(C_\zeta^{-1} C\rho \xi^{\rho} + C_\zeta^{-1} C_\theta \xi^{\theta})
+    # ξ^ζ = −(C_ζ⁻¹ C_ρ ξ^ρ + C_ζ⁻¹ C_θ ξ^θ)
 
     psi_r_over_sqrtg = psi_r / sqrtg
 
@@ -3949,30 +3950,63 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
         B = B.at[zeta_idx, rho_idx].set(B[rho_idx, zeta_idx].T)
         B = B.at[zeta_idx, theta_idx].set(B[theta_idx, zeta_idx].T)
 
-    ## Shift the diagon of A to ensure positive definiteness
+    ## Shift the diagonal of A to ensure positive definiteness
     ## The estimate must be accurate. If A is diagonally dominant
     ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-    # A = 0.5 * (A + A.T)
-    # B = 0.5 * (B + B.T)
 
-    A = A.at[jnp.diag_indices_from(A)].add(1e-11)
-    # LAinv = jnp.linalg.inv(jnp.linalg.cholesky(A))
+    #A = A.at[jnp.diag_indices_from(A)].add(1e-11)
+    #B = B.at[jnp.diag_indices_from(B)].add(1e-11)
 
-    ## Similarity transform to
-    # A = LAinv @ A @ LAinv.T
-    # B = LAinv @ B @ LAinv.T
+    if incompressible:
+        #Impose incompressibility
+        A = A.at[rho_idx, rho_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho 
+            + (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T) 
+            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
 
-    # B = B.at[jnp.diag_indices_from(B)].add(1e-11)
+        A = A.at[rho_idx, theta_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
+            + C_zeta_inv_C_rho @ A[rho_idx, theta_idx])
+            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
 
-    ## Finally add the only instability drive term
-    Au = jnp.zeros((3 * n_total, 3 * n_total))
-    Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+        A = A.at[theta_idx, theta_idx].add(-1 * (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta 
+            + (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T) 
+            + C_zeta_inv_C_theta.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
 
+        # Fill out the lower part using symmetry
+        A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+
+        B = B.at[rho_idx, rho_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho 
+            + (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T) 
+            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
+
+        B = B.at[rho_idx, theta_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
+            + C_zeta_inv_C_rho @ B[rho_idx, theta_idx])
+            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
+
+        B = B.at[theta_idx, theta_idx].add(-1 * (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta 
+            + (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T) 
+            + C_zeta_inv_C_theta.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
+
+        # Fill out the lower part using symmetry
+        B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+
+
+        ### Finally add the only instability drive term
+        #Au = jnp.zeros((3 * n_total, 3 * n_total))
+        #Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
+        #A = A.at[rho_idx, rho_idx_idx].add(Au)
+    else:
+        ## Finally add the only instability drive term
+        Au = jnp.zeros((3 * n_total, 3 * n_total))
+        Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
+        A = A.at[all_idx, all_idx].add(Au)
+
+    # Improve the condition number of the mass matrix
     ## D = 1.0 /jnp.tile((W * sqrtg).flatten(), 3)[:, None]
     D = jnp.diag(1 / jnp.sqrt(jnp.diag(B)))
 
     A2 = D @ (A @ D.T)
-    Au2 = D @ (Au @ D.T)
     B2 = D @ (B @ D.T)
 
     ##w2, _ = jnp.linalg.eigh(A)
@@ -3980,16 +4014,12 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     # w4, _ = jnp.linalg.eigh((B2 + B2.T)/2)
     # print(w4)
 
-    A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-11)
-
     # apply dirichlet BC to ξ^ρ
     keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
 
-    A3 = A2[jnp.ix_(keep, keep)] + Au2[jnp.ix_(keep, keep)]
-
-    w2, _ = jnp.linalg.eigh((A3 + A3.T) / 2)
+    w2, _ = jnp.linalg.eigh((A2 + A2.T) / 2)
     print(w2)
 
     # tic = time.time()
@@ -4003,7 +4033,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
     # Linv = jnp.linalg.inv(L)
     # Right-multiply by L^{-T}:  ALt = A L^{-T}
-    ALt = solve_triangular(L, A3.T, lower=True).T
+    ALt = solve_triangular(L, A2.T, lower=True).T
     # Left-multiply by L^{-1}:   C = L^{-1} (A L^{-T})
     A3 = solve_triangular(L, ALt, lower=True)
 

@@ -573,9 +573,9 @@ class TestSingularities:
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
     def test_biest_interpolators(self, interpolator):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        grid = LinearGrid(0, *_f_2d_nyquist_freq())
-        h_t = 2 * np.pi / grid.num_theta
-        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+        s_grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        h_t = 2 * np.pi / s_grid.num_theta
+        h_z = 2 * np.pi / s_grid.num_zeta / s_grid.NFP
 
         st = 3
         sz = 5
@@ -584,10 +584,13 @@ class TestSingularities:
         dt = st / 2 * h_t * r * np.sin(w)
         dz = sz / 2 * h_z * r * np.cos(w)
 
-        interp = interpolator(grid, grid, st, sz, q)
-        theta = grid.nodes[:, 1]
-        zeta = grid.nodes[:, 2]
-        f = _f_2d(theta, zeta)
+        e_grid = LinearGrid(
+            0, theta=s_grid.num_theta // 2 + 1, zeta=s_grid.num_zeta // 2 + 1
+        )
+        interp = interpolator(e_grid, s_grid, st, sz, q)
+        theta = e_grid.nodes[:, 1]
+        zeta = e_grid.nodes[:, 2]
+        f = _f_2d(s_grid.nodes[:, 1], s_grid.nodes[:, 2])
         for i in range(dt.size):
             truth = _f_2d(theta + dt[i], zeta + dz[i])
             np.testing.assert_allclose(interp(f, i), truth)

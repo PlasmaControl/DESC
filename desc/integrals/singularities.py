@@ -24,7 +24,7 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
-from ._interpax_mod import fft_interp2d
+from ._fourier import fft_interp2d
 
 
 def _vanilla_params(grid):
@@ -369,28 +369,29 @@ class FFTInterpolator(_BIESTInterpolator):
         st = parse_argname_change(st, kwargs, "s", "st")
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
         warn_fft = kwargs.get("warn_fft", True)
+        # TODO: 99.999% of time eval_grid will be half resolution of source grid
+        #       Instead of building transforms on eval and source grid then
+        #       recomputing everything twice, just build transforms on source grid
+        #       and then the eval grid data is just every other point for the
+        #       source_grid_data.reshape(rho, theta, zeta)[0][::2, ::2].
+        #       (note that source_grid num theta, num zeta must be odd).
         warnif(
-            warn_fft and eval_grid.num_theta < source_grid.num_theta,
-            msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid.\n"
+            warn_fft and eval_grid.num_theta < (source_grid.num_theta // 2 + 1),
+            msg="Frequency spectrum of FFT interpolation will be truncated.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
-            f"{source_grid.num_theta} = source_grid.num_theta.",
+            f"{source_grid.num_theta // 2 + 1} = source_grid.num_theta // 2 + 1.",
         )
         warnif(
-            warn_fft and eval_grid.num_zeta < source_grid.num_zeta,
-            msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid.\n"
+            warn_fft and eval_grid.num_zeta < (source_grid.num_zeta // 2 + 1),
+            msg="Frequency spectrum of FFT interpolation will be truncated.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
-            f"{source_grid.num_zeta} = source_grid.num_zeta.",
+            f"{source_grid.num_zeta // 2 + 1} = source_grid.num_zeta // 2 + 1.",
         )
         super().__init__(eval_grid, source_grid, st, sz, q)
 
     def fourier(self, f):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
-        # TODO (#1206)
-        return jnp.fft.ifft2(
-            self.source_grid.meshgrid_reshape(f, "rtz")[0], axes=(0, 1)
-        )
+        return self.source_grid.meshgrid_reshape(f, "rtz")[0]
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate ``f`` to polar node ``i`` around evaluation grid.
@@ -431,7 +432,6 @@ class FFTInterpolator(_BIESTInterpolator):
             sy=self._shift_z[i],
             dx=self._ht,
             dy=self._hz,
-            is_fourier=True,
         ).reshape(self.eval_grid.num_nodes, *f.shape[2:], order="F")
 
 
@@ -595,7 +595,7 @@ def _nonsingular_part(
             return (
                 kernel(eval_data_i, source_data, (ht * hz) * (1 - _eta))
                 .reshape(-1, source_grid.num_nodes, ndim)
-                .sum(axis=-2)
+                .sum(-2)
             )
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(-1, ndim)
@@ -693,7 +693,7 @@ def _singular_part(
 
 def _add_reduce(x):
     # https://github.com/jax-ml/jax/issues/23493
-    return x.sum(axis=0)
+    return x.sum(0)
 
 
 def singular_integral(

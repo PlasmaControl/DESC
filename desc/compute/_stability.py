@@ -3959,31 +3959,31 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
     if incompressible:
         #Impose incompressibility
-        A = A.at[rho_idx, rho_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho 
-            + (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T) 
+        A = A.at[rho_idx, rho_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
+            + (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T)
             + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
 
         A = A.at[rho_idx, theta_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
             + C_zeta_inv_C_rho @ A[rho_idx, theta_idx])
             + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
 
-        A = A.at[theta_idx, theta_idx].add(-1 * (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta 
-            + (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T) 
+        A = A.at[theta_idx, theta_idx].add(-1 * (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
+            + (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T)
             + C_zeta_inv_C_theta.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
 
         # Fill out the lower part using symmetry
         A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
 
-        B = B.at[rho_idx, rho_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho 
-            + (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T) 
+        B = B.at[rho_idx, rho_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
+            + (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T)
             + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
 
         B = B.at[rho_idx, theta_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
             + C_zeta_inv_C_rho @ B[rho_idx, theta_idx])
             + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
 
-        B = B.at[theta_idx, theta_idx].add(-1 * (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta 
-            + (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T) 
+        B = B.at[theta_idx, theta_idx].add(-1 * (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
+            + (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T)
             + C_zeta_inv_C_theta.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
 
         # Fill out the lower part using symmetry

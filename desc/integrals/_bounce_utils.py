@@ -692,7 +692,7 @@ def fast_cubic_spline(
     Returns
     -------
     f : jnp.ndarray
-        Shape broadcasts with (num rho, num alpha, num transit * (Y - 1), 4).
+        Shape broadcasts with (num rho, num alpha, num transit * Y - 1, 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
@@ -777,17 +777,17 @@ def _move(f, out=True):
 
 
 def _mmt_for_bounce(v, c):
-    """Matrix multiplication transform transform.
+    """Matrix multiplication transform.
 
     Parameters
     ----------
-    c : jnp.ndarray
-        Shape (num rho, 1, num zeta modes, num theta modes).
-        Fourier coefficients.
     v : jnp.ndarray
         Shape (num rho, num alpha, num pitch, num well, num quad,
                 num zeta modes, num theta modes).
         Vandermonde array.
+    c : jnp.ndarray
+        Shape (num rho, 1, num zeta modes, num theta modes).
+        Fourier coefficients.
 
     """
     return (v * c[..., None, None, None, :, :]).real.sum((-2, -1))

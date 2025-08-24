@@ -491,7 +491,6 @@ def test_LinearConstraintProjection_build(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.xfail(reason="Remove xfail after merging #1834.")
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
     _test_objective_ripple(benchmark, False, "compute_scaled_error")
@@ -499,7 +498,6 @@ def test_objective_compute_ripple(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.xfail(reason="Remove xfail after merging #1834.")
 def test_objective_compute_ripple_bounce1d(benchmark):
     """Benchmark computing objective for effective ripple."""
     _test_objective_ripple(benchmark, True, "compute_scaled_error")
@@ -507,7 +505,6 @@ def test_objective_compute_ripple_bounce1d(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.xfail(reason="Remove xfail after merging #1834.")
 def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
     _test_objective_ripple(benchmark, False, "jac_scaled_error")
@@ -515,7 +512,6 @@ def test_objective_grad_ripple(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.xfail(reason="Remove xfail after merging #1834.")
 def test_objective_grad_ripple_bounce1d(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
     _test_objective_ripple(benchmark, True, "jac_scaled_error")

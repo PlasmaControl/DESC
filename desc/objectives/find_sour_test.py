@@ -167,25 +167,15 @@ def B_sticks(
 
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
-    def sticks_fun(carry, x):
-        i = x
-        b_stick_fun = carry + y[i] * stick(
-            ss_data["x"][
-                i
-            ],  # Location of the wire at the theta = pi cut, variable zeta position
-            0 * ss_data["x"][i],  # All wires at the center go to the origin
-            pls_points,
-            sgrid,
-            basis="rpz",
+    b_stick_fun = y[:, None, None] * stick(
+        ss_data["x"],  # Location of the wire at the theta = pi cut, variable zeta position
+        0 * ss_data["x"],  # All wires at the center go to the origin
+        pls_points,
+        sgrid,
+        basis="rpz",
         )
-        return b_stick_fun
 
-    def sticks_map(i):
-        return scan(sticks_fun, init=jnp.array([0]), xs=i)
-
-    len0 = len(y)
-    i = jnp.arange(0, len0)
-    sticks_total = vmap(lambda j: sticks_map(j))(i)
+    sticks_total = jnp.sum(b_stick_fun, axis=0) # (M, 3)
 
     return sticks_total
 
@@ -197,34 +187,45 @@ def stick(
     surface_grid,  # Kgrid,
     basis="rpz",
 ):
+    """Computes the magnetic field on the plasma surface due to a unit current on the source wires.
+    
+        p2_: numpy.ndarray of dimension (N, 3)
+        p1_: numpy.ndarray of dimension (N, 3)
+        plasma_point: numpy.ndarray of dimension (M, 3)
+    
+    """
 
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
-        phi2 = (p2_[2] + j * 2 * jnp.pi / surface_grid.NFP) % (2 * jnp.pi)
+        phi2 = (p2_[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (2 * jnp.pi)
         # phi1 = ( p1_[2] + j * 2 * jnp.pi / surface_grid.NFP ) % ( 2 * jnp.pi )
         # (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP ) % ( 2 * jnp.pi )
 
-        p2s = jnp.vstack((p2_[0], phi2, p2_[2])).T
-        p2s = rpz2xyz(p2s)
+        # TODO: Make sure p2s has the shape (N, 3)
+        p2s = jnp.stack([p2_[:, 0], phi2, p2_[:, 2]], axis=1)
 
-        a_s = p2s - p1_
-        b_s = p1_ - plasma_points
-        c_s = p2s - plasma_points
+        p2s = rpz2xyz_vec(p2s)
 
+        # a_s.shape = b_s.shape = c_s.shape = (N, M, 3)
+        a_s = p2s[:, None, :] - p1_[:, None, :]
+        b_s = p1_[:, None, :] - plasma_points[None, :, :]
+        c_s = p2s[:, None, :] - plasma_points[None, :, :]
+
+        # if c_s and a_s are (N, 3), will work fine
         c_sxa_s = cross(c_s, a_s)
 
         f += (
             1e-7
             * (
                 (
-                    jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=1), a_min=1e-8, a_max=None)
-                    * jnp.sum(c_s * c_s, axis=1) ** (1 / 2)
+                    jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=2), a_min=1e-8, a_max=None)
+                    * jnp.sum(c_s * c_s, axis=2) ** (1 / 2)
                 )
                 ** (-1)
-                * (jnp.sum(a_s * c_s) - jnp.sum(a_s * b_s))
+                * (jnp.sum(a_s * c_s, axis=2) - jnp.sum(a_s * b_s, axis=2))
                 * c_sxa_s.T
             ).T
-        )
+        ) # (N, M, 3)
 
         return f
 

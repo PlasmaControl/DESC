@@ -4259,7 +4259,7 @@ def plot_gammac(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``X``, ``Y``, ``Y_B``, ``num_quad``: int
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
         * ``num_transit``, ``pitch_batch_size``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
@@ -4285,15 +4285,11 @@ def plot_gammac(
     if rho is None:
         rho = np.array([0.5], dtype=float)
     else:
-        rho = np.asarray(rho, dtype=float)
-        if rho.size != 1:
-            raise ValueError("rho must be a scalar or length-1 array")
-        rho = rho.reshape(
-            1,
-        )
+        rho = np.asarray(rho, dtype=float).ravel()
+        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
 
     if alphas is None:
-        alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
+        alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
 
     if num_pitch is None:
         num_pitch = 16
@@ -4301,10 +4297,11 @@ def plot_gammac(
     # TODO(#1352)
     X = kwargs.pop("X", 16)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", 24)
+    Y_B = kwargs.pop("Y_B", Y * 2)
     num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
-    num_transit = kwargs.pop("num_transit", 1)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_transit = kwargs.pop("num_transit", 2)
+    num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4315,21 +4312,19 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    # Compute bounce integral
-    theta = Bounce2D.compute_theta(eq, X, Y, rho)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=theta,
+        theta=Bounce2D.compute_theta(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,
         num_pitch=num_pitch,
+        num_well=num_well,
         pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
-    data_full = grid.compress(data0["gamma_c"])
 
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
@@ -4344,7 +4339,7 @@ def plot_gammac(
     im = ax.contourf(
         inv_pitch,
         alphas,
-        data_full[0],
+        data0["gamma_c"][0],
         cmap=cmap,
     )
 
@@ -4371,7 +4366,7 @@ def plot_gammac(
         data = {
             "inv_pitch": inv_pitch,
             "alpha": alphas,
-            "gammac": data_full[0],
+            "gammac": data0["gamma_c"][0],
         }
         return fig, ax, data
 

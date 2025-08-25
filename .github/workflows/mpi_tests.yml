@@ -96,20 +96,29 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          mpirun -n 3 --oversubscribe python -m pytest -v -m mpi_run\
-            --durations=0 \
-            --cov-report xml:cov.xml \
-            --cov-config=setup.cfg \
-            --cov=desc/ \
-            --db ./prof.db
+          # ensure each MPI rank writes to a different coverage file
+          mpirun -n 3 --oversubscribe \
+            bash -c 'COVERAGE_FILE=.coverage.$OMPI_COMM_WORLD_RANK \
+                     python -m pytest -v -m mpi_run \
+                       --durations=0 \
+                       --cov=desc/ \
+                       --cov-config=setup.cfg \
+                       --cov-append \
+                       --cov-report='
 
       - name: Run MPI tutorials
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          # Make sure that they just run (without checking for errors)
           mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-eq-solve.py
           mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-proximal.py
+
+      - name: Combine coverage files
+        if: always() && env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          coverage combine
+          coverage xml -o cov.xml
 
       - name: save coverage file
         if: always() && env.has_changes == 'true'

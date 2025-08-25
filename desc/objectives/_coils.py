@@ -1516,7 +1516,7 @@ class StochasticOptimizationSettings:
         small_diagonal_matrix = (
             jnp.eye(self.number_of_discretization_points * 2) * 1e-10
         )
-        return original_covariance_matrix + small_diagonal_matrix
+        return jnp.atleast_2d(original_covariance_matrix + small_diagonal_matrix)
 
     @functools.cached_property
     def perturbations(self) -> jnp.ndarray:
@@ -1592,6 +1592,9 @@ class QuadraticFlux(_Objective):
         Size to split singular integral computation for B_plasma into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``bs_chunk_size``.
+    stochastic_optimization_settings : dict
+        dictionary of settings to use for stochastic coil optimization. See
+        StochasticOptimizationSettings.
 
     """
 
@@ -1733,6 +1736,10 @@ class QuadraticFlux(_Objective):
         )
 
         if self._stochastic_settings:
+            if self._field_grid is None:
+                # TODO: should really make this on a per-coil basis
+                # so can use each's defaults
+                self._field_grid = LinearGrid(N=100)
             self._stochastic_settings["number_of_discretization_points"] = int(
                 self._field_grid.num_zeta
             )

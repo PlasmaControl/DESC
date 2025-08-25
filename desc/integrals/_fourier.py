@@ -123,14 +123,21 @@ def fft_interp2d(
     nx, ny = f.shape[:2]
 
     # https://github.com/f0uriest/interpax/pull/117
-    if n1 < nx:
-        f = fft_interp1d(f, n1, sx, dx)
-        f = fft_interp1d(f.swapaxes(0, 1), n2, sy, dy).swapaxes(0, 1)
-        return f
-    if n2 < ny:
-        f = fft_interp1d(f.swapaxes(0, 1), n2, sy, dy).swapaxes(0, 1)
-        f = fft_interp1d(f, n1, sx, dx)
-        return f
+    if (sx is None or jnp.size(sx) == 1) and (sy is None or jnp.size(sy) == 1):
+        if n1 < nx:
+            return fft_interp1d(
+                fft_interp1d(f, n1, sx, dx).squeeze(-1).swapaxes(0, 1),
+                n2,
+                sy,
+                dy,
+            ).swapaxes(0, 1)
+        if n2 < ny:
+            return fft_interp1d(
+                fft_interp1d(f.swapaxes(0, 1), n2, sy, dy).squeeze(-1).swapaxes(0, 1),
+                n1,
+                sx,
+                dx,
+            )
 
     return ifft_interp2d(
         jnp.fft.rfft2(asarray_inexact(f), axes=(0, 1), norm="forward"),
@@ -237,3 +244,86 @@ def _pad_along_axis(array, pad: tuple = (0, 0), axis: int = 0):
     index[axis] = slice(start, stop)
     pad_width[axis] = pad
     return jnp.pad(array[tuple(index)], pad_width)
+
+
+def _test_fft_interp2d():
+    """Test for 2d Fourier interpolation."""
+    import numpy as np
+
+    def fun2(x, y):
+        return (
+            2 * np.sin(1 * x[:, None])
+            - 1.2 * np.cos(2 * x[:, None])
+            + 3 * np.cos(3 * y[None])
+            - 2 * np.cos(5 * y[None])
+            + 1
+        )
+
+    x = {"o": {}, "e": {}}
+    y = {"o": {}, "e": {}}
+    x["o"][1] = np.linspace(0, 2 * np.pi, 33, endpoint=False)
+    x["e"][1] = np.linspace(0, 2 * np.pi, 32, endpoint=False)
+    x["o"][2] = np.linspace(0, 2 * np.pi, 133, endpoint=False)
+    x["e"][2] = np.linspace(0, 2 * np.pi, 132, endpoint=False)
+    y["o"][1] = np.linspace(0, 2 * np.pi, 33, endpoint=False)
+    y["e"][1] = np.linspace(0, 2 * np.pi, 32, endpoint=False)
+    y["o"][2] = np.linspace(0, 2 * np.pi, 133, endpoint=False)
+    y["e"][2] = np.linspace(0, 2 * np.pi, 132, endpoint=False)
+
+    f2 = {}
+    for xp in ["o", "e"]:
+        f2[xp] = {}
+        for yp in ["o", "e"]:
+            f2[xp][yp] = {}
+            for i in [1, 2]:
+                f2[xp][yp][i] = {}
+                for j in [1, 2]:
+                    f2[xp][yp][i][j] = fun2(x[xp][i], y[yp][j])
+
+    shiftx = 0.2
+    shifty = 0.3
+    for spx in ["o", "e"]:  # source parity x
+        for spy in ["o", "e"]:  # source parity y
+            fi = f2[spx][spy][1][1]
+            fs = fun2(x[spx][1] + shiftx, y[spy][1] + shifty)
+            np.testing.assert_allclose(
+                fft_interp2d(
+                    fi,
+                    *fi.shape,
+                    shiftx,
+                    shifty,
+                    dx=np.diff(x[spx][1])[0],
+                    dy=np.diff(y[spy][1])[0]
+                ).squeeze(),
+                fs,
+            )
+            for epx in ["o", "e"]:  # eval parity x
+                for epy in ["o", "e"]:  # eval parity y
+                    for sx in ["up", "down"]:  # up or downsample x
+                        if sx == "up":
+                            xs = 1
+                            xe = 2
+                        else:
+                            xs = 2
+                            xe = 1
+                        for sy in ["up", "down"]:  # up or downsample y
+                            if sy == "up":
+                                ys = 1
+                                ye = 2
+                            else:
+                                ys = 2
+                                ye = 1
+
+                            true = fun2(x[epx][xe] + shiftx, y[epy][ye] + shifty)
+                            interp = fft_interp2d(
+                                f2[spx][spy][xs][ys],
+                                x[epx][xe].size,
+                                y[epy][ye].size,
+                                shiftx,
+                                shifty,
+                                dx=x[spx][xs][1] - x[spx][xs][0],
+                                dy=y[spy][ys][1] - y[spy][ys][0],
+                            ).squeeze()
+                            np.testing.assert_allclose(
+                                interp, true, atol=1e-12, rtol=1e-12
+                            )

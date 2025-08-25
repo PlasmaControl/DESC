@@ -108,8 +108,8 @@ jobs:
         run: |
           source .venv-${{ env.version }}/bin/activate
           # Make sure that they just run (without checking for errors)
-          mpirun -n 2 --oversubscribe python -m docs/notebooks/tutorials/mpi-tutorials/mpi-eq-solve.py
-          mpirun -n 2 --oversubscribe python -m docs/notebooks/tutorials/mpi-tutorials/mpi-proximal.py
+          mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-eq-solve.py
+          mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-proximal.py
 
       - name: save coverage file
         if: always() && env.has_changes == 'true'

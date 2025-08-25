@@ -2,6 +2,11 @@ Changelog
 =========
 
 
+New Features
+
+- Adds initial support for multiple GPU optimization. This allows to compute derivatives and costs on multiple GPU, and allows more memory intense objectives. Note that, at this phase, the multi-device support is for memory, not speed.
+
+
 v0.15.0
 -------
 
@@ -21,7 +26,6 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
-- Adds initial support for multiple GPU optimization. This allows to compute derivatives and costs on multiple GPU, and allows more memory intense objectives. Note that, at this phase, the multi-device support is for memory, not speed.
 
 Bug Fixes
 

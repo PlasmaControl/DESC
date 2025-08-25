@@ -1,6 +1,10 @@
 Changelog
 =========
 
+
+v0.15.0
+-------
+
 New Features
 
 - Multiple plotting related changes:

@@ -1063,14 +1063,13 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
+        if constants is None:
+            constants = self.constants
         v = ensure_tuple(v)
         if len(v) > 1:
             # using blocked for higher order derivatives is a pain, and only really
             # is needed for perturbations. Just pass that to jvp_batched for now
             return self._jvp_batched(v, x, constants, op)
-
-        if constants is None:
-            constants = self.constants
 
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
@@ -1760,6 +1759,8 @@ class _Objective(IOAble, ABC):
         )(*args, **kwargs)
 
     def _jvp(self, v, x, constants=None, op="scaled"):
+        if constants is None:
+            constants = self.constants
         v = ensure_tuple(v)
         x = ensure_tuple(x)
         assert len(x) == len(v)
@@ -2127,15 +2128,13 @@ class _ThingFlattener(IOAble):
         return unique
 
 
-# These will run on workers, and we wan to safely jit them
+# These will run on workers, and we want to safely jit them
 @functools.partial(jit, static_argnames="op")
 def compute_per_process(params, objectives, op):
     """Compute the objective function on each process."""
     f_rank = jnp.concatenate(
         [
-            getattr(obj, op)(
-                *param,
-            )
+            getattr(obj, op)(*param, constants=obj.constants)
             for (obj, param) in zip(objectives, params)
         ]
     )
@@ -2146,7 +2145,10 @@ def compute_per_process(params, objectives, op):
 def jvp_per_process(x, v, objectives, op):
     """Compute the Jacobian-vector product on each process."""
     J_rank = jnp.hstack(
-        [getattr(obj, op)(v[idx], x[idx]) for idx, obj in enumerate(objectives)]
+        [
+            getattr(obj, op)(v[idx], x[idx], constants=obj.constants)
+            for idx, obj in enumerate(objectives)
+        ]
     )
     return J_rank
 
@@ -2159,12 +2161,16 @@ def jvp_proximal_per_process(x, v, objectives, op):
         if obj._deriv_mode == "rev":
             # obj might not allow fwd mode, so compute full rev mode
             # jacobian and do matmul manually. This is slightly
-            # inefficient, but usuallywhen rev mode is used,
+            # inefficient, but usually when rev mode is used,
             # dim_f <<< dim_x, so its not too bad.
             Ji = getattr(obj, "jac_" + op)(*x[idx])
             J_rank.append(
                 jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, v[idx])]).sum(axis=0)
             )
         else:
-            J_rank.append(getattr(obj, "jvp_" + op)([_vi for _vi in v[idx]], x[idx]).T)
+            J_rank.append(
+                getattr(obj, "jvp_" + op)(
+                    [_vi for _vi in v[idx]], x[idx], constants=obj.constants
+                ).T
+            )
     return jnp.vstack(J_rank)

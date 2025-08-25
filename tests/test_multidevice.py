@@ -39,7 +39,7 @@ from desc.optimize import Optimizer
 
 @pytest.mark.mpi_setup
 def test_set_cpu_count():
-    """Test that _set_cpu_count."""
+    """Test that _set_cpu_count works."""
     # we already called the function, just check the desc_config
     assert desc_config["kind"] == "cpu"
     assert desc_config["num_device"] == num_device
@@ -48,12 +48,54 @@ def test_set_cpu_count():
 
 
 @pytest.mark.mpi_run
+def test_multidevice_objective_attributes():
+    """Test that objective attributes are same."""
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Setting rotational transform"):
+        eq.iota = eq.get_profile("iota")
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+
+    obj1 = ObjectiveFunction(
+        [
+            ForceBalance(eq, grid=grid1),
+            ForceBalance(eq, grid=grid2),
+        ],
+        deriv_mode="blocked",
+    )
+    obj1.build()
+
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        obj2 = ObjectiveFunction(
+            [
+                ForceBalance(eq, grid=grid1, device_id=0),
+                ForceBalance(eq, grid=grid2, device_id=1),
+            ],
+            mpi=MPI,
+        )
+        obj2.build()
+
+    for obj1i, obj2i in zip(obj1.objectives, obj2.objectives):
+        assert obj1i._loss_function == obj2i._loss_function
+        np.testing.assert_allclose(obj1i._weight, obj2i._weight)
+        np.testing.assert_allclose(obj1i._target, obj2i._target)
+        np.testing.assert_allclose(obj1i._normalization, obj2i._normalization)
+        np.testing.assert_allclose(obj1i._dim_f, obj2i._dim_f)
+        key = "quad_weights"
+        np.testing.assert_allclose(
+            obj1i._constants[key], obj2i._constants[key], err_msg=key
+        )
+
+
+@pytest.mark.mpi_run
 def test_multidevice_compute():
     """Test that objective compute gives same results."""
     rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
-    with pytest.warns(UserWarning, match="Setting rotational transform"):
-        eq.iota = eq.get_profile("iota")
 
     gM = eq.M_grid
     gN = eq.N_grid
@@ -92,6 +134,10 @@ def test_multidevice_compute():
             np.testing.assert_allclose(f2, f1, atol=1e-8)
             np.testing.assert_allclose(f2, f0, atol=1e-7)
 
+            f1 = obj1.compute_unscaled(obj1.x(eq))
+            f2 = obj2.compute_unscaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
             f1 = obj1.compute_scaled(obj1.x(eq))
             f2 = obj2.compute_scaled(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
@@ -106,8 +152,6 @@ def test_multidevice_derivatives():
     """Test that objective derivatives gives same results."""
     rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
-    with pytest.warns(UserWarning, match="Setting rotational transform"):
-        eq.iota = eq.get_profile("iota")
 
     gM = eq.M_grid
     gN = eq.N_grid
@@ -144,7 +188,7 @@ def test_multidevice_derivatives():
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 
             # figure out why this fails! One of them doesn't
-            # apply the scalign properly
+            # apply the scaling properly
             f1 = obj1.jac_scaled(obj1.x(eq))
             f2 = obj2.jac_scaled(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)

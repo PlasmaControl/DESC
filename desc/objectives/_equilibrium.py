@@ -3,8 +3,8 @@
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.utils import Timer, setdefault
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -43,8 +43,6 @@ class ForceBalance(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
-    _static_attrs = _Objective._static_attrs + ["_compute_iota_separately"]
-
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
@@ -63,12 +61,10 @@ class ForceBalance(_Objective):
         grid=None,
         name="force",
         jac_chunk_size=None,
-        iota_grid=None,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self._iota_grid = iota_grid
         super().__init__(
             things=eq,
             target=target,
@@ -128,32 +124,6 @@ class ForceBalance(_Objective):
             "profiles": profiles,
         }
 
-        # concentric grid iota-from-current calc can be inaccurate
-        # especially near-axis due to needing flux surface averages,
-        # use a linear grid for just iota calculation in this case
-        self._compute_iota_separately = False
-        if eq.current is not None and isinstance(grid, ConcentricGrid):
-            iota_grid = setdefault(
-                self._iota_grid,
-                LinearGrid(
-                    rho=grid.nodes[grid.unique_rho_idx, 0],
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                ),
-            )
-            assert jnp.allclose(
-                iota_grid.nodes[iota_grid.unique_rho_idx, 0],
-                grid.nodes[grid.unique_rho_idx, 0],
-            ), "Grid for iota computation must have same rho values as grid used "
-            self._compute_iota_separately = True
-            self._constants["iota_profiles"] = get_profiles(
-                ["iota", "iota_r"], obj=eq, grid=grid
-            )
-            self._constants["iota_transforms"] = get_transforms(
-                ["iota", "iota_r"], obj=eq, grid=grid
-            )
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -183,30 +153,12 @@ class ForceBalance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = {}
-        if self._compute_iota_separately:
-            data_iota = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                ["iota", "iota_r"],
-                params=params,
-                transforms=constants["iota_transforms"],
-                profiles=constants["iota_profiles"],
-            )
-
-            data["iota"] = constants["transforms"]["grid"].expand(
-                constants["iota_transforms"]["grid"].compress(data_iota["iota"])
-            )
-            data["iota_r"] = constants["transforms"]["grid"].expand(
-                constants["iota_transforms"]["grid"].compress(data_iota["iota_r"])
-            )
-
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            data=data,
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]

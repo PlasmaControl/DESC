@@ -451,6 +451,9 @@ def test_overstepping():
             "solve_options": {
                 "verbose": 0,
                 "maxiter": 2,
+                # Hidden kwarg just for debug/tests, to not solve
+                # during build
+                "solve_during_proximal_build": False,
             },
         },
     )

@@ -7,6 +7,7 @@ import desc.examples
 from desc.backend import jit
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
+    DoubleChebyshevFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -14,7 +15,7 @@ from desc.basis import (
     ZernikePolynomial,
 )
 from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, CylindricalGrid, Grid, LinearGrid
 from desc.transform import Transform
 
 
@@ -525,6 +526,68 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_diff_rpz(self):
+        """Test fitting and differentiation with RPZ method."""
+        # Build grid, basis, and transform
+        grid = CylindricalGrid(L=10, N=5, M=5, NFP=2, r_endpoint=True, z_endpoint=True)
+        r = grid.nodes[:, 0]
+        phi = grid.nodes[:, 1]
+        z = grid.nodes[:, 2]
+
+        # Create a basis that corresponds to the grid, and a transform between them
+        basis = DoubleChebyshevFourierBasis(grid.L, 6, grid.N, NFP=grid.NFP)
+        transform = Transform(
+            grid, basis, build=True, build_pinv=True, derivs=2, method="rpz"
+        )
+
+        # Define a test function with a known analytic derivative
+        def f(r, phi, z):
+            return np.stack(
+                [
+                    (np.cos(r)) * np.cos(6 * phi) * (1 - z) ** 3,
+                    r**2 * np.sin(2 * phi) * np.exp(z),
+                ]
+            ).T
+
+        # Evaluate the derivative numerically and analyically
+        y = f(r, phi, z)
+        y_c = transform.fit(y)
+        numerical = transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+        analytic = 216 * np.sin(r) * np.cos(6 * phi) * (1 - z)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(y[:, 0], transform.transform(y_c[:, 0]), atol=1e-7)
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, analytic, atol=1e-7)
+
+        # Try directRPZ method
+
+        # Create an arbitrary grid and use the direct RPZ (partial sum) method
+        R = np.arange(0, 1, 0.1)
+        Z = np.arange(0, 1, 0.1)
+        out_grid = CylindricalGrid(R=R, M=5, Z=Z, NFP=basis.NFP)
+        out_transform = Transform(
+            out_grid, basis, derivs=2, build=True, method="directrpz"
+        )
+
+        r = out_grid.nodes[:, 0]
+        phi = out_grid.nodes[:, 1]
+        z = out_grid.nodes[:, 2]
+
+        # Calculate the derivatives both numerically and analytically
+        numerical = out_transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+        analytic = 216 * np.sin(r) * np.cos(6 * phi) * (1 - z)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(
+            f(r, phi, z)[:, 0], out_transform.transform(y_c[:, 0]), atol=1e-7
+        )
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, analytic, atol=1e-7)
 
     @pytest.mark.unit
     def test_empty_grid(self):

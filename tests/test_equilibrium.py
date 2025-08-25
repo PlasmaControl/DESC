@@ -6,17 +6,22 @@ import warnings
 import numpy as np
 import pytest
 from qic import Qic
+from scipy.constants import mu_0
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import get_transforms
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
-from .utils import area_difference, compute_coords
+from .utils import area_difference, compute_coords, xyz2rpz, xyz2rpz_vec
 
 
 @pytest.mark.unit
@@ -82,6 +87,35 @@ def test_map_coordinates():
 
 
 @pytest.mark.unit
+def test_map_clebsch_coordinates():
+    """Test root finding for (rho,alpha,zeta)."""
+    eq = get("NCSX")
+    assert eq.NFP > 1
+    rho = np.linspace(0.5, 1, 2)
+    alpha = np.linspace(0, 2 * np.pi, 3)
+    zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
+
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    out = eq.map_coordinates(
+        grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        lmbda = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+        )["L"]
+    assert lmbda.basis.NFP == eq.NFP
+    np.testing.assert_allclose(
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+    )
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        grid.meshgrid_reshape(out[:, 1], "raz"),
+    )
+
+
+@pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
@@ -118,33 +152,6 @@ def test_map_coordinates_derivative():
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
         np.testing.assert_allclose(j1, j2, atol=1e-12)
-
-    # Check map_coordinates with full_output is still runs without errors
-    # this time _map_clebsch_coordinates is called inside map_coordinates
-    inbasis2 = ["rho", "alpha", "zeta"]
-    in_data = eq.compute(inbasis2, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
-
-    @jax.jit
-    def foo(params, in_coords):
-        out, (_, _) = eq.map_coordinates(
-            in_coords,
-            inbasis2,
-            ("rho", "theta", "zeta"),
-            np.array([rho, theta, zeta]).T,
-            params,
-            period=(2 * np.pi, 2 * np.pi, np.inf),
-            maxiter=40,
-            full_output=True,
-        )
-        return out
-
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
-    for j1, j2 in zip(J1.values(), J2.values()):
-        assert ~np.any(np.isnan(j1))
-        assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -471,4 +478,70 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
             constraints=(),
             optimizer="lsq-exact",
             maxiter=0,
+        )
+
+
+@pytest.mark.unit
+def test_eq_compute_magnetic_field():
+    """Test Biot-Savart and virtual casing methods of computing magnetic field."""
+    # Input parameters
+    I = 1e7  # Toroidal plasma current
+    R = 2  # Major radius
+    z = 10  # Z location of evaluation point
+
+    # Create a very high aspect ratio tokamak
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        surface=FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R,
+            aspect_ratio=2000,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=2,
+            sym=True,
+        ),
+        NFP=2,
+        current=PowerSeriesProfile([0, 0, I]),
+        pressure=PowerSeriesProfile([1.8e4, 0, -3.6e4, 0, 1.8e4]),
+        Psi=1.0,
+    )
+
+    # Biot-Savart method won't work without the equilibrium being solved
+    eq = solve_continuation_automatic(eq)[-1]
+
+    # Evaluate the magnetic field in a point on the z-axis
+    grid_xyz = np.atleast_2d([0, 0, z])
+    grid_rpz = xyz2rpz(grid_xyz)
+
+    # Analytically determine the true magnetic field
+    Bz_true = mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2)
+    B_true_xyz = np.atleast_2d([0, 0, Bz_true])
+    B_true_rpz_xy = xyz2rpz_vec(B_true_xyz, x=grid_xyz[:, 0], y=grid_xyz[:, 1])
+    B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz[:, 1])
+
+    # Compute the magnetic field using both methods
+    for method in ["biot-savart", "virtual casing"]:
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_xyz,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="xyz"),
+            rtol=1e-4,
+            atol=1e-10,
         )

@@ -5,7 +5,7 @@ import warnings
 # This file has to run on a separate process because it changes the number of CPUs
 from desc import _set_cpu_count, set_device
 
-num_device = 2
+num_device = 3
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     _set_cpu_count(num_device)
@@ -51,18 +51,18 @@ def test_set_cpu_count():
 def test_multidevice_objective_attributes():
     """Test that objective attributes are same."""
     eq = get("precise_QH")
-    with pytest.warns(UserWarning, match="Setting rotational transform"):
-        eq.iota = eq.get_profile("iota")
 
     gM = eq.M_grid
     gN = eq.N_grid
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.8], sym=True)
 
     obj1 = ObjectiveFunction(
         [
             ForceBalance(eq, grid=grid1),
             ForceBalance(eq, grid=grid2),
+            ForceBalance(eq, grid=grid3),
         ],
         deriv_mode="blocked",
     )
@@ -74,6 +74,7 @@ def test_multidevice_objective_attributes():
             [
                 ForceBalance(eq, grid=grid1, device_id=0),
                 ForceBalance(eq, grid=grid2, device_id=1),
+                ForceBalance(eq, grid=grid3, device_id=2),
             ],
             mpi=MPI,
         )
@@ -101,14 +102,16 @@ def test_multidevice_compute():
     gN = eq.N_grid
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
-    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.8], sym=True)
+    grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6, 0.8], sym=True)
 
-    obj0 = ObjectiveFunction(ForceBalance(eq, grid=grid3))
+    obj0 = ObjectiveFunction(ForceBalance(eq, grid=grid4))
     obj0.build()
     obj1 = ObjectiveFunction(
         [
             ForceBalance(eq, grid=grid1),
             ForceBalance(eq, grid=grid2),
+            ForceBalance(eq, grid=grid3),
         ],
         deriv_mode="blocked",
     )
@@ -120,6 +123,7 @@ def test_multidevice_compute():
             [
                 ForceBalance(eq, grid=grid1, device_id=0),
                 ForceBalance(eq, grid=grid2, device_id=1),
+                ForceBalance(eq, grid=grid3, device_id=2),
             ],
             mpi=MPI,
         )
@@ -157,11 +161,13 @@ def test_multidevice_derivatives():
     gN = eq.N_grid
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.8], sym=True)
 
     obj1 = ObjectiveFunction(
         [
             ForceBalance(eq, grid=grid1),
             ForceBalance(eq, grid=grid2),
+            ForceBalance(eq, grid=grid3),
         ],
         deriv_mode="blocked",
     )
@@ -173,6 +179,7 @@ def test_multidevice_derivatives():
             [
                 ForceBalance(eq, grid=grid1, device_id=0),
                 ForceBalance(eq, grid=grid2, device_id=1),
+                ForceBalance(eq, grid=grid3, device_id=2),
             ],
             mpi=MPI,
         )
@@ -199,8 +206,8 @@ def test_multidevice_derivatives():
 
 
 @pytest.mark.mpi_run
-def test_multidevice_objective():
-    """Test that objective function have proper attributes."""
+def test_multidevice_objective_build():
+    """Test that objective function build works fine."""
     eq = get("HELIOTRON")
 
     gM = eq.M_grid
@@ -212,20 +219,37 @@ def test_multidevice_objective():
 
     objective1 = ForceBalance(eq, grid=grid1, device_id=0)
     objective2 = ForceBalance(eq, grid=grid2, device_id=1)
-    objective3 = ForceBalance(eq, grid=grid3, device_id=0)
+    objective3 = ForceBalance(eq, grid=grid3, device_id=2)
     objective4 = ForceBalance(eq, grid=grid4, device_id=0)
 
     # need to pass MPI communicator to the ObjectiveFunction
-    with pytest.raises(ValueError):
-        # this one is multi-device, and grids have different sizes
-        obj1 = ObjectiveFunction([objective1, objective2])
+    with pytest.raises(ValueError, match="MPI communicator"):
+        # this one is multi-device
+        obj1 = ObjectiveFunction([objective1, objective2, objective3])
 
+    # need to use multiple ranks if using multiple devices
+    with pytest.raises(ValueError, match="Requested number of ranks is"):
+        # this one is multi-device
+        obj1 = ObjectiveFunction(
+            [objective1, objective2, objective3], mpi=MPI, rank_per_objective=[0, 0, 0]
+        )
+
+    # need to have same device for the same rank objectives
+    with pytest.raises(ValueError, match="Same rank objectives should"):
+        # this one is multi-device
+        obj1 = ObjectiveFunction(
+            [objective1, objective2, objective3, objective4],
+            mpi=MPI,
+            rank_per_objective=[0, 1, 2, 2],
+        )
+
+    obj1 = ObjectiveFunction([objective1, objective2, objective3], mpi=MPI)
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
-        obj1 = ObjectiveFunction([objective1, objective2], mpi=MPI)
         obj1.build()
+
     # this one is single device, and grids have different sizes
-    obj2 = ObjectiveFunction([objective3, objective4])
+    obj2 = ObjectiveFunction([objective1, objective4])
     obj2.build()
 
     assert obj1._is_mpi

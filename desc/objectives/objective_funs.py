@@ -315,10 +315,12 @@ class ObjectiveFunction(IOAble):
                 else np.arange(len(objectives))
             )
             errorif(
-                np.unique(self._rank_per_objective).size == 1,
+                np.unique(self._rank_per_objective).size < desc_config["num_device"],
                 ValueError,
-                "There is only one rank. You cannot use MPI for this case. Call "
-                "ObjectiveFunction with `mpi=None`.",
+                "Requested number of ranks is less than the number of devices. You "
+                f"asked for {desc_config['num_device']} devices, but only have "
+                f" {np.unique(self._rank_per_objective).size} ranks assigned to "
+                "objectives. There should be at least as many ranks as devices.",
             )
             errorif(
                 (
@@ -329,6 +331,7 @@ class ObjectiveFunction(IOAble):
                 f"ranks {self._rank_per_objective} and device ids {device_ids} are "
                 "not compatible.",
             )
+            # TODO: should this throw an Error?
             warnif(
                 max(device_ids) != desc_config["num_device"] - 1,
                 UserWarning,
@@ -371,7 +374,8 @@ class ObjectiveFunction(IOAble):
 
         if self._is_mpi and mpi is None:
             raise ValueError(
-                "When using multiple devices, MPI communicator must be passed."
+                "MPI communicator must be passed when objectives are on different "
+                "devices."
             )
 
     def __enter__(self):

@@ -296,21 +296,18 @@ def save_fieldlines_format(
         # We know zeta = phi, so we can swap that out
         guess = guess.at[:, 2].set(plasma_coords[:, 1])
 
-        rtz = Grid(
-            map_coordinates(
-                eq,
-                plasma_coords,
-                inbasis,
-                ("rho", "theta", "zeta"),
-                guess=guess,
-                period=period,
-            ),
-            NFP=eq.NFP,
+        rtz = map_coordinates(
+            eq,
+            plasma_coords,
+            inbasis,
+            ("rho", "theta", "zeta"),
+            guess=guess,
+            period=period,
         )
 
         if save_pressure:
             # Calculate the pressure for points inside the plasma
-            p_plasma = eq.compute("p", grid=rtz)["p"]
+            p_plasma = eq.compute("p", grid=Grid(rtz, NFP=eq.NFP))["p"]
 
             # Set points outside the plasma to have p=0
             pressure = np.zeros_like(plasma_mask, dtype=p_plasma.dtype)
@@ -318,7 +315,13 @@ def save_fieldlines_format(
         else:
             pressure = None
         if replace_in_plasma:
-            B_plasma = eq.compute("B", grid=rtz, basis="rpz")["B"]
+            # Manual chunking using a for loop to prevent memory problems
+            B_plasma = np.zeros_like(plasma_coords, dtype=B.dtype)
+            for index in np.arange(0, rtz.shape[0], step=chunk_size):
+                end_index = np.maximum(index + chunk_size, rtz.shape[0])
+                rtz_chunk = Grid(rtz[index:end_index, :], NFP=eq.NFP)
+                B_chunk = eq.compute("B", grid=rtz_chunk, basis="rpz")["B"]
+                B_plasma[index:end_index, :] = B_chunk
             B = B.at[plasma_mask, :].set(B_plasma)
 
     write_fieldlines_file(

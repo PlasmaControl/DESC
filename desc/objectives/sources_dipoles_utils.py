@@ -54,6 +54,7 @@ def omega_sour(
 
     return omega
 
+
 #@jax.jit
 def v1_prime_eval(w0, N, d_0, data_or):
 
@@ -68,6 +69,7 @@ def v1_prime_eval(w0, N, d_0, data_or):
     test = fori_loop( 0, N, body_fun, jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j)
     
     return test
+
 
 #@jax.jit
 def v1_eval(w0, N, d_0, data_or):
@@ -116,6 +118,7 @@ def f_reg(w0, d_0, data_or):  # location of the vortex
         jnp.abs(data_or["w"] - w0) < d_0, jnp.log(data_or["lambda_iso"]), 0
     )
 
+
 #@jax.jit
 def comp_loc(
     theta_0_,
@@ -146,7 +149,6 @@ def iso_coords_interp(tdata, _data, sgrid):
     lamb_v = tdata["lambda_iso_v"]
 
     # Data on plasma surface
-
     u_t = tdata["u_t"]
     u_z = tdata["u_z"]
     v_t = tdata["v_t"]
@@ -316,6 +318,7 @@ def interp_grid(theta, zeta, w_surface, tdata):
 
     return iso_coords_interp(tdata, s_data, w_surface)
 
+
 #@jax.jit
 def add_extra(data_, n_size, m_size):
 
@@ -325,6 +328,7 @@ def add_extra(data_, n_size, m_size):
 
     return _mod
 
+
 #@jax.jit
 def add_extra_periodic(data_, n_size, m_size):
 
@@ -333,6 +337,7 @@ def add_extra_periodic(data_, n_size, m_size):
     _mod = jnp.vstack([_mod, _mod[0, :]])
 
     return _mod
+
 
 #@jax.jit
 def add_extra_coords(data_, n_size, m_size, ind):
@@ -408,11 +413,12 @@ def densify_linspace(arr, points_per_interval=1):
 
     return jnp.concatenate([jnp.atleast_1d(p) for p in new_points])
 
+
 #@jax.jit
 def _compute_magnetic_field_from_Current(
     Kgrid, K_at_grid, surface, data,
     coords,
-    basis="rpz"
+    #basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -441,6 +447,8 @@ def _compute_magnetic_field_from_Current(
     #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
     #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
+    basis="rpz"
+    
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
         coords = coords.nodes
@@ -493,7 +501,7 @@ def _compute_magnetic_field_from_Current(
 #@jax.jit
 def _compute_magnetic_field_from_Current_Contour(
     Kgrid, K_at_grid, surface, data, coords,
-    basis="rpz"
+    #basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -519,6 +527,8 @@ def _compute_magnetic_field_from_Current_Contour(
 
     """
 
+    basis="rpz"
+    
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
         coords = coords.nodes

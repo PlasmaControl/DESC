@@ -59,9 +59,14 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
     _static_attrs = _Objective._static_attrs + [
         "_data_keys",
+        "_field_keys",
         "_source_keys",
         "_contour_keys",
         "_stick_keys",
+        "_iso_keys",
+        "_field_keys_mod",
+        "_source_keys_mod",
+        '_iso_keys_mod',
         "_N",
         "_M",
         "_N_sum",
@@ -149,8 +154,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             Level of output.
 
         """
-        # from desc.magnetic_fields import SumMagneticField
-        # from desc.fns_simp import _compute_magnetic_field_from_Current
+        
         from desc.objectives.sources_dipoles_utils import iso_coords_interp
 
         eq = self._eq
@@ -174,25 +178,41 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         field_grid = self._field_grid
         self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
         self._field_keys = [
-            "theta",
-            "zeta",
-            "e^theta_s",
-            "e^zeta_s",
+            "theta", "zeta",
+            "e^theta_s", "e^zeta_s",
             'x',
             '|e_theta x e_zeta|',
         ]  # Info on the winding surface
         
         self._contour_keys = ["theta", "zeta", "e_theta",'x']
         self._stick_keys = ["theta", "x"]
-        self._source_keys = ["theta",
-                            "zeta",
-                            "e^theta_s",
-                            "e^zeta_s",
-                            "x",
-                            #"e_theta",  # extra vector needed for the poloidal wire contours
-                            #'|e_theta x e_zeta|',
-                            ]
+        self._source_keys = ["theta", "zeta", "e^theta_s", "e^zeta_s",
+                             "x",]
 
+        self._iso_keys = ["u_iso", "v_iso", 
+                          #"Phi_iso", "Psi_iso",
+                          #"b_iso","lambda_ratio",
+                          "omega_1", "omega_2","tau","tau_1","tau_2",
+                          "lambda_iso", "lambda_u","lambda_v",
+                          #"u_t","u_z","v_t","v_z",
+                          #"e^u_s","e^v_s",
+                          "e_u", "e_v",
+                          'w',
+                         ]
+        
+        #self._field_keys_mod = self._field_keys + self._iso_keys
+        #self._source_keys_mod = self._source_keys + self._iso_keys
+        
+        self._field_keys_mod = self._field_keys + self._iso_keys
+        self._source_keys_mod = self._source_keys + self._iso_keys
+        self._iso_keys_mod = ['theta', 'zeta','u_iso','v_iso',
+                              'Phi_iso', 'Psi_iso',
+                              'b_iso', 'lambda_ratio',
+                              'omega_1', 'omega_2',
+                              'tau', 'tau_1', 'tau_2',
+                              'lambda_iso_u','lambda_iso_v',
+                              'u_t', 'u_z', 'v_t', 'v_z']
+        
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -235,6 +255,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             ).T
         )
 
+        
         # Find transforms for the grids on the winding surface
         field_transforms1 = get_transforms(
             self._field_keys,
@@ -442,29 +463,59 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
+        #import pdb
+        #pdb.set_trace()
 
+        #sdata1_arrays = {key: constants["sdata1"][key] for key in self._field_keys}
+        #sdata2_arrays = {key: constants["sdata2"][key] for key in self._field_keys}
+        #sdata3_arrays = {key: constants["sdata3"][key] for key in self._field_keys}
+        sdata1_arrays = {key: constants["sdata1"][key] for key in self._field_keys_mod}
+        sdata2_arrays = {key: constants["sdata2"][key] for key in self._field_keys_mod}
+        sdata3_arrays = {key: constants["sdata3"][key] for key in self._field_keys_mod}
+        
+        #ss_data_arrays = {key: constants["source_data"][key] for key in self._source_keys}
+        ss_data_arrays = {key: constants["source_data"][key] for key in self._source_keys_mod}
+        
+        contour_data_arrays = {key: constants["contour_data"][key] for key in self._contour_keys}
+        stick_data_arrays = {key: constants["stick_data"][key] for key in self._stick_keys}
+
+        # Define expected keys for iso_data
+
+        # In compute method
+        iso_data_arrays = {key: constants["iso_data"][key] for key in self._iso_keys_mod}
+        #iso_data_arrays = {key: constants["iso_data"][key] for key in constants["iso_data"]}#self._stick_keys}
+        
         # B from sources: B_src
         B_src = bn_res(
             #self._M,
             #self._N,
-            constants["sdata1"],
-            constants["sdata2"],
-            constants["sdata3"],
+            sdata1_arrays,
+            sdata2_arrays,
+            sdata3_arrays,
+            #constants["sdata1"],
+            #constants["sdata2"],
+            #constants["sdata3"],
             constants["field_grid"],
             constants["winding_surface"],
             params1["x_mn"],
             self._N_sum,
             constants["d0"],
             constants['coords'],
-            constants['iso_data'],
-            constants["contour_data"],
-            constants["stick_data"],
+            iso_data_arrays,
+            #constants['iso_data'],
+            contour_data_arrays,
+            stick_data_arrays,
+            #constants["contour_data"],
+            #constants["stick_data"],
             constants["contour_grid"],
-            constants["source_data"],
+            ss_data_arrays,
+            #constants["source_data"],
             constants['theta_coarse'],
             constants['zeta_coarse'],
         )
 
+        
+        #pdb.set_trace()
         error = B_src - constants["B_target"]
         f = jnp.sqrt(jnp.sum(error * error, axis=1)) * jnp.sqrt(
             eval_data["|e_theta x e_zeta|"]

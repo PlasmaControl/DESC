@@ -9,16 +9,12 @@ from desc.grid import Grid, LinearGrid
 from desc.utils import cross, dot
 
 from .sources_dipoles_utils import (_compute_magnetic_field_from_Current, 
-                                    _compute_magnetic_field_from_Current_Contour, 
-                                    v1_eval, chi_reg, v1_prime_eval, comp_loc, 
-                                    comp_loc, add_extra, add_extra_periodic, add_extra_coords, alt_grid, alt_grid_sticks, 
-                                    #iso_coords_interp,
-                                    #f_sour, f_reg,
-                                    omega_sour, v1_eval, v1_prime_eval, chi_reg, 
+                                    _compute_magnetic_field_from_Current_Contour,
+                                    omega_sour,
                                     compute_mask,
                                     )
 
-@jax.jit
+#@jax.jit
 def bn_res(
     #p_M,
     #p_N,
@@ -40,16 +36,20 @@ def bn_res(
     zeta_coarse,
 ):
 
+    #import pdb
+    #pdb.set_trace()
     B_sour0 = B_sour(#p_M, p_N, 
                      sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, tdata, ss_data,
     )
 
-    #p_M, p_N,
+    #pdb.set_trace()
     B_wire_cont = B_theta_contours(sdata1, sgrid, surface, y, coords, contour_data, contour_grid,
                                    theta_coarse,
                                    zeta_coarse,
                                    )
 
+    
+    #pdb.set_trace()
     B_sticks0 = B_sticks(
     #    p_M, p_N,
         sgrid,
@@ -59,13 +59,15 @@ def bn_res(
         stick_data,
     )
 
+    
+    #pdb.set_trace()
     B_total = (B_sour0 +  B_wire_cont 
                + B_sticks0 
               )
 
     return B_total
 
-@jax.jit
+#@jax.jit
 def B_sour(
     #p_M,
     #p_N,
@@ -84,27 +86,24 @@ def B_sour(
 
     return _compute_magnetic_field_from_Current(
         sgrid,
-        K_sour(
-            #p_M,
-            #p_N,
-            sdata1,
-            sdata2,
-            sdata3,
-            sgrid,
-            surface,
-            y,
-            N,
-            d_0,
-            tdata,
-            ss_data,
+        K_sour(sdata1,
+                sdata2,
+                sdata3,
+                sgrid,
+                surface,
+                y,
+                N,
+                d_0,
+                tdata,
+                ss_data,
         ),
         surface,
         sdata1,
         coords,
-        basis="rpz",
+        #basis="rpz",
     )
 
-@jax.jit#(static_argnums=(0,1))
+#@jax.jit#(static_argnums=(0,1))
 def B_theta_contours(
     #p_M,
     #p_N,
@@ -144,10 +143,10 @@ def B_theta_contours(
     K_cont = jnp.sum(y[None, None,:]*AAA,axis = 2)
     
     return _compute_magnetic_field_from_Current_Contour(
-        ss_grid, K_cont, surface, ss_data, coords, basis="rpz"
+        ss_grid, K_cont, surface, ss_data, coords, #basis="rpz"
     )
 
-@jax.jit#(static_argnums=(0,1))
+#@jax.jit#(static_argnums=(0,1))
 def B_sticks(
     #p_M,
     #p_N,
@@ -166,7 +165,7 @@ def B_sticks(
                                             0 * ss_data["x"],  # All wires at the center go to the origin
                                             pls_points,
                                             sgrid,
-                                            basis="rpz",
+                                            #basis="rpz",
                                             )
 
     sticks_total = jnp.sum(b_stick_fun, axis=0) # (M, 3)
@@ -180,7 +179,7 @@ def stick(
     p1_,  # first point of the stick
     plasma_points,  # points on the plasma surface
     surface_grid,  # Kgrid,
-    basis="rpz",
+    #basis="rpz",
 ):
     """Computes the magnetic field on the plasma surface due to a unit current on the source wires.
     
@@ -189,7 +188,9 @@ def stick(
         plasma_point: numpy.ndarray of dimension (M, 3)
     
     """
-
+    
+    basis="rpz"
+    
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
         phi2 = (p2_[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (2 * jnp.pi)
@@ -236,7 +237,7 @@ def stick(
     return b_stick
 
 
-@jax.jit#(static_argnums=(0,1))
+#@jax.jit#(static_argnums=(0,1))
 def K_sour(
     #p_M,
     #p_N,

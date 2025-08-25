@@ -80,8 +80,8 @@ if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
 
     # Comment the line above and uncomment the two lines below to turn-off jit
-    # from jax import custom_jvp, vmap
-    # jit = lambda func, *args, **kwargs: func
+    #from jax import custom_jvp, vmap
+    #jit = lambda func, *args, **kwargs: func
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax

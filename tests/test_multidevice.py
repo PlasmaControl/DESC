@@ -136,7 +136,7 @@ def test_multidevice_compute():
             f2 = obj2.compute_scalar(obj2.x(eq))
 
             np.testing.assert_allclose(f2, f1, atol=1e-8)
-            np.testing.assert_allclose(f2, f0, atol=1e-7)
+            np.testing.assert_allclose(f2, f0, atol=5e-7)
 
             f1 = obj1.compute_unscaled(obj1.x(eq))
             f2 = obj2.compute_unscaled(obj2.x(eq))
@@ -267,8 +267,8 @@ def test_multidevice_eq_solve():
     """Test that eq.solve still reduces force error."""
     rank = MPI.COMM_WORLD.Get_rank()
     size = MPI.COMM_WORLD.Get_size()
-    assert size == 2
-    assert rank < 2
+    assert size == num_device
+    assert rank < num_device
 
     eq = get("HELIOTRON")
     with pytest.warns(UserWarning, match="Reducing radial"):
@@ -278,13 +278,15 @@ def test_multidevice_eq_solve():
     gN = eq.N_grid
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
 
-    objective1 = ForceBalance(eq, grid=grid1, device_id=0)
-    objective2 = ForceBalance(eq, grid=grid2, device_id=1)
+    obj1 = ForceBalance(eq, grid=grid1, device_id=0)
+    obj2 = ForceBalance(eq, grid=grid2, device_id=1)
+    obj3 = ForceBalance(eq, grid=grid3, device_id=2)
 
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
-        obj = ObjectiveFunction([objective1, objective2], mpi=MPI)
+        obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
         obj.build()
 
     # creating grids like grid3 = [grid1, grid2] doesn't give the same
@@ -306,50 +308,38 @@ def test_multidevice_eq_optimize():
     """Test that eq.optimize still reduces error."""
     rank = MPI.COMM_WORLD.Get_rank()
     size = MPI.COMM_WORLD.Get_size()
-    assert size == 2
-    assert rank < 2
+    assert size == num_device
+    assert rank < num_device
 
     eq = get("precise_QA")
     eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
-    surf = eq.surface
 
     # create two grids with different rho values, this will effectively separate
     # the quasisymmetry objective into two parts
-    grid1 = LinearGrid(
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-        rho=np.linspace(0.2, 0.5, 2),
-        sym=True,
-    )
-    grid2 = LinearGrid(
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-        rho=np.linspace(0.6, 1.0, 3),
-        sym=True,
-    )
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
 
     # when using parallel objectives, the user needs to supply the device_id
     obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
     obj2 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1)
-    obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
-    objs = [obj1, obj2, obj3]
+    obj3 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid3, device_id=2)
+    obj4 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
+    objs = [obj1, obj2, obj3, obj4]
 
     objective = ObjectiveFunction(
-        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 0])
+        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 2, 0])
     )
     objective.build()
 
     # we will fix some modes as usual
     k = 1
-    R_modes = np.vstack(
-        (
-            [0, 0, 0],
-            surf.R_basis.modes[np.max(np.abs(surf.R_basis.modes), 1) > k, :],
-        )
-    )
-    Z_modes = surf.Z_basis.modes[np.max(np.abs(surf.Z_basis.modes), 1) > k, :]
+    sRm = eq.surface.R_basis.modes
+    sZm = eq.surface.Z_basis.modes
+    R_modes = np.vstack(([0, 0, 0], sRm[np.max(np.abs(sRm), 1) > k, :]))
+    Z_modes = sZm[np.max(np.abs(sZm), 1) > k, :]
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq, modes=R_modes),

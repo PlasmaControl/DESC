@@ -443,54 +443,22 @@ class ObjectiveFunction(IOAble):
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
-            elif "jvp" in message[0] and "proximal" not in message[0]:
-                xs = jax.device_put(
-                    message[1], self.objectives[obj_idx_rank[0]]._device
-                )
-                vs = jax.device_put(
-                    message[2], self.objectives[obj_idx_rank[0]]._device
-                )
-
-                # inputs to jitted functions must live on the same device. Need to
-                # put xi and vi on the same device as the objective
-                xs = [
-                    [xs[i] for i in self._things_per_objective_idx[idx]]
-                    for idx in obj_idx_rank
-                ]
-                vs = [
-                    [vs[i] for i in self._things_per_objective_idx[idx]]
-                    for idx in obj_idx_rank
-                ]
-
-                J_rank = jvp_per_process(
-                    xs,
-                    vs,
-                    objs,
-                    op=message[0],
-                )
-                J_rank = np.asarray(J_rank)
-                self.comm.gather(J_rank, root=0)
             elif "compute" in message[0]:
                 params = jax.device_put(
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
-
-                f_rank = compute_per_process(
-                    [params[i] for i in obj_idx_rank],
-                    objs,
-                    op=message[0],
-                )
-                f_rank = np.asarray(f_rank)
-                self.comm.gather(f_rank, root=0)
-            elif "proximal_jvp" in message[0]:
-                op = message[0].replace("proximal_jvp_", "")
+                params = [params[i] for i in obj_idx_rank]
+                out = compute_per_process(params, objs, op=message[0])
+            elif "jvp" in message[0]:
+                # inputs to jitted functions must live on the same device. Need to
+                # put xi and vi on the same device as the objective
                 xs = jax.device_put(
                     message[1], self.objectives[obj_idx_rank[0]]._device
                 )
                 vs = jax.device_put(
                     message[2], self.objectives[obj_idx_rank[0]]._device
                 )
-
+                # only pass the relevant parts of x and v to each objective
                 xs = [
                     [xs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
@@ -499,14 +467,15 @@ class ObjectiveFunction(IOAble):
                     [vs[i] for i in self._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
-                J_rank = jvp_proximal_per_process(
-                    xs,
-                    vs,
-                    objs,
-                    op=op,
-                )
-                J_rank = np.asarray(J_rank)
-                self.comm.gather(J_rank, root=0)
+                if "proximal" not in message[0]:
+                    out = jvp_per_process(xs, vs, objs, op=message[0])
+                elif "proximal_jvp" in message[0]:
+                    op = message[0].replace("proximal_jvp_", "")
+                    out = jvp_proximal_per_process(xs, vs, objs, op=op)
+
+            # TODO: CUDA aware MPI may prevent np call
+            out = np.asarray(out)
+            self.comm.gather(out, root=0)
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -759,20 +728,13 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:
-            if self.rank == 0:
-                message = ("compute_unscaled", params, None)
-                self.comm.bcast(message, root=0)
-
-                obj_idx_rank = self._obj_per_rank[self.rank]
-
-                f_rank = compute_per_process(
-                    [params[i] for i in obj_idx_rank],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    op=message[0],
-                )
-                f_rank = np.asarray(f_rank)
-                fs = self.comm.gather(f_rank, root=0)
-                f = pconcat(fs)
+            f = _parallel_compute(
+                params,
+                self.comm,
+                self.objectives,
+                self._obj_per_rank,
+                "compute_unscaled",
+            )
         return f
 
     @jit
@@ -804,20 +766,9 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:
-            if self.rank == 0:
-                message = ("compute_scaled", params, None)
-                self.comm.bcast(message, root=0)
-
-                obj_idx_rank = self._obj_per_rank[self.rank]
-
-                f_rank = compute_per_process(
-                    [params[i] for i in obj_idx_rank],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    op=message[0],
-                )
-                f_rank = np.asarray(f_rank)
-                fs = self.comm.gather(f_rank, root=0)
-                f = pconcat(fs)
+            f = _parallel_compute(
+                params, self.comm, self.objectives, self._obj_per_rank, "compute_scaled"
+            )
         return f
 
     @jit
@@ -849,20 +800,13 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:
-            if self.rank == 0:
-                message = ("compute_scaled_error", params, None)
-                self.comm.bcast(message, root=0)
-
-                obj_idx_rank = self._obj_per_rank[self.rank]
-
-                f_rank = compute_per_process(
-                    [params[i] for i in obj_idx_rank],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    op=message[0],
-                )
-                f_rank = np.asarray(f_rank)
-                fs = self.comm.gather(f_rank, root=0)
-                f = pconcat(fs)
+            f = _parallel_compute(
+                params,
+                self.comm,
+                self.objectives,
+                self._obj_per_rank,
+                "compute_scaled_error",
+            )
         return f
 
     @jit
@@ -1091,6 +1035,8 @@ class ObjectiveFunction(IOAble):
                 vi = [vs[i] for i in thing_idx]
                 Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
                 J += [Ji_]
+
+            return jnp.hstack(J)
         else:
             if self.rank == 0:
                 message = ("jvp_" + op, xs, vs)
@@ -1112,15 +1058,7 @@ class ObjectiveFunction(IOAble):
                 J_rank = np.asarray(J_rank)
                 J = self.comm.gather(J_rank, root=0)
 
-        # this is the transpose of the jvp when v is a matrix, for consistency with
-        # jvp_batched
-        if not self._is_mpi:
-            J = jnp.hstack(J)
-        else:
-            # this will handle the device placement of the J matrix
-            J = pconcat(J, mode="hstack")
-
-        return J
+                return pconcat(J, mode="hstack")
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
         v = ensure_tuple(v)
@@ -2132,29 +2070,45 @@ class _ThingFlattener(IOAble):
         return unique
 
 
+def _parallel_compute(params, comm, objectives, obj_per_rank, op):
+    rank = comm.Get_rank()
+    if rank == 0:
+        message = (op, params, None)
+        comm.bcast(message, root=0)
+        obj_idx_rank = obj_per_rank[rank]
+
+        f_rank = compute_per_process(
+            [params[i] for i in obj_idx_rank],
+            [objectives[i] for i in obj_idx_rank],
+            op=message[0],
+        )
+        # TODO: CUDA aware MPI may prevent np call
+        f_rank = np.asarray(f_rank)
+        fs = comm.gather(f_rank, root=0)
+        return pconcat(fs)
+
+
 # These will run on workers, and we want to safely jit them
 @functools.partial(jit, static_argnames="op")
 def compute_per_process(params, objectives, op):
     """Compute the objective function on each process."""
-    f_rank = jnp.concatenate(
+    return jnp.concatenate(
         [
             getattr(obj, op)(*param, constants=obj.constants)
             for (obj, param) in zip(objectives, params)
         ]
     )
-    return f_rank
 
 
 @functools.partial(jit, static_argnames="op")
 def jvp_per_process(x, v, objectives, op):
     """Compute the Jacobian-vector product on each process."""
-    J_rank = jnp.hstack(
+    return jnp.hstack(
         [
             getattr(obj, op)(v[idx], x[idx], constants=obj.constants)
             for idx, obj in enumerate(objectives)
         ]
     )
-    return J_rank
 
 
 @functools.partial(jit, static_argnames="op")

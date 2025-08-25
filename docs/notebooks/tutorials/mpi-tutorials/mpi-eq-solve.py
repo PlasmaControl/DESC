@@ -90,6 +90,7 @@ if __name__ == "__main__":
         mpi=MPI,
         deriv_mode="blocked",
     )
+    obj.build()
     cons = get_fixed_boundary_constraints(eq)
 
     # Until this line, the code is performed on all ranks, so it might print some

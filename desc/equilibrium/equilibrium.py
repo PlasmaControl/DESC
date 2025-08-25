@@ -10,7 +10,7 @@ import numpy as np
 from scipy import special
 from scipy.constants import mu_0
 
-from desc.backend import execute_on_cpu, jnp
+from desc.backend import execute_on_cpu, jax, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -1612,7 +1612,7 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
-        return self.surface.R_lmn
+        return jax.lax.stop_gradient(self.surface.R_lmn)
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
@@ -1622,7 +1622,7 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def Zb_lmn(self):
         """ndarray: Spectral coefficients of Z at the boundary."""
-        return self.surface.Z_lmn
+        return jax.lax.stop_gradient(self.surface.Z_lmn)
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):

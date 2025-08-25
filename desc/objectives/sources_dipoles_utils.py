@@ -8,6 +8,7 @@ from desc.utils import cross, dot
 
 #from desc.find_dips import biot_savart_general
 
+#@jax.jit
 def f_sour(data_or, u1_, v1_, N, d_0): 
 
     w1 = comp_loc(
@@ -29,7 +30,7 @@ def f_sour(data_or, u1_, v1_, N, d_0):
         - 1 / 2 * f1_reg
     )
 
-
+#@jax.jit
 def omega_sour(
     data_or,
     u1_,
@@ -53,6 +54,7 @@ def omega_sour(
 
     return omega
 
+#@jax.jit
 def v1_prime_eval(w0, N, d_0, data_or):
 
     gamma = data_or["omega_1"] / jnp.pi
@@ -67,7 +69,7 @@ def v1_prime_eval(w0, N, d_0, data_or):
     
     return test
 
-
+#@jax.jit
 def v1_eval(w0, N, d_0, data_or):
     
     gamma = data_or["omega_1"] / jnp.pi
@@ -96,7 +98,7 @@ def v1_eval(w0, N, d_0, data_or):
     )
 
     
-# @jax.jit
+#@jax.jit
 def chi_reg(w0, d_0, data_or):  # location of the vortex
 
     return jnp.where(
@@ -107,14 +109,14 @@ def chi_reg(w0, d_0, data_or):  # location of the vortex
     )
 
 
-# @jax.jit
+#@jax.jit
 def f_reg(w0, d_0, data_or):  # location of the vortex
 
     return jnp.where(
         jnp.abs(data_or["w"] - w0) < d_0, jnp.log(data_or["lambda_iso"]), 0
     )
 
-
+#@jax.jit
 def comp_loc(
     theta_0_,
     phi_0_,
@@ -123,6 +125,7 @@ def comp_loc(
 
 
 # Interpolate isothermal coordinates and interpolate on a different grid
+#@jax.jit
 def iso_coords_interp(tdata, _data, sgrid):
 
     # Temporary grid
@@ -313,7 +316,7 @@ def interp_grid(theta, zeta, w_surface, tdata):
 
     return iso_coords_interp(tdata, s_data, w_surface)
 
-
+#@jax.jit
 def add_extra(data_, n_size, m_size):
 
     _mod = data_.reshape((n_size, m_size)).T
@@ -322,7 +325,7 @@ def add_extra(data_, n_size, m_size):
 
     return _mod
 
-
+#@jax.jit
 def add_extra_periodic(data_, n_size, m_size):
 
     _mod = data_.reshape((n_size, m_size)).T
@@ -331,7 +334,7 @@ def add_extra_periodic(data_, n_size, m_size):
 
     return _mod
 
-
+#@jax.jit
 def add_extra_coords(data_, n_size, m_size, ind):
 
     _mod = data_.reshape((n_size, m_size)).T
@@ -347,7 +350,7 @@ def add_extra_coords(data_, n_size, m_size, ind):
 
     return _mod
 
-
+#@jax.jit
 def alt_grid(theta, zeta):
 
     theta_grid, zeta_grid = jnp.meshgrid(theta, zeta)
@@ -358,7 +361,7 @@ def alt_grid(theta, zeta):
         jnp.stack((jnp.ones_like(theta_flat), theta_flat, zeta_flat)).T, jitable=True
     )
 
-
+#@jax.jit
 def alt_grid_sticks(theta, zeta, sgrid):
 
     theta_grid, zeta_grid = jnp.meshgrid(theta, zeta)
@@ -372,7 +375,7 @@ def alt_grid_sticks(theta, zeta, sgrid):
         jitable=True,
     )
 
-
+#@jax.jit
 def densify_linspace(arr, points_per_interval=1):
     """
     Given a jnp.linspace array, return a new array with additional points
@@ -405,7 +408,7 @@ def densify_linspace(arr, points_per_interval=1):
 
     return jnp.concatenate([jnp.atleast_1d(p) for p in new_points])
 
-
+#@jax.jit
 def _compute_magnetic_field_from_Current(
     Kgrid, K_at_grid, surface, data,
     coords,
@@ -487,7 +490,7 @@ def _compute_magnetic_field_from_Current(
 
     return B
 
-
+#@jax.jit
 def _compute_magnetic_field_from_Current_Contour(
     Kgrid, K_at_grid, surface, data, coords,
     basis="rpz"
@@ -567,6 +570,7 @@ def _compute_magnetic_field_from_Current_Contour(
 
     return B
 
+#@jax.jit
 def biot_savart_general(re, rs, J, dV):
 
     #print("rs.shape =", rs.shape)
@@ -593,6 +597,7 @@ def biot_savart_general(re, rs, J, dV):
 
 
 ##### Functions for dipoles
+#@jax.jit
 def shift_grid(theta, zeta, dt, dz, w_surface, name):
     
     l_zeta = zeta - dz/2
@@ -627,6 +632,7 @@ def shift_grid(theta, zeta, dt, dz, w_surface, name):
             iso_coords_interp(name, u_data, u_grid, w_surface)
            )
 
+#@jax.jit
 def f_pair(data_or,
            u1_, v1_, # first dipole
            u2_, v2_, # second dipole
@@ -647,6 +653,7 @@ def f_pair(data_or,
             - 1/2 * ( f1_reg - f2_reg )
            )
 
+#@jax.jit
 def omega_pair(data_or,
                u1_, v1_, # first dipole
                u2_, v2_, # second dipole
@@ -672,6 +679,7 @@ def omega_pair(data_or,
     
     return omega
 
+#@jax.jit
 def compute_mask(contour_data, theta_coarse, zeta_coarse):
     """
     Compute a binary mask matrix matching the column order of the original loop.

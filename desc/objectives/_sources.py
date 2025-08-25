@@ -329,11 +329,9 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             transforms=source_transforms,
             profiles={},
         )
-        #pdb.set_trace()
+        
         ss_data = iso_coords_interp(self._iso_data, ss_data, ss_grid)
-        #pdb.set_trace()
-        #(theta, zeta, self._winding_surface, self._iso_data)
-    
+        
         assert (self._M * 2 + 1) * (self._N * 2 + 1) == ss_data["theta"].shape[0], "Check that the sources coincide with the number of sources/sinks"
     
         ####################################
@@ -408,6 +406,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             'iso_data':self._iso_data,
             'source_data': ss_data,
             'coords':x,
+            'theta_coarse':theta_sources,
+            'zeta_coarse':zeta_sources,
         }
 
         if self._normalize:
@@ -445,8 +445,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
         # B from sources: B_src
         B_src = bn_res(
-            self._M,
-            self._N,
+            #self._M,
+            #self._N,
             constants["sdata1"],
             constants["sdata2"],
             constants["sdata3"],
@@ -461,6 +461,8 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants["stick_data"],
             constants["contour_grid"],
             constants["source_data"],
+            constants['theta_coarse'],
+            constants['zeta_coarse'],
         )
 
         error = B_src - constants["B_target"]

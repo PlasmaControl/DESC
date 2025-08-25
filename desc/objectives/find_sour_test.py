@@ -18,10 +18,10 @@ from .sources_dipoles_utils import (_compute_magnetic_field_from_Current,
                                     compute_mask,
                                     )
 
-
+@jax.jit
 def bn_res(
-    p_M,
-    p_N,
+    #p_M,
+    #p_N,
     sdata1,
     sdata2,
     sdata3,
@@ -36,34 +36,39 @@ def bn_res(
     stick_data,
     contour_grid,
     ss_data,
+    theta_coarse,
+    zeta_coarse,
 ):
 
-    B_sour0 = B_sour(
-        p_M, p_N, sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, tdata, ss_data,
+    B_sour0 = B_sour(#p_M, p_N, 
+                     sdata1, sdata2, sdata3, sgrid, surface, y, N, d_0, coords, tdata, ss_data,
     )
 
-    #B_wire_cont = B_theta_contours(
-    #    p_M, p_N, sdata1, sgrid, surface, y, coords, contour_data, contour_grid
-    #)
+    #p_M, p_N,
+    B_wire_cont = B_theta_contours(sdata1, sgrid, surface, y, coords, contour_data, contour_grid,
+                                   theta_coarse,
+                                   zeta_coarse,
+                                   )
 
-    #B_sticks0 = B_sticks(
-    #    p_M,
-    #    p_N,
-    #    sgrid,
-    #    surface,
-    #    y,
-    #    coords,
-    #    stick_data,
-    #)
+    B_sticks0 = B_sticks(
+    #    p_M, p_N,
+        sgrid,
+        surface,
+        y,
+        coords,
+        stick_data,
+    )
 
-    B_total = B_sour0 #+  B_wire_cont + B_sticks0 # + 
+    B_total = (B_sour0 +  B_wire_cont 
+               + B_sticks0 
+              )
 
     return B_total
 
-
+@jax.jit
 def B_sour(
-    p_M,
-    p_N,
+    #p_M,
+    #p_N,
     sdata1,
     sdata2,
     sdata3,
@@ -80,8 +85,8 @@ def B_sour(
     return _compute_magnetic_field_from_Current(
         sgrid,
         K_sour(
-            p_M,
-            p_N,
+            #p_M,
+            #p_N,
             sdata1,
             sdata2,
             sdata3,
@@ -99,68 +104,10 @@ def B_sour(
         basis="rpz",
     )
 
-# @jax.jit
-def B_theta_contours_old(
-    p_M,
-    p_N,
-    sdata,
-    sgrid,
-    surface,
-    y,
-    coords,
-    ss_data,
-    ss_grid,
-):
-
-    r_t = p_M * 2 + 1  # theta_coarse.shape[0]
-    r_z = p_N * 2 + 1  # zeta_coarse.shape[0]
-
-    theta_coarse = jnp.linspace(
-        2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1 / 2,
-        2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1 / 2),
-        p_M * 2 + 1,
-    )
-
-    zeta_coarse = jnp.linspace(
-        2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1 / 2,
-        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1 / 2),
-        p_N * 2 + 1,
-    )
-
-    sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 0) + jnp.where(
-        ss_data["theta"] > jnp.pi, 1, 0
-    )
-
-    def outer_body(i, K_cont):
-        def inner_body(j, K_cont_inner):
-            k_fix = jnp.where(
-                (ss_data["zeta"] == zeta_coarse[i])
-                & (ss_data["theta"] > theta_coarse[j]),
-                1,
-                0,
-            )
-            return (
-                K_cont_inner
-                + (
-                    y[i * r_t + j]
-                    * sign_vals
-                    * k_fix
-                    * dot(ss_data["e_theta"], ss_data["e_theta"]) ** (-1 / 2)
-                    * ss_data["e_theta"].T
-                ).T
-            )
-
-        return fori_loop(0, r_t, inner_body, K_cont)
-
-    K_cont = fori_loop(0, r_z, outer_body, jnp.zeros_like(ss_data["e_theta"]))
-
-    return _compute_magnetic_field_from_Current_Contour(
-        ss_grid, K_cont, surface, ss_data, coords, basis="rpz"
-    )
-
+@jax.jit#(static_argnums=(0,1))
 def B_theta_contours(
-    p_M,
-    p_N,
+    #p_M,
+    #p_N,
     sdata,
     sgrid,
     surface,
@@ -168,26 +115,24 @@ def B_theta_contours(
     coords,
     ss_data,
     ss_grid,
+    theta_coarse,
+    zeta_coarse
 ):
 
-    r_t = p_M * 2 + 1  # theta_coarse.shape[0]
-    r_z = p_N * 2 + 1  # zeta_coarse.shape[0]
+    #r_t = p_M * 2 + 1  # theta_coarse.shape[0]
+    #r_z = p_N * 2 + 1  # zeta_coarse.shape[0]
 
-    theta_coarse = jnp.linspace(
-        2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1 / 2,
-        2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1 / 2),
-        p_M * 2 + 1,
-    )
+    #theta_coarse = jnp.linspace(2 * jnp.pi * (1 / (p_M * 2 + 1)) * 1 / 2,
+    #                            2 * jnp.pi * (1 - 1 / (p_M * 2 + 1) * 1 / 2),
+    #                            p_M * 2 + 1,
+    #                            )
 
-    zeta_coarse = jnp.linspace(
-        2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1 / 2,
-        2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1 / 2),
-        p_N * 2 + 1,
-    )
+    #zeta_coarse = jnp.linspace(2 * jnp.pi / surface.NFP * (1 / (p_N * 2 + 1)) * 1 / 2,
+    #                           2 * jnp.pi / surface.NFP * (1 - 1 / (p_N * 2 + 1) * 1 / 2),
+    #                           p_N * 2 + 1,
+    #                           )
 
-    sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 0) + jnp.where(
-        ss_data["theta"] > jnp.pi, 1, 0
-    )
+    sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 1) #+ jnp.where(ss_data["theta"] > jnp.pi, 1, 0)
 
     # Generate the matrix of coefficients for the contours
     A = compute_mask(ss_data, theta_coarse, zeta_coarse)
@@ -202,10 +147,10 @@ def B_theta_contours(
         ss_grid, K_cont, surface, ss_data, coords, basis="rpz"
     )
 
-
+@jax.jit#(static_argnums=(0,1))
 def B_sticks(
-    p_M,
-    p_N,
+    #p_M,
+    #p_N,
     sgrid,
     surface,
     y,
@@ -217,19 +162,19 @@ def B_sticks(
 
     r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
-    b_stick_fun = y[:, None, None] * stick(
-        ss_data["x"],  # Location of the wire at the theta = pi cut, variable zeta position
-        0 * ss_data["x"],  # All wires at the center go to the origin
-        pls_points,
-        sgrid,
-        basis="rpz",
-        )
+    b_stick_fun = y[:, None, None] * stick(ss_data["x"],  # Location of the wire at the theta = pi cut, variable zeta position
+                                            0 * ss_data["x"],  # All wires at the center go to the origin
+                                            pls_points,
+                                            sgrid,
+                                            basis="rpz",
+                                            )
 
     sticks_total = jnp.sum(b_stick_fun, axis=0) # (M, 3)
 
     return sticks_total
 
-
+# TODO: This function has a problem when jitted    
+#@jax.jit
 def stick(
     p2_,  # second point of the stick
     p1_,  # first point of the stick
@@ -290,99 +235,11 @@ def stick(
 
     return b_stick
 
-def K_sour_old(
-    p_M,
-    p_N,
-    sdata1,
-    sdata2,
-    sdata3,
-    sgrid,
-    surface,
-    y,
-    N,
-    d_0,
-    tdata,
-    ss_data,
-):
-    
-    r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
-    # @jax.jit
-    def body_fun1(i, carry):
-        omega_total_real, omega_total_imag = carry
 
-        y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-
-        omega_s1 = omega_sour(sdata1, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
-
-        omega_total_real += y_ * jnp.real(omega_s1)
-        omega_total_imag += y_ * jnp.imag(omega_s1)
-        return omega_total_real, omega_total_imag
-
-    # @jax.jit
-    def body_fun2(i, carry):
-        omega_total_real, omega_total_imag = carry
-
-        y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-
-        omega_s2 = omega_sour(sdata2, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
-
-        omega_total_real += y_ * jnp.real(omega_s2)
-        omega_total_imag += y_ * jnp.imag(omega_s2)
-        return omega_total_real, omega_total_imag
-
-    # @jax.jit
-    def body_fun3(i, carry):
-        omega_total_real, omega_total_imag = carry
-
-        y_ = jax.lax.dynamic_index_in_dim(y, i, axis=0)
-
-        # Need to evlauate three omegas
-        omega_s3 = omega_sour(sdata3, ss_data["u_iso"][i], ss_data["v_iso"][i], N, d_0)
-
-        omega_total_real += y_ * jnp.real(omega_s3)
-        omega_total_imag += y_ * jnp.imag(omega_s3)
-        return omega_total_real, omega_total_imag
-
-    omega_total_real1, omega_total_imag1 = fori_loop(
-        0,
-        r,
-        body_fun1,
-        (jnp.zeros_like(sdata1["theta"]), jnp.zeros_like(sdata1["theta"])),
-    )
-
-    omega_total_real2, omega_total_imag2 = fori_loop(
-        0,
-        r,
-        body_fun2,
-        (jnp.zeros_like(sdata2["theta"]), jnp.zeros_like(sdata2["theta"])),
-    )
-
-    omega_total_real3, omega_total_imag3 = fori_loop(
-        0,
-        r,
-        body_fun3,
-        (jnp.zeros_like(sdata3["theta"]), jnp.zeros_like(sdata3["theta"])),
-    )
-
-    # Assume periodicity on the values of the sources so
-    return (
-        (sdata1["lambda_iso"] ** (-1))
-        * (
-            -omega_total_imag1
-            * sdata1["e_v"].T  # - cross(sdata["n_rho"],sdata["e_u"]).T
-            - omega_total_imag2 * sdata2["e_v"].T
-            - omega_total_imag2 * sdata3["e_v"].T
-            + omega_total_real1
-            * sdata1["e_u"].T  # - cross(sdata["n_rho"],sdata["e_v"]).T
-            + omega_total_real2 * sdata2["e_u"].T
-            + omega_total_real2 * sdata3["e_u"].T
-        )
-    ).T
-
-
+@jax.jit#(static_argnums=(0,1))
 def K_sour(
-    p_M,
-    p_N,
+    #p_M,
+    #p_N,
     sdata1,
     sdata2,
     sdata3,
@@ -398,23 +255,22 @@ def K_sour(
     #r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
 
     # Assume periodicity on the values of the sources so
-    omega_sour_fun = omega_sour(sdata1, 
+    omega_sour_fun = ( omega_sour(sdata1, 
                                 ss_data["u_iso"], 
                                 ss_data["v_iso"], 
                                 N, 
                                 d_0)
-                      #+ omega_sour(sdata2, 
-                      #          ss_data["u_iso"], 
-                      #          ss_data["v_iso"], 
-                      #          N, 
-                      #          d_0) 
-                      #+ omega_sour(sdata3, 
-                      #          ss_data["u_iso"], 
-                      #          ss_data["v_iso"], 
-                      #          N, 
-                      #          d_0)
-                     #)  #* y[None, :]
-
+                      + omega_sour(sdata2, 
+                                ss_data["u_iso"], 
+                                ss_data["v_iso"], 
+                                N, 
+                                d_0) 
+                      + omega_sour(sdata3, 
+                                ss_data["u_iso"], 
+                                ss_data["v_iso"], 
+                                N, 
+                                d_0)
+                     )
     
     K_sour_total = (sdata1["lambda_iso"] ** (-1) * jnp.sum( ( ( - jnp.imag(omega_sour_fun)[:, None, :] * sdata1['e_v'][:, :, None]
                                                               + jnp.imag(omega_sour_fun)[:, None, :] * sdata1['e_u'][:, :, None] ) * y[None,:])
@@ -422,9 +278,4 @@ def K_sour(
                                                            ).T
                    ).T
 
-    #K_sour_total = jnp.sum(sdata1['e_v'][:, :, None] * y[None,:] , axis = 2) #works
-    #import pdb
-    #pdb.set_trace()
-    #K_sour_total = jnp.sum( ( jnp.imag(omega_sour_fun)[:, None, :] * sdata1['e_v'][:, :, None] ) * y[None,:] , axis = 2)
-    #jnp.sum(y)#sdata1['e_v']
     return K_sour_total

@@ -409,6 +409,7 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
+    objective.build()
     objective.jac_scaled_error = lambda x, *args: objective.jac_scaled_error(
         x
     ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
@@ -450,9 +451,6 @@ def test_overstepping():
             "solve_options": {
                 "verbose": 0,
                 "maxiter": 2,
-                # Hidden kwarg just for debug/tests, to not solve
-                # during build
-                "solve_during_proximal_build": False,
             },
         },
     )

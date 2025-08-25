@@ -23,7 +23,7 @@ def curl_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         radial distance for each point of A
     out_R : ndarray, shape(n,)
         radial location for each point at which to calculate
-        the curl
+        the curl. out_R should never be 0.
     in_transform: Transform
         transform from the real grid on which A is defined to
         a spectral basis in which partial derivatives of A can be evaluated.
@@ -58,7 +58,7 @@ def _curl_cylindrical(A_coeff, RA_phi_coeff, out_R, out_transform, scales):
         Spectral coefficients for R*A_phi.
     out_R : ndarray, shape(n,)
         radial location for each point at which to calculate
-        the curl
+        the curl. out_R should never be zero.
     out_transform: Transform
         transform from the spectral basis on which A is calculated to the
         real grid on which the curl is to be evaluated.
@@ -120,7 +120,7 @@ def div_cylindrical(A, in_R, out_R, in_transform, out_transform, scales):
         radial distance for each point of A
     out_R : ndarray, shape(n,)
         radial location for each point at which to calculate
-        the curl
+        the curl. out_R should never be 0.
     in_transform: Transform
         transform from the real grid on which A is defined to
         a spectral basis in which partial derivatives of A can be evaluated.

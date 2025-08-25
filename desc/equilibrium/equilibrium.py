@@ -59,6 +59,7 @@ from desc.utils import (
     rpz2xyz_vec,
     setdefault,
     warnif,
+    xyz2rpz,
     xyz2rpz_vec,
 )
 
@@ -1258,12 +1259,12 @@ class Equilibrium(Optimizable, _MagneticField):
             Dictionary of optimizable parameters, eg field.params_dict.
         method: string
             "biot-savart" or "virtual casing". both methods calculate the magnetic
-            field directly from the     nt density. if you wish to use the curl(A)
-            method, create a PlasmaField object.
+            field directly from the current density. if you wish to use the curl(A)
+            method, create a desc.magnetic_fields.PlasmaField object.
             NOTE: the virtual casing method does not work at all inside the plasma,
             but it is faster outside the plasma. the biot-savart method also doesn't
-            work very well inside the plasma. if you want the field inside the plasma,
-            create a PlasmaField object.
+            work very well inside the plasma when the evaluation grid points are close
+            to the source grid points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
@@ -1274,7 +1275,7 @@ class Equilibrium(Optimizable, _MagneticField):
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
 
         Returns
         -------
@@ -1283,37 +1284,50 @@ class Equilibrium(Optimizable, _MagneticField):
 
         """
         return_data = return_data or return_rtz
+        # Check that the method used is one of the allowed methods
         methods = ["biot-savart", "virtual casing"]
-        coords = jnp.atleast_2d(coords)
-        eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
+        method = method.lower().strip()
         assert (
             method in methods
         ), f"""Method {method} unknown. Please choose one of the following methods:
             {', '.join(methods)}"""
-        method = method.lower().strip()
+
+        # Convert coords to a 2D Jax array
+        coords = jnp.atleast_2d(coords)
+
+        # Biot-Savart method
         if method == methods[0]:
+            # Biot-Savart integral is evaluated in XYZ coordinates
+            eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
+
+            # Default spectral resolution parameters
             if source_grid is None:
                 source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
+
+            # Compute data for Biot-Savart integral
             data = self.compute(
                 ["J", "phi", "sqrt(g)", "x"],
                 grid=source_grid,
                 params=params,
                 transforms=transforms,
             )
-            # surface element, must divide by NFP to remove the NFP multiple on the
-            # surface grid weights, as we account for it during the for loop over NFP
+
+            # Surface element, must divide by NFP to remove the NFP multiple on the
+            # Surface grid weights, as we account for it during the for loop over NFP
             dV = data["sqrt(g)"] * source_grid.weights / source_grid.NFP
 
             def nfp_loop(j, f):
-                # calculate (by rotating) rs, rs_t, rz_t
+                # Calculate (by rotating) phi
                 phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
                     2 * jnp.pi
                 )
-                # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+                # New coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
                 source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
                 source_xyz = rpz2xyz(source_rpz)
 
                 J = rpz2xyz_vec(data["J"], phi=phi)
+
+                # Add the contribution from this field period to the total field
                 fj = biot_savart_general(
                     eval_xyz,
                     source_xyz,
@@ -1351,7 +1365,13 @@ class Equilibrium(Optimizable, _MagneticField):
                 data["src_dist"] = dist
             if basis.lower() == "rpz":
                 B = xyz2rpz_vec(B, phi=coords[:, 1])
+
+        # Virtual casing method
         elif method == methods[1]:
+            # Virtual casing integral is performed in RPZ coordinates
+            eval_rpz = xyz2rpz(coords) if basis.lower() == "xyz" else coords
+
+            # Default spectral resolution parameters
             if source_grid is None:
                 source_grid = LinearGrid(
                     rho=jnp.array([1.0]),
@@ -1360,8 +1380,11 @@ class Equilibrium(Optimizable, _MagneticField):
                     NFP=self.NFP if self.N > 0 else 64,
                     sym=False,
                 )
+
+            # Virtual casing Biot-Savart kernel
             kernel = _kernel_biot_savart
 
+            # Compute the kernel data at the source points
             data = self.compute(
                 kernel.keys,
                 grid=source_grid,
@@ -1369,8 +1392,10 @@ class Equilibrium(Optimizable, _MagneticField):
                 transforms=transforms,
                 override_grid=False,
             )
+
+            # Integrate the virtual casing integral over the plasma boundary
             B = integrate_surface(
-                coords, data, source_grid, kernel, chunk_size=chunk_size
+                eval_rpz, data, source_grid, kernel, chunk_size=chunk_size
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])

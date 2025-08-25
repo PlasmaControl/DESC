@@ -38,10 +38,7 @@ def omega_sour(
     d_0,
 ):
 
-    w1 = comp_loc(
-        u1_,
-        v1_,
-    )
+    w1 = comp_loc( u1_, v1_ )
 
     v_1_num = v1_eval(w1, N, d_0, data_or)
     v_1_num_prime = v1_prime_eval(w1, N, d_0, data_or)
@@ -55,6 +52,20 @@ def omega_sour(
     )
 
     return omega
+
+def v1_prime_eval(w0, N, d_0, data_or):
+
+    gamma = data_or["omega_1"] / jnp.pi
+    p = data_or["tau"]
+    
+    def body_fun(n, carry):
+        _product = carry
+        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"][:,None] - w0[None,:]) / gamma ) )
+        return _product + term
+    
+    test = fori_loop( 0, N, body_fun, jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j)
+    
+    return test
 
 
 def v1_eval(w0, N, d_0, data_or):
@@ -73,24 +84,25 @@ def v1_eval(w0, N, d_0, data_or):
 
     def body_fun(n,carry):
         product_ = carry
-        term = product_ + (  ( ( (-1) ** n) * (p ** (n**2 + n) ) ) * jnp.sin( (2 * n + 1) * (data_or["w"] - w0) / gamma) )
+        term = product_ + (  ( ( (-1) ** n) * (p ** (n**2 + n) ) ) * jnp.sin( (2 * n + 1) * (data_or["w"][:,None] - w0[None,:]) / gamma) )
         
         return product_ + term
         
     return jnp.where(
-        jnp.abs(data_or["w"] - w0) > d_0,
-        2 * p ** (1 / 4) * fori_loop(0,N,body_fun, jnp.zeros_like(data_or["w"])),
+        jnp.abs(data_or["w"][:,None] - w0[None,:]) > d_0,
+        2 * p ** (1 / 4) * fori_loop(0, N, body_fun, 
+                                     jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j ),
         1,  # Arbitraty value of 1 inside the circle around the vortex core
     )
 
-
+    
 # @jax.jit
 def chi_reg(w0, d_0, data_or):  # location of the vortex
 
     return jnp.where(
-        jnp.abs(data_or["w"] - w0) < d_0,
-        -(data_or["lambda_u"] / data_or["lambda_iso"])
-        + (data_or["lambda_v"] / data_or["lambda_iso"]) * 1j,
+        jnp.abs(data_or["w"][:,None] - w0[None,:]) < d_0,
+        (- ( data_or["lambda_u"] / data_or["lambda_iso"])
+        + (data_or["lambda_v"] / data_or["lambda_iso"]) * 1j)[:,None],
         0,
     )
 
@@ -101,19 +113,6 @@ def f_reg(w0, d_0, data_or):  # location of the vortex
     return jnp.where(
         jnp.abs(data_or["w"] - w0) < d_0, jnp.log(data_or["lambda_iso"]), 0
     )
-
-
-def v1_prime_eval(w0, N, d_0, data_or):
-
-    gamma = data_or["omega_1"] / jnp.pi
-    p = data_or["tau"]
-
-    def body_fun(n, carry):
-        _product = carry
-        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"] - w0) / gamma ) )
-        return _product + term
-
-    return fori_loop(0, N, body_fun, jnp.zeros_like(data_or["w"]))
 
 
 def comp_loc(
@@ -672,3 +671,24 @@ def omega_pair(data_or,
             )
     
     return omega
+
+def compute_mask(contour_data, theta_coarse, zeta_coarse):
+    """
+    Compute a binary mask matrix matching the column order of the original loop.
+    Each block of m columns corresponds to one zeta_coarse value.
+    
+    Parameters:
+        contour_data (dict): Contains 1D arrays "theta" (shape (n,)) and "zeta" (shape (n,)).
+        theta_coarse (ndarray): 1D array of shape (m,).
+        zeta_coarse (ndarray): 1D array of shape (k,).
+    
+    Returns:
+        ndarray: Binary mask of shape (n, m*k), with columns ordered by zeta_coarse.
+    """
+    theta_cond = contour_data["theta"][:, None] >= theta_coarse[None, :]  # Shape (n, m)
+    zeta_cond = contour_data["zeta"][:, None] == zeta_coarse[None, :]    # Shape (n, k)
+    mask = jnp.where(theta_cond[:, :, None] & zeta_cond[:, None, :], 1, 0)  # Shape (n, m, k)
+    # Transpose to (n, k, m) so zeta_coarse varies fastest
+    mask = jnp.transpose(mask, (0, 2, 1))
+    # Reshape to (n, m*k)
+    return mask.reshape(mask.shape[0], -1)

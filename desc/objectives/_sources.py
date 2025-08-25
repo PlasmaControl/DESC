@@ -10,6 +10,7 @@ from desc.utils import Timer, errorif, safenorm, setdefault
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 
+from .sources_dipoles_utils import interp_grid, alt_grid, iso_coords_interp
 
 #####################
 # Sources and sinks #
@@ -74,23 +75,23 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
     _coordinates = "rtz"
 
     def __init__(
-        self,
-        field,  # Field for sinks and sources
-        eq,  # Equilibrium
-        winding_surface,  # Winding surface
-        iso_data,  # Pass a dictionary to this objective with the information about the isothermal coordinates
-        N_sum,  # Nnumber of terms for the sum in the Jacobi-theta function
-        d0,  # Regularization radius for Guenther's function
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        source_grid=None,
-        eval_grid=None,
-        field_grid=None,
-        countour_grid = None,
-        stick_grid = None,
+            self,
+            field,  # Field for sinks and sources
+            eq,  # Equilibrium
+            winding_surface,  # Winding surface
+            iso_data,  # Pass a dictionary to this objective with the information about the isothermal coordinates
+            N_sum,  # Nnumber of terms for the sum in the Jacobi-theta function
+            d0,  # Regularization radius for Guenther's function
+            target=None,
+            bounds=None,
+            weight=1,
+            normalize=True,
+            normalize_target=True,
+            #source_grid=None,
+            eval_grid=None,
+            field_grid=None,
+            countour_grid = None,
+            stick_grid = None,
         #dt = 0, # Poloidal separation between sources
         #dz = 0, # Toroidal separation between sources
         #iso_name, # String with the location of the directory that stores the info of isothermal coordinates
@@ -105,7 +106,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         if target is None and bounds is None:
             target = 0
 
-        self._source_grid = source_grid  # Locations of the cores of the sources/sinks
+        #self._source_grid = source_grid  # Locations of the cores of the sources/sinks
         self._eval_grid = eval_grid
         self._field_grid = field_grid
         self._contour_grid = eval_grid
@@ -114,7 +115,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         self._field = field
         self._eq = eq
         self._winding_surface = (
-            winding_surface  # Array that stores the values of sinks/sources
+            winding_surface
         )
         
         self._iso_data = iso_data  # Info on isothermal coordinates
@@ -150,7 +151,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         """
         # from desc.magnetic_fields import SumMagneticField
         # from desc.fns_simp import _compute_magnetic_field_from_Current
-        from desc.objectives.find_sour_test import iso_coords_interp
+        from desc.objectives.sources_dipoles_utils import iso_coords_interp
 
         eq = self._eq
         field = self._field
@@ -166,10 +167,13 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             self._eval_grid = eval_grid
         else:
             eval_grid = self._eval_grid
-
+            
+        self._M = field.p_M# * 2 + 1
+        self._N = field.p_N# * 2 + 1
+        
         field_grid = self._field_grid
         self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
-        self._source_keys = [
+        self._field_keys = [
             "theta",
             "zeta",
             "e^theta_s",
@@ -180,6 +184,14 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         
         self._contour_keys = ["theta", "zeta", "e_theta",'x']
         self._stick_keys = ["theta", "x"]
+        self._source_keys = ["theta",
+                            "zeta",
+                            "e^theta_s",
+                            "e^zeta_s",
+                            "x",
+                            #"e_theta",  # extra vector needed for the poloidal wire contours
+                            #'|e_theta x e_zeta|',
+                            ]
 
         timer = Timer()
         if verbose > 0:
@@ -224,24 +236,24 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         )
 
         # Find transforms for the grids on the winding surface
-        source_transforms1 = get_transforms(
-            self._source_keys,
+        field_transforms1 = get_transforms(
+            self._field_keys,
             obj=self._winding_surface,
             grid=self._field_grid,
             has_axis=field_grid.axis.size,
         )
 
         # source_profiles2 = get_profiles(self._source_keys, obj=self._field, grid=field_grid2)
-        source_transforms2 = get_transforms(
-            self._source_keys,
+        field_transforms2 = get_transforms(
+            self._field_keys,
             obj=self._winding_surface,
             grid=field_grid2,
             has_axis=field_grid2.axis.size,
         )
 
         # source_profiles3 = get_profiles(self._source_keys, obj=self._field, grid=field_grid3)
-        source_transforms3 = get_transforms(
-            self._source_keys,
+        field_transforms3 = get_transforms(
+            self._field_keys,
             obj=self._winding_surface,
             grid=field_grid3,
             has_axis=field_grid3.axis.size,
@@ -250,26 +262,26 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         # Build data on the grids on the winding surface
         field_data1 = compute_fun(
             self._winding_surface,
-            self._source_keys,
+            self._field_keys,
             params=self._winding_surface.params_dict,
-            transforms=source_transforms1,
+            transforms=field_transforms1,
             profiles={},  # source_profiles1,
             # has_axis=field_grid.axis.size,
         )
 
         field_data2 = compute_fun(
             self._winding_surface,
-            self._source_keys,
+            self._field_keys,
             params=self._winding_surface.params_dict,
-            transforms=source_transforms2,
+            transforms=field_transforms2,
             profiles={},
         )
 
         field_data3 = compute_fun(
             self._winding_surface,
-            self._source_keys,
+            self._field_keys,
             params=self._winding_surface.params_dict,
-            transforms=source_transforms3,
+            transforms=field_transforms3,
             profiles={},
         )
 
@@ -283,21 +295,54 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         )
         
         field_data3 = iso_coords_interp(
-            self._iso_data, field_data3, field_grid2
+            self._iso_data, field_data3, field_grid3
         )
 
+
+        theta_sources = jnp.linspace(
+            2 * jnp.pi * (1 / (self._M * 2 + 1)) * 1 / 2,
+            2 * jnp.pi * (1 - 1 / (self._M * 2 + 1) * 1 / 2),
+            self._M * 2 + 1,
+        )
+    
+        zeta_sources = jnp.linspace(
+            2 * jnp.pi / self._winding_surface.NFP * (1 / ( self._N * 2 + 1 )) * 1 / 2,
+            2 * jnp.pi / self._winding_surface.NFP * (1 - 1 / ( self._N * 2 + 1 ) * 1 / 2),
+            self._N * 2+1,
+        )
+
+        #import pdb
+        #pdb.set_trace()
+        ss_grid = alt_grid(theta_sources, zeta_sources)
+        
+        source_transforms = get_transforms(
+            self._source_keys,
+            obj=self._winding_surface,
+            grid=ss_grid,#self._source_grid,
+            has_axis=ss_grid.axis.size,
+        )
+        # Find info of the isothermal coordinates at the locations of the sources
+        ss_data = compute_fun(
+            self._winding_surface,
+            self._source_keys,
+            params=self._winding_surface.params_dict,
+            transforms=source_transforms,
+            profiles={},
+        )
+        #pdb.set_trace()
+        ss_data = iso_coords_interp(self._iso_data, ss_data, ss_grid)
+        #pdb.set_trace()
+        #(theta, zeta, self._winding_surface, self._iso_data)
+    
+        assert (self._M * 2 + 1) * (self._N * 2 + 1) == ss_data["theta"].shape[0], "Check that the sources coincide with the number of sources/sinks"
+    
+        ####################################
+        # Contours
         contour_transforms = get_transforms(
             self._contour_keys,
             obj=self._winding_surface,
             grid=self._contour_grid,
-            has_axis=field_grid.axis.size,
-        )
-
-        stick_transforms = get_transforms(
-            self._stick_keys,
-            obj=self._winding_surface,
-            grid=self._stick_grid,
-            has_axis=field_grid.axis.size,
+            has_axis=self._contour_grid.axis.size,
         )
 
         contour_data = compute_fun(
@@ -307,6 +352,13 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             transforms=contour_transforms,
             profiles={},  # source_profiles1,
             # has_axis=field_grid.axis.size,
+        )
+
+        stick_transforms = get_transforms(
+            self._stick_keys,
+            obj=self._winding_surface,
+            grid=self._stick_grid,
+            has_axis=self._stick_grid.axis.size,
         )
 
         stick_data = compute_fun(
@@ -332,9 +384,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             chunk_size=self._bs_chunk_size,
             # params=self._winding_surface.params_dict,
         )
-
-        self._M = field.p_M * 2 + 1
-        self._N = field.p_N * 2 + 1
     
         self._constants = {
             "eq": eq,
@@ -357,6 +406,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             "N_sum": self._N_sum,
             "d0": self._d0,
             'iso_data':self._iso_data,
+            'source_data': ss_data,
             'coords':x,
         }
 
@@ -410,8 +460,9 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants["contour_data"],
             constants["stick_data"],
             constants["contour_grid"],
+            constants["source_data"],
         )
-        
+
         error = B_src - constants["B_target"]
         f = jnp.sqrt(jnp.sum(error * error, axis=1)) * jnp.sqrt(
             eval_data["|e_theta x e_zeta|"]
@@ -748,7 +799,7 @@ class SinksSourcesRegularization(_Objective):
             Level of output.
 
         """
-        from desc.objectives.find_sour import iso_coords_interp
+        #from desc.objectives.find_sour import iso_coords_interp
 
         eq = self._eq
         field = self._field

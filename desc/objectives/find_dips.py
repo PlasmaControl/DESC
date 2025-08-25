@@ -7,7 +7,7 @@ from desc.find_dips import biot_savart_general
 from desc.grid import Grid, LinearGrid
 from desc.utils import cross, dot
 
-from .find_sour_test import (_compute_magnetic_field_from_Current, 
+from .sources_dipoles_utils import (_compute_magnetic_field_from_Current, 
                             v1_eval, chi_reg, v1_prime_eval, comp_loc, 
                             comp_loc, add_extra, add_extra_periodic, add_extra_coords, alt_grid, 
                             iso_coords_interp,

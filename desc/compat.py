@@ -5,12 +5,7 @@ import warnings
 import numpy as np
 
 from desc.grid import Grid, LinearGrid, QuadratureGrid
-from desc.profiles import (
-    FourierZernikeProfile,
-    PowerSeriesProfile,
-    ScaledProfile,
-    SplineProfile,
-)
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
 from desc.utils import errorif, setdefault, warnif
 
 
@@ -255,15 +250,15 @@ def rescale(
     # scale pressure profile
     if scale_pressure:
         if eq.pressure is not None:
-            eq.pressure = ScaledProfile(cB**2, eq.pressure)
+            eq.pressure *= cB**2
         else:
-            eq.electron_density = ScaledProfile(cB, eq.electron_density)
-            eq.electron_temperature = ScaledProfile(cB, eq.electron_temperature)
-            eq.ion_temperature = ScaledProfile(cB, eq.ion_temperature)
+            eq.electron_density *= cB
+            eq.electron_temperature *= cB
+            eq.ion_temperature *= cB
 
     # scale current profile
     if eq.current is not None:
-        eq.current = ScaledProfile(cL * cB, eq.current)
+        eq.current *= cL * cB
 
     # boundary & axis
     eq.axis = eq.get_axis()

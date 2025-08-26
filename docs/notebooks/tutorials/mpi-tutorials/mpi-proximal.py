@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     # this context manager will put the workers in a loop to listen to the master
     # to compute the objective function and its derivatives
-    with objective as objective:
+    with objective:
         # apart from cost evaluation and derivatives, everything else will be only
         # performed on the master rank
         if rank == 0:

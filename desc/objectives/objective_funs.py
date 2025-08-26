@@ -412,7 +412,7 @@ class ObjectiveFunction(IOAble):
 
         This function is called when the ObjectiveFunction is used as a context manager.
 
-            with ObjectiveFunction(...) as obj:
+            with obj:
                 if rank == 0:
                     eq.optimize(objective=obj)
 
@@ -515,7 +515,7 @@ class ObjectiveFunction(IOAble):
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives. If using
             multiple GPUs, instead of jitting the ObjectiveFunction, the sub-objectives
-            will be jitted individually, independent of the value of `use_jit`.
+            will be jitted individually.
         verbose : int, optional
             Level of output.
 
@@ -552,6 +552,9 @@ class ObjectiveFunction(IOAble):
                         f"{objective._device_id}"
                     )
                 objective = jax.device_put(objective, objective._device)
+                # same object on different device will have different id
+                # need to overwrite by original to keep it the same and make
+                # _set_things work
                 objective._things = obj_things
         if self._dim_f == 1:
             self._scalar = True
@@ -699,6 +702,25 @@ class ObjectiveFunction(IOAble):
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
         self._flatten = _ThingFlattener(len(flat_), treedef_)
 
+    def _compute_op(self, x, constants=None, op="compute_unscaled"):
+        """Helper function to compute various operations."""
+        params = self.unpack_state(x)
+        if constants is None:
+            constants = self.constants
+        assert len(params) == len(constants) == len(self.objectives)
+        if not self._is_mpi:
+            f = jnp.concatenate(
+                [
+                    getattr(obj, op)(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:
+            f = _parallel_compute(
+                params, self.comm, self.objectives, self._obj_per_rank, op
+            )
+        return f
+
     @jit
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -716,26 +738,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        if not self._is_mpi:
-            f = jnp.concatenate(
-                [
-                    obj.compute_unscaled(*par, constants=const)
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
-        else:
-            f = _parallel_compute(
-                params,
-                self.comm,
-                self.objectives,
-                self._obj_per_rank,
-                "compute_unscaled",
-            )
-        return f
+        op = "compute_unscaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled(self, x, constants=None):
@@ -754,22 +758,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        if not self._is_mpi:
-            f = jnp.concatenate(
-                [
-                    obj.compute_scaled(*par, constants=const)
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
-        else:
-            f = _parallel_compute(
-                params, self.comm, self.objectives, self._obj_per_rank, "compute_scaled"
-            )
-        return f
+        op = "compute_scaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled_error(self, x, constants=None):
@@ -788,26 +778,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        if not self._is_mpi:
-            f = jnp.concatenate(
-                [
-                    obj.compute_scaled_error(*par, constants=const)
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
-        else:
-            f = _parallel_compute(
-                params,
-                self.comm,
-                self.objectives,
-                self._obj_per_rank,
-                "compute_scaled_error",
-            )
-        return f
+        op = "compute_scaled_error"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scalar(self, x, constants=None):

@@ -1208,13 +1208,14 @@ class ProximalProjection(ObjectiveFunction):
             )(v)
         else:
             # TODO: implement parallel constraint for ProximalProjection
+            # Note: This would require putting workers into a second infinite loop.
+            # One way to do this could be to give pre-build objective
+            # and constraint to the optimizer and use 2 context managers. Also,
+            # divide workers for force balance constraint loop and objective loop.
+            # This is probably a rare use case, so not a priority for now.
             raise NotImplementedError(
-                "Parallel constraint for ProximalProjection not implemented yet. Note: "
-                "This would require putting workers into a second infinite loop which "
-                "break things. One way to do this could be to give pre-build objective "
-                "and constraint to the optimizer and use 2 context managers. Also, "
-                "divide workers for force balance constraint loop and objective loop. "
-                "This is probably a rare use case, so not a priority for now."
+                "Parallel constraint for ProximalProjection not implemented yet. "
+                "Please use only one Equilibrium constraint."
             )
 
         if self._objective._deriv_mode == "batched":

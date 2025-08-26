@@ -157,9 +157,10 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
             try:
                 if mpi is None:
                     warnings.warn(
-                        "To get the fu list of CPUs, provide the MPI communicator.",
+                        "To get the full list of CPUs, provide the MPI communicator.",
                         UserWarning,
                     )
+                    # return the same device multiple times
                     cpu_names = [
                         f"{str(i) + ' ' + cpu_info}" for i in range(num_device)
                     ]
@@ -168,9 +169,6 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
                     rank = comm.Get_rank()
                     cpu_name = f"{str(rank) + ' ' + cpu_info}"
                     cpu_names = comm.allgather(cpu_name)
-                # These CPUs might not be the same model, but I think slurm will
-                # always give same model (and getting model of each CPU is not
-                # straightforward)
                 config["devices"] = [name for name in cpu_names]
                 # This memory is not individual but the total memory
                 config["avail_mems"] = [cpu_mem for _ in range(num_device)]

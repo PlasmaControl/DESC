@@ -172,10 +172,15 @@ def _J_sup_theta_PEST_p_PEST(params, transforms, profiles, data, **kwargs):
     # ∂/∂ϕ|ρ,ϑ = ∂/∂ϕ|ρ,θ − (∂ϑ/∂ϕ) ∂/∂ϑ|ρ,ϕ
     # Even though the derivatives on the right side are in zeta
     # the derivative rule written above is only true for ϕ = ζ
-    data["(J^theta_PEST_p)|PEST"] = data["J^theta_z"] * data["theta_PEST_t"]
-    (+data["J^theta"] * data["theta_PEST_tz"] + data["J^zeta_z"] * data["theta_PEST_z"])
-    +data["J^zeta"] * data["theta_PEST_zz"]
-    -data["(J^theta_PEST_v)|PEST"] * data["theta_PEST_z"]
+    data["(J^theta_PEST_p)|PEST"] = (
+        data["J^theta_z"]
+        * data["theta_PEST_t"](
+            +data["J^theta"] * data["theta_PEST_tz"]
+            + data["J^zeta_z"] * data["theta_PEST_z"]
+        )
+        + data["J^zeta"] * data["theta_PEST_zz"]
+        - data["(J^theta_PEST_v)|PEST"] * data["theta_PEST_z"]
+    )
     return data
 
 

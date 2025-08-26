@@ -3474,6 +3474,7 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     n_theta_max="int: 2 x maximum poloidal mode number",
     n_zeta_max="int: 2 x maximum toroidal mode number",
     axisym="bool: if the equilibrium is axisymmetric",
+    compressible="bool: if the perturbation is compressible",
 )
 def _AGNI5(params, transforms, profiles, data, **kwargs):
     """
@@ -3614,13 +3615,23 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
     sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
 
+    C_zeta_inv = jnp.zeros((n_total, n_total))
     partial_z_log_sqrtg = jnp.reshape(
         (sqrtg_p / sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max)
     )
     partial_z_log_sqrtg = partial_z_log_sqrtg[..., None] * jnp.eye(n_zeta_max)
 
     C_zeta = partial_z_log_sqrtg + D_zeta0[None, ...]
-    C_zeta_inv = jnp.linalg.inv(C_zeta)
+
+    C_zeta_inv_blocks = jnp.linalg.inv(C_zeta)
+
+    block_idx = jnp.arange(n_rho_max * n_theta_max)
+    start_idx = block_idx * n_zeta_max
+
+    i_idx = start_idx[:, None, None] + jnp.arange(n_zeta_max)[None, :, None]
+    j_idx = start_idx[:, None, None] + jnp.arange(n_zeta_max)[None, None, :]
+
+    C_zeta_inv = C_zeta_inv.at[i_idx, j_idx].set(C_zeta_inv_blocks)
 
     partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
     C_rho = jnp.diagonal(partial_r_log_sqrtg) + D_rho
@@ -3628,8 +3639,8 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
     C_theta = jnp.diagonal(partial_v_log_sqrtg) + D_theta
 
-    # Can this multiplication be made faster if we use
-    # the bandedness of C_zeta_inv.
+    # Could this multiplication be made faster if we use
+    # the block diagonal structure of C_zeta_inv?
     C_zeta_inv_C_rho = C_zeta_inv @ C_rho
     C_zeta_inv_C_theta = C_zeta_inv @ C_theta
 
@@ -3954,53 +3965,82 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     ## The estimate must be accurate. If A is diagonally dominant
     ## use Gerhsgorin theorem to estimate the lowest eigenvalue
 
-    #A = A.at[jnp.diag_indices_from(A)].add(1e-11)
-    #B = B.at[jnp.diag_indices_from(B)].add(1e-11)
+    # A = A.at[jnp.diag_indices_from(A)].add(1e-11)
+    # B = B.at[jnp.diag_indices_from(B)].add(1e-11)
 
-    if incompressible:
-        #Impose incompressibility
-        A = A.at[rho_idx, rho_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
-            + (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T)
-            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
-
-        A = A.at[rho_idx, theta_idx].add(-1 * (A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-            + C_zeta_inv_C_rho @ A[rho_idx, theta_idx])
-            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
-
-        A = A.at[theta_idx, theta_idx].add(-1 * (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
-            + (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T)
-            + C_zeta_inv_C_theta.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
-
-        # Fill out the lower part using symmetry
-        A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
-
-        B = B.at[rho_idx, rho_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
-            + (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T)
-            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho)
-
-        B = B.at[rho_idx, theta_idx].add(-1 * (B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-            + C_zeta_inv_C_rho @ B[rho_idx, theta_idx])
-            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta))
-
-        B = B.at[theta_idx, theta_idx].add(-1 * (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
-            + (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T)
-            + C_zeta_inv_C_theta.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta)
-
-        # Fill out the lower part using symmetry
-        B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
-
-
-        ### Finally add the only instability drive term
-        #Au = jnp.zeros((3 * n_total, 3 * n_total))
-        #Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
-
-        #A = A.at[rho_idx, rho_idx_idx].add(Au)
-    else:
+    if compressible:
         ## Finally add the only instability drive term
         Au = jnp.zeros((3 * n_total, 3 * n_total))
         Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
 
         A = A.at[all_idx, all_idx].add(Au)
+    else:
+        # Impose incompressibility
+        A = A.at[rho_idx, rho_idx].add(
+            -1
+            * (
+                A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
+                + (A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T
+            )
+            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
+        )
+
+        A = A.at[rho_idx, theta_idx].add(
+            -1
+            * (
+                A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
+                + C_zeta_inv_C_rho @ A[rho_idx, theta_idx]
+            )
+            + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
+        )
+
+        A = A.at[theta_idx, theta_idx].add(
+            -1
+            * (
+                A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
+                + (A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T
+            )
+            + C_zeta_inv_C_theta.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
+        )
+
+        # Fill out the lower part using symmetry
+        A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
+
+        B = B.at[rho_idx, rho_idx].add(
+            -1
+            * (
+                B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
+                + (B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho).T
+            )
+            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
+        )
+
+        B = B.at[rho_idx, theta_idx].add(
+            -1
+            * (
+                B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
+                + C_zeta_inv_C_rho @ B[rho_idx, theta_idx]
+            )
+            + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
+        )
+
+        B = B.at[theta_idx, theta_idx].add(
+            -1
+            * (
+                B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
+                + (B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta).T
+            )
+            + C_zeta_inv_C_theta.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
+        )
+
+        # Fill out the lower part using symmetry
+        B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+
+        ### Finally add the only instability drive term
+        # Au = jnp.zeros((3 * n_total, 3 * n_total))
+        # Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+
+        # A = A.at[rho_idx, rho_idx_idx].add(Au)
 
     # Improve the condition number of the mass matrix
     ## D = 1.0 /jnp.tile((W * sqrtg).flatten(), 3)[:, None]

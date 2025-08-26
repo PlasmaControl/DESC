@@ -1694,6 +1694,8 @@ class ConcentricGrid(_Grid):
         dt = []
 
         for iring in range(L // 2 + 1, 0, -1):
+            if iring == L // 2 + 1:
+                iring -= 1  # make innermost ring have as many nodes as next ring
             ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
             if ntheta % 2 == 0:
                 # ensure an odd number of nodes on each surface

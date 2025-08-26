@@ -12,6 +12,7 @@ from desc.backend import (
     jit,
     jnp,
     pconcat,
+    safe_mpi_Bcast,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -264,6 +265,7 @@ class ObjectiveFunction(IOAble):
         "_use_jit",
         "_is_mpi",
         "_static_attrs",
+        "_dim_x_splits",
     ]
 
     def __init__(
@@ -430,34 +432,47 @@ class ObjectiveFunction(IOAble):
         if self.rank == 0:
             # Root rank won't enter worker loop
             return
+
+        def alloc_array(shape):
+            if desc_config["kind"] == "cpu":
+                return np.empty(shape, dtype=np.float64)
+            return jnp.empty(shape, dtype=jnp.float64)
+
         while self.running:
             # The message contains 3 parts,
             # message[0] is the operation to be performed
-            # message[1] is the state vector (for compute and jvp's)
-            # message[2] is the tangents (for only jvp's)
+            # message[1] is the size of state vector (for compute and jvp's)
+            # message[2] is the shape of tangents (for only jvp's)
             message = (None, None, None)
             message = self.comm.bcast(message, root=0)
-            obj_idx_rank = self._obj_per_rank[self.rank]
-            objs = [self.objectives[i] for i in obj_idx_rank]
 
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
-            elif "compute" in message[0]:
+
+            # get arrays by Bcast which uses buffers and faster than bcast
+            x = alloc_array(message[1])
+            safe_mpi_Bcast(x, self.comm, root=0)
+
+            obj_idx_rank = self._obj_per_rank[self.rank]
+            objs = [self.objectives[i] for i in obj_idx_rank]
+
+            if "compute" in message[0]:
+                params = self.unpack_state(x)
                 params = jax.device_put(
-                    message[1], self.objectives[obj_idx_rank[0]]._device
+                    params, self.objectives[obj_idx_rank[0]]._device
                 )
                 params = [params[i] for i in obj_idx_rank]
                 out = compute_per_process(params, objs, op=message[0])
             elif "jvp" in message[0]:
-                # inputs to jitted functions must live on the same device. Need to
+                x = jnp.split(x, self._dim_x_splits)
+                vs = alloc_array(message[2])
+                safe_mpi_Bcast(vs, self.comm, root=0)
+                vs = jnp.split(vs, self._dim_x_splits, axis=-1)
+
                 # put xi and vi on the same device as the objective
-                xs = jax.device_put(
-                    message[1], self.objectives[obj_idx_rank[0]]._device
-                )
-                vs = jax.device_put(
-                    message[2], self.objectives[obj_idx_rank[0]]._device
-                )
+                xs = jax.device_put(x, self.objectives[obj_idx_rank[0]]._device)
+                vs = jax.device_put(vs, self.objectives[obj_idx_rank[0]]._device)
                 # only pass the relevant parts of x and v to each objective
                 xs = [
                     [xs[i] for i in self._things_per_objective_idx[idx]]
@@ -562,6 +577,7 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_things()
+        self._dim_x_splits = np.cumsum([t.dim_x for t in self.things])
 
         # setting derivative mode and chunking.
         sub_obj_jac_chunk_sizes_are_ints = [
@@ -704,11 +720,11 @@ class ObjectiveFunction(IOAble):
 
     def _compute_op(self, x, constants=None, op="compute_unscaled"):
         """Helper function to compute various operations."""
-        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
         if not self._is_mpi:
+            params = self.unpack_state(x)
+            assert len(params) == len(constants) == len(self.objectives)
             f = jnp.concatenate(
                 [
                     getattr(obj, op)(*par, constants=const)
@@ -716,10 +732,29 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:
-            f = _parallel_compute(
-                params, self.comm, self.objectives, self._obj_per_rank, op
-            )
+            f = self._parallel_compute(x, op)
         return f
+
+    def _parallel_compute(self, x, op):
+        """Compute the objective function in parallel using MPI."""
+        if self.rank == 0:
+            message = (op, x.shape, None)
+            self.comm.bcast(message, root=0)
+            safe_mpi_Bcast(x, self.comm, root=0)
+
+            params = self.unpack_state(x)
+            obj_idx_rank = self._obj_per_rank[self.rank]
+
+            f_rank = compute_per_process(
+                [params[i] for i in obj_idx_rank],
+                [self.objectives[i] for i in obj_idx_rank],
+                op=message[0],
+            )
+            # TODO: CUDA aware MPI may prevent np call
+            # Use Gatherv to improve speed
+            f_rank = np.asarray(f_rank)
+            fs = self.comm.gather(f_rank, root=0)
+            return pconcat(fs)
 
     @jit
     def compute_unscaled(self, x, constants=None):
@@ -900,8 +935,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, self._dim_x_splits)
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
@@ -991,10 +1025,9 @@ class ObjectiveFunction(IOAble):
             # is needed for perturbations. Just pass that to jvp_batched for now
             return self._jvp_batched(v, x, constants, op)
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
-        vs = jnp.split(v[0], xs_splits, axis=-1)
         if not self._is_mpi:
+            xs = jnp.split(x, self._dim_x_splits)
+            vs = jnp.split(v[0], self._dim_x_splits, axis=-1)
             J = []
             assert len(self.objectives) == len(self.constants)
             # basic idea is we compute the jacobian of each objective wrt each thing
@@ -1011,8 +1044,15 @@ class ObjectiveFunction(IOAble):
             return jnp.hstack(J)
         else:
             if self.rank == 0:
-                message = ("jvp_" + op, xs, vs)
+                # broadcasting x and v as single array is faster than
+                # boradcasting the list
+                message = ("jvp_" + op, x.shape, v[0].shape)
                 self.comm.bcast(message, root=0)
+                safe_mpi_Bcast(x, self.comm, root=0)
+                safe_mpi_Bcast(v[0], self.comm, root=0)
+
+                xs = jnp.split(x, self._dim_x_splits)
+                vs = jnp.split(v[0], self._dim_x_splits, axis=-1)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 J_rank = jvp_per_process(
@@ -1027,6 +1067,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 )
+                # Use Gatherv to use fast buffer transfer
                 J_rank = np.asarray(J_rank)
                 J = self.comm.gather(J_rank, root=0)
 
@@ -2040,24 +2081,6 @@ class _ThingFlattener(IOAble):
         assert len(flat) == self.length
         unique, _ = unique_list(flat)
         return unique
-
-
-def _parallel_compute(params, comm, objectives, obj_per_rank, op):
-    rank = comm.Get_rank()
-    if rank == 0:
-        message = (op, params, None)
-        comm.bcast(message, root=0)
-        obj_idx_rank = obj_per_rank[rank]
-
-        f_rank = compute_per_process(
-            [params[i] for i in obj_idx_rank],
-            [objectives[i] for i in obj_idx_rank],
-            op=message[0],
-        )
-        # TODO: CUDA aware MPI may prevent np call
-        f_rank = np.asarray(f_rank)
-        fs = comm.gather(f_rank, root=0)
-        return pconcat(fs)
 
 
 # These will run on workers, and we want to safely jit them

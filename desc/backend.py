@@ -604,6 +604,33 @@ if use_jax:  # noqa: C901
 
         return out
 
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Safe Bcast function for Jax arrays.
+
+        JAX arrays cannot be directly broadcasted using MPI's Bcast, but numpy
+        arrays can. If CUDA-aware MPI is available, JAX arrays on GPU can be
+        broadcasted directly. This function checks the type of the array and
+        perform the broadcast safely. It assumes that for GPU backend CUDA-aware
+        MPI is available.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to broadcast. Only the root process needs to provide this.
+        comm : MPI.Comm
+            MPI communicator.
+        root : int
+            Rank of root process. Default is 0.
+
+        Returns
+        -------
+        arr : jnp.ndarray or np.ndarray
+            Broadcasted array.
+        """
+        if isinstance(arr, jnp.ndarray) and desc_config["kind"] == "cpu":
+            arr = np.array(arr)
+        return comm.Bcast(arr, root=root)
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -1080,3 +1107,7 @@ else:  # pragma: no cover
         elif mode == "vstack":
             out = np.vstack(arrays)
         return out
+
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Numpy implementation of desc.backend.safe_mpi_Bcast."""
+        return comm.Bcast(arr, root=root)

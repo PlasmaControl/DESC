@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, pconcat, put
+from desc.backend import jit, jnp, pconcat, put, safe_mpi_Bcast
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -753,11 +753,12 @@ class ProximalProjection(ObjectiveFunction):
         self._dimc_per_thing[self._eq_idx] = np.sum(
             [self._eq.dimensions[arg] for arg in self._args]
         )
+        self._dim_x_splits = np.cumsum(self._dimx_per_thing)
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
         self._feasible_tangents = jnp.eye(self._objective.dim_x)
         self._feasible_tangents = jnp.split(
-            self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
+            self._feasible_tangents, self._dim_x_splits, axis=-1
         )
         # dg/dxeq_reduced = dg/dx_eq_unscaled @ dx_eq_unscaled/dxeq_reduced # noqa: E800
         # x_eq_unscaled = Deq(xp_eq + Zeq @ xeq_reduced)                    # noqa: E800
@@ -1222,12 +1223,14 @@ class ProximalProjection(ObjectiveFunction):
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
-            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
             if not self._objective._is_mpi:
+                vgs = jnp.split(tangents, self._dim_x_splits, axis=-1)
+                xgs = jnp.split(xg, self._dim_x_splits)
                 return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
             else:
-                return _proximal_jvp_blocked_parallel(self._objective, vgs, xgs, op)
+                return _proximal_jvp_blocked_parallel(
+                    self._objective, tangents, xg, self._dim_x_splits, op
+                )
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
@@ -1350,10 +1353,15 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     return jnp.concatenate(out).T
 
 
-def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
+def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
     if objective.rank == 0:
-        message = ("proximal_jvp_" + op, xgs, vgs)
+        message = ("proximal_jvp_" + op, xgs.shape, vgs.shape)
         objective.comm.bcast(message, root=0)
+        safe_mpi_Bcast(xgs, comm=objective.comm, root=0)
+        safe_mpi_Bcast(vgs, comm=objective.comm, root=0)
+
+        xgs = jnp.split(xgs, splits)
+        vgs = jnp.split(vgs, splits, axis=-1)
 
         obj_idx_rank = objective._obj_per_rank[objective.rank]
         xs = [
@@ -1365,12 +1373,7 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
             for idx in obj_idx_rank
         ]
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        J_rank = jvp_proximal_per_process(
-            xs,
-            vs,
-            objs,
-            op=op,
-        )
+        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op)
         J_rank = np.asarray(J_rank)
         J = objective.comm.gather(J_rank, root=0)
         J = pconcat(J).T

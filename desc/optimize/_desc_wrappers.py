@@ -432,10 +432,11 @@ def _optimize_desc_stochastic(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    options["value_and_grad"] = True
     result = sgd(
-        objective.compute_scalar,
+        objective.value_and_grad,
         x0=x0,
-        grad=objective.grad,
+        grad=None,
         args=(objective.constants,),
         method=method,
         ftol=stoptol["ftol"],

@@ -54,6 +54,10 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     """
 
+    _static_attrs = ObjectiveFunction._static_attrs + [
+        "_x_scale",
+    ]
+
     def __init__(
         self, objective, constraint, x_scale="auto", name="LinearConstraintProjection"
     ):

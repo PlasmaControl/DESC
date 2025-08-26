@@ -319,7 +319,7 @@ class AutoDiffDerivative(_Derivative):
         return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
     def _set_mode(self, mode) -> None:
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
+        if mode not in ["fwd", "rev", "grad", "val+grad", "hess", "jvp"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
             )
@@ -335,6 +335,8 @@ class AutoDiffDerivative(_Derivative):
             )
         elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
+        elif self._mode == "val+grad":
+            self._compute = jax.value_and_grad(self._fun, self._argnum)
         elif self._mode == "hess":
             self._compute = jacfwd_chunked(
                 jacrev_chunked(self._fun, self._argnum, chunk_size=self._chunk_size),

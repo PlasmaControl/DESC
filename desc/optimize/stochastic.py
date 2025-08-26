@@ -79,6 +79,7 @@ def sgd(
         - ``"alpha"`` : (float > 0) Step size parameter. Default
           ``1e-2 * norm(x)/norm(grad(x))``
         - ``"beta"`` : (float > 0) Momentum parameter. Default 0.9
+        - ``"value_and_grad"`` : bool, if True, assume fun returns value and gradient
 
     Returns
     -------
@@ -89,6 +90,7 @@ def sgd(
 
     """
     options = {} if options is None else options
+    value_and_grad = options.pop("value_and_grad", False)
     nfev = 0
     ngev = 0
     iteration = 0
@@ -96,9 +98,12 @@ def sgd(
     N = x0.size
     x = x0.copy()
     v = jnp.zeros_like(x)
-    f = fun(x, *args)
+    if value_and_grad:
+        f, g = fun(x, *args)
+    else:
+        f = fun(x, *args)
+        g = grad(x, *args)
     nfev += 1
-    g = grad(x, *args)
     ngev += 1
 
     maxiter = setdefault(maxiter, N * 100)
@@ -147,11 +152,14 @@ def sgd(
 
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
-        g = grad(x, *args)
+        if value_and_grad:
+            fnew, g = fun(x, *args)
+        else:
+            fnew = fun(x, *args)
+            g = grad(x, *args)
         ngev += 1
         step_norm = jnp.linalg.norm(alpha * v, ord=2)
         g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fnew = fun(x, *args)
         nfev += 1
         df = f - fnew
         f = fnew

@@ -700,6 +700,14 @@ class ObjectiveFunction(IOAble):
         )
 
     @jit
+    def value_and_grad(self, x, constants=None):
+        """Compute value and gradient vector of self.compute_scalar wrt x."""
+        if constants is None:
+            constants = self.constants
+        f, g = Derivative(self.compute_scalar, mode="val+grad")(x, constants)
+        return jnp.atleast_1d(f.squeeze()), jnp.atleast_1d(g.squeeze())
+
+    @jit
     def hess(self, x, constants=None):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         if constants is None:
@@ -941,6 +949,10 @@ class ObjectiveFunction(IOAble):
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
+            timer.start("Value and Gradient compilation time")
+            _ = self.value_and_grad(x, self.constants).block_until_ready()
+            timer.stop("Value and Gradient compilation time")
+
         if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
             _ = self.hess(x, self.constants).block_until_ready()
@@ -1334,6 +1346,14 @@ class _Objective(IOAble, ABC):
         """Compute gradient vector of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="grad")(*args, **kwargs)
+
+    @jit
+    def value_and_grad(self, *args, **kwargs):
+        """Compute value and gradient vector of self.compute_scalar wrt x."""
+        argnums = tuple(range(len(self.things)))
+        return Derivative(self.compute_scalar, argnums, mode="val+grad")(
+            *args, **kwargs
+        )
 
     @jit
     def hess(self, *args, **kwargs):

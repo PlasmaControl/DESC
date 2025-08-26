@@ -344,10 +344,8 @@ def _map_PEST_coordinates(
 
     """
     errorif(
-        np.isfinite(period)
-        and period != (2 * jnp.pi)
-        and period != (2 * jnp.pi / L_basis.NFP),
-        msg=f"Period must be ∞ or 2π or 2π/NFP, but got {period}.",
+        np.isfinite(period) and period != (2 * jnp.pi),
+        msg=f"Period must be ∞ or 2π, but got {period}.",
     )
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
@@ -619,6 +617,9 @@ def to_sfl(
     Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
     with respect to the straight field line coordinates, rather than the boundary
     coordinates. The new lambda value will be zero.
+
+    NOTE: Though the converted equilibrium will have the same flux surfaces,
+    the force balance error will likely be higher than the original equilibrium.
 
     Parameters
     ----------

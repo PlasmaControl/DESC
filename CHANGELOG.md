@@ -2,11 +2,6 @@ Changelog
 =========
 
 
-Bug fixes
-
-- Previously the basis used to convert to straight field line coordinates was not orthogonal and oversampling was required for the least squares solve. This is now resolved.
-
-
 v0.15.0
 -------
 

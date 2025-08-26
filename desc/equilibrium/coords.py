@@ -655,16 +655,19 @@ def to_sfl(
     M_grid = M_grid or int(2 * M)
     N_grid = N_grid or int(2 * N)
 
-    eq_PEST = eq.copy() if copy else eq
-    eq_PEST.change_resolution(L, M, N)
-
-    grid_PEST = ConcentricGrid(
-        L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq_PEST.NFP
-    )
+    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
     data = eq.compute(
         ["R", "Z", "lambda"],
         Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
     )
+    data_bdry = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(map_coordinates(eq, grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"))),
+    )
+
+    eq_PEST = eq.copy() if copy else eq
+    eq_PEST.change_resolution(L, M, N)
 
     eq_PEST.R_lmn = Transform(
         grid_PEST,
@@ -684,27 +687,21 @@ def to_sfl(
 
     eq_PEST.L_lmn = np.zeros_like(eq_PEST.L_lmn)
 
-    grid_PEST = LinearGrid(M=M, N=N, rho=1.0, NFP=eq_PEST.NFP)
-    data = eq.compute(
-        ["R", "Z", "lambda"],
-        Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
-    )
-
     eq_PEST.Rb_lmn = Transform(
-        grid_PEST,
+        grid_PEST_bdry,
         eq_PEST.surface.R_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    ).fit(data["R"])
+    ).fit(data_bdry["R"])
 
     eq_PEST.Zb_lmn = Transform(
-        grid_PEST,
+        grid_PEST_bdry,
         eq_PEST.surface.Z_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    ).fit(data["Z"])
+    ).fit(data_bdry["Z"])
 
     return eq_PEST
 

@@ -1450,9 +1450,6 @@ class Equilibrium(IOAble, Optimizable):
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
-
         Parameters
         ----------
         L : int, optional

@@ -468,6 +468,10 @@ def _map_clebsch_coordinates(
 ):
     """Find θ for given Clebsch field line poloidal label α.
 
+    # TODO: input (rho, alpha, zeta) coordinates may be an arbitrary point cloud
+    #       and the partial summation will work without modification.
+    #       Clean up input parameter API to support this.
+
     Parameters
     ----------
     iota : ndarray
@@ -614,9 +618,6 @@ def to_sfl(
     with respect to the straight field line coordinates, rather than the boundary
     coordinates. The new lambda value will be zero.
 
-    NOTE: Though the converted equilibrium will have the same flux surfaces,
-    the force balance error will likely be higher than the original equilibrium.
-
     Parameters
     ----------
     eq : Equilibrium
@@ -640,7 +641,7 @@ def to_sfl(
 
     Returns
     -------
-    eq_sfl : Equilibrium
+    eq_PEST : Equilibrium
         Equilibrium transformed to a straight field line coordinate representation.
 
     """
@@ -651,67 +652,56 @@ def to_sfl(
     M_grid = M_grid or int(2 * M)
     N_grid = N_grid or int(2 * N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
+    eq_PEST = eq.copy() if copy else eq
+    eq_PEST.change_resolution(L, M, N, NFP=1)
 
-    toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
-    theta = grid.nodes[:, 1]
-    vartheta = theta + toroidal_coords["lambda"]
-    sfl_grid = Grid(np.array([grid.nodes[:, 0], vartheta, grid.nodes[:, 2]]).T)
-
-    bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
-    bdry_theta = bdry_grid.nodes[:, 1]
-    bdry_vartheta = bdry_theta + bdry_coords["lambda"]
-    bdry_sfl_grid = Grid(
-        np.array([bdry_grid.nodes[:, 0], bdry_vartheta, bdry_grid.nodes[:, 2]]).T
+    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=1)
+    data = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
     )
 
-    if copy:
-        eq_sfl = eq.copy()
-    else:
-        eq_sfl = eq
-    eq_sfl.change_resolution(L, M, N)
-
-    R_sfl_transform = Transform(
-        sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
-    )
-    R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
-    del R_sfl_transform  # these can take up a lot of memory so delete when done.
-
-    Z_sfl_transform = Transform(
-        sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
-    )
-    Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
-    del Z_sfl_transform
-    L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
-
-    R_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.R_basis,
+    eq_PEST.R_lmn = Transform(
+        grid_PEST,
+        eq_PEST.R_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    )
-    Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
-    del R_sfl_bdry_transform
+    ).fit(data["R"])
 
-    Z_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.Z_basis,
+    eq_PEST.Z_lmn = Transform(
+        grid_PEST,
+        eq_PEST.Z_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
+    ).fit(data["Z"])
+
+    eq_PEST.L_lmn = np.zeros_like(eq_PEST.L_lmn)
+
+    grid_PEST = LinearGrid(M=M, N=N, rho=1.0, NFP=1)
+    data = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
     )
-    Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
-    del Z_sfl_bdry_transform
 
-    eq_sfl.Rb_lmn = Rb_lmn_sfl
-    eq_sfl.Zb_lmn = Zb_lmn_sfl
-    eq_sfl.R_lmn = R_lmn_sfl
-    eq_sfl.Z_lmn = Z_lmn_sfl
-    eq_sfl.L_lmn = L_lmn_sfl
+    eq_PEST.Rb_lmn = Transform(
+        grid_PEST,
+        eq_PEST.surface.R_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data["R"])
 
-    return eq_sfl
+    eq_PEST.Zb_lmn = Transform(
+        grid_PEST,
+        eq_PEST.surface.Z_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data["Z"])
+
+    return eq_PEST
 
 
 def get_rtz_grid(

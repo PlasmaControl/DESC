@@ -344,8 +344,10 @@ def _map_PEST_coordinates(
 
     """
     errorif(
-        np.isfinite(period) and period != (2 * jnp.pi),
-        msg=f"Period must be ∞ or 2π, but got {period}.",
+        np.isfinite(period)
+        and period != (2 * jnp.pi)
+        and period != (2 * jnp.pi / L_basis.NFP),
+        msg=f"Period must be ∞ or 2π or 2π/NFP, but got {period}.",
     )
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
@@ -653,9 +655,11 @@ def to_sfl(
     N_grid = N_grid or int(2 * N)
 
     eq_PEST = eq.copy() if copy else eq
-    eq_PEST.change_resolution(L, M, N, NFP=1)
+    eq_PEST.change_resolution(L, M, N)
 
-    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=1)
+    grid_PEST = ConcentricGrid(
+        L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq_PEST.NFP
+    )
     data = eq.compute(
         ["R", "Z", "lambda"],
         Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
@@ -679,7 +683,7 @@ def to_sfl(
 
     eq_PEST.L_lmn = np.zeros_like(eq_PEST.L_lmn)
 
-    grid_PEST = LinearGrid(M=M, N=N, rho=1.0, NFP=1)
+    grid_PEST = LinearGrid(M=M, N=N, rho=1.0, NFP=eq_PEST.NFP)
     data = eq.compute(
         ["R", "Z", "lambda"],
         Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),

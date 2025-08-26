@@ -4,8 +4,7 @@ Changelog
 
 Bug fixes
 
-- Previously the basis used to convert to straight field line coordinates was not orthogonal. This handicapped convergence. This is now resolved.
-- Previously the basis used for the straight field line coordinate equilibrium was not complete. It lacked low frequency modes. This can lead to spectral aliasing issues among other things. This is now resolved.
+- Previously the basis used to convert to straight field line coordinates was not orthogonal and oversampling was required for the least squares solve. This is now resolved.
 
 
 v0.15.0

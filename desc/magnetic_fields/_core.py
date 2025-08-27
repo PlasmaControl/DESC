@@ -4,6 +4,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
+
 import numpy as np
 from diffrax import (
     DiscreteTerminatingEvent,
@@ -69,6 +70,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+
     Returns
     -------
     B : ndarray
@@ -902,6 +904,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
         scale = float(np.squeeze(scale))
@@ -1030,6 +1033,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
+    _static_attrs = _MagneticField._static_attrs
 
     def __init__(self, *fields):
         fields = flatten_list(fields, flatten_tuple=True)

@@ -1449,6 +1449,84 @@ class Equilibrium(Optimizable, _MagneticField):
             A = xyz2rpz_vec(A, phi=coords[:, 1])
         return A
 
+    def map_coordinates(
+        self,
+        coords,
+        inbasis,
+        outbasis=("rho", "theta", "zeta"),
+        guess=None,
+        params=None,
+        period=(np.inf, np.inf, np.inf),
+        tol=1e-6,
+        maxiter=30,
+        full_output=False,
+        **kwargs,
+    ):
+        """Transform coordinates given in ``inbasis`` to ``outbasis``.
+
+        Solves for the computational coordinates that correspond to ``inbasis``,
+        then evaluates ``outbasis`` at those locations.
+
+        Performance can often improve significantly given a reasonable initial guess.
+
+        Parameters
+        ----------
+        coords : ndarray
+            Shape (k, 3).
+            2D array of input coordinates. Each row is a different point in space.
+        inbasis, outbasis : tuple of str
+            Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
+            ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+            same as the compute function data key.
+        guess : jnp.ndarray
+            Shape (k, 3).
+            Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+            corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+            based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+            In general, this must be given to be compatible with JIT.
+        params : dict
+            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
+        period : tuple of float
+            Assumed periodicity for each quantity in ``inbasis``.
+            Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
+        tol : float
+            Stopping tolerance.
+        maxiter : int
+            Maximum number of Newton iterations.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
+
+        Returns
+        -------
+        out : jnp.ndarray
+            Shape (k, 3).
+            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+            returned for coordinates where root finding did not succeed, possibly
+            because the coordinate is not in the plasma volume.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True.
+
+        """
+        return map_coordinates(
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
+        )
+
     def _get_rtz_grid(
         self,
         radial,

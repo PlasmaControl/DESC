@@ -5,7 +5,7 @@ Changelog
 Performance Improvements
 
 - [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
-- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals. However, they are not the default in optimization objectives until [tutorial for docker image with jax-finufft on GPU](https://github.com/PlasmaControl/DESC/issues/1851) is resolved.
+- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
 
 
 v0.15.0

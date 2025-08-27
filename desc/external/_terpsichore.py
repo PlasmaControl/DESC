@@ -23,24 +23,24 @@ from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 @execute_on_cpu
 def terpsichore(
     eq,
+    *,
     processes=1,
-    path="",
-    exec="",
+    path,
+    exec,
     mode_family=-1,
     surfs=101,
     M_nyq=None,
     N_nyq=None,
-    lssl=1000,
-    lssd=1000,
+    M_booz_max=None,
+    N_booz_max=None,
     M_max=8,
     N_min=-4,
     N_max=4,
-    M_booz_max=19,
-    N_booz_max=18,
+    lssl=None,
+    lssd=None,
     awall=2.0,
-    deltaJp=1e-2,
+    deltaJp=1e-4,
     modelk=1,
-    nev=1,
     al0=-5e-1,
     sleep_time=1,
     stop_time=60,
@@ -79,18 +79,17 @@ def terpsichore(
             path=input_path,
             mode_family=mode_family,
             surfs=surfs,
-            lssl=lssl,
-            lssd=lssd,
+            M_booz_max=2 * eq[k].M if M_booz_max is None else M_booz_max,
+            N_booz_max=2 * eq[k].N if N_booz_max is None else N_booz_max,
             M_max=M_max,
             N_min=N_min,
             N_max=N_max,
-            M_booz_max=M_booz_max,
-            N_booz_max=N_booz_max,
+            lssl=lssl,
+            lssd=lssd,
             awall=awall,
             deltaJp=deltaJp,
             modelk=modelk,
             nfp=eq[k].NFP,
-            nev=nev,
             al0=al0,
         )
 
@@ -114,7 +113,6 @@ def terpsichore(
                     _pool_fun,
                     path=tmp_path,
                     exec=exec,
-                    surfs=surfs,
                     al0=al0,
                     sleep_time=sleep_time,
                     stop_time=stop_time,
@@ -384,21 +382,23 @@ def _write_terps_input(  # noqa: C901
     path,
     mode_family,
     surfs,
-    lssl,
-    lssd,
+    M_booz_max,
+    N_booz_max,
     M_max,
     N_min,
     N_max,
-    M_booz_max,
-    N_booz_max,
+    lssl,
+    lssd,
     awall,
     deltaJp,
     modelk,
     nfp,
-    nev,
     al0,
 ):
     """Write TERPSICHORE input file."""
+    lssl = 20 * M_booz_max * N_booz_max if lssl is None else lssl
+    lssd = 20 * M_max * N_max if lssd is None else lssd
+
     ivac = surfs // 4
     if (N_max > 8) or (M_max > 16):
         nj = 150
@@ -532,13 +532,13 @@ def _write_terps_input(  # noqa: C901
 
     f.write("C\n")
     f.write("C   NEV NITMAX         AL0     EPSPAM IGREEN MPINIT\n")
-    f.write("      {}   4500  {:10.3e}  1.000E-04      0      0\n".format(nev, al0))
+    f.write("      1   4500  {:10.3e}  1.000E-04      0      0\n".format(al0))
     f.write("C\n")
 
     f.close()
 
 
-def _pool_fun(k, path, exec, surfs, al0, sleep_time, stop_time):
+def _pool_fun(k, path, exec, al0, sleep_time, stop_time):
     """Run TERPSICHORE and read output for equilibrium with index k."""
     idx_path = os.path.join(path, str(k))
     exec_path = os.path.join(idx_path, exec)
@@ -555,7 +555,7 @@ def _pool_fun(k, path, exec, surfs, al0, sleep_time, stop_time):
             sleep_time=sleep_time,
             stop_time=stop_time,
         )
-        output = _read_terps_output(path=fort16_path, surfs=surfs)
+        output = _read_terps_output(path=fort16_path)
     except RuntimeError:
         warnif(
             True, UserWarning, "TERPSICHORE growth rate not found, using default value."
@@ -615,8 +615,8 @@ def _is_terps_complete(path, run_time, stop_time, terps_subprocess):
         return False
 
 
-def _read_terps_output(path, surfs):
-    """Read TERPSICHORE output file and return the growth rate / dW values."""
+def _read_terps_output(path):
+    """Read TERPSICHORE output file and return the growth rate."""
     errorif(
         not os.path.exists(path),
         RuntimeError,
@@ -665,9 +665,9 @@ class TERPSICHORE(ExternalObjective):
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
     processes : int, optional
         Maximum number of CPU threads to use for multiprocessing. Default = 1.
-    path : str, optional
+    path : str
         Path to the directory where temporary files will be stored.
-    exec : str, optional
+    exec : str
         File name of the TERPSICHORE executable. Must be located in the directory
         specified by ``path``.
     mode_family : int, optional
@@ -680,14 +680,12 @@ class TERPSICHORE(ExternalObjective):
     M_nyq, N_nyq: int
         The max poloidal and toroidal mode numbers to use in the Nyquist spectrum of the
         equilibrium input. Defaults to ``eq.M + 4`` and ``eq.N + 2``.
-    lssl : int, optional
-        Minimum number of possible permutations of Boozer mode combinations
-        (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,
-        try increasing this parameter. Default = 1000.
-    lssd : int, optional
-        Minimum number of possible permutations of stability mode combinations
-        (determined by ``M_max`` and ``N_max``). If TERPSICHORE fails to run,
-        try increasing this parameter. Default = 1000.
+    M_booz_max : int, optional
+        Maximum poloidal mode number of Boozer spectrum. Will include modes with
+        m ∈ [0,M_booz_max]. Defaults to ``2 * eq.M``.
+    N_booz_max : int, optional
+        Maximum poloidal mode number of Boozer spectrum. Will include modes with
+        n ∈ [-N_booz_max,N_booz_max]. Defaults to ``2 * eq.N``.
     M_max : int, optional
         Maximum poloidal mode number of stability modes to consider. Will include modes
         with m ∈ [0,M_max] (if ``mode_family < 0``). Default = 8.
@@ -697,28 +695,28 @@ class TERPSICHORE(ExternalObjective):
     N_max : int, optional
         Maximum toroidal mode number of stability modes to consider. Will include modes
         with n ∈ [N_min,N_max] (if ``mode_family < 0``). Default = 4.
-    M_booz_max : int, optional
-        Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        m ∈ [0,M_booz_max]. Default = 19.
-    N_booz_max : int, optional
-        Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        n ∈ [-N_booz_max,N_booz_max]. Default = 18.
+    lssl : int, optional
+        Minimum number of possible permutations of Boozer mode combinations
+        (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = ``20 * M_booz_max * N_booz_max``.
+    lssd : int, optional
+        Minimum number of possible permutations of stability mode combinations
+        (determined by ``M_max`` and ``N_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = ``20 * M_max * N_max``.
     awall : float, optional
         Ratio of the radius of the conformal conducting wall to the plasma minor radius.
         The conducting wall is obtained by scaling the m ≠ 0 Fourier components of the
         plasma boundary by ``awall``. A shorter wall offset will help stabilize the
         plasma. If TERPSICHORE fails to run, try decreasing this parameter. Default = 2.
-    deltaJp : float, optional
+    deltaJp : float
         Resonance detuning parameter to resolve parallel current density singularities.
-        Default = 0.01.
+        A larger value can artificially improve the stability. Default = 1e-4.
     modelk : int, optional
         0 = Noninteracting anisotropic fast particle stability model with reduced
         kintetic energy. 1 = Kruskal-Oberman anisotropic energy principle model with
         reduced kinetic energy. 2 = Noninteracting anisotropic fast particle stability
         model with physical kinetic energy. 3 = Kruskal-Oberman anisotropic energy
         principle model with physical kinetic energy. Default = 0.
-    nev : int, optional
-        Number of eigenvalue computations. Default = 1.
     al0 : float, optional
         Initial guess of the eigenvalue. Use a sufficiently negative value to find the
         most unstable growth rate. If TERPSICHORE fails to run, the objective will
@@ -754,8 +752,8 @@ class TERPSICHORE(ExternalObjective):
         abs_step=1e-4,
         rel_step=0,
         processes=1,
-        path="",
-        exec="",
+        path,
+        exec,
         mode_family=-1,
         surfs=101,
         M_nyq=None,
@@ -765,12 +763,11 @@ class TERPSICHORE(ExternalObjective):
         M_max=8,
         N_min=-4,
         N_max=4,
-        M_booz_max=19,
-        N_booz_max=18,
+        M_booz_max=None,
+        N_booz_max=None,
         awall=2.0,
-        deltaJp=1e-2,
+        deltaJp=1e-4,
         modelk=0,
-        nev=1,
         al0=-5e-1,
         sleep_time=1,
         stop_time=60,
@@ -790,17 +787,16 @@ class TERPSICHORE(ExternalObjective):
                 "surfs": surfs,
                 "M_nyq": M_nyq,
                 "N_nyq": N_nyq,
-                "lssl": lssl,
-                "lssd": lssd,
+                "M_booz_max": M_booz_max,
+                "N_booz_max": N_booz_max,
                 "M_max": M_max,
                 "N_min": N_min,
                 "N_max": N_max,
-                "M_booz_max": M_booz_max,
-                "N_booz_max": N_booz_max,
+                "lssl": lssl,
+                "lssd": lssd,
                 "awall": awall,
                 "deltaJp": deltaJp,
                 "modelk": modelk,
-                "nev": nev,
                 "al0": al0,
                 "sleep_time": sleep_time,
                 "stop_time": stop_time,

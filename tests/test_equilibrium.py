@@ -20,8 +20,9 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
+from desc.utils import xyz2rpz, xyz2rpz_vec
 
-from .utils import area_difference, compute_coords, xyz2rpz, xyz2rpz_vec
+from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit

@@ -2608,7 +2608,6 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
-    method="virtual casing",
     **kwargs,
 ):
     """Trace field lines by integration, using diffrax package.
@@ -2682,7 +2681,6 @@ def field_line_integrate(
                 basis="rpz",
                 source_grid=source_grid,
                 chunk_size=chunk_size,
-                method=method,
             ).T
         )
         return jnp.array(

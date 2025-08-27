@@ -612,7 +612,7 @@ def to_sfl(
     rcond=None,
     copy=False,
 ):
-    """Transform this equilibrium to use straight field line coordinates.
+    """Transform this equilibrium to use straight field line PEST coordinates.
 
     Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
     with respect to the straight field line coordinates, rather than the boundary

@@ -3462,6 +3462,8 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
         "J^zeta",
         "|J|",
         "sqrt(g)_PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
         "(sqrt(g)_PEST_p)|PEST",
         "finite-n instability drive",
         "iota",
@@ -3514,6 +3516,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
+    compressible = kwargs.get("compressible", False)
 
     # For axisymmetric equilibria n_mode will decide the toroidal
     # mode number to analyze. Should work for n_mode = 0 (vertical instability)
@@ -3611,42 +3614,6 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     W = jnp.diag(jnp.kron(wrho * wtheta * wzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
     sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
-    sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
-    sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
-    sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
-
-    C_zeta_inv = jnp.zeros((n_total, n_total))
-    partial_z_log_sqrtg = jnp.reshape(
-        (sqrtg_p / sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max)
-    )
-    partial_z_log_sqrtg = partial_z_log_sqrtg[..., None] * jnp.eye(n_zeta_max)
-
-    C_zeta = partial_z_log_sqrtg + D_zeta0[None, ...]
-
-    C_zeta_inv_blocks = jnp.linalg.inv(C_zeta)
-
-    block_idx = jnp.arange(n_rho_max * n_theta_max)
-    start_idx = block_idx * n_zeta_max
-
-    i_idx = start_idx[:, None, None] + jnp.arange(n_zeta_max)[None, :, None]
-    j_idx = start_idx[:, None, None] + jnp.arange(n_zeta_max)[None, None, :]
-
-    C_zeta_inv = C_zeta_inv.at[i_idx, j_idx].set(C_zeta_inv_blocks)
-
-    partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
-    C_rho = jnp.diagonal(partial_r_log_sqrtg) + D_rho
-
-    partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
-    C_theta = jnp.diagonal(partial_v_log_sqrtg) + D_theta
-
-    # Could this multiplication be made faster if we use
-    # the block diagonal structure of C_zeta_inv?
-    C_zeta_inv_C_rho = C_zeta_inv @ C_rho
-    C_zeta_inv_C_theta = C_zeta_inv @ C_theta
-
-    # Incompressibility gives us
-    # \xi^\zeta = -(C_\zeta^{-1} C\rho \xi^{\rho} + C_\zeta^{-1} C_\theta \xi^{\theta})
-    # ξ^ζ = −(C_ζ⁻¹ C_ρ ξ^ρ + C_ζ⁻¹ C_θ ξ^θ)
 
     psi_r_over_sqrtg = psi_r / sqrtg
 
@@ -3975,6 +3942,37 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
         A = A.at[all_idx, all_idx].add(Au)
     else:
+        sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
+        sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
+        sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
+
+        C_zeta_inv = jnp.zeros((n_total, n_total))
+        partial_z_log_sqrtg = jnp.reshape(
+            (sqrtg_p / sqrtg).flatten(), (n_rho_max * n_theta_max, n_zeta_max)
+        )
+        partial_z_log_sqrtg = partial_z_log_sqrtg[..., None] * jnp.eye(n_zeta_max)
+
+        C_zeta = partial_z_log_sqrtg + D_zeta0[None, ...]
+
+        partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
+        C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
+
+        partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
+        C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
+
+        # batched inversion without actually forming C_zeta_inv
+        C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
+        C_zeta_inv_C_rho_reshaped = jnp.linalg.solve(C_zeta, C_rho_reshaped)
+        C_zeta_inv_C_rho = C_zeta_inv_C_rho_reshaped.reshape(n_total, n_total)
+
+        C_theta_reshaped = C_theta.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
+        C_zeta_inv_C_theta_reshaped = jnp.linalg.solve(C_zeta, C_rho_reshaped)
+        C_zeta_inv_C_theta = C_zeta_inv_C_theta_reshaped.reshape(n_total, n_total)
+
+        ## Incompressibility gives us
+        ## \xi^\zeta = -(C_\zeta^{-1} C\rho \xi^{\rho} + C_\zeta^{-1} C_\theta \xi^{\theta})
+        ## ξ^ζ = −(C_ζ⁻¹ C_ρ ξ^ρ + C_ζ⁻¹ C_θ ξ^θ)
+
         # Impose incompressibility
         A = A.at[rho_idx, rho_idx].add(
             -1
@@ -4035,6 +4033,20 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
         # Fill out the lower part using symmetry
         B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
+
+        pdb.set_trace()
+
+        # apply dirichlet BC to ξ^ρ
+        keep_1 = jnp.arange(
+            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
+        )
+        keep_2 = jnp.arange(n_total, 2 * n_total)
+        keep = jnp.concatenate([keep_1, keep_2])
+
+        w2, _ = jnp.linalg.eigh((A + A.T) / 2)
+        w3, _ = eigh(A[jnp.ix_(keep, keep)])
+
+        # L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
 
         ### Finally add the only instability drive term
         # Au = jnp.zeros((3 * n_total, 3 * n_total))

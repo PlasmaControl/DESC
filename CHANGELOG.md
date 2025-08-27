@@ -1,6 +1,9 @@
 Changelog
 =========
 
+New Features
+
+- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 
 v0.15.0
 -------

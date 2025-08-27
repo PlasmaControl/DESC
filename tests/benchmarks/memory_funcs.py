@@ -241,8 +241,8 @@ if __name__ == "__main__":
         test_proximal_freeb_jac_blocked()
     elif func == "test_proximal_jac_ripple":
         test_proximal_jac_ripple()
-    elif func == "test_proximal_jac_ripple_spline":
-        test_proximal_jac_ripple_spline()
+    elif func == "test_proximal_jac_ripple_bounce1d":
+        test_proximal_jac_ripple_bounce1d()
     elif func == "test_eq_solve":
         test_eq_solve()
     else:

@@ -4013,7 +4013,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta_t", "e_theta_PEST", "theta_PEST_t", "theta_PEST_tt"],
-    aliases=["(e_vartheta_v)|PEST", "(e_theta_PEST_t)|PEST"],
+    aliases=["(e_vartheta_v)|PEST"],
 )
 def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϕ

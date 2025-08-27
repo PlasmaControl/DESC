@@ -1280,7 +1280,7 @@ def test_covariant_basis_vectors(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_covariant_basis_vectors_PEST(DummyStellarator):
+def test_covariant_basis_vectors_PEST():
     """
     Test calculation of covariant basis vectors in PEST.
 
@@ -1441,7 +1441,7 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_contravariant_basis_vectors_PEST(DummyStellarator):
+def test_contravariant_basis_vectors_PEST():
     """
     Test only the derivatives of contravariant basis vectors in PEST.
 

@@ -2629,14 +2629,17 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B^theta"][:, jnp.newaxis]
-    +(
+    ) * data["B^theta"][:, jnp.newaxis] + (
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B^zeta"][:, jnp.newaxis]
+    ) * data[
+        "B^zeta"
+    ][
+        :, jnp.newaxis
+    ]
 
     return data
 

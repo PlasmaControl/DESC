@@ -96,10 +96,10 @@ class VMECIO:
                 + " 9. Some data may not be loaded correctly."
             )
 
-        assert (
-            float(file.variables["lrfp"][-1]) == 0
-        ), "DESC currently does not support poloidal flux label, "
-        "and so cannot load this VMEC wout which has LRFP=T"
+        assert float(file.variables["lrfp__logical__"][0]) == 0, (
+            "DESC currently does not support poloidal flux label, "
+            "and so cannot load this VMEC wout, which has LRFP=T"
+        )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])

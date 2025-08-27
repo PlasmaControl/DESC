@@ -171,7 +171,7 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
-        nufft_eps=0,
+        nufft_eps=1e-6,
         use_bounce1d=False,
         **kwargs,
     ):

@@ -1124,13 +1124,13 @@ class TestBounce:
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
-        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
-        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        eq = get("HELIOTRON")
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        bounce = Bounce1D(grid.source_grid, data, check=True)
+        bounce = Bounce1D(grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1144,7 +1144,7 @@ class TestBounce:
         num, den = bounce.integrate(
             [TestBounce._example_numerator, TestBounce._example_denominator],
             pitch_inv,
-            {"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
+            {"g_zz": Bounce1D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1166,7 +1166,7 @@ class TestBounce:
         # corresponds to the 1/λ value
         print("1/λ(ρ, λ):", pitch_inv[l, p])
         # for the Clebsch field line coordinates
-        nodes = bounce.reshape(grid.source_grid, grid.source_grid.nodes[:, :2])
+        nodes = bounce.reshape(grid, grid.nodes[:, :2])
         print("(ρ, α):", nodes[l, m, 0])
 
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)

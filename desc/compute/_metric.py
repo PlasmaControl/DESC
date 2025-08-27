@@ -2623,23 +2623,24 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
     # B⋅∇ = B^θ_P ∂/∂θ + B^ζ ∂/∂ζ
     # ∇ρ = (e_θ × e_ζ)/√g
-    data["B_dot_grad(grad(rho))"] = (
+
+    term1 = (
         cross(data["e_theta_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_t"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B^theta"][:, jnp.newaxis] + (
+    ) * data["B^theta"][:, jnp.newaxis]
+
+    term2 = (
         cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
         + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
         - cross(data["e_theta"], data["e_zeta"])
         * data["sqrt(g)_z"][:, jnp.newaxis]
         / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data[
-        "B^zeta"
-    ][
-        :, jnp.newaxis
-    ]
+    ) * data["B^zeta"][:, jnp.newaxis]
+
+    data["B_dot_grad(grad(rho))"] = term1 + term2
 
     return data
 

@@ -25,7 +25,7 @@ It was adapted from the test ``test_external_vs_generic_objectives`` in
 ``tests/test_examples.py``.
 
 The function must take a single positional argument, which can be either a single
-Equilibrium or a list of Equilibria. Additional inputs can be passed as keyword
+Equilibrium or a list of Equilibria. Additional inputs must be passed as keyword
 arguments. In this example, the function returns the three scalar quatities
 :math:`\langle\beta\rangle_{vol}`, :math:`\langle\beta\rangle_{pol}`, and
 :math:`\langle\beta\rangle_{tor}`. It writes these quantities to a NetCDF file and then
@@ -64,12 +64,13 @@ following other arguments:
   Equilibria. Since the function ``beta_from_file`` takes a single Equilibrium as its
   only positional argument, ``vectorized=False``.
 
-All other input parameters that the external function requires can be passed as keyword
-arguments to ``ExternalObjective``. In this example, ``path`` specifies the file name
-of the NetCDF file that the function writes/reads. Since ``vectorized=False``, the
-function ``beta_from_file`` will be evaluated sequentially when computing the finite
-differences (rather than in parallel), so the same file will be overwritten each time
-for the different Equilibria.
+All other input parameters that the external function requires must be passed through
+the dictionary ``fun_kwargs`` (an argument of ``ExternalObjective``) so that the
+function can be called as ``fun(eq, **fun_kwargs)``. In this example, ``path`` specifies
+the file name of the NetCDF file that the function writes/reads. Since
+``vectorized=False``, the function ``beta_from_file`` will be evaluated sequentially
+when computing the finite differences (rather than in parallel), so the same file will
+be overwritten each time for the different Equilibria.
 
 ::
 
@@ -80,8 +81,8 @@ for the different Equilibria.
             eq=eq,
             fun=beta_from_file,
             dim_f=3,
+            fun_kwargs={"path": "path/to/file.nc"},
             vectorized=False,
-            path="path/to/file.nc",
         )
     )
 
@@ -108,7 +109,7 @@ This section walks through the implementation of wrapping the ideal MHD linear s
 code TERPSICHORE, which is written in FORTRAN. It summarizes how the external function
 was written to call TERPSICHORE from DESC, and can be used as a template for wrapping
 other codes. The code shown here is abbreviated and slightly modified for brevity, but
-the full code can be found in ``desc/experimental/_terpsichore.py``.
+the full code can be found in ``desc/external/_terpsichore.py``.
 
 The external function in this case is named ``terpsichore``, and takes the following
 arguments:
@@ -119,7 +120,8 @@ arguments:
 * ``exec``, the file name of the TERPSICHORE executable.
 
 The ``TERPSICHORE`` objective takes other arguments that have been omitted for
-simplicity. The outline of this function is:
+simplicity. Note that ``eq`` must be the first and only positional argument, and all
+other arguments must be keyword arguments. The outline of this function is:
 
 1. Create a temporary directory where I/O files will be written.
 2. Write the equilibria data to files in the format that TERPSICHORE expects from a VMEC
@@ -144,7 +146,7 @@ issues with multiprocessing.
     # This decorator will run this function on a CPU, even if other functions are being
     # run on a GPU.
     @execute_on_cpu
-    def terpsichore(eq, processes=1, path="", exec=""):
+    def terpsichore(eq, *, processes=1, path, exec):
         """TERPSICHORE driver function."""
         # create temporary directory to store I/O files
         tmp_path = os.path.join(path, "tmp-TERPS")
@@ -245,15 +247,13 @@ argument. (Parts of the full class definition have been omitted here for simplic
     class TERPSICHORE(ExternalObjective):
         """Computes ideal MHD linear stability from calls to the code TERPSICHORE."""
 
-        def __init__(self, eq, processes=1, path="", exec=""):
+        def __init__(self, eq, *, processes=1, path, exec):
             super().__init__(
                 eq=eq,
                 fun=terpsichore,
                 dim_f=1,
+                fun_kwargs={"processes": processes, "path": path, "exec": exec},
                 vectorized=True,
-                processes=processes,
-                path=path,
-                exec=exec,
             )
 
 Multiprocessing
@@ -281,7 +281,7 @@ threads that are available.
         set_device("gpu")
 
         from desc.examples import get
-        from desc.experimental import TERPSICHORE
+        from desc.external import TERPSICHORE
         from desc.objectives import (
             ForceBalance,
             FixBoundaryR,

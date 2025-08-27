@@ -671,9 +671,10 @@ class TERPSICHORE(ExternalObjective):
         File name of the TERPSICHORE executable. Must be located in the directory
         specified by ``path``.
     mode_family : int, optional
-        The mode family of the instabilities to consider. Possible mode families are in
-        the range ``[0, eq.NFP // 2]``. If ``mode_family < 0``, all mode families are
-        considered. Default = -1.
+        The mode family of the instabilities to consider. The toroidal modes included
+        in a mode family are n_i = i * eq.NFP ± k, where i = ..., -1, 0, +1, ... and
+        k ∈ [0, mode_family]. Possible mode families are in the range [0, eq.NFP // 2].
+        If mode_family < 0 then all mode families are considered. Default = -1.
     surfs : int, optional
         Number of surfaces to include in the equilibrium input. More surfaces provides
         more accuracy at the cost of longer compute times. Default = 101.
@@ -682,19 +683,19 @@ class TERPSICHORE(ExternalObjective):
         equilibrium input. Defaults to ``eq.M + 4`` and ``eq.N + 2``.
     M_booz_max : int, optional
         Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        m ∈ [0,M_booz_max]. Defaults to ``2 * eq.M``.
+        m ∈ [0, M_booz_max]. Defaults to ``2 * eq.M``.
     N_booz_max : int, optional
         Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        n ∈ [-N_booz_max,N_booz_max]. Defaults to ``2 * eq.N``.
+        n ∈ [-N_booz_max, N_booz_max]. Defaults to ``2 * eq.N``.
     M_max : int, optional
         Maximum poloidal mode number of stability modes to consider. Will include modes
-        with m ∈ [0,M_max] (if ``mode_family < 0``). Default = 8.
+        with m ∈ [0, M_max] (if ``mode_family < 0``). Default = 8.
     N_min : int, optional
         Minimum toroidal mode number of stability modes to consider. Will include modes
-        with n ∈ [N_min,N_max] (if ``mode_family < 0``). Default = -4.
+        with n ∈ [N_min, N_max] (if ``mode_family < 0``). Default = -4.
     N_max : int, optional
         Maximum toroidal mode number of stability modes to consider. Will include modes
-        with n ∈ [N_min,N_max] (if ``mode_family < 0``). Default = 4.
+        with n ∈ [N_min, N_max] (if ``mode_family < 0``). Default = 4.
     lssl : int, optional
         Minimum number of possible permutations of Boozer mode combinations
         (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,

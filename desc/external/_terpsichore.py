@@ -48,7 +48,91 @@ def terpsichore(
     fit_transform=None,
     theta0_outboard=True,
 ):
-    """TERPSICHORE driver function."""
+    """TERPSICHORE driver function.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    processes : int, optional
+        Maximum number of CPU threads to use for multiprocessing. Default = 1.
+    path : str
+        Path to the directory where temporary files will be stored.
+    exec : str
+        File name of the TERPSICHORE executable. Must be located in the directory
+        specified by ``path``.
+    mode_family : int, optional
+        The mode family of the instabilities to consider. The toroidal modes included
+        in a mode family are n_i = i * eq.NFP ± k, where i = ..., -1, 0, +1, ... and
+        k ∈ [0, mode_family]. Possible mode families are in the range [0, eq.NFP // 2].
+        If mode_family < 0 then all mode families are considered. Default = -1.
+    surfs : int, optional
+        Number of surfaces to include in the equilibrium input. More surfaces provides
+        more accuracy at the cost of longer compute times. Default = 101.
+    M_nyq, N_nyq: int
+        The max poloidal and toroidal mode numbers to use in the Nyquist spectrum of the
+        equilibrium input. Defaults to ``eq.M + 4`` and ``eq.N + 2``.
+    M_booz_max, N_booz_max : int, optional
+        Maximum poloidal and toroidal mode numbers of Boozer spectrum. Will include
+        modes with m ∈ [0, M_booz_max] and n ∈ [-N_booz_max, N_booz_max].
+        Defaults to ``2 * eq.M`` and ``2 * eq.N``.
+    M_max : int, optional
+        Maximum poloidal mode number of stability modes to consider. Will include modes
+        with m ∈ [0, M_max] (if ``mode_family < 0``). Default = 8.
+    N_min : int, optional
+        Minimum toroidal mode number of stability modes to consider. Will include modes
+        with n ∈ [N_min, N_max] (if ``mode_family < 0``). Default = -4.
+    N_max : int, optional
+        Maximum toroidal mode number of stability modes to consider. Will include modes
+        with n ∈ [N_min, N_max] (if ``mode_family < 0``). Default = 4.
+    lssl : int, optional
+        Minimum number of possible permutations of Boozer mode combinations
+        (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = ``20 * M_booz_max * N_booz_max``.
+    lssd : int, optional
+        Minimum number of possible permutations of stability mode combinations
+        (determined by ``M_max`` and ``N_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = ``20 * M_max * N_max``.
+    awall : float, optional
+        Ratio of the radius of the conformal conducting wall to the plasma minor radius.
+        The conducting wall is obtained by scaling the m ≠ 0 Fourier components of the
+        plasma boundary by ``awall``. A shorter wall offset will help stabilize the
+        plasma. If TERPSICHORE fails to run, try decreasing this parameter. Default = 2.
+    deltaJp : float
+        Resonance detuning parameter to resolve parallel current density singularities.
+        A larger value can artificially improve the stability. Default = 1e-4.
+    modelk : int, optional
+        0 = Noninteracting anisotropic fast particle stability model with reduced
+        kintetic energy. 1 = Kruskal-Oberman anisotropic energy principle model with
+        reduced kinetic energy. 2 = Noninteracting anisotropic fast particle stability
+        model with physical kinetic energy. 3 = Kruskal-Oberman anisotropic energy
+        principle model with physical kinetic energy. Default = 0.
+    al0 : float, optional
+        Initial guess of the eigenvalue. Use a sufficiently negative value to find the
+        most unstable growth rate. If TERPSICHORE fails to run, the objective will
+        return a growth rate of ``abs(al0)``. Default = -0.5.
+    sleep_time : float, optional
+        Time in seconds to wait between checks to determine if TERPSICHORE has finished
+        executing. Default = 1.
+    stop_time : float, optional
+        Time in seconds to wait for TERPSICHORE to execute before terminating its run.
+        Default = 60.
+    data_transforms, fit_transform : dict, Transform
+        Transform objects used for writing the wout files.
+    theta0_outboard : bool
+        Should be True if theta=0 is defined at the outboard midplane and False
+        otherwise. TERPSICHORE assumes theta=0 is on the outboard midplane, and so the
+        equilibria will be flipped correspondingly if this is not already the case.
+
+    Returns
+    -------
+    result : ndarray
+        The TERPSICHORE linear growth rate of the fastest growing instability,
+        normalized by the Alfven frequency. A negative growth rate denotes stability and
+        a positive growth rate denotes instability. If TERPSICHORE fails to run, a
+        result of ``abs(al0)`` is returned.
+
+    """
     # TERPSICHORE assumes theta=0 is on the outboard midplane
     if not theta0_outboard:
         eq = flip_theta(eq)
@@ -645,8 +729,9 @@ def _read_terps_output(path):
 class TERPSICHORE(ExternalObjective):
     """Computes ideal MHD linear stability from calls to the code TERPSICHORE.
 
-    Returns the linear growth rate of the fastest growing instability, where a negative
-    growth rate denotes stability and a positive growth rate denotes instability.
+    Returns the linear growth rate of the fastest growing instability, normalized by the
+    Alfven frequency. A negative growth rate denotes stability and a positive growth
+    rate denotes instability.
 
     TERPSICHORE reference: https://doi.org/10.1007/978-1-4613-0659-7_8
 
@@ -681,12 +766,10 @@ class TERPSICHORE(ExternalObjective):
     M_nyq, N_nyq: int
         The max poloidal and toroidal mode numbers to use in the Nyquist spectrum of the
         equilibrium input. Defaults to ``eq.M + 4`` and ``eq.N + 2``.
-    M_booz_max : int, optional
-        Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        m ∈ [0, M_booz_max]. Defaults to ``2 * eq.M``.
-    N_booz_max : int, optional
-        Maximum poloidal mode number of Boozer spectrum. Will include modes with
-        n ∈ [-N_booz_max, N_booz_max]. Defaults to ``2 * eq.N``.
+    M_booz_max, N_booz_max : int, optional
+        Maximum poloidal and toroidal mode numbers of Boozer spectrum. Will include
+        modes with m ∈ [0, M_booz_max] and n ∈ [-N_booz_max, N_booz_max].
+        Defaults to ``2 * eq.M`` and ``2 * eq.N``.
     M_max : int, optional
         Maximum poloidal mode number of stability modes to consider. Will include modes
         with m ∈ [0, M_max] (if ``mode_family < 0``). Default = 8.

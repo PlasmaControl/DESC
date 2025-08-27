@@ -318,7 +318,7 @@ def save_fieldlines_format(
             # Manual chunking using a for loop to prevent memory problems
             B_plasma = np.zeros_like(plasma_coords, dtype=B.dtype)
             for index in np.arange(0, rtz.shape[0], step=chunk_size):
-                end_index = np.maximum(index + chunk_size, rtz.shape[0])
+                end_index = np.minimum(index + chunk_size, rtz.shape[0])
                 rtz_chunk = Grid(rtz[index:end_index, :], NFP=eq.NFP)
                 B_chunk = eq.compute("B", grid=rtz_chunk, basis="rpz")["B"]
                 B_plasma[index:end_index, :] = B_chunk

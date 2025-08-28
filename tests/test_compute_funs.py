@@ -1585,7 +1585,9 @@ def test_PEST_derivative_math(eq):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index
 
-    eq_PEST = eq.to_sfl(copy=True, tol=1e-7)
+    tol = 1e-7
+
+    eq_PEST = eq.to_sfl(copy=True, tol=tol)
 
     keys_DESC = [
         "e^rho_t",
@@ -1678,12 +1680,23 @@ def test_PEST_derivative_math(eq):
     keys_DESC = list(keys_DESC)
     keys_PEST = list(keys_PEST)
 
-    grid = LinearGrid(
+    grid_PEST = LinearGrid(
         rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
     )
-    data = eq_PEST.compute(keys_DESC + keys_PEST, grid)
+    data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
     np.testing.assert_allclose(data["theta_PEST_t"], 1)
-    data_to_verify = eq.compute(keys_PEST, grid)
+
+    data_to_verify = eq.compute(
+        keys_PEST,
+        Grid(
+            eq.map_coordinates(
+                grid_PEST.nodes,
+                inbasis=("rho", "theta_PEST", "zeta"),
+                outbasis=("rho", "theta", "zeta"),
+                tol=tol,
+            )
+        ),
+    )
 
     for key_DESC, key_PEST in zip(keys_DESC, keys_PEST):
         # This must pass with zero error tolerance.

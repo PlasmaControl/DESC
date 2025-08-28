@@ -139,12 +139,26 @@ class TestBasis:
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
+        # Chebyshev values
         correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
         values = chebyshev(r[:, np.newaxis], l, dr=0)
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+        # Chebyshev derivatives
+        correct_derivs = np.array([np.zeros_like(r), np.full_like(r, 2), 16 * r - 8]).T
+        derivs = chebyshev(r[:, np.newaxis], l, dr=1)
+        np.testing.assert_allclose(derivs, correct_derivs, atol=1e-8)
+
+        # Second-order Chebyshev derivatives
+        correct_derivs_2 = np.array(
+            [np.zeros_like(r), np.zeros_like(r), np.full_like(r, 16)]
+        ).T
+        derivs_2 = chebyshev(r[:, np.newaxis], l, dr=2)
+        np.testing.assert_allclose(derivs_2, correct_derivs_2, atol=1e-8)
+
+        # Third-order Chebyshev derivatives
         with pytest.raises(NotImplementedError):
-            chebyshev(r[:, np.newaxis], l, dr=1)
+            chebyshev(r[:, np.newaxis], l, dr=3)
 
     @pytest.mark.unit
     def test_zernike_radial(self):  # noqa: C901

@@ -18,6 +18,7 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
+from desc.magnetic_fields import PlasmaField
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 from desc.utils import xyz2rpz, xyz2rpz_vec
@@ -490,9 +491,9 @@ def test_eq_compute_magnetic_field():
 
     # Create a very high aspect ratio tokamak
     eq = Equilibrium(
-        L=2,
-        M=2,
-        N=2,
+        L=3,
+        M=3,
+        N=0,
         surface=FourierRZToroidalSurface.from_shape_parameters(
             major_radius=R,
             aspect_ratio=2000,
@@ -544,3 +545,47 @@ def test_eq_compute_magnetic_field():
             rtol=1e-4,
             atol=1e-10,
         )
+
+    # Test eq compute magnetic vector potential
+    grid_xyz = np.atleast_2d([0, 0, z])
+    grid_rpz = xyz2rpz(grid_xyz)
+
+    A_true = np.atleast_2d([0, 0, 0])
+    A_xyz = eq.compute_magnetic_vector_potential(grid_xyz, basis="xyz")
+    A_rpz = eq.compute_magnetic_vector_potential(grid_rpz, basis="rpz")
+    np.testing.assert_allclose(
+        A_true,
+        A_rpz,
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        A_true,
+        A_xyz,
+        atol=1e-5,
+    )
+
+    # Test PlasmaField (note that R can never be 0 because of the cylindrical curl)
+    field = PlasmaField(
+        eq, A_res=3, R_bounds=[1e-8, 3e-8], Z_bounds=[z - 0.05, z + 0.05]
+    )
+
+    B_xyz = field.compute_magnetic_field([2e-8, 0, z], basis="xyz")
+    B_rpz = field.compute_magnetic_field([2e-8, 0, z], basis="rpz")
+    np.testing.assert_allclose(
+        B_true_rpz_phi,
+        B_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        B_true_rpz_xy,
+        B_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        B_true_xyz,
+        B_xyz,
+        rtol=1e-4,
+        atol=1e-10,
+    )

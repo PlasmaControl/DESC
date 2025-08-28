@@ -1579,6 +1579,58 @@ def test_contravariant_basis_vectors_PEST():
 
 
 @pytest.mark.unit
+def test_PEST_equil_and_metric():
+    """
+    A test to check the formulae implemented for various quantities in PEST coords.
+
+    By using to_sfl, we ensure theta_PEST = theta and since zeta = phi, the
+    derivatives, components, metric elements should be identical.
+    """
+    from desc.equilibrium.coords import to_sfl
+
+    eq0 = get("W7-X")
+    eq1 = get("NCSX")
+    eq_list = [eq0, eq1]
+
+    for eq in eq_list:
+        eq = to_sfl(eq)
+
+        # Add more quantities to check
+        keys_DESC = [
+            "J^theta",
+            "J^theta_t",
+            "J^theta_z",
+            "sqrt(g)_t",
+            "sqrt(g)_z",
+            "g_tt",
+            "g_rr",
+            "g_zz",
+            "g_tt_r",
+            "g^rr_t",
+            "g^rr_z",
+        ]
+        keys_PEST = [
+            "J^theta_PEST",
+            "(J^theta_PEST_v)|PEST",
+            "(J^theta_PEST_p)|PEST",
+            "(sqrt(g)_PEST_v)|PEST",
+            "(sqrt(g)_PEST_p)|PEST",
+            "g_vv|PEST",
+            "g_rr|PEST",
+            "g_pp|PEST",
+            "(g_vv_r)|PEST",
+            "(g^rr_v)|PEST",
+            "(g^rr_p)|PEST",
+        ]
+
+        data_DESC = eq.compute(keys_DESC)
+        data_PEST = eq.compute(keys_PEST)
+
+        for key_DESC, key_PEST in zip(keys_DESC, keys_PEST):
+            np.testing.assert_allclose(data_DESC[key_DESC], data_PEST[key_PEST])
+
+
+@pytest.mark.unit
 def test_contravariant_basis_vectors():
     """Test calculation of contravariant basis vectors by comparing to finite diff."""
     eq = get("HELIOTRON")

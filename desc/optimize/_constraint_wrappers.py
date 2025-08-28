@@ -753,12 +753,11 @@ class ProximalProjection(ObjectiveFunction):
         self._dimc_per_thing[self._eq_idx] = np.sum(
             [self._eq.dimensions[arg] for arg in self._args]
         )
-        self._dim_x_splits = np.cumsum(self._dimx_per_thing)
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
         self._feasible_tangents = jnp.eye(self._objective.dim_x)
         self._feasible_tangents = jnp.split(
-            self._feasible_tangents, self._dim_x_splits, axis=-1
+            self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
         # dg/dxeq_reduced = dg/dx_eq_unscaled @ dx_eq_unscaled/dxeq_reduced # noqa: E800
         # x_eq_unscaled = Deq(xp_eq + Zeq @ xeq_reduced)                    # noqa: E800
@@ -1224,12 +1223,12 @@ class ProximalProjection(ObjectiveFunction):
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             if not self._objective._is_mpi:
-                vgs = jnp.split(tangents, self._dim_x_splits, axis=-1)
-                xgs = jnp.split(xg, self._dim_x_splits)
+                vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+                xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
                 return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
             else:
                 return _proximal_jvp_blocked_parallel(
-                    self._objective, tangents, xg, self._dim_x_splits, op
+                    self._objective, tangents, xg, np.cumsum(self._dimx_per_thing), op
                 )
 
     def _get_tangent(self, v, xf, constants, op):

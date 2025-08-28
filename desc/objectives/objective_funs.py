@@ -265,7 +265,6 @@ class ObjectiveFunction(IOAble):
         "_use_jit",
         "_is_mpi",
         "_static_attrs",
-        "_dim_x_splits",
     ]
 
     def __init__(
@@ -465,10 +464,10 @@ class ObjectiveFunction(IOAble):
                 params = [params[i] for i in obj_idx_rank]
                 out = compute_per_process(params, objs, op=message[0])
             elif "jvp" in message[0]:
-                x = jnp.split(x, self._dim_x_splits)
+                x = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
                 vs = alloc_array(message[2])
                 safe_mpi_Bcast(vs, self.comm, root=0)
-                vs = jnp.split(vs, self._dim_x_splits, axis=-1)
+                vs = jnp.split(vs, np.cumsum([t.dim_x for t in self.things]), axis=-1)
 
                 # put xi and vi on the same device as the objective
                 xs = jax.device_put(x, self.objectives[obj_idx_rank[0]]._device)
@@ -577,7 +576,6 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_things()
-        self._dim_x_splits = np.cumsum([t.dim_x for t in self.things])
 
         # setting derivative mode and chunking.
         sub_obj_jac_chunk_sizes_are_ints = [
@@ -935,7 +933,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs = jnp.split(x, self._dim_x_splits)
+        xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
@@ -1026,8 +1024,8 @@ class ObjectiveFunction(IOAble):
             return self._jvp_batched(v, x, constants, op)
 
         if not self._is_mpi:
-            xs = jnp.split(x, self._dim_x_splits)
-            vs = jnp.split(v[0], self._dim_x_splits, axis=-1)
+            xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
+            vs = jnp.split(v[0], np.cumsum([t.dim_x for t in self.things]), axis=-1)
             J = []
             assert len(self.objectives) == len(self.constants)
             # basic idea is we compute the jacobian of each objective wrt each thing
@@ -1051,8 +1049,8 @@ class ObjectiveFunction(IOAble):
                 safe_mpi_Bcast(x, self.comm, root=0)
                 safe_mpi_Bcast(v[0], self.comm, root=0)
 
-                xs = jnp.split(x, self._dim_x_splits)
-                vs = jnp.split(v[0], self._dim_x_splits, axis=-1)
+                xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
+                vs = jnp.split(v[0], np.cumsum([t.dim_x for t in self.things]), axis=-1)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
                 J_rank = jvp_per_process(

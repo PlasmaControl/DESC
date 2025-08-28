@@ -531,7 +531,7 @@ class TestTransform:
     def test_diff_rpz(self):
         """Test fitting and differentiation with RPZ method."""
         # Build grid, basis, and transform
-        grid = CylindricalGrid(L=10, N=5, M=5, NFP=2, r_endpoint=True, z_endpoint=True)
+        grid = CylindricalGrid(L=10, N=5, M=5, NFP=2)
         r = grid.nodes[:, 0]
         phi = grid.nodes[:, 1]
         z = grid.nodes[:, 2]

@@ -561,7 +561,7 @@ class TestGrid:
         L = M = N = 4
         NFP = 2
 
-        grid = CylindricalGrid(L, M, N, z_endpoint=True, r_endpoint=True, NFP=NFP)
+        grid = CylindricalGrid(L, M, N, NFP=NFP)
         np.testing.assert_allclose((grid.weights * grid.nodes[:, 0]).sum(), np.pi)
 
     @pytest.mark.unit

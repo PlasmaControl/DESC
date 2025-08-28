@@ -483,7 +483,7 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
 
 @pytest.mark.unit
 def test_eq_compute_magnetic_field():
-    """Test Biot-Savart and virtual casing methods of computing magnetic field."""
+    """Test plasma current magnetic field and vector potential."""
     # Input parameters
     I = 1e7  # Toroidal plasma current
     R = 2  # Major radius

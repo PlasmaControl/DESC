@@ -117,6 +117,29 @@ On Your Local Machine
 
             pip install -r devtools/dev-requirements.txt
 
+    .. tab-item:: CPU+GPU (partial support)
+
+        If you have not had success with the CPU+GPU installation instructions, then please `make an issue on Github <https://github.com/PlasmaControl/DESC/issues>`.
+        If the developers cannot resolve your issue, then you may try the method below which provides GPU support for a subset of features in DESC.
+
+        .. code-block:: sh
+
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
+            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda activate desc-env
+            sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+            pip install --editable .
+
+        Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
+
+        You may optionally install developer requirements if you want to run tests.
+
+        .. code-block:: sh
+
+            pip install -r devtools/dev-requirements.txt
+
 
 On Most Linux Computing Clusters
 ********************************

@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, dot, errorif
+from desc.utils import Timer, dot, errorif, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -465,6 +465,13 @@ class MagneticDiagnostics(_Objective):
         self._field_fixed = field_fixed
         if not field_fixed:
             things.append(field)
+        warnif(
+            target is not None or bounds is not None,
+            UserWarning,
+            "MagneticDiagnostics class"
+            "does not require target or bounds, these will be"
+            "overridden by the sub-objectives' targets/bounds",
+        )
         super().__init__(
             things=things,
             target=target,
@@ -540,7 +547,16 @@ class MagneticDiagnostics(_Objective):
         self._dim_f = np.sum([diag._dim_f for diag in self._magnetic_diagnostics])
 
         # the targets are the sub-objective targets
+        # TODO: what if some sub objectives have target, and others have bounds???
+        # could make them ALL bounds and have some bounds top/bottom be
+        # different, to account for this? would need to change our bounds check to
+        # be bounds[0] <= bounds[1], which I THINK is fine but Rory prob wont like it
         self._target = np.hstack([diag._target for diag in self._magnetic_diagnostics])
+
+        # TODO: how to deal with self._weight? It might be scalar for some obj
+        # and an array for others. past build is it expanded? idt so
+        # could just always expand out each one, like mult each
+        #  by np.ones_like(diag._diag._dim_f)
 
         # set normalizations to each sub objective normalization
         if self._normalize:

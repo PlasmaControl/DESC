@@ -65,8 +65,6 @@ class PlasmaField(_MagneticField):
             M=source_grid.N,
             N=A_res,
             NFP=eq.NFP,
-            r_endpoint=True,
-            z_endpoint=True,
         )
         basis = DoubleChebyshevFourierBasis(A_grid.L, A_grid.M, A_grid.N, NFP=eq.NFP)
         in_transform = Transform(

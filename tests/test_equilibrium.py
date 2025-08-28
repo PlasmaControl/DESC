@@ -5,6 +5,7 @@ import warnings
 
 import numpy as np
 import pytest
+import scipy
 from qic import Qic
 from scipy.constants import mu_0
 
@@ -15,13 +16,13 @@ from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.magnetic_fields import PlasmaField
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
-from desc.utils import xyz2rpz, xyz2rpz_vec
+from desc.utils import dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 from .utils import area_difference, compute_coords
 
@@ -547,22 +548,51 @@ def test_eq_compute_magnetic_field():
         )
 
     # Test eq compute magnetic vector potential
-    grid_xyz = np.atleast_2d([0, 0, z])
-    grid_rpz = xyz2rpz(grid_xyz)
+    # analytic eqn for "A_phi" (phi is in dl direction for loop)
+    def _A_analytic(r):
+        # elliptic integral arguments must be k^2, not k,
+        # error in original paper and apparently in Jackson EM book too.
+        theta = np.pi / 2
+        arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
+        term_1_num = I * R * scipy.constants.mu_0 / np.pi
+        term_1_den = np.sqrt(arg)
+        k_sqd = 4 * r * R * np.sin(theta) / arg
+        term_2_num = (2 - k_sqd) * scipy.special.ellipk(
+            k_sqd
+        ) - 2 * scipy.special.ellipe(k_sqd)
+        term_2_den = k_sqd
+        return term_1_num * term_2_num / term_1_den / term_2_den
 
-    A_true = np.atleast_2d([0, 0, 0])
-    A_xyz = eq.compute_magnetic_vector_potential(grid_xyz, basis="xyz")
-    A_rpz = eq.compute_magnetic_vector_potential(grid_rpz, basis="rpz")
-    np.testing.assert_allclose(
-        A_true,
-        A_rpz,
-        atol=1e-5,
-    )
-    np.testing.assert_allclose(
-        A_true,
-        A_xyz,
-        atol=1e-5,
-    )
+    N = 100
+    curve_grid = LinearGrid(zeta=N)
+    rs = np.array([0.1, 0.3, 3, 4])
+
+    for r in rs:
+        # A_phi is constant around the loop (no phi dependence)
+        A_true_phi = _A_analytic(r) * np.ones(N)
+        correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
+
+        # Flux loop to integrate A over
+        curve = FourierXYZCurve(X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0])
+
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
+        curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+        grid_rpz = curve_data_rpz["x"]
+        grid_xyz = rpz2xyz(grid_rpz)
+
+        A_xyz = eq.compute_magnetic_vector_potential(grid_xyz, basis="xyz")
+        A_rpz = eq.compute_magnetic_vector_potential(grid_rpz, basis="rpz")
+
+        flux_rpz = np.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_xyz = np.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, atol=1e-6, rtol=1e-5)
+        np.testing.assert_allclose(correct_flux, flux_rpz, atol=1e-6, rtol=1e-5)
 
     # Test PlasmaField (note that R can never be 0 because of the cylindrical curl)
     field = PlasmaField(

@@ -119,8 +119,8 @@ On Your Local Machine
 
     .. tab-item:: CPU+GPU (partial support)
 
-        If you have not had success with the CPU+GPU installation instructions, then please `make an issue on Github <https://github.com/PlasmaControl/DESC/issues>`.
-        If the developers cannot resolve your issue, then you may try the method below which provides GPU support for a subset of features in DESC.
+        If you have not had success with the CPU+GPU installation instructions, then please `make an issue on Github <https://github.com/PlasmaControl/DESC/issues>`__.
+        If your issue remains unresolved, you may try to install GPU support for a only subset of features in DESC.
 
         .. code-block:: sh
 

@@ -61,6 +61,7 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     GenericObjective,
     LinearObjectiveFromUser,
+    MagneticDiagnostics,
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
@@ -2477,37 +2478,40 @@ def test_PointBMeasurement_fixed_bdry():
 
     # solve with finite pressure, use that as target B
     p0 = 2e4
-    eq.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
-    eq.solve(verbose=3)
+    eq_target = eq.copy()
+    eq_target.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
+    eq_target.solve(verbose=3)
 
     meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
     dummy_coil = ToroidalMagneticField(0, 0)
-    obj = PointBMeasurement(
-        eq,
+    diag = PointBMeasurement(
+        eq_target,
         dummy_coil,
         measurement_coords=meas_loc_rpz,
         target=0,
         basis="rpz",
         field_fixed=True,
     )
+
+    obj = MagneticDiagnostics(eq_target, dummy_coil, diag, field_fixed=True)
     obj.build()
-    target_fin_beta = obj.compute(*obj.xs(eq))
+    target_fin_beta = obj.compute(*obj.xs(eq_target))
+
     # scale eq pressure back down to a lower value
-    eq.pressure = ScaledProfile(0.5, eq.pressure)
-    eq.solve()
+    eq.pressure = ScaledProfile(0.0, eq_target.pressure)
 
     # optimize for matching the Bplasma external measurement,
     # only allowing pressure scale to vary
-    obj = ObjectiveFunction(
-        PointBMeasurement(
-            eq,
-            dummy_coil,
-            measurement_coords=meas_loc_rpz,
-            target=target_fin_beta,
-            basis="rpz",
-            field_fixed=True,
-        )
+    obj = PointBMeasurement(
+        eq,
+        dummy_coil,
+        measurement_coords=meas_loc_rpz,
+        target=target_fin_beta,
+        basis="rpz",
+        field_fixed=True,
     )
+
+    obj = ObjectiveFunction(MagneticDiagnostics(eq, dummy_coil, obj, field_fixed=True))
 
     cons = (
         ForceBalance(eq),

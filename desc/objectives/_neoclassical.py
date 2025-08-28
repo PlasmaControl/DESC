@@ -4,6 +4,7 @@ import warnings
 
 import numpy as np
 from orthax.legendre import leggauss
+from termcolor import colored
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
@@ -175,6 +176,19 @@ class EffectiveRipple(_Objective):
         use_bounce1d=False,
         **kwargs,
     ):
+        try:
+            import jax_finufft  # noqa: F401
+        except ImportError:
+            warnings.warn(
+                colored(
+                    "\njax-finufft is not installed.\n"
+                    "Setting parameter nufft_eps to zero.\n"
+                    "Performance will deteriorate significantly.\n"
+                    "yellow",
+                )
+            )
+            nufft_eps = 0.0
+
         if target is None and bounds is None:
             target = 0.0
 

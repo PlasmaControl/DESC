@@ -23,7 +23,6 @@ except ImportError:
             "You must set the parameter nufft_eps to zero, e.g. ``nufft_eps=0``\n",
             "when computing effective ripple, Gamma_c, and any other computations\n"
             "that involve bounce integrals.\n"
-            "This will signficantly increase memory consumption.\n"
             "yellow",
         )
     )

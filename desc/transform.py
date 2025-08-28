@@ -86,9 +86,10 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         warnif(
-            self.grid.coordinates != "rtz",
-            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
+            self.grid.coordinates not in ["rtz", "rpz"],
+            msg=f"Expected coordinates rtz or rpz, got {self.grid.coordinates}.",
         )
+
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.

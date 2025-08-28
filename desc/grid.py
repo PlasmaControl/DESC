@@ -1978,6 +1978,13 @@ class CylindricalGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi / self._NFP, np.inf)
 
+        if (L is None) and (R is None):
+            L = 0
+        if (M is None) and (phi is None):
+            M = 0
+        if (N is None) and (Z is None):
+            N = 0
+
         # R (Chebyshev extrema nodes)
         if None not in [L, M, N]:
             if L * M * N > 0:
@@ -2421,6 +2428,8 @@ def _midpoint_spacing(x, jnp=jnp):
 
 
 def lobatto(res):
+    if res == 0:
+        return np.array([1])
     x = (np.cos(np.arange(res, -1, -1) * np.pi / res) + 1) / 2
     x = np.sort(x, axis=None)
     return x

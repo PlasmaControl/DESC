@@ -1411,9 +1411,7 @@ class Equilibrium(Optimizable, _MagneticField):
         coords = jnp.atleast_2d(coords).astype(jnp.float64)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-            )
+            source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
 
         data = self.compute(
             ["J", "phi", "sqrt(g)", "x"],

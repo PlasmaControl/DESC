@@ -11,15 +11,16 @@ from scipy.constants import mu_0
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.coils import FourierRZCoil
 from desc.compute.utils import get_transforms
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import InputReader, load
-from desc.magnetic_fields import PlasmaField
+from desc.magnetic_fields import PlasmaField, SumMagneticField
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 from desc.utils import dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
@@ -547,6 +548,28 @@ def test_eq_compute_magnetic_field():
             atol=1e-10,
         )
 
+    # Test SumMagneticField correctly passes method through
+    source_grid = (QuadratureGrid(64, 64, 64, eq.NFP), None)
+    coil = FourierRZCoil(current=I, R_n=[R], Z_n=[0])
+    field = SumMagneticField(eq, coil)
+    with pytest.raises(AssertionError, match="source_grid must be on a flux surface"):
+        field.compute_magnetic_field(
+            grid_rpz,
+            method="virtual casing",
+            source_grid=source_grid,
+        )
+    B_double_rpz = field.compute_magnetic_field(
+        grid_rpz,
+        method="biot-savart",
+        source_grid=source_grid,
+    )
+    np.testing.assert_allclose(
+        2 * B_true_rpz_phi,
+        B_double_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+
     # Test eq compute magnetic vector potential
     # analytic eqn for "A_phi" (phi is in dl direction for loop)
     def _A_analytic(r):
@@ -618,4 +641,19 @@ def test_eq_compute_magnetic_field():
         B_xyz,
         rtol=1e-4,
         atol=1e-10,
+    )
+
+    B_rpz = field.compute_magnetic_grid(R=[1e-8, 2e-8, 4], phi=0, Z=z)
+    np.testing.assert_allclose(
+        B_true_rpz_xy,
+        B_rpz[1].reshape(-1, 3),
+        rtol=1e-4,
+        atol=1e-10,
+    )
+
+    np.testing.assert_allclose(
+        np.zeros((1, 3)),  # Vector potential is 0 on the Z-axis
+        field.compute_magnetic_vector_potential([2e-8, 0, z], basis="xyz"),
+        rtol=1e-4,
+        atol=1e-7,
     )

@@ -492,6 +492,72 @@ class TestTransform:
         assert t.method == "direct1"
 
     @pytest.mark.unit
+    def test_rpz_warnings(self):
+        """Test warnings when trying to use RPZ methods if they won't work."""
+        # Grid has correct spacing for RPZ and partial RPZ methods
+        g = LinearGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=2)
+        for method in ["rpz", "partialrpz"]:
+            with pytest.warns(UserWarning, match="compatible basis and grid"):
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+
+        # Basis is correct
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = FourierZernikeBasis(2, 2, 2, NFP=2)
+        for method in ["rpz", "partialrpz", "directrpz"]:
+            with pytest.warns(
+                UserWarning, match="compatible basis and grid|basis of type"
+            ):
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+
+        # Grid and basis have same L and N
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(3, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="same L and N"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # Grid and basis have same NFP
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=3)
+        for method in ["rpz", "partialrpz"]:
+            with pytest.warns(UserWarning) as record:
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+            NFP_grid_basis_warning_exists = False
+            nodes_warning_exists = False
+            for r in record:
+                if "Unequal number of field periods" in str(r.message):
+                    NFP_grid_basis_warning_exists = True
+                if "same NFP" in str(r.message):
+                    nodes_warning_exists = True
+
+            assert NFP_grid_basis_warning_exists and nodes_warning_exists
+
+        # Cylindrical grid has correct node pattern
+        g = CylindricalGrid(R=[0.1, 0.2, 0.3], M=2, N=2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="custom node patterns"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # 0-resolution grids not allowed
+        g = CylindricalGrid(M=2, N=2, NFP=2)
+        b = DoubleChebyshevFourierBasis(0, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="0-resolution"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # Direct RPZ method requires a meshgrid
+        g = Grid([[1, 0, 1], [0, 1, 0], [3, 1, 0]])
+        b = DoubleChebyshevFourierBasis(g.L, g.M, g.N)
+        with pytest.warns(UserWarning, match="tensor product grid"):
+            t = Transform(g, b, method="directrpz")
+        assert t.method == "direct1"
+
+    @pytest.mark.unit
     def test_fit_direct1(self):
         """Test fitting with direct1 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")

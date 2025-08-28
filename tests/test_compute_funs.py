@@ -1665,8 +1665,8 @@ def test_PEST_derivative_math(eq):
         "(g^rr_v)|PEST",
         "(g^rv_p)|PEST",
         "(g^rv_v)|PEST",
-        "(g^rz_p)|PEST",  # TODO: fix name
-        "(g^rz_v)|PEST",  # TODO: fix name
+        "(g^rz_p)|PEST",
+        "(g^rz_v)|PEST",
         "(sqrt(g)_PEST_r)|PEST",
         "(sqrt(g)_PEST_v)|PEST",
         "(sqrt(g)_PEST_p)|PEST",

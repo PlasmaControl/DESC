@@ -4,7 +4,6 @@ from desc.backend import fori_loop, jax, jit, jnp, scan
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 #from desc.find_dips import biot_savart_general
 
-# from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.utils import cross, dot
 
@@ -32,8 +31,9 @@ def bn_res(
     stick_data,
     contour_grid,
     ss_data,
-    theta_coarse,
-    zeta_coarse,
+    #theta_coarse,
+    #zeta_coarse,
+    AAA,
 ):
 
     #import pdb
@@ -43,11 +43,9 @@ def bn_res(
     )
 
     #pdb.set_trace()
-    B_wire_cont = B_theta_contours(sdata1, sgrid, surface, y, coords, contour_data, contour_grid,
-                                   theta_coarse,
-                                   zeta_coarse,
-                                   )
-
+    B_wire_cont = B_theta_contours(surface, y, coords, contour_data, contour_grid,
+                                   AAA,
+                                  )
     
     #pdb.set_trace()
     B_sticks0 = B_sticks(
@@ -59,11 +57,8 @@ def bn_res(
         stick_data,
     )
 
-    
     #pdb.set_trace()
-    B_total = (B_sour0 +  B_wire_cont 
-               + B_sticks0 
-              )
+    B_total = (B_sour0 + B_wire_cont + B_sticks0)
 
     return B_total
 
@@ -79,24 +74,20 @@ def B_sour(
     y,
     N,
     d_0,
-    coords,  # eq,Bgrid,
+    coords,
     tdata,
     ss_data,
 ):
 
     return _compute_magnetic_field_from_Current(
         sgrid,
-        K_sour(sdata1,
-                sdata2,
-                sdata3,
-                sgrid,
-                surface,
-                y,
-                N,
-                d_0,
-                tdata,
-                ss_data,
-        ),
+        K_sour(sdata1, sdata2, sdata3,
+               sgrid, surface,
+               y,
+               N, d_0,
+               tdata,
+               ss_data,
+               ),
         surface,
         sdata1,
         coords,
@@ -107,15 +98,16 @@ def B_sour(
 def B_theta_contours(
     #p_M,
     #p_N,
-    sdata,
-    sgrid,
+    #sdata,
+    #sgrid,
     surface,
     y,
     coords,
     ss_data,
     ss_grid,
-    theta_coarse,
-    zeta_coarse
+    #theta_coarse,
+    #zeta_coarse,
+    AAA,
 ):
 
     #r_t = p_M * 2 + 1  # theta_coarse.shape[0]
@@ -131,16 +123,15 @@ def B_theta_contours(
     #                           p_N * 2 + 1,
     #                           )
 
-    sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 1) #+ jnp.where(ss_data["theta"] > jnp.pi, 1, 0)
+    #sign_vals = jnp.where(ss_data["theta"] < jnp.pi, -1, 1) #+ jnp.where(ss_data["theta"] > jnp.pi, 1, 0)
 
     # Generate the matrix of coefficients for the contours
-    A = compute_mask(ss_data, theta_coarse, zeta_coarse)
-    AA = A[:, None, :] * ss_data['e_theta'][:, :, None]
-    AAA = AA * ( dot(ss_data["e_theta"], ss_data["e_theta"] ) ** (-1 / 2) * sign_vals )[:, None, None]
-    # TODO: AAA matrix is constant during iterations so might be better to construic it in build and pass it to compute. Storing it in memory migh not be that expensive (?)
-
+    #A = compute_mask(ss_data, theta_coarse, zeta_coarse)
+    #AA = A[:, None, :] * ss_data['e_theta'][:, :, None]
+    #AAA = AA * ( dot(ss_data["e_theta"], ss_data["e_theta"] ) ** (-1 / 2) * sign_vals )[:, None, None]
+    
     # Add the contributions from all the wires extending out of the winding surface
-    K_cont = jnp.sum(y[None, None,:]*AAA,axis = 2)
+    K_cont = jnp.sum(y[None, None,:] * AAA,axis = 2)
     
     return _compute_magnetic_field_from_Current_Contour(
         ss_grid, K_cont, surface, ss_data, coords, #basis="rpz"

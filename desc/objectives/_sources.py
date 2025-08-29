@@ -10,7 +10,7 @@ from desc.utils import Timer, errorif, safenorm, setdefault
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 
-from .sources_dipoles_utils import interp_grid, alt_grid, iso_coords_interp
+from .sources_dipoles_utils import interp_grid, alt_grid, iso_coords_interp, compute_mask
 
 #####################
 # Sources and sinks #
@@ -373,6 +373,17 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             # has_axis=field_grid.axis.size,
         )
 
+        # Build the matrix for K from contours
+
+        sign_vals = jnp.where(contour_data["theta"] < jnp.pi, -1, 1) #+ jnp.where(ss_data["theta"] > jnp.pi, 1, 0)
+
+        # Generate the matrix of coefficients for the contours
+        A = compute_mask(contour_data, theta_sources, zeta_sources)
+        AA = A[:, None, :] * contour_data['e_theta'][:, :, None]
+        AAA = AA * ( jnp.sum(contour_data["e_theta"] * contour_data["e_theta"], axis = 1 ) ** (-1 / 2) * sign_vals )[:, None, None]
+        
+        ########################################
+        # Sticks
         stick_transforms = get_transforms(
             self._stick_keys,
             obj=self._winding_surface,
@@ -427,8 +438,9 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             'iso_data':self._iso_data,
             'source_data': ss_data,
             'coords':x,
-            'theta_coarse':theta_sources,
-            'zeta_coarse':zeta_sources,
+            #'theta_coarse':theta_sources,
+            #'zeta_coarse':zeta_sources,
+            'AAA':AAA,
         }
 
         if self._normalize:
@@ -510,10 +522,10 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants["contour_grid"],
             ss_data_arrays,
             #constants["source_data"],
-            constants['theta_coarse'],
-            constants['zeta_coarse'],
+            #constants['theta_coarse'],
+            #constants['zeta_coarse'],
+            constants['AAA'],
         )
-
         
         #pdb.set_trace()
         error = B_src - constants["B_target"]

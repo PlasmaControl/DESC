@@ -45,7 +45,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._neoclassical import EffectiveRipple
+from ._neoclassical import EffectiveRipple, TrappedResonance
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

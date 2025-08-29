@@ -14,6 +14,7 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "CylindricalGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]

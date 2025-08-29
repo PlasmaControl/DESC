@@ -618,9 +618,9 @@ def test_eq_compute_magnetic_field():
         np.testing.assert_allclose(correct_flux, flux_rpz, atol=1e-6, rtol=1e-5)
 
     # Test PlasmaField (note that R can never be 0 because of the cylindrical curl)
-    field = PlasmaField(
-        eq, A_res=3, R_bounds=[1e-8, 3e-8], Z_bounds=[z - 0.05, z + 0.05]
-    )
+    R_bounds = [1e-8, 3e-8]
+    Z_bounds = [z - 0.05, z + 0.05]
+    field = PlasmaField(eq, A_res=3, R_bounds=R_bounds, Z_bounds=Z_bounds)
 
     B_xyz = field.compute_magnetic_field([2e-8, 0, z], basis="xyz")
     B_rpz = field.compute_magnetic_field([2e-8, 0, z], basis="rpz")
@@ -657,3 +657,5 @@ def test_eq_compute_magnetic_field():
         rtol=1e-4,
         atol=1e-7,
     )
+    np.testing.assert_equal(R_bounds, field.R_bounds)
+    np.testing.assert_equal(Z_bounds, field.Z_bounds)

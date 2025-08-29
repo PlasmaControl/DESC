@@ -19,9 +19,9 @@ __all__ = [
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
+    "DoubleChebyshevFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
-    "ChebyshevDoubleFourierBasis",
 ]
 
 

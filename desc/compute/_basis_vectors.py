@@ -4089,7 +4089,7 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    # No mixed derivatives used.
+    # No mixed coordinate derivatives used.
     # All higher-order derivatives are either in DESC or PEST coordinates
     data["(e_phi_p)|PEST"] = (
         data["e_zeta_z"]

@@ -211,10 +211,7 @@ def interp_rfft2(
         Real function value at query points.
 
     """
-    if f.shape[axes[1]] % 2 == 0:
-        i = (0, -1)
-    else:
-        i = 0
+    i = (0, -1) if (f.shape[axes[1]] % 2 == 0) else 0
     a = rfft2(f, axes=axes, norm="forward")
     a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
@@ -503,13 +500,12 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
+    opts = options.Opts(modeord=1)
     JF_BUG = True
     if JF_BUG:
         # https://github.com/flatironinstitute/jax-finufft/pull/159
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
-    else:
-        opts = options.Opts(modeord=1)
 
     return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 

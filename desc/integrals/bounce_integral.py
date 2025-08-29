@@ -402,10 +402,7 @@ class Bounce2D(Bounce):
             Complex coefficients of 2D real FFT of ``f``.
 
         """
-        if f.shape[-1] % 2 == 0:
-            i = (0, -1)
-        else:
-            i = 0
+        i = (0, -1) if (f.shape[-1] % 2 == 0) else 0
         # Due to the structure of the problem, often when evaluating the series the
         # number of ζ coordinates at which to compute the toroidal basis functions is
         # less than the number of θ coordinates at which to compute the poloidal basis.

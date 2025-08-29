@@ -899,18 +899,19 @@ class TestBouncePoints:
         def f(z):
             return -2 * np.cos(1 / (0.1 + z**2)) + 2
 
-        M, N = 1, 10
-        alpha, zeta = FourierChebyshevSeries.nodes(M, N).T
-        cheb = FourierChebyshevSeries(f(zeta).reshape(M, N)).compute_cheb(
-            fourier_pts(M)
+        X, Y = 1, 10
+        alpha, zeta = FourierChebyshevSeries.nodes(X, Y).T
+        cheb = FourierChebyshevSeries(f(zeta).reshape(X, Y)).compute_cheb(
+            fourier_pts(X)
         )
-        cheb = PiecewiseChebyshevSeries(cheb)
+        cheb = PiecewiseChebyshevSeries(cheb, tag="(n_alpha, n_cheb)")
+        print(cheb.tag)
         pitch_inv = 3
         z1, z2 = cheb.intersect1d(pitch_inv)
         cheb.check_intersect1d(z1, z2, pitch_inv)
         z1, z2 = TestBouncePoints.filter(z1, z2)
 
-        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
+        r = self._cheb_intersect(chebinterpolate(f, Y - 1), pitch_inv)
         np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
         np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
@@ -1435,8 +1436,8 @@ class TestBounce:
         If the AD tool works properly, then these operations should be assigned
         zero gradients while the gradients wrt parameters of our physics computations
         accumulate correctly. Less mature AD tools may have subtle bugs that cause
-        the gradients to not accumulate correctly. (There's a few
-        GitHub issues that JAX has fixed related to this in the past.)
+        the gradients to not accumulate correctly. (This is important to catch bugs
+        like https://github.com/flatironinstitute/jax-finufft/issues/158).
 
         This test first confirms the gradients computed by reverse mode AD matches
         the analytic approximation of the true gradient. Then we confirm that the
@@ -1646,12 +1647,12 @@ class TestBounce2D:
             num_nufft[~near_zero_nufft], num[~near_zero], rtol=2.5e-4
         )
 
-        b = Bounce2D(
+        bounce = Bounce2D(
             grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
         )
-        b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
+        bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
         l, m = 1, 0
-        _, _ = b.plot(l, m, pitch_inv[l], show=False)
+        _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):

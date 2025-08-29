@@ -446,6 +446,12 @@ class TestBasis:
                 ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
             ]
         )
+        all_bases.append(
+            [
+                DoubleChebyshevFourierBasis(L=3, M=3, N=3),
+                DoubleChebyshevFourierBasis(L=3, M=3, N=3),
+            ]
+        )
         all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
         for basis1, basis2 in all_bases:
             # check that hash is consistent

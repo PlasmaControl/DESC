@@ -3475,7 +3475,8 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     n_rho_max="int: 2 x maximum radial mode number",
     n_theta_max="int: 2 x maximum poloidal mode number",
     n_zeta_max="int: 2 x maximum toroidal mode number",
-    axisym="bool: if the equilibrium is axisymmetric",
+    axisym="bool if the equilibrium is axisymmetric",
+    n_zeta_axisym="bool: max axisym mode number to analyze",
     compressible="bool: if the perturbation is compressible",
 )
 def _AGNI5(params, transforms, profiles, data, **kwargs):
@@ -3531,7 +3532,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     if axisym:
         # Each componenet of xi can be written as the Fourier sum of two modes in
         # the toroidal direction
-        D_zeta0 = 1j * n_mode * jnp.array([[1]])
+        D_zeta0 = n_zeta_axisym * jnp.array([[0, -1], [1, 0]])
         n_zeta_max = 1
         x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
     else:
@@ -3593,14 +3594,6 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
 
-    ## Create the full matrix
-    if axisym:
-        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.complex128)
-        B = jnp.zeros((3 * n_total, 3 * n_total))
-    else:
-        A = jnp.zeros((3 * n_total, 3 * n_total))
-        B = jnp.zeros((3 * n_total, 3 * n_total))
-
     # Define block indices
     rho_idx = slice(0, n_total)
     theta_idx = slice(n_total, 2 * n_total)
@@ -3635,6 +3628,8 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
     # instability drive term
     F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N / B_N) ** 2
+
+    A = jnp.zeros((3 * n_total, 3 * n_total))
 
     ####################
     ####----Q_ρρ----####
@@ -3941,7 +3936,8 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
         Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
 
         A = A.at[all_idx, all_idx].add(Au)
-    else:
+    elif (compressible is False) and n_zeta_axisym != 0:
+        # keeping compressibility but not solving for n = 0 axisym mode
         sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
         sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
         sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
@@ -3954,6 +3950,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
         C_zeta = partial_z_log_sqrtg + D_zeta0[None, ...]
 
+        pdb.set_trace()
         partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
         C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
 
@@ -4034,14 +4031,45 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
         # Fill out the lower part using symmetry
         B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
 
+    else:  # n_zeta_axisym is 0
+
+        # keeping compressibility but not solving for n = 0 axisym mode
+        sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
+        sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
+
+        partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
+        C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
+
+        partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
+        C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
+
+        # batched inversion without actually forming C_theta_inv
+        C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
+        C_theta_inv_C_rho = jnp.linalg.solve(C_theta, C_rho_reshaped)
+
         pdb.set_trace()
 
-        # apply dirichlet BC to ξ^ρ
-        keep_1 = jnp.arange(
-            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
+        # Impose incompressibility
+        A = A.at[rho_idx, rho_idx].add(
+            -1
+            * (
+                A[rho_idx, theta_idx] @ C_theta_inv_C_rho
+                + (A[rho_idx, theta_idx] @ C_theta_inv_C_rho).T
+            )
+            + C_theta_inv_C_rho.T @ A[theta_idx, theta_idx] @ C_theta_inv_C_rho
         )
-        keep_2 = jnp.arange(n_total, 2 * n_total)
-        keep = jnp.concatenate([keep_1, keep_2])
+
+        A = B.at[rho_idx, rho_idx].add(
+            -1
+            * (
+                B[rho_idx, theta_idx] @ C_theta_inv_C_rho
+                + (B[rho_idx, theta_idx] @ C_theta_inv_C_rho).T
+            )
+            + C_theta_inv_C_rho.T @ B[theta_idx, theta_idx] @ C_theta_inv_C_rho
+        )
+
+        # apply dirichlet BC to ξ^ρ
+        keep = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
 
         w2, _ = jnp.linalg.eigh((A + A.T) / 2)
         w3, _ = eigh(A[jnp.ix_(keep, keep)])

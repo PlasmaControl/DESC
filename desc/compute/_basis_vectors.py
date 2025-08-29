@@ -4079,19 +4079,28 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_zeta_z",  # TODO: 568
+        "e_zeta_t",
         "e_theta_PEST",
-        "(e_theta_PEST_v)|PEST",
         "(e_theta_PEST_p)|PEST",
         "theta_PEST_z",
+        "theta_PEST_t",
+        "theta_PEST_tz",
         "theta_PEST_zz",
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
+    # Combination of terms that contain either all PEST or all DESC
+    # derivatives. No mixed derivatives used.
     data["(e_phi_p)|PEST"] = (
         data["e_zeta_z"]
-        - 2 * data["(e_theta_PEST_p)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
-        - data["e_theta_PEST"] * (data["theta_PEST_zz"])[:, jnp.newaxis]
-        - data["(e_theta_PEST_v)|PEST"] * (data["theta_PEST_z"] ** 2)[:, jnp.newaxis]
+        - data["(e_theta_PEST_p)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta_PEST"]
+        * (
+            data["theta_PEST_zz"]
+            - data["theta_PEST_tz"] * (data["theta_PEST_z"] / data["theta_PEST_t"])
+        )[:, jnp.newaxis]
+        - data["e_zeta_t"]
+        * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, jnp.newaxis]
     )
     return data
 

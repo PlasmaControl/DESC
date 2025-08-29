@@ -4089,8 +4089,21 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    # No mixed coordinate derivatives used.
-    # All higher-order derivatives are either in DESC or PEST coordinates
+    # ∂()/∂ϕ|r,ϑ = ∂()/∂ϕ|r,θ − ∂()/∂θ * ϑ_ζ/ϑ_θ ____________________________ (1)
+    # ∂()/∂ϑ|r,ϕ = ∂()/∂θ 1/ϑ_θ _____________________________________________ (2)
+
+    # Using (1) and (2), we can write
+    # e_ϕ|r,ϑ = e_ϕ|r,θ − e_ϑ|r,ϕ ϑ_ζ _______________________________________ (3)
+
+    # Applying just ∂()/∂ϕ|r,ϑ to both sides of (3),
+    # ∂(e_ϕ|r,ϑ)/∂ϕ|r,ϑ = ∂(e_ϕ|r,θ)/∂ϕ|r,ϑ - ∂(e_ϑ|r,ϕ * ϑ_ζ)/∂ϕ|r,ϑ _______ (4)
+
+    # Expanding the first term on the right side of (4) using (1), we get
+    # ∂(e_ϕ|r,θ)/∂ϕ|r,ϑ = ∂(e_ϕ|r,θ)/∂ϕ|r,θ − ∂(e_ϕ|r,θ)/∂θ * ϑ_ζ/ϑ_θ
+
+    # and expanding the second term on the right side of (4) without using (1)
+    # ∂(e_ϑ|r,ϕ *ϑ_ζ)/∂ϕ|r,ϑ = (∂(e_ϑ|r,ϕ)/∂ϕ|r,ϑ)*ϑ_ζ + (e_ϑ|r,ϕ)*∂(ϑ_ζ)/∂ϕ|r,ϑ
+
     data["(e_phi_p)|PEST"] = (
         data["e_zeta_z"]
         - data["(e_theta_PEST_p)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]

@@ -4103,17 +4103,13 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
 
     # and expanding the second term on the right side of (4) without using (1)
     # ∂(e_ϑ|r,ϕ *ϑ_ζ)/∂ϕ|r,ϑ = (∂(e_ϑ|r,ϕ)/∂ϕ|r,ϑ)*ϑ_ζ + (e_ϑ|r,ϕ)*∂(ϑ_ζ)/∂ϕ|r,ϑ
-
+    factor = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["(e_phi_p)|PEST"] = (
         data["e_zeta_z"]
         - data["(e_theta_PEST_p)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
         - data["e_theta_PEST"]
-        * (
-            data["theta_PEST_zz"]
-            - data["theta_PEST_tz"] * (data["theta_PEST_z"] / data["theta_PEST_t"])
-        )[:, jnp.newaxis]
-        - data["e_zeta_t"]
-        * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, jnp.newaxis]
+        * (data["theta_PEST_zz"] - data["theta_PEST_tz"] * factor)[:, jnp.newaxis]
+        - data["e_zeta_t"] * factor[:, jnp.newaxis]
     )
 
     return data
@@ -4187,8 +4183,17 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
     # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ ___________________________________ (1)
     # e_ϕ|ρ,ϑ = e_ϕ|ρ,θ − e_ϑ|r,ϕ ϑ_ζ ______________________________________ (2)
-    # ∂(e_ϕ|ρ,ϑ)/∂ρ|ϑ,ϕ = ∂(e_ϕ|ρ,θ)/∂ρ|ϑ,ϕ - ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|ϑ,ϕ ________ (3)
+    # ∂(e_ϕ|ρ,ϑ)/∂ρ|ϑ,ϕ = ∂(e_ϕ|ρ,ϑ)/∂ρ|θ,ϕ - ∂(e_ϕ|ρ,ϑ)/∂ϑ|ρ,ϕ * ϑ_ρ ______ (3)
+
     # Expanding the two terms in (3), we get the relation below
+    # The first term in (3) becomes
+    # ∂(e_ϕ|ρ,ϑ)/∂ρ|θ,ϕ = ∂(e_ϕ|ρ,θ)/∂ρ|θ,ϕ − ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|θ,ϕ ________ (4)
+
+    # The second term in (4) can be expanded to
+    # ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|θ,ϕ = ∂(e_θ|ρ,ϕ)/∂ρ|θ,ϕ * (ϑ_ζ/ϑ_θ)
+    #                       + e_θ|ρ,ϕ * ∂(ϑ_ζ/ϑ_θ)/∂ρ|θ,ϕ
+
+    # The second term in (3) is implemented as it is.
     data["(e_phi_r)|PEST"] = (
         data["e_zeta_r"]
         - data["e_theta"]
@@ -4248,15 +4253,12 @@ def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwa
 
     # Use (1) again to expand the second term on the right side of (3)
     # ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ = ∂(e_ϑ|ρ,ϕ)/∂ρ|ϑ,ϕ * ϑ_ρ - e_ϑ|ρ,ϕ *(ϑ_ρρ+ϑ_ρθ (ϑ_ρ/ϑ_θ))
-    term1 = data["theta_PEST_r"] / data["theta_PEST_t"]
+    factor = data["theta_PEST_r"] / data["theta_PEST_t"]
     data["(e_rho_r)|PEST"] = (
         data["e_rho_r"]
-        - data["e_rho_t"] * term1[:, jnp.newaxis]
+        - data["e_rho_t"] * factor[:, jnp.newaxis]
         - data["(e_rho_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
         - data["e_theta_PEST"]
-        * (data["theta_PEST_rr"] - data["theta_PEST_rt"] * term1)[:, jnp.newaxis]
+        * (data["theta_PEST_rr"] - data["theta_PEST_rt"] * factor)[:, jnp.newaxis]
     )
     return data
-
-
-################################################################################

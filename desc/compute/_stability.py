@@ -3518,6 +3518,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
 
     axisym = kwargs.get("axisym", False)
     compressible = kwargs.get("compressible", False)
+    n_zeta_axisym = kwargs.get("n_zeta_axisym", 1)
 
     # For axisymmetric equilibria n_mode will decide the toroidal
     # mode number to analyze. Should work for n_mode = 0 (vertical instability)
@@ -3630,6 +3631,7 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
     F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N / B_N) ** 2
 
     A = jnp.zeros((3 * n_total, 3 * n_total))
+    B = jnp.zeros((3 * n_total, 3 * n_total))
 
     ####################
     ####----Q_ρρ----####
@@ -4047,7 +4049,6 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
         C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
         C_theta_inv_C_rho = jnp.linalg.solve(C_theta, C_rho_reshaped)
 
-        pdb.set_trace()
 
         # Impose incompressibility
         A = A.at[rho_idx, rho_idx].add(

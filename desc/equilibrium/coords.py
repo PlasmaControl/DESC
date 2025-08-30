@@ -611,6 +611,7 @@ def to_sfl(
     N_grid=None,
     rcond=None,
     copy=False,
+    tol=1e-6,
 ):
     """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -641,6 +642,8 @@ def to_sfl(
         cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
+    rtol : float
+        Tolerance for coordinate mapping.
 
     Returns
     -------
@@ -659,11 +662,17 @@ def to_sfl(
     grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
     data = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
+        Grid(
+            map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
     )
     data_bdry = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(map_coordinates(eq, grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"))),
+        Grid(
+            map_coordinates(
+                eq, grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+            )
+        ),
     )
 
     eq_PEST = eq.copy() if copy else eq

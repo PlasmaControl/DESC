@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, pconcat, put, safe_mpi_Bcast
+from desc.backend import desc_config, jit, jnp, put, safe_mpi_Bcast
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1372,8 +1372,22 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
             for idx in obj_idx_rank
         ]
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op)
-        J_rank = np.asarray(J_rank)
-        J = objective.comm.gather(J_rank, root=0)
-        J = pconcat(J).T
-        return J
+        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op).T
+        if desc_config["kind"] == "cpu":
+            J_rank = np.array(J_rank)
+            recvbuf = np.empty((J_rank.shape[0], objective.dim_f), dtype=np.float64)
+        else:
+            recvbuf = jnp.empty((J_rank.shape[0], objective.dim_f), dtype=jnp.float64)
+        objective.comm.Gatherv(
+            J_rank,
+            (
+                recvbuf,
+                objective._f_sizes * J_rank.shape[0],
+                objective._f_displs * J_rank.shape[0],
+                objective.mpi.DOUBLE,
+            ),
+            root=0,
+        )
+        if desc_config["kind"] == "cpu":
+            recvbuf = jnp.array(recvbuf)
+        return recvbuf

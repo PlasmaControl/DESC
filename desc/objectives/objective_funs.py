@@ -11,7 +11,6 @@ from desc.backend import (
     jax,
     jit,
     jnp,
-    pconcat,
     safe_mpi_Bcast,
     tree_flatten,
     tree_map,
@@ -371,6 +370,8 @@ class ObjectiveFunction(IOAble):
                 "running",
                 "_obj_per_rank",
                 "_rank_per_objective",
+                "_f_sizes",
+                "_f_displs",
             ]
 
         if self._is_mpi and mpi is None:
@@ -463,6 +464,11 @@ class ObjectiveFunction(IOAble):
                 )
                 params = [params[i] for i in obj_idx_rank]
                 out = compute_per_process(params, objs, op=message[0])
+                if desc_config["kind"] == "cpu":
+                    out = np.array(out)
+                self.comm.Gatherv(
+                    out, (None, self._f_sizes, self._f_displs, self.mpi.DOUBLE), root=0
+                )
             elif "jvp" in message[0]:
                 x = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
                 vs = alloc_array(message[2])
@@ -485,11 +491,20 @@ class ObjectiveFunction(IOAble):
                     out = jvp_per_process(xs, vs, objs, op=message[0])
                 elif "proximal_jvp" in message[0]:
                     op = message[0].replace("proximal_jvp_", "")
-                    out = jvp_proximal_per_process(xs, vs, objs, op=op)
+                    out = jvp_proximal_per_process(xs, vs, objs, op=op).T
 
-            # TODO: CUDA aware MPI may prevent np call
-            out = np.asarray(out)
-            self.comm.gather(out, root=0)
+                if desc_config["kind"] == "cpu":
+                    out = np.array(out)
+                self.comm.Gatherv(
+                    out,
+                    (
+                        None,
+                        self._f_sizes * out.shape[0],
+                        self._f_displs * out.shape[0],
+                        self.mpi.DOUBLE,
+                    ),
+                    root=0,
+                )
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -652,6 +667,18 @@ class ObjectiveFunction(IOAble):
                 # use the chunk size of the first objective
                 self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
+        if self._is_mpi:
+            # sizes and displacements for Gatherv
+            self._f_sizes = np.array(
+                [
+                    sum([self.objectives[i].dim_f for i in ids])
+                    for ids in self._obj_per_rank
+                ]
+            )
+            self._f_displs = np.array(
+                [sum(self._f_sizes[:i]) for i in range(self.size)]
+            )
+
         if self._is_mpi and verbose > 0:
             if self.rank == 0:
                 objective_names_per_rank = [
@@ -748,11 +775,19 @@ class ObjectiveFunction(IOAble):
                 [self.objectives[i] for i in obj_idx_rank],
                 op=message[0],
             )
-            # TODO: CUDA aware MPI may prevent np call
-            # Use Gatherv to improve speed
-            f_rank = np.asarray(f_rank)
-            fs = self.comm.gather(f_rank, root=0)
-            return pconcat(fs)
+            if desc_config["kind"] == "cpu":
+                f_rank = np.array(f_rank)
+                recvbuf = np.empty(self.dim_f, dtype=np.float64)
+            else:
+                recvbuf = jnp.empty(self.dim_f, dtype=jnp.float64)
+            self.comm.Gatherv(
+                f_rank,
+                (recvbuf, self._f_sizes, self._f_displs, self.mpi.DOUBLE),
+                root=0,
+            )
+            if desc_config["kind"] == "cpu":
+                recvbuf = jnp.array(recvbuf)
+            return recvbuf
 
     @jit
     def compute_unscaled(self, x, constants=None):
@@ -1065,11 +1100,26 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 )
-                # Use Gatherv to use fast buffer transfer
-                J_rank = np.asarray(J_rank)
-                J = self.comm.gather(J_rank, root=0)
-
-                return pconcat(J, mode="hstack")
+                if desc_config["kind"] == "cpu":
+                    J_rank = np.array(J_rank)
+                    recvbuf = np.empty((J_rank.shape[0], self.dim_f), dtype=np.float64)
+                else:
+                    recvbuf = jnp.empty(
+                        (J_rank.shape[0], self.dim_f), dtype=jnp.float64
+                    )
+                self.comm.Gatherv(
+                    J_rank,
+                    (
+                        recvbuf,
+                        self._f_sizes * J_rank.shape[0],
+                        self._f_displs * J_rank.shape[0],
+                        self.mpi.DOUBLE,
+                    ),
+                    root=0,
+                )
+                if desc_config["kind"] == "cpu":
+                    recvbuf = jnp.array(recvbuf)
+                return recvbuf
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
         v = ensure_tuple(v)

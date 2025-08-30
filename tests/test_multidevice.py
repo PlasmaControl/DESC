@@ -350,7 +350,7 @@ def test_multidevice_eq_optimize():
     )
     optimizer = Optimizer("proximal-lsq-exact")
 
-    with objective as objective:
+    with objective:
         if rank == 0:
             f0 = objective.compute_scalar(objective.x(eq))
             eq.optimize(

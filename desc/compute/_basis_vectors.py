@@ -4053,10 +4053,10 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwargs):
     data["(e_theta_PEST_p)|PEST"] = (
         data["e_theta_z"]
+        - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
         - data["(e_theta_PEST_v)|PEST"]
         * data["theta_PEST_t"][:, jnp.newaxis]
         * data["theta_PEST_z"][:, jnp.newaxis]
-        - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
     ) / data["theta_PEST_t"][:, jnp.newaxis]
     return data
 
@@ -4173,24 +4173,32 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_zeta_r",  # in native coordinates
+        "e_theta_r",
         "(e_phi_v)|PEST",
-        "(e_theta_PEST_v)|PEST",
-        "e_theta_PEST",
-        "(e_rho_v)|PEST",
         "theta_PEST_r",
         "theta_PEST_z",
         "theta_PEST_rz",
+        "theta_PEST_t",
+        "theta_PEST_rt",
     ],
     aliases=["(e_rho_p)|PEST"],
 )
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ ___________________________________ (1)
+    # e_ϕ|ρ,ϑ = e_ϕ|ρ,θ − e_ϑ|r,ϕ ϑ_ζ ______________________________________ (2)
+    # ∂(e_ϕ|ρ,ϑ)/∂ρ|ϑ,ϕ = ∂(e_ϕ|ρ,θ)/∂ρ|ϑ,ϕ - ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|ϑ,ϕ ________ (3)
+    # Expanding the two terms in (3), we get the relation below
     data["(e_phi_r)|PEST"] = (
         data["e_zeta_r"]
-        - data["(e_phi_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
-        - data["(e_theta_PEST_v)|PEST"]
-        * (data["theta_PEST_r"] * data["theta_PEST_z"])[:, jnp.newaxis]
-        - data["e_theta_PEST"] * (data["theta_PEST_rz"])[:, jnp.newaxis]
-        - data["(e_rho_v)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta_r"]
+        * (
+            (
+                data["theta_PEST_rz"] / data["theta_PEST_t"]
+                - data["theta_PEST_z"] * data["theta_PEST_rt"]
+            )
+            / data["theta_PEST_t"]
+        )[:, jnp.newaxis]
+        - data["(e_phi_v)|PEST"] * (data["theta_PEST_r"])[:, jnp.newaxis]
     )
     return data
 
@@ -4214,19 +4222,36 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     coordinates="rtz",
     data=[
         "e_rho_r",
+        "e_rho_t",
         "(e_rho_v)|PEST",
         "e_theta_PEST",
-        "(e_theta_PEST_v)|PEST",
         "theta_PEST_r",
+        "theta_PEST_t",
         "theta_PEST_rr",
+        "theta_PEST_rt",
     ],
 )
 def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ − ∂/∂ϕ|ρ,ϑ ϕ_ρ|θ,ϕ
+
+    # Without generalizing the toroidal angle ϕ_ρ|θ,ϕ = 0, so
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ ___________________________________ (1)
+    # e_ρ|ϑ,ϕ = e_ρ|θ,ϕ − e_ϑ|ρ,ϕ ϑ_ρ ______________________________________ (2)
+
+    # ∂(e_ρ|ϑ,ϕ)/∂ρ|ϑ,ϕ = ∂(e_ρ|θ,ϕ)/∂ρ|ϑ,ϕ - ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ ______ (3)
+
+    # Expand first term on the right side of (3) using (1)
+    # ∂(e_ρ|θ,ϕ)/∂ρ|ϑ,ϕ = ∂(e_ρ|θ,ϕ)/∂ρ|θ,ϕ - ∂(e_ρ|θ,ϕ)/∂θ|ρ,ϕ * (ϑ_ρ/ϑ_ϑ)
+
+    # Use (1) again to expand the second term on the right side of (3)
+    # ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ = ∂(e_ϑ|ρ,ϕ)/∂ρ|ϑ,ϕ * ϑ_ρ - e_ϑ|ρ,ϕ *(ϑ_ρρ+ϑ_ρθ (ϑ_ρ/ϑ_θ))
+    term1 = data["theta_PEST_r"] / data["theta_PEST_t"]
     data["(e_rho_r)|PEST"] = (
         data["e_rho_r"]
+        - data["e_rho_t"] * term1[:, jnp.newaxis]
         - data["(e_rho_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
-        - data["e_theta_PEST"] * data["theta_PEST_rr"][:, jnp.newaxis]
-        - data["(e_theta_PEST_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
+        - data["e_theta_PEST"]
+        * (data["theta_PEST_rr"] - data["theta_PEST_rt"] * term1)[:, jnp.newaxis]
     )
     return data
 

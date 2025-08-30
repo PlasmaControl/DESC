@@ -162,7 +162,7 @@ def register_compute_fun(  # noqa: C901
     if (
         len(splits) > 1
         # Only look for permutations of partial derivatives of same coordinate system.
-        and ({"r", "t", "z"}.issuperset(splits[-1]))
+        and {"r", "t", "z"}.issuperset(splits[-1])
     ):
         aliases_temp = np.append(np.array(aliases), find_permutations(name))
         for alias in aliases:

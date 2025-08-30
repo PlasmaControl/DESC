@@ -4049,7 +4049,6 @@ def _AGNI5(params, transforms, profiles, data, **kwargs):
         C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
         C_theta_inv_C_rho = jnp.linalg.solve(C_theta, C_rho_reshaped)
 
-
         # Impose incompressibility
         A = A.at[rho_idx, rho_idx].add(
             -1

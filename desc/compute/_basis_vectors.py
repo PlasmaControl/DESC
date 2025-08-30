@@ -4173,6 +4173,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_zeta_r",  # in native coordinates
+        "e_theta",
         "e_theta_r",
         "(e_phi_v)|PEST",
         "theta_PEST_r",
@@ -4190,14 +4191,16 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     # Expanding the two terms in (3), we get the relation below
     data["(e_phi_r)|PEST"] = (
         data["e_zeta_r"]
-        - data["e_theta_r"]
+        - data["e_theta"]
         * (
             (
-                data["theta_PEST_rz"] / data["theta_PEST_t"]
+                data["theta_PEST_rz"] * data["theta_PEST_t"]
                 - data["theta_PEST_z"] * data["theta_PEST_rt"]
             )
-            / data["theta_PEST_t"]
+            / data["theta_PEST_t"] ** 2
         )[:, jnp.newaxis]
+        - data["e_theta_r"]
+        * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, jnp.newaxis]
         - data["(e_phi_v)|PEST"] * (data["theta_PEST_r"])[:, jnp.newaxis]
     )
     return data

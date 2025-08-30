@@ -3999,8 +3999,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="(e_theta_PEST_v)|PEST",
     label="(\\partial_{\\vartheta}|_{\\rho, \\phi}"
-    "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})"
-    "= \\mathbf{e}_{\\theta_{PEST} \\theta_{PEST}}",
+    "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4027,8 +4026,7 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 @register_compute_fun(
     name="(e_theta_PEST_p)|PEST",
     label="(\\partial_{\\phi} |_{\\rho, \\vartheta}"
-    " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))"
-    "= {\\mathbf{e}_{\\theta_{PEST}}_{\\phi}}",
+    " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4065,8 +4063,7 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
 @register_compute_fun(
     name="(e_phi_p)|PEST",
     label="(\\partial_{\\phi} |_{\\rho, \\vartheta}"
-    " \\mathbf{e}_{\\phi}) |_{\\rho, \\vartheta}"
-    "= {\\mathbf{e}_{\\phi}}_{\\phi}",
+    " \\mathbf{e}_{\\phi}) |_{\\rho, \\vartheta}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
@@ -4119,8 +4116,7 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
 @register_compute_fun(
     name="(e_theta_PEST_r)|PEST",
     label="(\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}"
-    "= {\\mathbf{e}_{\\theta_{PEST}}}_{\\rho}",
+    " \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal PEST basis vector in (ρ,ϑ,ϕ)"
@@ -4154,8 +4150,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
 @register_compute_fun(
     name="(e_phi_r)|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " (\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta})"
-    "= {\\mathbf{e}_{\\phi}}_{\\rho}",
+    " (\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
@@ -4215,8 +4210,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
 @register_compute_fun(
     name="(e_rho_r)|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " (\\mathbf{e}_{\\rho} |_{\\phi, \\vartheta})"
-    "= \\mathbf{e}_{\\rho \\rho}",
+    " (\\mathbf{e}_{\\rho} |_{\\phi, \\vartheta})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant radial basis vector in (ρ,ϑ,ϕ)"

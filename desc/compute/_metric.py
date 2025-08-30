@@ -2239,7 +2239,7 @@ def _g_sup_rv(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g_rr_v)|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\rho\\rho}|PEST",
+    label="\\partial_{\\theta_PEST}|_{\\rho, \\phi} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Radial-Radial element of covariant metric tensor"
@@ -2259,7 +2259,7 @@ def _g_sub_rr_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_rr_p)|PEST",
-    label="\\partial_{\\phi} g_{\\rho\\rho}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\rho\\rho}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Radial-Radial element of covariant metric tensor"
@@ -2279,7 +2279,7 @@ def _g_sub_rr_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g_vv_r)|PEST",
-    label="\\partial_{\\rho} g_{\\vartheta \\vartheta}|PEST",
+    label="\\partial_{\\rho}|_{\\phi, \\vartheta} g_{\\vartheta \\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Poloidal-Poloidal element of covariant metric tensor"
@@ -2299,7 +2299,7 @@ def _g_sub_vv_r_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_vv_p)|PEST",
-    label="\\partial_{\\phi} g_{\\vartheta\\vartheta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\vartheta\\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Poloidal-Poloidal element of covariant metric tensor"
@@ -2319,7 +2319,7 @@ def _g_sub_vv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g_pp_v)|PEST",
-    label="\\partial_{\\theta_PEST} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\theta_PEST}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Toroidal-Toroidal element of PEST covariant metric tensor"
@@ -2339,7 +2339,7 @@ def _g_sub_pp_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g_rv_p)|PEST",
-    label="a\\partial_{\\phi} g_{\\rho\\vartheta}|PEST",
+    label="a\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\rho\\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Radial-Poloidal element of PEST covariant metric tensor"
@@ -2361,7 +2361,7 @@ def _g_sub_rv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rr_p)|PEST",
-    label="\\partial_{\\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Radial element of PEST contravariant metric tensor"
@@ -2381,7 +2381,7 @@ def _g_sup_rr_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rr_v)|PEST",
-    label="\\partial_{\\vartheta} g^{\\rho\\rho}|PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g^{\\rho\\rho}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Radial element of PEST contravariant metric tensor"
@@ -2401,7 +2401,7 @@ def _g_sup_rr_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rv_p)|PEST",
-    label="\\partial_{\\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Poloidal element of contravariant metric tensor"
@@ -2423,7 +2423,7 @@ def _g_sup_rv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rv_v)|PEST",
-    label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Poloidal element of contrvariant metric tensor"
@@ -2445,7 +2445,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rz_p)|PEST",
-    label="\\partial_{\\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Toroidal element of contravariant metric tensor"
@@ -2467,7 +2467,7 @@ def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rz_v)|PEST",
-    label="\\partial_{\\vartheta} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Toroidal element of contrvariant metric tensor"
@@ -2494,7 +2494,7 @@ def _g_sup_rz_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(sqrt(g)_PEST_r)|PEST",
-    label="\\partial_{\\rho} \\sqrt{g}_PEST",
+    label="\\partial_{\\rho}|_{\\phi, \\vartheta} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of PEST coordinate system"
@@ -2527,7 +2527,7 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(sqrt(g)_PEST_v)|PEST",
-    label="\\partial_{\\vartheta} \\sqrt{g}_PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} \\sqrt{g}_PEST",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of PEST coordinate system"
@@ -2596,7 +2596,7 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B_dot_grad(grad(rho))",
+    name="(B*grad) grad(rho)",
     label="\\nabla(\\nabla(\\rho))",
     units=" T m^{-2}",
     units_long="Tesla over square meters",
@@ -2607,40 +2607,16 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_theta",
-        "e_zeta",
-        "e_theta_t",
-        "e_theta_z",
-        "e_zeta_t",
-        "e_zeta_z",
-        "sqrt(g)",
-        "sqrt(g)_t",
-        "sqrt(g)_z",
+        "e^rho_t",
+        "e^rho_z",
         "B^theta",
         "B^zeta",
     ],
 )
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
-    # B⋅∇ = B^θ_P ∂/∂θ + B^ζ ∂/∂ζ
-    # ∇ρ = (e_θ × e_ζ)/√g
-
-    term1 = (
-        cross(data["e_theta_t"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
-        + cross(data["e_theta"], data["e_zeta_t"]) / data["sqrt(g)"][:, jnp.newaxis]
-        - cross(data["e_theta"], data["e_zeta"])
-        * data["sqrt(g)_t"][:, jnp.newaxis]
-        / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B^theta"][:, jnp.newaxis]
-
-    term2 = (
-        cross(data["e_theta_z"], data["e_zeta"]) / data["sqrt(g)"][:, jnp.newaxis]
-        + cross(data["e_theta"], data["e_zeta_z"]) / data["sqrt(g)"][:, jnp.newaxis]
-        - cross(data["e_theta"], data["e_zeta"])
-        * data["sqrt(g)_z"][:, jnp.newaxis]
-        / (data["sqrt(g)"][:, jnp.newaxis]) ** 2
-    ) * data["B^zeta"][:, jnp.newaxis]
-
-    data["B_dot_grad(grad(rho))"] = term1 + term2
+    # (B⋅∇)∇ρ = B^θ ∂(∇ρ)/∂θ + B^ζ ∂(∇ρ)/∂ζ
+    data["(B*grad) grad(rho)"] = data["B^theta"][:, jnp.newaxis] * data["e^rho_t"]
+    +data["B^zeta"][:, jnp.newaxis] * data["e^rho_z"]
 
     return data
 
@@ -2657,12 +2633,18 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["J x grad(rho)", "B_dot_grad(grad(rho))", "g^rr"],
+    data=["J x grad(rho)", "g^rr", "(B*grad) grad(rho)"],
 )
 def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
+    """
+    Taken from the TERPSICHORE paper (https://doi.org/10.1007/978-1-4613-0659-7_8).
+
+    In the paper, the instability drive term uses s (= ρ²), but we have replaced
+    all instances of s with ρ².
+    """
     data["finite-n instability drive"] = (
         -2
-        * dot(data["J x grad(rho)"], data["B_dot_grad(grad(rho))"], axis=1)
+        * dot(data["J x grad(rho)"], data["(B*grad) grad(rho)"], axis=1)
         / data["g^rr"]
     )
 

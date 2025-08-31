@@ -578,7 +578,7 @@ def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal PEST basis vector"
-    + " derivative wrt theta poloidal PEST coordinate",
+    + " derivative wrt theta poloidal PEST coordinate ϑ.",
     dim=3,
     params=[],
     transforms={},
@@ -624,7 +624,7 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal PEST basis vector, derivative wrt"
-    " cylindrical toroidal coordinate",
+    " cylindrical toroidal coordinate ϕ.",
     dim=3,
     params=[],
     transforms={},
@@ -652,7 +652,6 @@ def _e_sup_vartheta_v_PEST(params, transforms, profiles, data, **kwargs):
     aliases=["(e^theta_PEST_p)|PEST"],
 )
 def _e_sup_vartheta_p_PEST(params, transforms, profiles, data, **kwargs):
-    # ∂(𝐞^ϑ)/∂θ|(ρ,ϕ)
     # This is a mixed derivative so it has been removed as a compute function
     # until the convention for naming such variables becomes clear
     e_sup_vartheta_t = (
@@ -4002,8 +4001,8 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
-    "coordinates or straight field line PEST coordinates w.r.t straight field"
+    description="Derivative of the covariant poloidal basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t straight field"
     "line PEST theta coordinate. ϕ increases counterclockwise when viewed above"
     "(cylindrical R,ϕ plane with Z out of page).",
     dim=3,
@@ -4029,8 +4028,8 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
     " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
-    "coordinates or straight field line PEST coordinates w.r.t the cylindrical"
+    description="Derivative of the covariant poloidal basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t the cylindrical"
     "toroidal angle. ϕ increases counterclockwise when viewed from above"
     "(cylindrical R,ϕ plane with Z out of page).",
     dim=3,
@@ -4066,8 +4065,8 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
     " \\mathbf{e}_{\\phi}) |_{\\rho, \\vartheta}",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
-    "coordinates (straight field line PEST) w.r.t the cylindrical"
+    description="Derivative of the covariant toroidal basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t the cylindrical"
     "toroidal angle.",
     dim=3,
     params=[],
@@ -4119,8 +4118,8 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
     " \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant poloidal PEST basis vector in (ρ,ϑ,ϕ)"
-    "coordinates or straight field line PEST coordinates w.r.t rho.",
+    description="Derivative of the covariant poloidal PEST basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t rho.",
     dim=3,
     params=[],
     transforms={},
@@ -4153,8 +4152,8 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     " (\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta})",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
-    "coordinates or straight field line PEST coordinates w.r.t rho."
+    description="Derivative of the covariant toroidal basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t rho."
     "ϕ increases counterclockwise when viewed from above"
     "(cylindrical R,ϕ plane with Z out of page).",
     dim=3,
@@ -4163,7 +4162,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_zeta_r",  # in native coordinates
+        "e_zeta_r",
         "e_theta",
         "e_theta_r",
         "(e_phi_v)|PEST",
@@ -4213,8 +4212,8 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     " (\\mathbf{e}_{\\rho} |_{\\phi, \\vartheta})",
     units="m",
     units_long="meters",
-    description="Derivative of the covariant radial basis vector in (ρ,ϑ,ϕ)"
-    "coordinates or straight field line PEST coordinates w.r.t rho."
+    description="Derivative of the covariant radial basis vector in"
+    "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t rho."
     "ϕ increases counterclockwise when viewed from above"
     "(cylindrical R,ϕ plane with Z out of page).",
     dim=3,
@@ -4245,7 +4244,7 @@ def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwa
     # Expand first term on the right side of (3) using (1)
     # ∂(e_ρ|θ,ϕ)/∂ρ|ϑ,ϕ = ∂(e_ρ|θ,ϕ)/∂ρ|θ,ϕ - ∂(e_ρ|θ,ϕ)/∂θ|ρ,ϕ * (ϑ_ρ/ϑ_ϑ)
 
-    # Use (1) again to expand the second term on the right side of (3)
+    # Now, use (1) again to expand the second term on the right side of (3)
     # ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ = ∂(e_ϑ|ρ,ϕ)/∂ρ|ϑ,ϕ * ϑ_ρ - e_ϑ|ρ,ϕ *(ϑ_ρρ+ϑ_ρθ (ϑ_ρ/ϑ_θ))
     factor = data["theta_PEST_r"] / data["theta_PEST_t"]
     data["(e_rho_r)|PEST"] = (

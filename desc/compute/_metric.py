@@ -2598,7 +2598,7 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="(B*grad) grad(rho)",
     label="\\nabla(\\nabla(\\rho))",
-    units=" T m^{-2}",
+    units="T m^{-2}",
     units_long="Tesla over square meters",
     description="Hessian of flux surface label along the magnetic field",
     dim=3,

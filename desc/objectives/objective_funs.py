@@ -488,10 +488,10 @@ class ObjectiveFunction(IOAble):
                     for idx in obj_idx_rank
                 ]
                 if "proximal" not in message[0]:
-                    out = jvp_per_process(xs, vs, objs, op=message[0])
+                    out = jvp_per_process(xs, vs, objs, op=message[0]).T
                 elif "proximal_jvp" in message[0]:
                     op = message[0].replace("proximal_jvp_", "")
-                    out = jvp_proximal_per_process(xs, vs, objs, op=op).T
+                    out = jvp_proximal_per_process(xs, vs, objs, op=op)
 
                 if desc_config["kind"] == "cpu":
                     out = np.array(out)
@@ -499,8 +499,8 @@ class ObjectiveFunction(IOAble):
                     out,
                     (
                         None,
-                        self._f_sizes * out.shape[0],
-                        self._f_displs * out.shape[0],
+                        self._f_sizes * message[2][1],
+                        self._f_displs * message[2][1],
                         self.mpi.DOUBLE,
                     ),
                     root=0,
@@ -1088,6 +1088,11 @@ class ObjectiveFunction(IOAble):
                 vs = jnp.split(v[0], np.cumsum([t.dim_x for t in self.things]), axis=-1)
 
                 obj_idx_rank = self._obj_per_rank[self.rank]
+                # jvp_per_process returns the Jacobian in a transposed way which is
+                # hard to stack vertically by MPI (colums get scrambled), that's why
+                # we will do multiple transpose operations. The first one is to be able
+                # to stack the Jacobian parts vertically, the second one is to return
+                # the Jacobian in the expected way by other functions.
                 J_rank = jvp_per_process(
                     [
                         [xs[i] for i in self._things_per_objective_idx[idx]]
@@ -1099,27 +1104,25 @@ class ObjectiveFunction(IOAble):
                     ],
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
-                )
+                ).T
                 if desc_config["kind"] == "cpu":
                     J_rank = np.array(J_rank)
-                    recvbuf = np.empty((J_rank.shape[0], self.dim_f), dtype=np.float64)
+                    recvbuf = np.empty((self.dim_f, message[2][1]), dtype=np.float64)
                 else:
-                    recvbuf = jnp.empty(
-                        (J_rank.shape[0], self.dim_f), dtype=jnp.float64
-                    )
+                    recvbuf = jnp.empty((self.dim_f, message[2][1]), dtype=jnp.float64)
                 self.comm.Gatherv(
                     J_rank,
                     (
                         recvbuf,
-                        self._f_sizes * J_rank.shape[0],
-                        self._f_displs * J_rank.shape[0],
+                        self._f_sizes * message[2][1],
+                        self._f_displs * message[2][1],
                         self.mpi.DOUBLE,
                     ),
                     root=0,
                 )
                 if desc_config["kind"] == "cpu":
                     recvbuf = jnp.array(recvbuf)
-                return recvbuf
+                return recvbuf.T
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
         v = ensure_tuple(v)

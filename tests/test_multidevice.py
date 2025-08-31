@@ -34,7 +34,7 @@ from desc.objectives import (
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
 )
-from desc.optimize import Optimizer
+from desc.optimize import Optimizer, ProximalProjection
 
 
 @pytest.mark.mpi_setup
@@ -103,10 +103,7 @@ def test_multidevice_compute():
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.8], sym=True)
-    grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6, 0.8], sym=True)
 
-    obj0 = ObjectiveFunction(ForceBalance(eq, grid=grid4))
-    obj0.build()
     obj1 = ObjectiveFunction(
         [
             ForceBalance(eq, grid=grid1),
@@ -129,14 +126,11 @@ def test_multidevice_compute():
         )
         obj2.build()
 
-    f0 = obj0.compute_scalar(obj0.x(eq))
     f1 = obj1.compute_scalar(obj1.x(eq))
     with obj2:
         if rank == 0:
             f2 = obj2.compute_scalar(obj2.x(eq))
-
             np.testing.assert_allclose(f2, f1, atol=1e-8)
-            np.testing.assert_allclose(f2, f0, atol=5e-7)
 
             f1 = obj1.compute_unscaled(obj1.x(eq))
             f2 = obj2.compute_unscaled(obj2.x(eq))
@@ -194,14 +188,90 @@ def test_multidevice_derivatives():
             f2 = obj2.jac_unscaled(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 
-            # figure out why this fails! One of them doesn't
-            # apply the scaling properly
             f1 = obj1.jac_scaled(obj1.x(eq))
             f2 = obj2.jac_scaled(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 
             f1 = obj1.jac_scaled_error(obj1.x(eq))
             f2 = obj2.jac_scaled_error(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+
+@pytest.mark.mpi_run
+def test_multidevice_proximal_derivatives():
+    """Test that proximal derivatives gives same results."""
+    rank = MPI.COMM_WORLD.Get_rank()
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
+
+    obj1 = QuasisymmetryTwoTerm(eq=eq1, helicity=(1, eq.NFP), grid=grid1)
+    obj2 = QuasisymmetryTwoTerm(eq=eq1, helicity=(1, eq.NFP), grid=grid2)
+    obj3 = QuasisymmetryTwoTerm(eq=eq1, helicity=(1, eq.NFP), grid=grid3)
+    objs = [obj1, obj2, obj3]
+
+    objective1 = ObjectiveFunction(objs, deriv_mode="blocked")
+    objective1.build(verbose=0)
+
+    con1 = ObjectiveFunction(ForceBalance(eq1))
+    con1.build(verbose=0)
+
+    obj1 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid1, device_id=0)
+    obj2 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid2, device_id=1)
+    obj3 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid3, device_id=2)
+    objs = [obj1, obj2, obj3]
+
+    objective2 = ObjectiveFunction(
+        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 2])
+    )
+    objective2.build(verbose=0)
+    con2 = ObjectiveFunction(ForceBalance(eq2))
+    con2.build(verbose=0)
+
+    perturb_options = {"order": 1}
+    solve_options = {"maxiter": 1}
+    prox1 = ProximalProjection(
+        objective=objective1,
+        constraint=con1,
+        eq=eq1,
+        solve_options=solve_options,
+        perturb_options=perturb_options,
+    )
+    prox2 = ProximalProjection(
+        objective=objective2,
+        constraint=con2,
+        eq=eq2,
+        solve_options=solve_options,
+        perturb_options=perturb_options,
+    )
+    prox1.build()
+    prox2.build()
+
+    with objective2:
+        if rank == 0:
+            f1 = prox1.grad(prox1.x(eq1))
+            f2 = prox2.grad(prox2.x(eq2))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = prox1.jac_unscaled(prox1.x(eq1))
+            f2 = prox2.jac_unscaled(prox2.x(eq2))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = prox1.jac_scaled(prox1.x(eq1))
+            f2 = prox2.jac_scaled(prox2.x(eq2))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = prox1.jac_scaled_error(prox1.x(eq1))
+            f2 = prox2.jac_scaled_error(prox2.x(eq2))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 
 

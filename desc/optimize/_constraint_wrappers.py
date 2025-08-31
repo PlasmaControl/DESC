@@ -1349,6 +1349,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
+
     return jnp.concatenate(out).T
 
 
@@ -1372,22 +1373,27 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
             for idx in obj_idx_rank
         ]
         objs = [objective.objectives[i] for i in obj_idx_rank]
-        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op).T
+        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op)
         if desc_config["kind"] == "cpu":
             J_rank = np.array(J_rank)
-            recvbuf = np.empty((J_rank.shape[0], objective.dim_f), dtype=np.float64)
+            recvbuf = np.empty((objective.dim_f, J_rank.shape[1]), dtype=np.float64)
         else:
-            recvbuf = jnp.empty((J_rank.shape[0], objective.dim_f), dtype=jnp.float64)
+            recvbuf = jnp.empty((objective.dim_f, J_rank.shape[1]), dtype=jnp.float64)
         objective.comm.Gatherv(
             J_rank,
             (
                 recvbuf,
-                objective._f_sizes * J_rank.shape[0],
-                objective._f_displs * J_rank.shape[0],
+                objective._f_sizes * J_rank.shape[1],
+                objective._f_displs * J_rank.shape[1],
                 objective.mpi.DOUBLE,
             ),
             root=0,
         )
         if desc_config["kind"] == "cpu":
             recvbuf = jnp.array(recvbuf)
-        return recvbuf
+
+        # we collected the Jacobian in the proper way above, but as a convention
+        # the _jvp methods return the transpose of the Jacobian. For example,
+        # _jac methods always take the transpose of the returned quantity by _jvp.
+        # To be consistent with that, we return the transpose here.
+        return recvbuf.T

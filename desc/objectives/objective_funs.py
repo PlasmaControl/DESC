@@ -499,8 +499,8 @@ class ObjectiveFunction(IOAble):
                     out,
                     (
                         None,
-                        self._f_sizes * message[2][1],
-                        self._f_displs * message[2][1],
+                        self._f_sizes * message[2][0],
+                        self._f_displs * message[2][0],
                         self.mpi.DOUBLE,
                     ),
                     root=0,
@@ -1107,15 +1107,15 @@ class ObjectiveFunction(IOAble):
                 ).T
                 if desc_config["kind"] == "cpu":
                     J_rank = np.array(J_rank)
-                    recvbuf = np.empty((self.dim_f, message[2][1]), dtype=np.float64)
+                    recvbuf = np.empty((self.dim_f, message[2][0]), dtype=np.float64)
                 else:
-                    recvbuf = jnp.empty((self.dim_f, message[2][1]), dtype=jnp.float64)
+                    recvbuf = jnp.empty((self.dim_f, message[2][0]), dtype=jnp.float64)
                 self.comm.Gatherv(
                     J_rank,
                     (
                         recvbuf,
-                        self._f_sizes * message[2][1],
-                        self._f_displs * message[2][1],
+                        self._f_sizes * message[2][0],
+                        self._f_displs * message[2][0],
                         self.mpi.DOUBLE,
                     ),
                     root=0,

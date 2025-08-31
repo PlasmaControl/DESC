@@ -33,8 +33,9 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_boundary_constraints,
 )
-from desc.optimize import Optimizer, ProximalProjection
+from desc.optimize import LinearConstraintProjection, Optimizer, ProximalProjection
 
 
 @pytest.mark.mpi_setup
@@ -180,6 +181,65 @@ def test_multidevice_derivatives():
         obj2.build()
 
     with obj2:
+        if rank == 0:
+            with pytest.raises(NotImplementedError):
+                _ = obj2.grad(obj2.x(eq))
+
+            f1 = obj1.jac_unscaled(obj1.x(eq))
+            f2 = obj2.jac_unscaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = obj1.jac_scaled(obj1.x(eq))
+            f2 = obj2.jac_scaled(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = obj1.jac_scaled_error(obj1.x(eq))
+            f2 = obj2.jac_scaled_error(obj2.x(eq))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+
+@pytest.mark.mpi_run
+def test_multidevice_linear_proj_derivatives():
+    """Test that linear projection derivatives gives same results."""
+    rank = MPI.COMM_WORLD.Get_rank()
+    eq = get("precise_QH")
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6], sym=True)
+    grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.8], sym=True)
+
+    objf1 = ObjectiveFunction(
+        [
+            ForceBalance(eq, grid=grid1),
+            ForceBalance(eq, grid=grid2),
+            ForceBalance(eq, grid=grid3),
+        ],
+        deriv_mode="blocked",
+    )
+    objf1.build()
+
+    # deriv_mode will be set to "blocked" automatically
+    with pytest.warns(UserWarning, match="When using multiple devices"):
+        objf2 = ObjectiveFunction(
+            [
+                ForceBalance(eq, grid=grid1, device_id=0),
+                ForceBalance(eq, grid=grid2, device_id=1),
+                ForceBalance(eq, grid=grid3, device_id=2),
+            ],
+            mpi=MPI,
+        )
+        objf2.build()
+
+    cons = get_fixed_boundary_constraints(eq)
+    cons = ObjectiveFunction(cons)
+    obj1 = LinearConstraintProjection(objective=objf1, constraint=cons)
+    obj2 = LinearConstraintProjection(objective=objf2, constraint=cons)
+    obj1.build()
+    obj2.build()
+
+    with objf2:
         if rank == 0:
             with pytest.raises(NotImplementedError):
                 _ = obj2.grad(obj2.x(eq))

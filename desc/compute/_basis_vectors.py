@@ -3999,8 +3999,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="(e_theta_PEST_v)|PEST",
     label="(\\partial_{\\vartheta}|_{\\rho, \\phi}"
-    "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})"
-    "= \\mathbf{e}_{\\theta_{PEST} \\theta_{PEST}}",
+    "(\\mathbf{e}_{\\vartheta})|_{\\rho \\phi})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4013,7 +4012,7 @@ def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta_t", "e_theta_PEST", "theta_PEST_t", "theta_PEST_tt"],
-    aliases=["(e_vartheta_v)|PEST", "(e_theta_PEST_t)|PEST"],
+    aliases=["(e_vartheta_v)|PEST"],
 )
 def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϕ
@@ -4027,8 +4026,7 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 @register_compute_fun(
     name="(e_theta_PEST_p)|PEST",
     label="(\\partial_{\\phi} |_{\\rho, \\vartheta}"
-    " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))"
-    "= {\\mathbf{e}_{\\theta_{PEST}}_{\\phi}}",
+    " (\\mathbf{e}_{\\vartheta}|_{\\rho, \\phi}))",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal basis vector in (ρ,ϑ,ϕ)"
@@ -4053,10 +4051,10 @@ def _e_sub_vartheta_rp_vartheta_rp(params, transforms, profiles, data, **kwargs)
 def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwargs):
     data["(e_theta_PEST_p)|PEST"] = (
         data["e_theta_z"]
+        - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
         - data["(e_theta_PEST_v)|PEST"]
         * data["theta_PEST_t"][:, jnp.newaxis]
         * data["theta_PEST_z"][:, jnp.newaxis]
-        - data["e_theta_PEST"] * data["theta_PEST_tz"][:, jnp.newaxis]
     ) / data["theta_PEST_t"][:, jnp.newaxis]
     return data
 
@@ -4065,8 +4063,7 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
 @register_compute_fun(
     name="(e_phi_p)|PEST",
     label="(\\partial_{\\phi} |_{\\rho, \\vartheta}"
-    " \\mathbf{e}_{\\phi}) |_{\\rho, \\vartheta}"
-    "= {\\mathbf{e}_{\\phi}}_{\\phi}",
+    " \\mathbf{e}_{\\phi}) |_{\\rho, \\vartheta}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
@@ -4082,26 +4079,36 @@ def _e_sub_vartheta_rz_phi_rvartheta(params, transforms, profiles, data, **kwarg
         "e_zeta_t",
         "e_theta_PEST",
         "(e_theta_PEST_p)|PEST",
-        "theta_PEST_z",
         "theta_PEST_t",
+        "theta_PEST_z",
         "theta_PEST_tz",
         "theta_PEST_zz",
     ],
 )
 def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwargs):
-    # Combination of terms that contain either all PEST or all DESC
-    # derivatives. No mixed derivatives used.
+    # ∂()/∂ϕ|r,ϑ = ∂()/∂ϕ|r,θ − ∂()/∂θ * ϑ_ζ/ϑ_θ ____________________________ (1)
+    # ∂()/∂ϑ|r,ϕ = ∂()/∂θ 1/ϑ_θ _____________________________________________ (2)
+
+    # Using (1) and (2), we can write
+    # e_ϕ|r,ϑ = e_ϕ|r,θ − e_ϑ|r,ϕ ϑ_ζ _______________________________________ (3)
+
+    # Applying just ∂()/∂ϕ|r,ϑ to both sides of (3),
+    # ∂(e_ϕ|r,ϑ)/∂ϕ|r,ϑ = ∂(e_ϕ|r,θ)/∂ϕ|r,ϑ - ∂(e_ϑ|r,ϕ * ϑ_ζ)/∂ϕ|r,ϑ _______ (4)
+
+    # Expanding the first term on the right side of (4) using (1), we get
+    # ∂(e_ϕ|r,θ)/∂ϕ|r,ϑ = ∂(e_ϕ|r,θ)/∂ϕ|r,θ − ∂(e_ϕ|r,θ)/∂θ * ϑ_ζ/ϑ_θ
+
+    # and expanding the second term on the right side of (4) without using (1)
+    # ∂(e_ϑ|r,ϕ *ϑ_ζ)/∂ϕ|r,ϑ = (∂(e_ϑ|r,ϕ)/∂ϕ|r,ϑ)*ϑ_ζ + (e_ϑ|r,ϕ)*∂(ϑ_ζ)/∂ϕ|r,ϑ
+    factor = data["theta_PEST_z"] / data["theta_PEST_t"]
     data["(e_phi_p)|PEST"] = (
         data["e_zeta_z"]
         - data["(e_theta_PEST_p)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
         - data["e_theta_PEST"]
-        * (
-            data["theta_PEST_zz"]
-            - data["theta_PEST_tz"] * (data["theta_PEST_z"] / data["theta_PEST_t"])
-        )[:, jnp.newaxis]
-        - data["e_zeta_t"]
-        * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, jnp.newaxis]
+        * (data["theta_PEST_zz"] - data["theta_PEST_tz"] * factor)[:, jnp.newaxis]
+        - data["e_zeta_t"] * factor[:, jnp.newaxis]
     )
+
     return data
 
 
@@ -4109,8 +4116,7 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
 @register_compute_fun(
     name="(e_theta_PEST_r)|PEST",
     label="(\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}"
-    "= {\\mathbf{e}_{\\theta_{PEST}}}_{\\rho}",
+    " \\mathbf{e}_{\\vartheta}) |_{\\rho, \\phi}",
     units="m",
     units_long="meters",
     description="Derivative of the covariant poloidal PEST basis vector in (ρ,ϑ,ϕ)"
@@ -4144,8 +4150,7 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
 @register_compute_fun(
     name="(e_phi_r)|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " (\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta})"
-    "= {\\mathbf{e}_{\\phi}}_{\\rho}",
+    " (\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant toroidal basis vector in (ρ,ϑ,ϕ)"
@@ -4159,24 +4164,44 @@ def _e_sub_vartheta_rz_rho_varthetaz(params, transforms, profiles, data, **kwarg
     coordinates="rtz",
     data=[
         "e_zeta_r",  # in native coordinates
+        "e_theta",
+        "e_theta_r",
         "(e_phi_v)|PEST",
-        "(e_theta_PEST_v)|PEST",
-        "e_theta_PEST",
-        "(e_rho_v)|PEST",
         "theta_PEST_r",
         "theta_PEST_z",
         "theta_PEST_rz",
+        "theta_PEST_t",
+        "theta_PEST_rt",
     ],
     aliases=["(e_rho_p)|PEST"],
 )
 def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ ___________________________________ (1)
+    # e_ϕ|ρ,ϑ = e_ϕ|ρ,θ − e_ϑ|r,ϕ ϑ_ζ ______________________________________ (2)
+    # ∂(e_ϕ|ρ,ϑ)/∂ρ|ϑ,ϕ = ∂(e_ϕ|ρ,ϑ)/∂ρ|θ,ϕ - ∂(e_ϕ|ρ,ϑ)/∂ϑ|ρ,ϕ * ϑ_ρ ______ (3)
+
+    # Expanding the two terms in (3), we get the relation below
+    # The first term in (3) becomes
+    # ∂(e_ϕ|ρ,ϑ)/∂ρ|θ,ϕ = ∂(e_ϕ|ρ,θ)/∂ρ|θ,ϕ − ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|θ,ϕ ________ (4)
+
+    # The second term in (4) can be expanded to
+    # ∂(e_ϑ|r,ϕ ϑ_ζ)/∂ρ|θ,ϕ = ∂(e_θ|ρ,ϕ)/∂ρ|θ,ϕ * (ϑ_ζ/ϑ_θ)
+    #                       + e_θ|ρ,ϕ * ∂(ϑ_ζ/ϑ_θ)/∂ρ|θ,ϕ
+
+    # The second term in (3) is implemented as it is.
     data["(e_phi_r)|PEST"] = (
         data["e_zeta_r"]
-        - data["(e_phi_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
-        - data["(e_theta_PEST_v)|PEST"]
-        * (data["theta_PEST_r"] * data["theta_PEST_z"])[:, jnp.newaxis]
-        - data["e_theta_PEST"] * (data["theta_PEST_rz"])[:, jnp.newaxis]
-        - data["(e_rho_v)|PEST"] * data["theta_PEST_z"][:, jnp.newaxis]
+        - data["e_theta"]
+        * (
+            (
+                data["theta_PEST_rz"] * data["theta_PEST_t"]
+                - data["theta_PEST_z"] * data["theta_PEST_rt"]
+            )
+            / data["theta_PEST_t"] ** 2
+        )[:, jnp.newaxis]
+        - data["e_theta_r"]
+        * (data["theta_PEST_z"] / data["theta_PEST_t"])[:, jnp.newaxis]
+        - data["(e_phi_v)|PEST"] * (data["theta_PEST_r"])[:, jnp.newaxis]
     )
     return data
 
@@ -4185,8 +4210,7 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
 @register_compute_fun(
     name="(e_rho_r)|PEST",
     label="\\partial_{\\rho} |_{\\phi, \\vartheta}"
-    " (\\mathbf{e}_{\\rho} |_{\\phi, \\vartheta})"
-    "= \\mathbf{e}_{\\rho \\rho}",
+    " (\\mathbf{e}_{\\rho} |_{\\phi, \\vartheta})",
     units="m",
     units_long="meters",
     description="Derivative of the covariant radial basis vector in (ρ,ϑ,ϕ)"
@@ -4200,21 +4224,35 @@ def _e_sub_phi_rvartheta_rho_varthetaz(params, transforms, profiles, data, **kwa
     coordinates="rtz",
     data=[
         "e_rho_r",
+        "e_rho_t",
         "(e_rho_v)|PEST",
         "e_theta_PEST",
-        "(e_theta_PEST_v)|PEST",
         "theta_PEST_r",
+        "theta_PEST_t",
         "theta_PEST_rr",
+        "theta_PEST_rt",
     ],
 )
 def _e_sub_rho_varthetaz_rho_varthetaz(params, transforms, profiles, data, **kwargs):
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ − ∂/∂ϕ|ρ,ϑ ϕ_ρ|θ,ϕ
+
+    # Without generalizing the toroidal angle ϕ_ρ|θ,ϕ = 0, so
+    # ∂/∂ρ|ϑ,ϕ = ∂/∂ρ|θ,ϕ − ∂/∂ϑ|ρ,ϕ ϑ_ρ ___________________________________ (1)
+    # e_ρ|ϑ,ϕ = e_ρ|θ,ϕ − e_ϑ|ρ,ϕ ϑ_ρ ______________________________________ (2)
+
+    # ∂(e_ρ|ϑ,ϕ)/∂ρ|ϑ,ϕ = ∂(e_ρ|θ,ϕ)/∂ρ|ϑ,ϕ - ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ ______ (3)
+
+    # Expand first term on the right side of (3) using (1)
+    # ∂(e_ρ|θ,ϕ)/∂ρ|ϑ,ϕ = ∂(e_ρ|θ,ϕ)/∂ρ|θ,ϕ - ∂(e_ρ|θ,ϕ)/∂θ|ρ,ϕ * (ϑ_ρ/ϑ_ϑ)
+
+    # Use (1) again to expand the second term on the right side of (3)
+    # ∂(e_ϑ|ρ,ϕ * ϑ_ρ)/∂ρ|ϑ,ϕ = ∂(e_ϑ|ρ,ϕ)/∂ρ|ϑ,ϕ * ϑ_ρ - e_ϑ|ρ,ϕ *(ϑ_ρρ+ϑ_ρθ (ϑ_ρ/ϑ_θ))
+    factor = data["theta_PEST_r"] / data["theta_PEST_t"]
     data["(e_rho_r)|PEST"] = (
         data["e_rho_r"]
+        - data["e_rho_t"] * factor[:, jnp.newaxis]
         - data["(e_rho_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis]
-        - data["e_theta_PEST"] * data["theta_PEST_rr"][:, jnp.newaxis]
-        - data["(e_theta_PEST_v)|PEST"] * data["theta_PEST_r"][:, jnp.newaxis] ** 2
+        - data["e_theta_PEST"]
+        * (data["theta_PEST_rr"] - data["theta_PEST_rt"] * factor)[:, jnp.newaxis]
     )
     return data
-
-
-################################################################################

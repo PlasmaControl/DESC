@@ -1280,7 +1280,7 @@ def test_covariant_basis_vectors(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_covariant_basis_vectors_PEST(DummyStellarator):
+def test_covariant_basis_vectors_PEST():
     """
     Test calculation of covariant basis vectors in PEST.
 
@@ -1441,7 +1441,7 @@ def test_covariant_basis_vectors_PEST(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_contravariant_basis_vectors_PEST(DummyStellarator):
+def test_contravariant_basis_vectors_PEST():
     """
     Test only the derivatives of contravariant basis vectors in PEST.
 
@@ -1579,6 +1579,142 @@ def test_contravariant_basis_vectors_PEST(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.parametrize("eq", [get("W7-X")])
+def test_PEST_derivative_math(eq):
+    """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
+    from desc.compute import data_index
+
+    tol = 1e-7
+
+    eq_PEST = eq.to_sfl(copy=True, tol=tol)
+
+    keys_DESC = [
+        "e^rho_t",
+        "e^rho_z",
+        "e^theta",
+        "e^theta_t",
+        "e^theta_z",
+        "e^zeta_t",
+        "e^zeta_z",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_r",
+        "J^theta",
+        "J^theta_t",
+        "J^theta_z",
+        "J^zeta_t",
+        "J^zeta_z",
+        "g_rr",
+        "g_rt",
+        "g_rz",
+        "g_tt",
+        "g_tz",
+        "g_zz",
+        "g^rt",
+        "g_rr_t",
+        "g_rr_z",
+        "g_tt_r",
+        "g_tt_z",
+        "g_zz_t",
+        "g_rt_z",
+        "g^rr_z",
+        "g^rr_t",
+        "g^rt_z",
+        "g^rt_t",
+        "g^rz_z",
+        "g^rz_t",
+        "sqrt(g)_r",
+        "sqrt(g)_t",
+        "sqrt(g)_z",
+    ]
+    keys_PEST = [
+        "(e^rho_v)|PEST",
+        "(e^rho_p)|PEST",
+        "e^vartheta",
+        "(e^vartheta_v)|PEST",
+        "(e^vartheta_p)|PEST",
+        "(e^zeta_v)|PEST",
+        "(e^zeta_p)|PEST",
+        "(e_theta_PEST_v)|PEST",
+        "(e_theta_PEST_p)|PEST",
+        "(e_phi_p)|PEST",
+        "(e_theta_PEST_r)|PEST",
+        "(e_phi_r)|PEST",
+        "(e_rho_r)|PEST",
+        "J^theta_PEST",
+        "(J^theta_PEST_v)|PEST",
+        "(J^theta_PEST_p)|PEST",
+        "(J^zeta_v)|PEST",
+        "(J^zeta_p)|PEST",
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rp|PEST",
+        "g_vv|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
+        "g^rv",
+        "(g_rr_v)|PEST",
+        "(g_rr_p)|PEST",
+        "(g_vv_r)|PEST",
+        "(g_vv_z)|PEST",
+        "(g_pp_v)|PEST",
+        "(g_rv_p)|PEST",
+        "(g^rr_p)|PEST",
+        "(g^rr_v)|PEST",
+        "(g^rv_p)|PEST",
+        "(g^rv_v)|PEST",
+        "(g^rz_p)|PEST",
+        "(g^rz_v)|PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
+        "(sqrt(g)_PEST_p)|PEST",
+    ]
+    index = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+    keys_DESC, keys_PEST = zip(
+        *[(d, p) for d, p in zip(keys_DESC, keys_PEST) if (d in index) and (p in index)]
+    )
+    keys_DESC = list(keys_DESC)
+    keys_PEST = list(keys_PEST)
+
+    grid_PEST = LinearGrid(
+        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
+    data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
+    np.testing.assert_allclose(data["theta_PEST_t"], 1)
+
+    data_to_verify = eq.compute(
+        keys_PEST,
+        Grid(
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
+    )
+
+    for key_DESC, key_PEST in zip(keys_DESC, keys_PEST):
+        # This must pass with zero error tolerance.
+        np.testing.assert_allclose(
+            data[key_PEST], data[key_DESC], err_msg=f"{key_PEST} vs {key_DESC}"
+        )
+
+        # FIXME: Even though https://github.com/PlasmaControl/DESC/pull/1880 fixed
+        # bugs due to ill-conditioned fitting from Runge/Gibbs effects etc., eq.to_sfl()
+        # still does not work to even single digit accuracy.
+        with pytest.raises(AssertionError):
+            # This must pass with spectrally accurate error tolerance and tests
+            # correctness of PEST quantities beyond ensuring there are no missing
+            # or additional factors of lambda.
+            np.testing.assert_allclose(
+                data_to_verify[key_PEST],
+                data[key_DESC],
+                atol=1e-7,
+                err_msg=f"{key_PEST} vs {key_DESC}",
+            )
+
+
+@pytest.mark.unit
 def test_contravariant_basis_vectors():
     """Test calculation of contravariant basis vectors by comparing to finite diff."""
     eq = get("HELIOTRON")
@@ -1648,16 +1784,12 @@ def test_contravariant_basis_vectors():
         print(key)
         grid = grids[deriv]
         data = eq.compute([key, base_quant, "phi"], grid=grid)
-        data[key] = (
-            rpz2xyz_vec(data[key], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
-        data[base_quant] = (
-            rpz2xyz_vec(data[base_quant], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
+        data[key] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[key], phi=data["phi"]), "trz"
+        ).squeeze()
+        data[base_quant] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[base_quant], phi=data["phi"]), "trz"
+        ).squeeze()
 
         spacing = {
             "r": grid.spacing[0, 0],

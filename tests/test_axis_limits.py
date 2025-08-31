@@ -116,7 +116,7 @@ not_implemented_limits = {
     "iota_num_rrr",
     "iota_den_rrr",
     "gds2",
-    "B_dot_grad(grad(rho))",
+    "(B*grad) grad(rho)",
 }
 
 

@@ -2547,6 +2547,9 @@ def _sqrtg_PEST_r_PEST(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
+    # TODO: This can be computed more efficiently without building radial
+    #       derivatives of the stream functions by taking vartheta derivative
+    #       of formula used to compute sqrt(g)_PEST.
     data["(sqrt(g)_PEST_v)|PEST"] = (
         dot(data["(e_rho_v)|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(
@@ -2580,6 +2583,9 @@ def _sqrtg_PEST_theta_PEST_PEST(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
+    # TODO: This can be computed more efficiently without building radial
+    #       derivatives of the stream functions by taking phi derivative
+    #       of formula used to compute sqrt(g)_PEST.
     data["(sqrt(g)_PEST_p)|PEST"] = (
         dot(data["(e_rho_p)|PEST"], cross(data["e_theta_PEST"], data["e_phi|r,v"]))
         + dot(

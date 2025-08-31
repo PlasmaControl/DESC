@@ -1,0 +1,117 @@
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/ipykernel_launcher.py", line 18, in <module>
+    app.launch_new_instance()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1074, in launch_instance
+    app.initialize(argv)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 118, in inner
+    return method(app, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/ipykernel/kernelapp.py", line 692, in initialize
+    self.init_sockets()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/ipykernel/kernelapp.py", line 336, in init_sockets
+    self.stdin_port = self._bind_socket(self.stdin_socket, self.stdin_port)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/ipykernel/kernelapp.py", line 253, in _bind_socket
+    return self._try_bind_socket(s, port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/ipykernel/kernelapp.py", line 229, in _try_bind_socket
+    s.bind("tcp://%s:%i" % (self.ip, port))
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/zmq/sugar/socket.py", line 320, in bind
+    super().bind(addr)
+  File "zmq/backend/cython/_zmq.py", line 998, in zmq.backend.cython._zmq.Socket.bind
+    _check_rc(rc)
+    ^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 187, in zmq.backend.cython._zmq._check_rc
+    raise ZMQError(errno)
+    ^^^^^^^^^^^
+zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:59507')
+[NbConvertApp] ERROR | Error occurred while starting new kernel client for kernel 8ffe2956-24da-48b5-8d5c-e8a98a7f8a80: Kernel died before replying to kernel_info
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 97, in preprocess
+    with self.setup_kernel():
+         ^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 603, in setup_kernel
+    self.start_new_kernel_client()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 566, in async_start_new_kernel_client
+    await ensure_async(self.kc.wait_for_ready(timeout=self.startup_timeout))
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 197, in ensure_async
+    result = await obj
+             ^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_client/client.py", line 203, in _async_wait_for_ready
+    raise RuntimeError(msg)
+RuntimeError: Kernel died before replying to kernel_info
+srun: error: della-r3c2n5: task 11: Exited with exit code 1
+srun: Terminating StepId=287237.0
+slurmstepd: error: *** STEP 287237.0 ON della-r3c2n1 CANCELLED AT 2025-08-31T15:15:47 ***
+srun: error: della-r3c2n5: tasks 8-10,12-15: Terminated
+srun: error: della-r3c2n1: tasks 0-7: Terminated
+srun: Force Terminated StepId=287237.0

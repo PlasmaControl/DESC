@@ -1,0 +1,29 @@
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+[NbConvertApp] Writing 174726 bytes to mpi.ipynb
+slurmstepd: error:  mpi/pmix_v3: _errhandler: della-r3c2n2 [0]: pmixp_client_v2.c:211: Error handler invoked: status = -25, source = [slurm.pmix.289454.0:5]
+slurmstepd: error: *** STEP 289454.0 ON della-r3c2n2 CANCELLED AT 2025-08-31T17:02:14 ***
+srun: Job step aborted: Waiting up to 47 seconds for job step to finish.
+srun: error: della-r3c2n2: tasks 0-7: Killed
+srun: Terminating StepId=289454.0

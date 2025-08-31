@@ -1,0 +1,496 @@
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+    asyncio.get_running_loop()
+    asyncio.get_running_loop()
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    sys.exit(main())
+    sys.exit(main())
+             ^^^^^^
+    sys.exit(main())
+             ^^^^^^
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+    super().launch_instance(argv=argv, **kwargs)
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+    app.start()
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    super().launch_instance(argv=argv, **kwargs)
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    self.convert_single_notebook(notebook_filename)
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+    return self.from_file(f, resources=resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    self.preprocess_cell(cell, resources, index)
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return loop.run_until_complete(inner)
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+    return future.result()
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    return future.result()
+           ^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+from mpi4py import MPI
+#from yourmodule import bn_res_vec_mpi, Grid, FourierRZToroidalSurface
+
+# init MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+# --- run ---
+result = bn_res_vec_mpi(
+    sdata, sdata2, sdata3,
+    sgrid, surf_winding, N, d0, coords,
+    tdata, contour_data, stick_data,
+    contour_grid, ss_data, AAA,
+    mpi_comm=comm
+)
+
+# --- output only from rank 0 ---
+if rank == 0:
+    print("Result shape:", result.shape)
+    # save to file if needed
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mTypeError[39m                                 Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 9[39m
+[32m      6[39m rank = comm.Get_rank()
+[32m      8[39m [38;5;66;03m# --- run ---[39;00m
+[32m----> [39m[32m9[39m result = [43mbn_res_vec_mpi[49m[43m([49m
+[32m     10[39m [43m    [49m[43msdata[49m[43m,[49m[43m [49m[43msdata2[49m[43m,[49m[43m [49m[43msdata3[49m[43m,[49m
+[32m     11[39m [43m    [49m[43msgrid[49m[43m,[49m[43m [49m[43msurf_winding[49m[43m,[49m[43m [49m[43mN[49m[43m,[49m[43m [49m[43md0[49m[43m,[49m[43m [49m[43mcoords[49m[43m,[49m
+[32m     12[39m [43m    [49m[43mtdata[49m[43m,[49m[43m [49m[43mcontour_data[49m[43m,[49m[43m [49m[43mstick_data[49m[43m,[49m
+[32m     13[39m [43m    [49m[43mcontour_grid[49m[43m,[49m[43m [49m[43mss_data[49m[43m,[49m[43m [49m[43mAAA[49m[43m,[49m
+[32m     14[39m [43m    [49m[43mmpi_comm[49m[43m=[49m[43mcomm[49m
+[32m     15[39m [43m)[49m
+[32m     17[39m [38;5;66;03m# --- output only from rank 0 ---[39;00m
+[32m     18[39m [38;5;28;01mif[39;00m rank == [32m0[39m:
+
+[31mTypeError[39m: bn_res_vec_mpi() got multiple values for argument 'mpi_comm'
+
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+from mpi4py import MPI
+#from yourmodule import bn_res_vec_mpi, Grid, FourierRZToroidalSurface
+
+# init MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+# --- run ---
+result = bn_res_vec_mpi(
+    sdata, sdata2, sdata3,
+    sgrid, surf_winding, N, d0, coords,
+    tdata, contour_data, stick_data,
+    contour_grid, ss_data, AAA,
+    mpi_comm=comm
+)
+
+# --- output only from rank 0 ---
+if rank == 0:
+    print("Result shape:", result.shape)
+    # save to file if needed
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mTypeError[39m                                 Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 9[39m
+[32m      6[39m rank = comm.Get_rank()
+[32m      8[39m [38;5;66;03m# --- run ---[39;00m
+[32m----> [39m[32m9[39m result = [43mbn_res_vec_mpi[49m[43m([49m
+[32m     10[39m [43m    [49m[43msdata[49m[43m,[49m[43m [49m[43msdata2[49m[43m,[49m[43m [49m[43msdata3[49m[43m,[49m
+[32m     11[39m [43m    [49m[43msgrid[49m[43m,[49m[43m [49m[43msurf_winding[49m[43m,[49m[43m [49m[43mN[49m[43m,[49m[43m [49m[43md0[49m[43m,[49m[43m [49m[43mcoords[49m[43m,[49m
+[32m     12[39m [43m    [49m[43mtdata[49m[43m,[49m[43m [49m[43mcontour_data[49m[43m,[49m[43m [49m[43mstick_data[49m[43m,[49m
+[32m     13[39m [43m    [49m[43mcontour_grid[49m[43m,[49m[43m [49m[43mss_data[49m[43m,[49m[43m [49m[43mAAA[49m[43m,[49m
+[32m     14[39m [43m    [49m[43mmpi_comm[49m[43m=[49m[43mcomm[49m
+[32m     15[39m [43m)[49m
+[32m     17[39m [38;5;66;03m# --- output only from rank 0 ---[39;00m
+[32m     18[39m [38;5;28;01mif[39;00m rank == [32m0[39m:
+
+[31mTypeError[39m: bn_res_vec_mpi() got multiple values for argument 'mpi_comm'
+
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+from mpi4py import MPI
+#from yourmodule import bn_res_vec_mpi, Grid, FourierRZToroidalSurface
+
+# init MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+# --- run ---
+result = bn_res_vec_mpi(
+    sdata, sdata2, sdata3,
+    sgrid, surf_winding, N, d0, coords,
+    tdata, contour_data, stick_data,
+    contour_grid, ss_data, AAA,
+    mpi_comm=comm
+)
+
+# --- output only from rank 0 ---
+if rank == 0:
+    print("Result shape:", result.shape)
+    # save to file if needed
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mTypeError[39m                                 Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 9[39m
+[32m      6[39m rank = comm.Get_rank()
+[32m      8[39m [38;5;66;03m# --- run ---[39;00m
+[32m----> [39m[32m9[39m result = [43mbn_res_vec_mpi[49m[43m([49m
+[32m     10[39m [43m    [49m[43msdata[49m[43m,[49m[43m [49m[43msdata2[49m[43m,[49m[43m [49m[43msdata3[49m[43m,[49m
+[32m     11[39m [43m    [49m[43msgrid[49m[43m,[49m[43m [49m[43msurf_winding[49m[43m,[49m[43m [49m[43mN[49m[43m,[49m[43m [49m[43md0[49m[43m,[49m[43m [49m[43mcoords[49m[43m,[49m
+[32m     12[39m [43m    [49m[43mtdata[49m[43m,[49m[43m [49m[43mcontour_data[49m[43m,[49m[43m [49m[43mstick_data[49m[43m,[49m
+[32m     13[39m [43m    [49m[43mcontour_grid[49m[43m,[49m[43m [49m[43mss_data[49m[43m,[49m[43m [49m[43mAAA[49m[43m,[49m
+[32m     14[39m [43m    [49m[43mmpi_comm[49m[43m=[49m[43mcomm[49m
+[32m     15[39m [43m)[49m
+[32m     17[39m [38;5;66;03m# --- output only from rank 0 ---[39;00m
+[32m     18[39m [38;5;28;01mif[39;00m rank == [32m0[39m:
+
+[31mTypeError[39m: bn_res_vec_mpi() got multiple values for argument 'mpi_comm'
+
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+from mpi4py import MPI
+#from yourmodule import bn_res_vec_mpi, Grid, FourierRZToroidalSurface
+
+# init MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+# --- run ---
+result = bn_res_vec_mpi(
+    sdata, sdata2, sdata3,
+    sgrid, surf_winding, N, d0, coords,
+    tdata, contour_data, stick_data,
+    contour_grid, ss_data, AAA,
+    mpi_comm=comm
+)
+
+# --- output only from rank 0 ---
+if rank == 0:
+    print("Result shape:", result.shape)
+    # save to file if needed
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mTypeError[39m                                 Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 9[39m
+[32m      6[39m rank = comm.Get_rank()
+[32m      8[39m [38;5;66;03m# --- run ---[39;00m
+[32m----> [39m[32m9[39m result = [43mbn_res_vec_mpi[49m[43m([49m
+[32m     10[39m [43m    [49m[43msdata[49m[43m,[49m[43m [49m[43msdata2[49m[43m,[49m[43m [49m[43msdata3[49m[43m,[49m
+[32m     11[39m [43m    [49m[43msgrid[49m[43m,[49m[43m [49m[43msurf_winding[49m[43m,[49m[43m [49m[43mN[49m[43m,[49m[43m [49m[43md0[49m[43m,[49m[43m [49m[43mcoords[49m[43m,[49m
+[32m     12[39m [43m    [49m[43mtdata[49m[43m,[49m[43m [49m[43mcontour_data[49m[43m,[49m[43m [49m[43mstick_data[49m[43m,[49m
+[32m     13[39m [43m    [49m[43mcontour_grid[49m[43m,[49m[43m [49m[43mss_data[49m[43m,[49m[43m [49m[43mAAA[49m[43m,[49m
+[32m     14[39m [43m    [49m[43mmpi_comm[49m[43m=[49m[43mcomm[49m
+[32m     15[39m [43m)[49m
+[32m     17[39m [38;5;66;03m# --- output only from rank 0 ---[39;00m
+[32m     18[39m [38;5;28;01mif[39;00m rank == [32m0[39m:
+
+[31mTypeError[39m: bn_res_vec_mpi() got multiple values for argument 'mpi_comm'
+
+srun: error: della-h17n11: tasks 60-63: Exited with exit code 1
+srun: Terminating StepId=290625.0
+slurmstepd: error: *** STEP 290625.0 ON della-h12n12 CANCELLED AT 2025-08-31T17:54:40 ***
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+slurmstepd: error:  mpi/pmix_v3: _errhandler: della-h17n11 [1]: pmixp_client_v2.c:211: Error handler invoked: status = -25, source = [slurm.pmix.290625.0:63]
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
+srun: Job step aborted: Waiting up to 47 seconds for job step to finish.
+srun: error: della-h17n11: tasks 32-59: Terminated
+srun: error: della-h12n12: tasks 0-31: Terminated

@@ -202,26 +202,14 @@ class SinksSources(Optimizable, IOAble):
 
         # Assign the info of isothermaal coordinates
 
-    def save(self, file_name, file_format=None, file_mode="w"):
-        """Save the object.
-
-        **Not supported for this object!**
-
-        Parameters
-        ----------
-        file_name : str file path OR file instance
-            location to save object
-        file_format : str (Default hdf5)
-            format of save file. Only used if file_name is a file path
-        file_mode : str (Default w - overwrite)
-            mode for save file. Only used if file_name is a file path
-
-        """
-        file_name = os.path.expanduser(file_name)
-        raise OSError(
-            "Saving CurrentPotentialField is not supported,"
-            " as the potential function cannot be serialized."
-        )
+    #def save(self, file_name, file_format=None, file_mode="w"):
+        #"""Save the object.
+        #"""
+        #file_name = os.path.expanduser(file_name)
+        #raise OSError(
+        #    "Saving CurrentPotentialField is not supported,"
+        #    " as the potential function cannot be serialized."
+        #)
         
     @property
     def p_M(self):

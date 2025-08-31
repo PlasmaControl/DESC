@@ -3,7 +3,7 @@
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=190
+#SBATCH --cpus-per-task=180
 #SBATCH --mem=300G
 #SBATCH --mail-type=begin        # send mail when process begins
 #SBATCH --mail-type=end          # send email when job ends

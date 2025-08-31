@@ -1,0 +1,1205 @@
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+[NbConvertApp] Converting notebook mpi.ipynb to notebook
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+    asyncio.get_running_loop()
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    sys.exit(main())
+    sys.exit(main())
+             ^^^^^^
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+    super().launch_instance(argv=argv, **kwargs)
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+    app.start()
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+    self.convert_notebooks()
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+    self.convert_single_notebook(notebook_filename)
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+    output, resources = self.export_single_notebook(
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+    output, resources = self.exporter.from_filename(
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+    return self.from_file(f, resources=resources, **kw)
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+    nbc, resc = preprocessor(nbc, resc)
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+    return self.preprocess(nb, resources)
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+    self.preprocess_cell(cell, resources, index)
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+    cell = self.execute_cell(cell, index, store_history=True)
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    return loop.run_until_complete(inner)
+    return loop.run_until_complete(inner)
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+    return future.result()
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,601:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,601:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,600:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+    asyncio.get_running_loop()
+    asyncio.get_running_loop()
+RuntimeError: no running event loop
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+
+During handling of the above exception, another exception occurred:
+
+    sys.exit(main())
+Traceback (most recent call last):
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    super().launch_instance(argv=argv, **kwargs)
+    sys.exit(main())
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+    output, resources = self.exporter.from_filename(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    return self.from_file(f, resources=resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    nbc, resc = preprocessor(nbc, resc)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+                ^^^^^^^^^^^^^^^^^^^^^^^
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    return self.preprocess(nb, resources)
+    nbc, resc = preprocessor(nbc, resc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+                ^^^^^^^^^^^^^^^^^^^^^^^
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    return loop.run_until_complete(inner)
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    return future.result()
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+    return future.result()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,602:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,602:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+Traceback (most recent call last):
+    asyncio.get_running_loop()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 154, in wrapped
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+    asyncio.get_running_loop()
+    sys.exit(main())
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+             ^^^^^^
+    asyncio.get_running_loop()
+    sys.exit(main())
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+RuntimeError: no running event loop
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/bin/jupyter-nbconvert", line 7, in <module>
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    sys.exit(main())
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+             ^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/traitlets/config/application.py", line 1075, in launch_instance
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    app.start()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    app.start()
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 420, in start
+    self.convert_single_notebook(notebook_filename)
+    self.convert_notebooks()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    self.convert_single_notebook(notebook_filename)
+    output, resources = self.export_single_notebook(
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.export_single_notebook(
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    return self.from_file(f, resources=resources, **kw)
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    output, resources = self.exporter.from_filename(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+    return self.from_notebook_node(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 201, in from_filename
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 220, in from_file
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+    nbc, resc = preprocessor(nbc, resc)
+    return self.from_notebook_node(
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/notebook.py", line 36, in from_notebook_node
+                ^^^^^^^^^^^^^^^^^^^^^^^
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 154, in from_notebook_node
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    self.preprocess_cell(cell, resources, index)
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/exporters/exporter.py", line 353, in _preprocess
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/base.py", line 48, in __call__
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    self.preprocess_cell(cell, resources, index)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    return loop.run_until_complete(inner)
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self.preprocess_cell(cell, resources, index)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    return loop.run_until_complete(inner)
+    return future.result()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 158, in wrapped
+    return loop.run_until_complete(inner)
+    return future.result()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,600:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,601:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import os
+
+from scipy.io import netcdf_file
+import copy
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy
+import sys
+import functools
+import pickle
+
+import jax
+import jax.numpy as jnp
+from jax import jit, jacfwd
+
+from netCDF4 import Dataset
+
+from desc.backend import put, fori_loop, jnp, sign
+
+from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import ConcentricGrid, LinearGrid, Grid, QuadratureGrid
+from desc.io import InputReader, load
+#from desc.plotting import plot_1d, plot_2d, plot_3d, plot_section, plot_surfaces, plot_comparison
+
+from desc.plotting import *
+
+from desc.transform import Transform
+from desc.vmec import VMECIO
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+import desc.examples
+
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.coils import *
+
+from desc.utils import flatten_list, Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif, cross, dot
+
+from desc.optimize import lsqtr, lsq_auglag
+
+from desc.magnetic_fields import FourierCurrentPotentialField
+
+import time
+
+import numpy as np
+from numpy import ndarray
+
+from desc.fns_simp import (plot_figure,
+                           plot_figure2,
+                            plot_xy,
+                           surf_int,
+                           _compute_magnetic_field_from_Current)
+
+from desc.objectives.sources_dipoles_utils import iso_coords_load, iso_coords_interp, alt_grid
+
+
+from desc.objectives.find_sour_mpi import bn_res_vec#B_theta_contours_vec, B_sticks_vec, B_sour_vec,
+------------------
+
+----- stderr -----
+ERROR:2025-08-31 15:08:54,601:jax._src.xla_bridge:444: Jax plugin configuration error: Exception when calling jax_plugins.xla_cuda12.initialize()
+Traceback (most recent call last):
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax/_src/xla_bridge.py", line 442, in discover_pjrt_plugins
+    plugin_module.initialize()
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 324, in initialize
+    _check_cuda_versions(raise_on_first_error=True)
+  File "/home/fcastro/.conda/envs/desc-ray/lib/python3.12/site-packages/jax_plugins/xla_cuda12/__init__.py", line 281, in _check_cuda_versions
+    local_device_count = cuda_versions.cuda_device_count()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: jaxlib/cuda/versions_helpers.cc:113: operation cuInit(0) failed: Unknown CUDA error 303; cuGetErrorName failed. This probably means that JAX was unable to load the CUDA libraries.
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mImportError[39m                               Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[2][39m[32m, line 60[39m
+[32m     51[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mfns_simp[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m (plot_figure,
+[32m     52[39m                            plot_figure2,
+[32m     53[39m                             plot_xy,
+[32m     54[39m                            surf_int,
+[32m     55[39m                            _compute_magnetic_field_from_Current)
+[32m     57[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01msources_dipoles_utils[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m iso_coords_load, iso_coords_interp, alt_grid
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+[32m---> [39m[32m60[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdesc[39;00m[34;01m.[39;00m[34;01mobjectives[39;00m[34;01m.[39;00m[34;01mfind_sour_mpi[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m bn_res_vec[38;5;66;03m#B_theta_contours_vec, B_sticks_vec, B_sour_vec,[39;00m
+
+[31mImportError[39m: cannot import name 'bn_res_vec' from 'desc.objectives.find_sour_mpi' (/home/fcastro/DESC/desc/objectives/find_sour_mpi.py)
+
+
+srun: error: della-r3c2n5: tasks 8-15: Exited with exit code 1
+srun: Terminating StepId=287121.0
+slurmstepd: error: *** STEP 287121.0 ON della-r3c2n1 CANCELLED AT 2025-08-31T15:09:01 ***
+srun: error: della-r3c2n1: tasks 0-7: Terminated
+srun: Force Terminated StepId=287121.0

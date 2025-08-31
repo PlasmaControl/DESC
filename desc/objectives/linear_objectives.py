@@ -3723,10 +3723,10 @@ class SinksSourcesSum(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.",
-        bounds_default="``target=0``.",
-    )
+    #__doc__ = __doc__.rstrip() + collect_docs(
+    #    target_default="``target=0``.",
+    #    bounds_default="``target=0``.",
+    #)
 
     _static_attrs = _Objective._static_attrs + [
         "_data_keys",
@@ -3737,65 +3737,44 @@ class SinksSourcesSum(_Objective):
         "_eq",
     ]
 
-    _scalar = False
-    _linear = False
-    _print_value_fmt = "Boundary normal field error: "
-    _units = "(T m^2)"
-    _coordinates = "rtz"
-
+    _scalar = True
+    _linear = True
+    _print_value_fmt = "Sum of sinsks/sources error: "
+    _units = "(A)"
+    _coordinates = ""#"rtz"
+        
     def __init__(
         self,
         field,  # Field for sinks and sources
-        eq,  # Equilibrium
-        #winding_surface,  # Winding surface
-        #iso_data,  # Pass a dictionary to this objective with the information about the isothermal coordinates
-        #N_sum,  # Nnumber of terms for the sum in the Jacobi-theta function
-        #d0,  # Regularization radius for Guenther's function
+        #eq,  # Equilibrium
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        #source_grid=None,
-        eval_grid=None,
-        field_grid=None,
+        #eval_grid=None,
+        #field_grid=None,
         name="Sinks/Sources Quadratic flux",
-        jac_chunk_size=None,
-        *,
-        bs_chunk_size=None,
-        B_plasma_chunk_size=None,
         **kwargs,
     ):
 
         if target is None and bounds is None:
             target = 0
 
-        #self._source_grid = source_grid  # Locations of the cores of the sources/sinks
-        self._eval_grid = eval_grid
-        #self._iso_data = iso_data  # Info on isothermal coordinates
-        self._eq = eq
+        #self._eval_grid = eval_grid
+        #self._eq = eq
         self._field = field
-        #self._winding_surface = (
-        #    winding_surface  # Array that stores the values of sinks/sources
-        #)
-        self._field_grid = field_grid
-        #self._N_sum = N_sum
-        #self._d0 = d0
-
-        self._bs_chunk_size = bs_chunk_size
-        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+        #self._field_grid = field_grid
 
         super().__init__(
-            things=[field],
-            # [#self._field, #self._sinks_and_sources],
+            things=field,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+            )
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -3808,66 +3787,44 @@ class SinksSourcesSum(_Objective):
             Level of output.
 
         """
-        # from desc.magnetic_fields import SumMagneticField
-        # from desc.fns_simp import _compute_magnetic_field_from_Current
-        from desc.objectives.find_sour import iso_coords_interp
 
-        eq = self._eq
+        #eq = self._eq
         field = self._field
 
-        if self._eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=False,
-            )
-            self._eval_grid = eval_grid
-        else:
-            eval_grid = self._eval_grid
-
-        #field_grid = self._field_grid
+        #if self._eval_grid is None:
+        #    eval_grid = LinearGrid(
+        #        rho=np.array([1.0]),
+        #        M=eq.M_grid,
+        #        N=eq.N_grid,
+        #        NFP=eq.NFP,
+        #        sym=False,
+        #    )
+        #    self._eval_grid = eval_grid
+        #else:
+        #    eval_grid = self._eval_grid
         
-        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
-        #self._source_keys = [
-        #    "theta",
-        #    "zeta",
-        #    "e^theta_s",
-        #    "e^zeta_s",
-        #    'x',
-        #    '|e_theta x e_zeta|',
-        #]  # Info on the winding surface
+        #self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
 
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
+        self._dim_f = 1#eval_grid.num_nodes
 
-        self._dim_f = eval_grid.num_nodes
+        #w = eval_grid.weights
+        #w *= jnp.sqrt(eval_grid.num_nodes)
 
-        w = eval_grid.weights
-        w *= jnp.sqrt(eval_grid.num_nodes)
-
-        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
-        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-        
-        self._constants = {
-            "eq": eq,
-            "quad_weights": w,
-            "eval_transforms": eval_transforms,
-            "eval_profiles": eval_profiles,
-        }
+        #eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        #eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+    
+        #self._constants = {
+        #    "eq": eq,
+        #    "quad_weights": w,
+        #    "eval_transforms": eval_transforms,
+        #    "eval_profiles": eval_profiles,
+        #}
 
         if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            #scales = compute_scaling_factors(eq)
+            self._normalization = 1#scales["B"] * scales["R0"] * scales["a"]
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=3)
 
     def compute(
         self,
@@ -3890,11 +3847,8 @@ class SinksSourcesSum(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self.constants
+        #if constants is None:
+        #    constants = self.constants
 
-        # B_plasma from equilibrium precomputed
-        #eval_data = constants["eval_data"]
-
-        #return f
-        return jnp.sum(params["x_mn"])#* jnp.sqrt( eval_data["|e_theta x e_zeta|"] )
+        return jnp.sum(params["x_mn"])
+#* jnp.sqrt( eval_data["|e_theta x e_zeta|"] )

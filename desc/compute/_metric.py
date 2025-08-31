@@ -2116,7 +2116,7 @@ def _g_sub_rr_PEST(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g_rv|PEST",
-    label="g_{\\rho\\theta}|PEST",
+    label="g_{\\rho\\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Radial-Poloidal element of covariant metric tensor"
@@ -2156,7 +2156,7 @@ def _g_sub_rp_PEST(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g_vv|PEST",
-    label="g_{\\theta_PEST \\theta_PEST}|PEST",
+    label="g_{\\vartheta \\vartheta}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Poloidal-Poloidal element of covariant metric tensor"
@@ -2175,7 +2175,7 @@ def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g_vp|PEST",
-    label="g_{\\theta_PEST \\phi}|PEST",
+    label="g_{\\vartheta \\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Poloidal-Toroidal element of covariant metric tensor"
@@ -2319,7 +2319,7 @@ def _g_sub_vv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g_pp_v)|PEST",
-    label="\\partial_{\\theta_PEST}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\theta_PEST}|_{\\rho, \\phi} g_{\\phi\\phi}|PEST",
     units="m^{2}",
     units_long="square meters",
     description="Toroidal-Toroidal element of PEST covariant metric tensor"
@@ -2361,7 +2361,7 @@ def _g_sub_rv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rr_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g^{\\rho\\rho}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Radial element of PEST contravariant metric tensor"
@@ -2401,7 +2401,7 @@ def _g_sup_rr_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rv_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g^{\\rho\\vartheta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Poloidal element of contravariant metric tensor"
@@ -2423,7 +2423,7 @@ def _g_sup_rv_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rv_v)|PEST",
-    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g^{\\rho\\vartheta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Poloidal element of contrvariant metric tensor"
@@ -2445,7 +2445,7 @@ def _g_sup_rv_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(g^rz_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} g^{\\rho\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Toroidal element of contravariant metric tensor"
@@ -2467,7 +2467,7 @@ def _g_sup_rz_p_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(g^rz_v)|PEST",
-    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g_{\\zeta\\zeta}|PEST",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} g^{\\rho\\zeta}|PEST",
     units="m^{-2}",
     units_long="inverse square meters",
     description="Radial-Toroidal element of contrvariant metric tensor"
@@ -2600,18 +2600,13 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     label="\\nabla(\\nabla(\\rho))",
     units=" T m^{-2}",
     units_long="Tesla over square meters",
-    description="Gradient of gradient of rho tensor along the magnetic field",
+    description="Hessian of flux surface label along the magnetic field",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho_t",
-        "e^rho_z",
-        "B^theta",
-        "B^zeta",
-    ],
+    data=["e^rho_t", "e^rho_z", "B^theta", "B^zeta"],
 )
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
     data["(B*grad) grad(rho)"] = (
@@ -2643,9 +2638,6 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     all instances of s with ρ².
     """
     data["finite-n instability drive"] = (
-        -2
-        * dot(data["J x grad(rho)"], data["(B*grad) grad(rho)"], axis=1)
-        / data["g^rr"]
+        -2 * dot(data["J x grad(rho)"], data["(B*grad) grad(rho)"]) / data["g^rr"]
     )
-
     return data

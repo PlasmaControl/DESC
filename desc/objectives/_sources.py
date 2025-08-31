@@ -531,7 +531,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
 
 
 # Sum of sinks and sources
-class SinksSourcesSum(_Objective):
+class SinksSourcesSum2(_Objective):
     """Target Sum(Sources + Sinks) = 0 on a surface.
 
     Used to find a quadratic-flux-minimizing (QFM) surface, so a

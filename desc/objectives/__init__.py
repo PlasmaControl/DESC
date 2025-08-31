@@ -104,12 +104,13 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
     ShareParameters,
+    SinksSourcesSum,
 )
 from .objective_funs import ObjectiveFunction
 
 from ._sources import ( 
 SinksSourcesSurfaceQuadraticFlux, 
-SinksSourcesSum,
+#SinksSourcesSum,
 SinksSourcesRegularization,
 )
 

@@ -3684,3 +3684,217 @@ class FixNearAxisLambda(_FixedObjective):
         """
         f = jnp.dot(self._A, params["L_lmn"]).squeeze()
         return f
+
+# Sum of sinks and sources
+class SinksSourcesSum(_Objective):
+    """Target Sum(Sources + Sinks) = 0 on a surface.
+
+    Used to find a quadratic-flux-minimizing (QFM) surface, so a
+    `FourierRZToroidalSurface` should be passed to the objective.
+    Should always be used along with a ``ToroidalFlux`` or ``Volume`` objective to
+    ensure that the resulting QFM surface has the desired amount of
+    flux enclosed and avoid trivial solutions.
+
+    Note: Winding Surface is fixed, equilibrium is fixed.
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalSurface
+        QFM surface upon which the normal field error will be minimized.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided QFM surface. May be fixed
+        by passing in ``field_fixed=True``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=surface.M_grid,``
+        ``N=surface.N_grid, NFP=surface.NFP, sym=False)``
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    field_fixed : bool
+        Whether or not to fix the magnetic field's DOFs during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_data_keys",
+        "_source_keys",
+        "_N",
+        "_M",
+        "_N_sum",
+        "_eq",
+    ]
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field error: "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        field,  # Field for sinks and sources
+        eq,  # Equilibrium
+        #winding_surface,  # Winding surface
+        #iso_data,  # Pass a dictionary to this objective with the information about the isothermal coordinates
+        #N_sum,  # Nnumber of terms for the sum in the Jacobi-theta function
+        #d0,  # Regularization radius for Guenther's function
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        #source_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        name="Sinks/Sources Quadratic flux",
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
+        **kwargs,
+    ):
+
+        if target is None and bounds is None:
+            target = 0
+
+        #self._source_grid = source_grid  # Locations of the cores of the sources/sinks
+        self._eval_grid = eval_grid
+        #self._iso_data = iso_data  # Info on isothermal coordinates
+        self._eq = eq
+        self._field = field
+        #self._winding_surface = (
+        #    winding_surface  # Array that stores the values of sinks/sources
+        #)
+        self._field_grid = field_grid
+        #self._N_sum = N_sum
+        #self._d0 = d0
+
+        self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+
+        super().__init__(
+            things=[field],
+            # [#self._field, #self._sinks_and_sources],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        # from desc.magnetic_fields import SumMagneticField
+        # from desc.fns_simp import _compute_magnetic_field_from_Current
+        from desc.objectives.find_sour import iso_coords_interp
+
+        eq = self._eq
+        field = self._field
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        #field_grid = self._field_grid
+        
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
+        #self._source_keys = [
+        #    "theta",
+        #    "zeta",
+        #    "e^theta_s",
+        #    "e^zeta_s",
+        #    'x',
+        #    '|e_theta x e_zeta|',
+        #]  # Info on the winding surface
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        
+        self._constants = {
+            "eq": eq,
+            "quad_weights": w,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+        }
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(
+        self,
+        params,
+        constants=None,
+    ):
+        """Compute normal field error on boundary.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm from B_ext and B_plasma
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        # B_plasma from equilibrium precomputed
+        #eval_data = constants["eval_data"]
+
+        #return f
+        return jnp.sum(params["x_mn"])#* jnp.sqrt( eval_data["|e_theta x e_zeta|"] )

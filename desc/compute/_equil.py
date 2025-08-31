@@ -131,7 +131,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 )
 def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
     # J^ϑ = J^θ (∂ϑ/∂θ) + J^ζ (∂ϑ/∂ζ)
-    # and ∂/∂ϑ|ρ,ϕ = (∂θ/∂ϑ)|ρ,ϕ ∂/∂θ|ρ,ϕ
+    # and ∂/∂ϑ|ρ,ϕ = (1/(∂ϑ/∂θ)|ρ,ϕ) ∂/∂θ|ρ,ϕ
     data["(J^theta_PEST_v)|PEST"] = (
         data["J^theta_t"] * data["theta_PEST_t"]
         + data["J^theta"] * data["theta_PEST_tt"]

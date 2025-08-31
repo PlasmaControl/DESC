@@ -2614,10 +2614,10 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
-    # (B⋅∇)∇ρ = B^θ ∂(∇ρ)/∂θ + B^ζ ∂(∇ρ)/∂ζ
-    data["(B*grad) grad(rho)"] = data["B^theta"][:, jnp.newaxis] * data["e^rho_t"]
-    +data["B^zeta"][:, jnp.newaxis] * data["e^rho_z"]
-
+    data["(B*grad) grad(rho)"] = (
+        data["B^theta"][:, jnp.newaxis] * data["e^rho_t"]
+        + data["B^zeta"][:, jnp.newaxis] * data["e^rho_z"]
+    )
     return data
 
 

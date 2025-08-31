@@ -1689,12 +1689,7 @@ def test_PEST_derivative_math(eq):
     data_to_verify = eq.compute(
         keys_PEST,
         Grid(
-            eq.map_coordinates(
-                grid_PEST.nodes,
-                inbasis=("rho", "theta_PEST", "zeta"),
-                outbasis=("rho", "theta", "zeta"),
-                tol=tol,
-            )
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
         ),
     )
 
@@ -1789,16 +1784,12 @@ def test_contravariant_basis_vectors():
         print(key)
         grid = grids[deriv]
         data = eq.compute([key, base_quant, "phi"], grid=grid)
-        data[key] = (
-            rpz2xyz_vec(data[key], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
-        data[base_quant] = (
-            rpz2xyz_vec(data[base_quant], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
+        data[key] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[key], phi=data["phi"]), "trz"
+        ).squeeze()
+        data[base_quant] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[base_quant], phi=data["phi"]), "trz"
+        ).squeeze()
 
         spacing = {
             "r": grid.spacing[0, 0],

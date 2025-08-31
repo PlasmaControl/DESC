@@ -642,7 +642,7 @@ def to_sfl(
         cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
-    rtol : float
+    tol : float
         Tolerance for coordinate mapping.
 
     Returns

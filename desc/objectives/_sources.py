@@ -92,7 +92,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             weight=1,
             normalize=True,
             normalize_target=True,
-            #source_grid=None,
             eval_grid=None,
             field_grid=None,
             countour_grid = None,
@@ -374,10 +373,7 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
         )
 
         # Build the matrix for K from contours
-
         sign_vals = jnp.where(contour_data["theta"] < jnp.pi, -1, 1) #+ jnp.where(ss_data["theta"] > jnp.pi, 1, 0)
-
-        # Generate the matrix of coefficients for the contours
         A = compute_mask(contour_data, theta_sources, zeta_sources)
         AA = A[:, None, :] * contour_data['e_theta'][:, :, None]
         AAA = AA * ( jnp.sum(contour_data["e_theta"] * contour_data["e_theta"], axis = 1 ) ** (-1 / 2) * sign_vals )[:, None, None]
@@ -527,7 +523,6 @@ class SinksSourcesSurfaceQuadraticFlux(_Objective):
             constants['AAA'],
         )
         
-        #pdb.set_trace()
         error = B_src - constants["B_target"]
         f = jnp.sqrt(jnp.sum(error * error, axis=1)) * jnp.sqrt(
             eval_data["|e_theta x e_zeta|"]

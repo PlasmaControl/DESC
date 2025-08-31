@@ -418,7 +418,7 @@ def densify_linspace(arr, points_per_interval=1):
 def _compute_magnetic_field_from_Current(
     Kgrid, K_at_grid, surface, data,
     coords,
-    #basis="rpz"
+    basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -447,7 +447,7 @@ def _compute_magnetic_field_from_Current(
     #Bdata = eq.compute(["R", "phi", "Z", "n_rho"], grid=Bgrid)
     #coords = jnp.vstack([Bdata["R"], Bdata["phi"], Bdata["Z"]]).T
 
-    basis="rpz"
+    #basis="rpz"
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):
@@ -501,7 +501,7 @@ def _compute_magnetic_field_from_Current(
 #@jax.jit
 def _compute_magnetic_field_from_Current_Contour(
     Kgrid, K_at_grid, surface, data, coords,
-    #basis="rpz"
+    basis="rpz"
 ):
     """Compute magnetic field at a set of points.
 
@@ -527,7 +527,7 @@ def _compute_magnetic_field_from_Current_Contour(
 
     """
 
-    basis="rpz"
+    #basis="rpz"
     
     assert basis.lower() in ["rpz", "xyz"]
     if hasattr(coords, "nodes"):

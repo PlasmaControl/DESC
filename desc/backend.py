@@ -554,56 +554,6 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
-    def pconcat(arrays, mode="concat"):  # pragma: no cover
-        """Concatenate arrays that live on different devices.
-
-        Parameters
-        ----------
-        arrays : list of jnp.ndarray
-            Arrays to concatenate.
-        mode : str
-            "concat:, "hstack" or "vstack. Default is "concat"
-
-        Returns
-        -------
-        out : jnp.ndarray
-            Concatenated array that lives on GPU[id=0]. If thre is not enough memory
-            the array will be stored on CPU.
-        """
-        # we will use either CPU or GPU[0] for the matrix decompositions, so the
-        # array of float64 should fit into single device
-        size = jnp.array([x.size for x in arrays])
-        size = jnp.sum(size)
-        if (
-            size * 8 / (1024**3) > desc_config["avail_mems"][0]
-            or desc_config["kind"] == "cpu"
-        ):
-            if (
-                getattr(desc_config, "SUPPRESS_CPU_WARNING", False)
-                and desc_config["kind"] == "gpu"
-            ):
-                warnings.warn(
-                    "The total size of the arrays exceeds the available memory of the "
-                    "GPU[id=0]. Moving the array to CPU. This may cause performance "
-                    "degredation. To suppress this warning, use "
-                    "`from desc import config as desc_config` \n"
-                    "`desc_config['SUPPRESS_CPU_WARNING'] = True`"
-                )
-            device = jax.devices("cpu")[0]
-        else:
-            device = jax.devices("gpu")[0]
-
-        if mode == "concat":
-            out = jnp.concatenate([jax.device_put(x, device=device) for x in arrays])
-        elif mode == "hstack":
-            out = jnp.hstack(
-                [jnp.atleast_2d(jax.device_put(x, device=device)) for x in arrays]
-            )
-        elif mode == "vstack":
-            out = jnp.vstack([jax.device_put(x, device=device) for x in arrays])
-
-        return out
-
     def safe_mpi_Bcast(arr, comm, root=0):
         """Safe Bcast function for Jax arrays.
 
@@ -1096,16 +1046,6 @@ else:  # pragma: no cover
             )
         else:
             out = np.take(a, indices, axis, out, mode)
-        return out
-
-    def pconcat(arrays, mode="concat"):
-        """Numpy implementation of desc.backend.pconcat."""
-        if mode == "concat":
-            out = np.concatenate(arrays)
-        elif mode == "hstack":
-            out = np.hstack(arrays)
-        elif mode == "vstack":
-            out = np.vstack(arrays)
         return out
 
     def safe_mpi_Bcast(arr, comm, root=0):

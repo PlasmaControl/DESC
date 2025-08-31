@@ -30,6 +30,35 @@
 [NbConvertApp] Converting notebook mpi2.ipynb to notebook
 [NbConvertApp] Converting notebook mpi2.ipynb to notebook
 [NbConvertApp] Converting notebook mpi2.ipynb to notebook
-srun: Job step aborted: Waiting up to 47 seconds for job step to finish.
-slurmstepd: error: *** JOB 290623 ON della-h17n11 CANCELLED AT 2025-08-31T17:53:38 ***
-slurmstepd: error: *** STEP 290623.0 ON della-h17n11 CANCELLED AT 2025-08-31T17:53:38 ***
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175766 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb
+[NbConvertApp] Writing 175347 bytes to mpi2.ipynb

@@ -2606,8 +2606,8 @@ def _sqrtg_PEST_phi_PEST(params, transforms, profiles, data, **kwargs):
     label="\\nabla(\\nabla(\\rho))",
     units="T m^{-2}",
     units_long="Tesla over square meters",
-    description="Gradient of covariant radial basis vector along"
-    "the magnetic field scaled by the magnetic field strength",
+    description="Gradient of contravariant radial basis vector(grad rho)"
+    "along the magnetic field scaled by the magnetic field strength",
     dim=3,
     params=[],
     transforms={},

@@ -6,7 +6,7 @@
 #SBATCH --nodes=2                    # Number of nodes
 #SBATCH --ntasks-per-node=16          # MPI ranks per node
 #SBATCH --cpus-per-task=1            # CPU cores per MPI rank
-#SBATCH --mem=250G                      # Use all memory on node
+#SBATCH --mem=350G                      # Use all memory on node
 #SBATCH --mail-type=END,FAIL         # Notifications for job done & fail
 #SBATCH --mail-user=fcastro@princeton.edu
 

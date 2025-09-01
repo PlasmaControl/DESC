@@ -3,7 +3,7 @@
 #SBATCH --output=4bn_res_vec.%j.out   # Standard output
 #SBATCH --error=4bn_res_vec.%j.err    # Standard error
 #SBATCH --time=01:00:00              # Walltime (hh:mm:ss)
-#SBATCH --nodes=2                    # Number of nodes
+#SBATCH --nodes=4                    # Number of nodes
 #SBATCH --ntasks-per-node=4          # MPI ranks per node
 #SBATCH --cpus-per-task=25          # CPU cores per MPI rank
 #SBATCH --mem=350G                      # Use all memory on node

@@ -2644,7 +2644,7 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     TERPSICHORE: A THREE-DIMENSIONAL IDEAL MAGNETOHYDRODYNAMIC STABILITY PROGRAM
     (https://doi.org/10.1007/978-1-4613-0659-7_8). Equation (5) on page 162.
     In the paper, the instability drive term uses s (= ρ²), but we have replaced
-    all instances of s with ρ².
+    all instances of s with ρ.
     """
     data["finite-n instability drive"] = (
         2 * dot(data["J x grad(rho)"], data["(B*grad) grad(rho)"]) / data["g^rr"] ** 2

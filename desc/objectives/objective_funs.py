@@ -434,7 +434,7 @@ class ObjectiveFunction(IOAble):
             return
 
         def alloc_array(shape, device=None):
-            if desc_config["kind"] == "cpu":
+            if not desc_config["mpi-cuda"]:
                 return np.empty(shape, dtype=np.float64)
             return jnp.empty(
                 shape, dtype=jnp.float64, device=device
@@ -466,7 +466,7 @@ class ObjectiveFunction(IOAble):
                 )
                 params = [params[i] for i in obj_idx_rank]
                 out = compute_per_process(params, objs, op=message[0])
-                if desc_config["kind"] == "cpu":
+                if not desc_config["mpi-cuda"]:
                     out = np.array(out)
                 self.comm.Gatherv(
                     out, (None, self._f_sizes, self._f_displs, self.mpi.DOUBLE), root=0
@@ -497,7 +497,7 @@ class ObjectiveFunction(IOAble):
                     op = message[0].replace("proximal_jvp_", "")
                     out = jvp_proximal_per_process(xs, vs, objs, op=op)
 
-                if desc_config["kind"] == "cpu":
+                if not desc_config["mpi-cuda"]:
                     out = np.array(out)
                 self.comm.Gatherv(
                     out,
@@ -779,7 +779,7 @@ class ObjectiveFunction(IOAble):
                 [self.objectives[i] for i in obj_idx_rank],
                 op=message[0],
             )
-            if desc_config["kind"] == "cpu":
+            if not desc_config["mpi-cuda"]:
                 f_rank = np.array(f_rank)
                 recvbuf = np.empty(self.dim_f, dtype=np.float64)
             else:
@@ -789,7 +789,7 @@ class ObjectiveFunction(IOAble):
                 (recvbuf, self._f_sizes, self._f_displs, self.mpi.DOUBLE),
                 root=0,
             )
-            if desc_config["kind"] == "cpu":
+            if not desc_config["mpi-cuda"]:
                 recvbuf = jnp.array(recvbuf)
             return recvbuf
 
@@ -1109,7 +1109,7 @@ class ObjectiveFunction(IOAble):
                     [self.objectives[i] for i in obj_idx_rank],
                     op=message[0],
                 ).T
-                if desc_config["kind"] == "cpu":
+                if not desc_config["mpi-cuda"]:
                     J_rank = np.array(J_rank)
                     recvbuf = np.empty((self.dim_f, message[2][0]), dtype=np.float64)
                 else:
@@ -1124,7 +1124,7 @@ class ObjectiveFunction(IOAble):
                     ),
                     root=0,
                 )
-                if desc_config["kind"] == "cpu":
+                if not desc_config["mpi-cuda"]:
                     recvbuf = jnp.array(recvbuf)
                 return recvbuf.T
 
@@ -1635,9 +1635,6 @@ class _Objective(IOAble, ABC):
             self._unjit()
 
         self._built = True
-        # put the constants to device as jax arrays
-        if desc_config["kind"] == "gpu":
-            self._constants = jax.device_put(self.constants, self._device)
 
     @abstractmethod
     def compute(self, *args, **kwargs):

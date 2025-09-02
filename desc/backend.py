@@ -578,7 +578,7 @@ if use_jax:  # noqa: C901
             Broadcasted array.
         """
         arr.block_until_ready()
-        if desc_config["kind"] == "cpu":
+        if not desc_config["mpi-cuda"]:
             arr = np.array(arr)
         return comm.Bcast(arr, root=root)
 

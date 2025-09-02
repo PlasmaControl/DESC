@@ -61,7 +61,13 @@ _BANNER = r"""
 BANNER = colored(_BANNER, "magenta")
 
 
-config = {"devices": None, "avail_mems": None, "kind": None, "num_device": None}
+config = {
+    "devices": None,
+    "avail_mems": None,
+    "kind": None,
+    "num_device": None,
+    "mpi-cuda": False,
+}
 
 
 def _get_processor_name():

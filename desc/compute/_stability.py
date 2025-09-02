@@ -4755,7 +4755,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
-    A2 = A2.at[jnp.diag_indices_from(A2)].add(5e-10)
+    A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-9)
 
     # A3 = A2[jnp.ix_(keep, keep)] + Au2[jnp.ix_(keep, keep)]
     A3 = A2[jnp.ix_(keep, keep)]
@@ -4764,6 +4764,45 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     print(w2)
 
     pdb.set_trace()
+
+    sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
+    sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
+    sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
+
+    partial_z_log_sqrtg = (sqrtg_p / sqrtg).flatten()
+    partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
+    partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
+
+    C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
+    C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
+    C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
+
+    # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
+    if compressible:
+        A = A.at[rho_idx, rho_idx].add(C_rho @ C_rho.T)
+        A = A.at[theta_idx, theta_idx].add(C_theta @ C_theta.T)
+        A = A.at[zeta_idx, zeta_idx].add(C_zeta @ C_zeta.T)
+        A = A.at[rho_idx, theta_idx].add(C_rho @ C_rho.T)
+        A = A.at[rho_idx, zeta_idx].add(C_rho @ C_zeta.T)
+        A = A.at[theta_idx, zeta_idx].add(C_theta @ C_zeta.T)
+
+    else:  # Impose ∇⋅𝛏 = 0
+        C = jnp.array([C_rho, C_theta, C_zeta])
+
+        # Orthogonal projector P = I - C^T (C C^T)^{-1} C, used implicitly via CTS:
+        G = sym(C @ C.T) + 1e-12 * jnp.eye(C.shape[0], C.dtype)  # Gram
+        L = jnp.linalg.cholesky(G)
+        Y = jax.lax.linalg.triangular_solve(L, C, left_side=True, lower=True)
+        S = jax.lax.linalg.triangular_solve(L.T, Y, left_side=True, lower=False)
+        CTS = C.T @ S  # = C^T (C C^T)^{-1} C
+
+        # Projected operator A_proj = P A P without forming P
+        A_proj = A - A @ CTS - CTS @ A + CTS @ A @ CTS
+        A_proj = sym(A_proj)
+
+        # w, V = jnp.linalg.eigh(A_proj)
+        # jnp.linalg.cholesky(C @ C.T)
+
     # tic = time.time()
     # w, v = jax.scipy.linalg.eigh(A3, B2[jnp.ix_(keep, keep)])
     # toc = time.time()

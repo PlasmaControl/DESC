@@ -1105,10 +1105,13 @@ class DirectParticleTracing(_Objective):
         # one metric per particle
         self._dim_f = self._x0.shape[0]
 
-        def default_terminating_event(t, y, args, **kwargs):
-            return jnp.logical_or(y[0] < 0, y[0] > 1)
+        # tracing uses carteasian coordinates internally, the termainating event
+        # must look at rho values by conversion
+        def default_event(t, y, args, **kwargs):
+            i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
+            return jnp.logical_or(i < 0.0, i > 1.0)
 
-        self._event = Event(default_terminating_event)
+        self._event = Event(default_event)
 
         # avoid circular import
         self._trace_particles = _trace_particles
@@ -1165,7 +1168,7 @@ class DirectParticleTracing(_Objective):
         else:
             iota_prof = None
 
-        rtz, _ = self._trace_particles(
+        rpz, _ = self._trace_particles(
             field=self.things[0],
             y0=self._x0,
             model=self._model,
@@ -1182,8 +1185,8 @@ class DirectParticleTracing(_Objective):
             options={"iota": iota_prof},
         )
 
-        # rtz is shape [N_particles, N_time, 3], take just index rho
-        rhos = rtz[:, :, 0]
+        # rpz is shape [N_particles, N_time, 3], take just index rho
+        rhos = rpz[:, :, 0]
         tmax_idx = jnp.where(jnp.isnan(rhos), -1, jnp.arange(0, self._ts.size))
         # find the index of the last non-NaN time for each particle
         tmax_idx = jnp.max(tmax_idx, axis=1)

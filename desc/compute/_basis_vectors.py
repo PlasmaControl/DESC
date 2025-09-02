@@ -4217,6 +4217,11 @@ def _e_sub_phi_rvartheta_phi_rvartheta(params, transforms, profiles, data, **kwa
     units_long="meters",
     description="Derivative of the covariant poloidal PEST basis vector in"
     "straight field line PEST coordinates (ρ,ϑ,ϕ) w.r.t rho.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
     data=[
         "e_theta_r",  # in DESC coordinates
         "e_theta_PEST",

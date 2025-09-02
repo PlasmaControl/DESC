@@ -1,6 +1,13 @@
 Changelog
 =========
 
+New Features
+------------
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+
+Bug Fixes
+---------
+- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 
 Performance Improvements
 

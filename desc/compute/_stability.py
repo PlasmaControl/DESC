@@ -406,7 +406,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     Returns
     -------
     Ideal-ballooning lambda eigenvalues
-        Shape (num_rho, num alpha, num zeta0, num eigvals).
+        Shape (num rho, num alpha, num zeta0, num eigvals).
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
@@ -418,7 +418,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     def reshape(f):
         assert f.shape == (num_zeta0, grid.num_nodes)
-        f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
+        f = grid.meshgrid_reshape(f.T, "raz").swapaxes(-1, -2)
         assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
         return f
 
@@ -475,7 +475,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     Returns
     -------
     Ideal-ballooning lambda eigenfunctions
-        Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
+        Shape (num rho, num alpha, num zeta0, num zeta - 2, num eigvals).
 
     """
     return data  # noqa: unused dependency

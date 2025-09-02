@@ -703,7 +703,7 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert T._tag == "(nᵨ, n_α, nₜᵣₐₙₛᵢₜ, n_cheb)" and T.cheb.ndim >= 3
+    assert (not check) or (T._tag == "(nᵨ, n_α, nₜᵣₐₙₛᵢₜ, n_cheb)" and T.cheb.ndim >= 3)
     lines = T.cheb.shape[:-2]
 
     num_zeta = (Y + NFP - 1) // NFP

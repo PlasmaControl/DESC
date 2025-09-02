@@ -436,7 +436,9 @@ class ObjectiveFunction(IOAble):
         def alloc_array(shape, device=None):
             if desc_config["kind"] == "cpu":
                 return np.empty(shape, dtype=np.float64)
-            return jnp.empty(shape, dtype=jnp.float64, device=device)
+            return jnp.empty(
+                shape, dtype=jnp.float64, device=device
+            ).block_until_ready()
 
         while self.running:
             # The message contains 3 parts,

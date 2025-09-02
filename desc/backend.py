@@ -577,7 +577,7 @@ if use_jax:  # noqa: C901
         arr : jnp.ndarray or np.ndarray
             Broadcasted array.
         """
-        if isinstance(arr, jnp.ndarray) and desc_config["kind"] == "cpu":
+        if desc_config["kind"] == "cpu":
             arr = np.array(arr)
         return comm.Bcast(arr, root=root)
 

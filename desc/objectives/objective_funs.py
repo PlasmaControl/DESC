@@ -433,10 +433,10 @@ class ObjectiveFunction(IOAble):
             # Root rank won't enter worker loop
             return
 
-        def alloc_array(shape):
+        def alloc_array(shape, device=None):
             if desc_config["kind"] == "cpu":
                 return np.empty(shape, dtype=np.float64)
-            return jnp.empty(shape, dtype=jnp.float64)
+            return jnp.empty(shape, dtype=jnp.float64, device=device)
 
         while self.running:
             # The message contains 3 parts,
@@ -450,12 +450,12 @@ class ObjectiveFunction(IOAble):
                 print(f"Rank {self.rank} STOPPING")
                 break
 
-            # get arrays by Bcast which uses buffers and faster than bcast
-            x = alloc_array(message[1])
-            safe_mpi_Bcast(x, self.comm, root=0)
-
             obj_idx_rank = self._obj_per_rank[self.rank]
             objs = [self.objectives[i] for i in obj_idx_rank]
+
+            # get arrays by Bcast which uses buffers and faster than bcast
+            x = alloc_array(message[1], device=self.objectives[obj_idx_rank[0]]._device)
+            safe_mpi_Bcast(x, self.comm, root=0)
 
             if "compute" in message[0]:
                 params = self.unpack_state(x)
@@ -471,7 +471,9 @@ class ObjectiveFunction(IOAble):
                 )
             elif "jvp" in message[0]:
                 x = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
-                vs = alloc_array(message[2])
+                vs = alloc_array(
+                    message[2], device=self.objectives[obj_idx_rank[0]]._device
+                )
                 safe_mpi_Bcast(vs, self.comm, root=0)
                 vs = jnp.split(vs, np.cumsum([t.dim_x for t in self.things]), axis=-1)
 

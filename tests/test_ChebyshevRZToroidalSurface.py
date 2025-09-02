@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import numpy as np
+import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 from desc.geometry.surface import ChebyshevRZToroidalSurface
 from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.plotting import *
 
 # def chebygrid(N_grid):
 #    return np.concatenate(
@@ -44,8 +47,22 @@ surf = ChebyshevRZToroidalSurface(
 )
 
 
-grid = LinearGrid(rho=1.0, M=10, N=10)
-data = surf.compute(["R"], grid=grid)
+grid = LinearGrid(
+    rho=1.0,
+    theta=np.linspace(0, 2 * np.pi, 10, endpoint=False),
+    zeta=np.linspace(0, 2 * np.pi, 10, endpoint=False),
+)
+
+# fig, data = plot_3d(surf, name="R", return_data=True)
+# fig.write_html("test.html")
+
+fig, ax = plot_boundary(surf, plot_axis=False)
+plt.show()
+
+# import pdb
+# pdb.set_trace()
+
+# data = surf.compute(["R"], grid=grid)
 # import numpy as np
 #
 #

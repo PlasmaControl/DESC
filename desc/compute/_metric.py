@@ -2147,7 +2147,7 @@ def _g_sub_rv_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho|v,p", "e_phi|r,v"],
-    aliases=["g_pr|PEST"],
+    aliases=["g_zr|PEST"],
 )
 def _g_sub_rp_PEST(params, transforms, profiles, data, **kwargs):
     data["g_rp|PEST"] = dot(data["e_rho|v,p"], data["e_phi|r,v"])
@@ -2186,7 +2186,7 @@ def _g_sub_vv_PEST(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta_PEST", "e_phi|r,v"],
-    aliases=["g_pv|PEST"],
+    aliases=["g_zv|PEST"],
 )
 def _g_sub_vp_PEST(params, transforms, profiles, data, **kwargs):
     data["g_vp|PEST"] = dot(data["e_theta_PEST"], data["e_phi|r,v"])

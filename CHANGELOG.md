@@ -1,6 +1,14 @@
 Changelog
 =========
 
+New Features
+------------
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adding AGNI, a finite-n ideal MHD stability solver and optimizer. The eigenvalues can be accessed using ``finite-n lambda'' whereas optimization against an instability can be performed using ``ObjectiveFunctionNameHere''.
+
+Bug Fixes
+---------
+- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 
 v0.15.0
 -------

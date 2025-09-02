@@ -2166,6 +2166,7 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
@@ -2544,6 +2545,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
@@ -2975,6 +2977,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _n_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -3011,6 +3014,7 @@ def _n_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _n_rho_z(params, transforms, profiles, data, **kwargs):

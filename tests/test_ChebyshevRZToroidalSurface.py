@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-from desc.geometry.surface import ChebyshevRZToroidalSurface
-from desc.grid import ConcentricGrid,Grid, LinearGrid
 import numpy as np
 
-#def chebygrid(N_grid):
+from desc.geometry.surface import ChebyshevRZToroidalSurface
+from desc.grid import ConcentricGrid, Grid, LinearGrid
+
+# def chebygrid(N_grid):
 #    return np.concatenate(
 #        (
 #            [0],
@@ -14,7 +15,7 @@ import numpy as np
 #    )
 
 
-#def grid_gen(L_grid, M_grid, N_grid, node_pattern="jacobi"):
+# def grid_gen(L_grid, M_grid, N_grid, node_pattern="jacobi"):
 #    LMnodes = ConcentricGrid(L=L_grid, M=M_grid, N=0, node_pattern=node_pattern).nodes[
 #        :, :2
 #    ]
@@ -39,18 +40,18 @@ surf = ChebyshevRZToroidalSurface(
     modes_R=[[0, 0], [1, 0], [1, 2]],
     Z_lmn=[0, -1, 0.5],
     modes_Z=[[0, 0], [-1, 0], [-1, 2]],
-    #mirror=True,
+    mirror=True,
 )
 
 
 grid = LinearGrid(rho=1.0, M=10, N=10)
 data = surf.compute(["R"], grid=grid)
-#import numpy as np
+# import numpy as np
 #
 #
-#ntheta
+# ntheta
 #
-#theta_1D = np.linspace(0, 2*np.pi, ntheta)
-#zeta_1D = np.linspace(0, 2*np.pi, nzeta)
+# theta_1D = np.linspace(0, 2*np.pi, ntheta)
+# zeta_1D = np.linspace(0, 2*np.pi, nzeta)
 #
-#theta_2D, zeta_2D = 
+# theta_2D, zeta_2D =

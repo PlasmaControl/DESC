@@ -250,13 +250,13 @@ _class_inheritance = {
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.surface.ChebyshevRZToroidalSurface": [
+        "desc.geometry.core.Surface",
+    ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
         "desc.geometry.core.Surface",
     ],
     "desc.geometry.surface.ZernikeRZToroidalSection": [
-        "desc.geometry.core.Surface",
-    ],
-    "desc.geometry.surface.ChebyshevRZToroidalSection": [
         "desc.geometry.core.Surface",
     ],
     "desc.coils.FourierRZCoil": [

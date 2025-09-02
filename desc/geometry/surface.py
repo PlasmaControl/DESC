@@ -34,8 +34,8 @@ from desc.utils import (
 from .core import Surface
 
 __all__ = [
-    "FourierRZToroidalSurface",
     "ChebyshevRZToroidalSurface",
+    "FourierRZToroidalSurface",
     "ZernikeRZToroidalSection",
 ]
 

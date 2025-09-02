@@ -436,9 +436,7 @@ class ObjectiveFunction(IOAble):
         def alloc_array(shape, device=None):
             if not desc_config["mpi-cuda"]:
                 return np.empty(shape, dtype=np.float64)
-            return jnp.empty(
-                shape, dtype=jnp.float64, device=device
-            ).block_until_ready()
+            return jnp.empty(shape, dtype=jnp.float64, device=device)
 
         while self.running:
             # The message contains 3 parts,

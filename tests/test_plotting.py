@@ -45,6 +45,7 @@ from desc.plotting import (
     plot_comparison,
     plot_field_lines,
     plot_fsa,
+    plot_gammac,
     plot_grid,
     plot_logo,
     plot_qs_error,
@@ -1261,6 +1262,15 @@ def test_plot_poincare():
     z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
     fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
+def test_plot_gammac():
+    """Test plotting gamma_c."""
+    eq = get("W7-X")
+    fig, ax = plot_gammac(eq, rho=0.5)
     return fig
 
 

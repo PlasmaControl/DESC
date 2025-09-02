@@ -32,7 +32,7 @@ from desc.utils import Index, errorif, safediv
 #  since a low order polynomial approximates |B| well in between adjacent
 #  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
 #  Implementing 1 and 2 will remove all eigenvalue solves from computation.
-#  2 is a larger improvement than 1. Implement this in later PR.
+#  2 is a larger improvement than 1.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -299,6 +299,8 @@ def rfft2_vander(
     modes_rfft,
     x_fft0=0,
     x_rfft0=0,
+    inverse_idx_fft=None,
+    inverse_idx_rfft=None,
 ):
     """Return Vandermonde matrix for complex Fourier modes.
 
@@ -340,6 +342,10 @@ def rfft2_vander(
     x_rfft0 : float
         Left boundary of domain of coordinate specified by ``x_rfft`` over which
         samples were taken.
+    inverse_idx_fft : jnp.ndarray
+        Optional. Inverse idx along axis 0 to ensure query points broadcast.
+    inverse_idx_rfft : jnp.ndarray
+        Optional. Inverse idx along axis 0 to ensure query points broadcast.
 
     Returns
     -------
@@ -348,31 +354,13 @@ def rfft2_vander(
         Vandermonde matrix to evaluate complex Fourier series.
 
     """
-    vander_f = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
-    vander_r = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
-    return vander_f[..., jnp.newaxis] * vander_r[..., jnp.newaxis, :]
-    # Above logic makes the Vandermonde array faster than the commented logic.
-    # (See GitHub issue 1530).
-    # On the ``master`` branch, commit ``532215825933e4e256ee551f644110180ba7bf8b``
-    # 2025 January 22, running ``pytest --mpl -k test_effective_ripple_2D`` will
-    # consume a peak memory of 4 GB. Switching to above approach (that being the
-    # only change), peak memory was observed to increase to 4.3 GB. Now in pull
-    # request #1440, the bounce integration method was rewritten with the goal of
-    # reusing the Vandermonde array to interpolate while retaining fusion. It was
-    # observed that JIT can fuse the above logic at peak memory 4.3 GB, while the
-    # old logic could not be fused (peak memory 9.7 GB) unless the array is
-    # remade each time.
-    # return jnp.exp(  # noqa: E800
-    #     1j  # noqa: E800
-    #     * (  # noqa: E800
-    #         (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
-    #             ..., jnp.newaxis  # noqa: E800
-    #         ]  # noqa: E800
-    #         + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
-    #             ..., jnp.newaxis, :  # noqa: E800
-    #         ]  # noqa: E800
-    #     )  # noqa: E800
-    # )  # noqa: E800
+    vf = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
+    vr = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
+    if inverse_idx_fft is not None:
+        vf = vf[inverse_idx_fft]
+    if inverse_idx_rfft is not None:
+        vr = vr[inverse_idx_rfft]
+    return vf[..., jnp.newaxis] * vr[..., jnp.newaxis, :]
 
 
 def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):
@@ -469,7 +457,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
         Real function value at query points.
 
     """
-    errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
+    errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
     return idct_non_uniform(
         xq,
         cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
@@ -574,7 +562,7 @@ def polyval_vec(*, x, c):
     )
 
 
-# TODO (#1388): Eventually do a PR to move this stuff into interpax.
+# TODO (#1388): Move this stuff into interpax.
 
 
 def _subtract_first(c, k):
@@ -681,6 +669,7 @@ def polyroot_vec(
         and get_only_real_roots
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
+        # TODO: Differentiate through root alone with custom_linear_solve.
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient. Also consumes less memory.
         r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)

@@ -2,6 +2,17 @@ Changelog
 =========
 
 New Features
+------------
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+
+Bug Fixes
+---------
+- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
+
+v0.15.0
+-------
+
+New Features
 
 - Multiple plotting related changes:
     - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.

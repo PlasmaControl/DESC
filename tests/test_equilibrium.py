@@ -183,14 +183,12 @@ def test_map_coordinates_derivative():
 def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
     eq = get("DSHAPE_CURRENT")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=2e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
 
 
 @pytest.mark.slow

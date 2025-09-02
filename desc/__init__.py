@@ -60,7 +60,7 @@ _BANNER = r"""
 
 BANNER = colored(_BANNER, "magenta")
 
-
+# mpi-cuda = True is not supported yet
 config = {
     "devices": None,
     "avail_mems": None,

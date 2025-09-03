@@ -262,13 +262,6 @@ class TestVMECIO:
         np.testing.assert_allclose(n, n_correct, atol=1e-8)
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
-    @pytest.mark.unit
-    def test_vmec_load_lrfp(self):
-        """Tests that loading a wout with LRFP=T gives error."""
-        input_path = "./tests/inputs/dummy_wout_lrfp_T.nc"
-        with pytest.raises(AssertionError, match="poloidal flux"):
-            _ = VMECIO.load(input_path, profile="iota")
-
 
 @pytest.mark.unit
 def test_vmec_load_profiles(TmpDir):

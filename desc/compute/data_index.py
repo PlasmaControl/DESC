@@ -186,6 +186,7 @@ def register_compute_fun(  # noqa: C901
             "public": public,
         }
         for p in parameterization:
+            # print(p)
             flag = False
             for base_class, superclasses in _class_inheritance.items():
                 if p in superclasses or p == base_class:
@@ -248,6 +249,9 @@ _class_inheritance = {
     ],
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.surface.ChebyshevRZToroidalSurface": [
+        "desc.geometry.core.Surface",
     ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
         "desc.geometry.core.Surface",

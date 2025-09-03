@@ -29,6 +29,27 @@ def _0(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# Length? Other more convenient way? Or maybe not necessary?
+@register_compute_fun(
+    name="length_mirror",
+    label="L_{\\mirror}",
+    units="m",
+    units_long="meters",
+    description="mirror Length",
+    dim=1,
+    params=["length_mirror"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _length_mirror(params, transforms, profiles, data, **kwargs):
+    data["length_mirror"] = (
+        jnp.ones(transforms["grid"].num_nodes) * params["length_mirror"]
+    )
+    return data
+
+
 @register_compute_fun(
     name="1",
     label="1",
@@ -601,6 +622,7 @@ def _R_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_ttz(params, transforms, profiles, data, **kwargs):
@@ -624,6 +646,8 @@ def _R_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _R_tz(params, transforms, profiles, data, **kwargs):
@@ -647,6 +671,7 @@ def _R_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_tzz(params, transforms, profiles, data, **kwargs):
@@ -669,6 +694,8 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _R_z(params, transforms, profiles, data, **kwargs):
@@ -691,6 +718,8 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _R_zz(params, transforms, profiles, data, **kwargs):
@@ -713,6 +742,7 @@ def _R_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_zzz(params, transforms, profiles, data, **kwargs):
@@ -738,7 +768,7 @@ def _R_zzz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _X(params, transforms, profiles, data, **kwargs):
-    data["X"] = data["R"] * jnp.cos(data["phi"])
+    data["X"] = data["R"]
     return data
 
 
@@ -756,10 +786,7 @@ def _X(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "phi", "phi_r"],
 )
 def _X_r(params, transforms, profiles, data, **kwargs):
-    data["X_r"] = (
-        data["R_r"] * jnp.cos(data["phi"])
-        - data["R"] * jnp.sin(data["phi"]) * data["phi_r"]
-    )
+    data["X_r"] = data["R_r"]
     return data
 
 
@@ -777,10 +804,7 @@ def _X_r(params, transforms, profiles, data, **kwargs):
     data=["R", "R_t", "phi", "phi_t"],
 )
 def _X_t(params, transforms, profiles, data, **kwargs):
-    data["X_t"] = (
-        data["R_t"] * jnp.cos(data["phi"])
-        - data["R"] * jnp.sin(data["phi"]) * data["phi_t"]
-    )
+    data["X_t"] = data["R_t"]
     return data
 
 
@@ -798,10 +822,7 @@ def _X_t(params, transforms, profiles, data, **kwargs):
     data=["R", "R_z", "phi", "phi_z"],
 )
 def _X_z(params, transforms, profiles, data, **kwargs):
-    data["X_z"] = (
-        data["R_z"] * jnp.cos(data["phi"])
-        - data["R"] * jnp.sin(data["phi"]) * data["phi_z"]
-    )
+    data["X_z"] = data["R_z"]
     return data
 
 
@@ -823,7 +844,7 @@ def _X_z(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _Y(params, transforms, profiles, data, **kwargs):
-    data["Y"] = data["R"] * jnp.sin(data["phi"])
+    data["Y"] = data["phi"]
     return data
 
 
@@ -838,13 +859,10 @@ def _Y(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "phi", "phi_r"],
+    data=["phi_r"],
 )
 def _Y_r(params, transforms, profiles, data, **kwargs):
-    data["Y_r"] = (
-        data["R_r"] * jnp.sin(data["phi"])
-        + data["R"] * jnp.cos(data["phi"]) * data["phi_r"]
-    )
+    data["Y_r"] = data["phi_r"]
     return data
 
 
@@ -859,13 +877,10 @@ def _Y_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_t", "phi", "phi_t"],
+    data=["phi_t"],
 )
 def _Y_t(params, transforms, profiles, data, **kwargs):
-    data["Y_t"] = (
-        data["R_t"] * jnp.sin(data["phi"])
-        + data["R"] * jnp.cos(data["phi"]) * data["phi_t"]
-    )
+    data["Y_t"] = data["phi_t"]
     return data
 
 
@@ -880,13 +895,10 @@ def _Y_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_z", "phi", "phi_z"],
+    data=["phi_z"],
 )
 def _Y_z(params, transforms, profiles, data, **kwargs):
-    data["Y_z"] = (
-        data["R_z"] * jnp.sin(data["phi"])
-        + data["R"] * jnp.cos(data["phi"]) * data["phi_z"]
-    )
+    data["Y_z"] = data["phi_z"]
     return data
 
 
@@ -1410,6 +1422,7 @@ def _Z_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_ttz(params, transforms, profiles, data, **kwargs):
@@ -1433,6 +1446,8 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _Z_tz(params, transforms, profiles, data, **kwargs):
@@ -1456,6 +1471,7 @@ def _Z_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_tzz(params, transforms, profiles, data, **kwargs):
@@ -1478,6 +1494,8 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
@@ -1500,6 +1518,8 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _Z_zz(params, transforms, profiles, data, **kwargs):
@@ -1522,6 +1542,7 @@ def _Z_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_zzz(params, transforms, profiles, data, **kwargs):
@@ -2651,6 +2672,7 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
@@ -2674,6 +2696,8 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
@@ -2696,6 +2720,7 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
 )
@@ -2719,6 +2744,8 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
@@ -2741,6 +2768,8 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
@@ -2763,6 +2792,7 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
@@ -2996,6 +3026,7 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_ttz(params, transforms, profiles, data, **kwargs):
@@ -3019,6 +3050,7 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_tz(params, transforms, profiles, data, **kwargs):
@@ -3042,6 +3074,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_tzz(params, transforms, profiles, data, **kwargs):
@@ -3064,6 +3097,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
@@ -3087,6 +3121,7 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
@@ -3110,6 +3145,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_zzz(params, transforms, profiles, data, **kwargs):

@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    ChebyshevRZToroidalSurface,
     Surface,
     ZernikeRZToroidalSection,
 )
@@ -59,7 +60,7 @@ def parse_profile(prof, name="", **kwargs):
     raise TypeError(f"Got unknown {name} profile {prof}")
 
 
-def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
+def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi", mirror=False):
     """Parse surface input into Surface object.
 
     Parameters
@@ -84,7 +85,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     if isinstance(surface, Surface):
         surface = surface
     elif surface is None:
-        surface = FourierRZToroidalSurface(NFP=NFP, sym=sym)
+        surface = FourierRZToroidalSurface(NFP=NFP, sym=sym, mirror=mirror)
     elif isinstance(surface, (np.ndarray, jnp.ndarray)):
         if np.all(surface[:, 0] == 0):
             surface = FourierRZToroidalSurface(
@@ -95,6 +96,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 NFP,
                 sym,
                 check_orientation=False,
+                mirror=mirror,
             )
         elif np.all(surface[:, 2] == 0):
             surface = ZernikeRZToroidalSection(
@@ -104,6 +106,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 surface[:, :2].astype(int),
                 spectral_indexing,
                 sym,
+                mirror=mirror,
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
@@ -114,10 +117,13 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
         bdry_mode = "lcfs"
     if isinstance(surface, ZernikeRZToroidalSection):
         bdry_mode = "poincare"
+    if isinstance(surface, ChebyshevRZToroidalSurface):
+        bdry_mode = "lcfs"
+
     return surface, bdry_mode
 
 
-def parse_axis(axis, NFP=1, sym=True, surface=None):
+def parse_axis(axis, NFP=1, sym=True, surface=None, mirror=False):
     """Parse axis input into Curve object.
 
     Parameters
@@ -145,12 +151,60 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             NFP=NFP,
             sym=sym,
             name="axis",
+            mirror=mirror,
         )
     elif axis is None:  # use the center of surface
         if isinstance(surface, FourierRZToroidalSurface):
-            axis = surface.get_axis()
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
+                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
+                modes_R=surface.R_basis.modes[
+                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
+                ],
+                modes_Z=surface.Z_basis.modes[
+                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
+                ],
+                NFP=NFP,
+                sym=sym,
+                mirror=mirror,
+            )
+            
+        if isinstance(surface, ChebyshevRZToroidalSurface):
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
+                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
+                modes_R=surface.R_basis.modes[
+                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
+                ],
+                modes_Z=surface.Z_basis.modes[
+                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
+                ],
+                NFP=NFP,
+                sym=sym,
+                mirror=mirror,
+            )
+        
         elif isinstance(surface, ZernikeRZToroidalSection):
-            axis = surface.get_axis()
+            # FIXME: include m=0 l!=0 modes
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[
+                    np.where(
+                        (surface.R_basis.modes[:, 0] == 0)
+                        & (surface.R_basis.modes[:, 1] == 0)
+                    )
+                ].sum(),
+                Z_n=surface.Z_lmn[
+                    np.where(
+                        (surface.Z_basis.modes[:, 0] == 0)
+                        & (surface.Z_basis.modes[:, 1] == 0)
+                    )
+                ].sum(),
+                modes_R=[0],
+                modes_Z=[0],
+                NFP=NFP,
+                sym=sym,
+                mirror=mirror,
+            )
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis

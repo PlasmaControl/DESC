@@ -11,7 +11,13 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    ChebyshevZernikeBasis,
+    FourierZernikeBasis,
+    chebyshev_z,
+    fourier,
+    zernike_radial,
+)
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -168,6 +174,8 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
+        "_mirror",
+        "_length",
     ]
     _static_attrs = Optimizable._static_attrs + [
         "_sym",
@@ -210,6 +218,8 @@ class Equilibrium(IOAble, Optimizable):
         axis=None,
         sym=None,
         spectral_indexing=None,
+        mirror=False,
+        length=None,
         check_orientation=True,
         ensure_nested=True,
         **kwargs,
@@ -258,11 +268,11 @@ class Equilibrium(IOAble, Optimizable):
 
         # surface
         self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing
+            surface, self.NFP, self.sym, self.spectral_indexing, mirror=mirror
         )
 
         # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, mirror=mirror)
 
         # resolution
         L = check_nonnegint(L, "L")
@@ -290,8 +300,32 @@ class Equilibrium(IOAble, Optimizable):
         self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
         self._axis.change_resolution(self.N, sym=self.sym)
 
+        # implement errorif for _mirror
+        errorif(
+            mirror
+            not in [
+                True,
+                False,
+            ],
+            ValueError,
+            f"mirror should be one of True, False, got {mirror}",
+        )
+        self._mirror = mirror
+        self._length = length
+
         # bases
-        self._R_basis = FourierZernikeBasis(
+        if self.mirror:
+            assert (self.sym is False) or (self.sym is None), NotImplementedError(
+                f"mirror sym expected false but given {self.sym}"
+            )
+            assert self.NFP == 1, NotImplementedError(
+                f"mirror NFP expected 1 but given {self.NFP}"
+            )
+            Basis = ChebyshevZernikeBasis
+        else:
+            Basis = FourierZernikeBasis
+
+        self._R_basis = Basis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -299,7 +333,7 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._R_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        self._Z_basis = FourierZernikeBasis(
+        self._Z_basis = Basis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -307,7 +341,7 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        self._L_basis = FourierZernikeBasis(
+        self._L_basis = Basis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -420,6 +454,17 @@ class Equilibrium(IOAble, Optimizable):
                 TypeError,
                 f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
             )
+        if self.mirror:
+            if length is None:
+                self.length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self.length = length
+        else:
+            self.length = None
+            
+        self._length = self.length
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -674,7 +719,13 @@ class Equilibrium(IOAble, Optimizable):
         )
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+            surface = FourierRZToroidalSurface(
+                sym=self.sym,
+                NFP=self.NFP,
+                rho=rho,
+                mirror=self.mirror,
+                length=self.length,
+            )
             surface.change_resolution(self.M, self.N)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
@@ -820,7 +871,16 @@ class Equilibrium(IOAble, Optimizable):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        axis = FourierRZCurve(
+            R_n,
+            Z_n,
+            modes_R,
+            modes_Z,
+            NFP=self.NFP,
+            sym=self.sym,
+            mirror=self.mirror,
+            length=self.length,
+        )
         return axis
 
     def compute(  # noqa: C901
@@ -1995,6 +2055,20 @@ class Equilibrium(IOAble, Optimizable):
             "M_grid": self.M_grid,
             "N_grid": self.N_grid,
         }
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror"""
+        return self._mirror
+
+    @property
+    def length(self):
+        """float or None: length of the mirror"""
+        return self._length
+
+    @length.setter
+    def length(self, leng):
+        self._length = leng
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""

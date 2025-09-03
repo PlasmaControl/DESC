@@ -349,10 +349,6 @@ class PointBMeasurement(_Objective):
 
     def _compute(self, B):
         """Same as above, but accepts pre-computed B at the points it needs."""
-        # TODO: do we want each sub objective to pre-compute the coil B if it is fixed
-        # or do we just want to use the super obj? I think the super obj, so we assume
-        # this B it gets is entire B and all _compute does is translate B into
-        # the specific diagnostic signal
         if self._use_directions:
             B = dot(B, self._directions)
         return B.flatten()
@@ -415,7 +411,7 @@ class MagneticDiagnostics(_Objective):
     _units = "(~)"
     # these will be determined by sub objectives, I guess need to
     # define a custom print for this that goes
-    # thru each sub objective and calls _compute... annoying af
+    # thru each sub objective and calls _compute or maybe the sub prints... annoying
     _print_value_fmt = "Magnetic Diagnostic Error: "
     _print_error = True
     _static_attrs = _Objective._static_attrs + [
@@ -515,9 +511,6 @@ class MagneticDiagnostics(_Objective):
 
         timer.start("Precomputing transforms")
         for diag in self._magnetic_diagnostics:
-            # TODO: these don't need to build transforms, or do they...
-            # yes still need to build transforms bc some require the
-            # diagnostic geometry like the flux loops
             diag.build(verbose=0)
         self._eq_vc_data_keys = ["K_vc", "R", "phi", "Z"]
 
@@ -550,18 +543,25 @@ class MagneticDiagnostics(_Objective):
         # TODO: what if some sub objectives have target, and others have bounds???
         # could make them ALL bounds and have some bounds top/bottom be
         # different, to account for this? would need to change our bounds check to
-        # be bounds[0] <= bounds[1], which I THINK is fine but Rory prob wont like it
+        # be bounds[0] <= bounds[1], which I THINK is fine
+        assert np.all(
+            [diag._bounds is None for diag in self._magnetic_diagnostics]
+        ), "must use target, not bounds, for MagneticDiagnostics objective"
+
         self._target = np.hstack([diag._target for diag in self._magnetic_diagnostics])
 
-        # TODO: how to deal with self._weight? It might be scalar for some obj
-        # and an array for others. past build is it expanded? idt so
-        # could just always expand out each one, like mult each
-        #  by np.ones_like(diag._diag._dim_f)
+        self._weight = self._weight * np.hstack(
+            [diag._weight * np.ones(diag._dim_f) for diag in self._magnetic_diagnostics]
+        )
 
         # set normalizations to each sub objective normalization
+        # these also I think must be expanded out for each
         if self._normalize:
             self._normalization = np.hstack(
-                [diag._normalization for diag in self._magnetic_diagnostics]
+                [
+                    diag._normalization * np.ones(diag._dim_f)
+                    for diag in self._magnetic_diagnostics
+                ]
             )
         if self._normalize_target:
             # we need every sub diagnostic's normalize_target to be the same
@@ -572,7 +572,7 @@ class MagneticDiagnostics(_Objective):
                     diag._normalize_target == self._normalize_target
                     for diag in self._magnetic_diagnostics
                 ]
-            )
+            ), "if normalize_target is True, it must be true for every sub-objective"
         # pre-calc field contrib to B if field are fixed
         if self._field_fixed:
             self._B_from_field = self._field.compute_magnetic_field(

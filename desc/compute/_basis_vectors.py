@@ -2485,7 +2485,7 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",        
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
@@ -2783,7 +2783,7 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.ChebyshevRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",        
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )

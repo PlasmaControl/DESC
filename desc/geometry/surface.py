@@ -68,7 +68,7 @@ class ChebyshevRZToroidalSurface(Surface):
         "_mirror",
         "_length",
     ]
-    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + ["_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -110,13 +110,14 @@ class ChebyshevRZToroidalSurface(Surface):
         NZ = int(np.max(abs(modes_Z[:, 1]))) if modes_Z.size else 0
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
+        self._L = 0
 
         # Chebyshev toroidal coordinate is non-periodic; force NFP = 1
         self._NFP = 1
         self._rho = float(rho)
         self._name = name
         self._mirror = bool(mirror)
-        self._length = float(length) if length is not None else None
+        #self._length = float(length) if length is not None else None
 
         # For Chebyshev n >= 0 only, no stellarator symmetry in (m,n) pairs
         self._sym = False
@@ -139,6 +140,16 @@ class ChebyshevRZToroidalSurface(Surface):
         self._Z_lmn = jnp.asarray(Z_full)
 
         self._check_orientation = bool(check_orientation)
+
+        if self.mirror:
+                if length == None:
+                    self.length = (
+                        self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                    )
+                else:
+                    self.length = length
+        else:
+            self.length = None
 
     @property
     def mirror(self):

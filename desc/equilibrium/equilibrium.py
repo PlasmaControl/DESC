@@ -311,6 +311,7 @@ class Equilibrium(IOAble, Optimizable):
             f"mirror should be one of True, False, got {mirror}",
         )
         self._mirror = mirror
+        self._length = length
 
         # bases
         if self.mirror:
@@ -462,6 +463,8 @@ class Equilibrium(IOAble, Optimizable):
                 self.length = length
         else:
             self.length = None
+            
+        self._length = self.length
 
     def _set_up(self):
         """Set unset attributes after loading.

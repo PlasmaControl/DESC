@@ -822,6 +822,45 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     )
     return data
 
+## these next two tools are for anisotropic F, but need to be tested 
+
+@register_compute_fun(
+    name="|F|_a",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Magnitude of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["F_anisotropic"],
+)
+def _Fmag_a(params, transforms, profiles, data, **kwargs):
+    data["|F|_a"] = safenorm(data["F_anisotropic"], axis=-1)
+    return data
+    
+@register_compute_fun(
+    name="<|F|>_a_vol",
+    label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Volume average of magnitude of force balance error",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["|F|_a", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
+)
+def _Fmag_a_vol(params, transforms, profiles, data, **kwargs):
+    data["<|F|>_a_vol"] = (
+        jnp.sum(data["|F|_a"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
+    )
+    return data
+
 
 @register_compute_fun(
     name="e^helical",

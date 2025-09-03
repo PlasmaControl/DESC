@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    ChebyshevRZToroidalSurface,
     Surface,
     ZernikeRZToroidalSection,
 )
@@ -116,6 +117,9 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi", mirror=Fal
         bdry_mode = "lcfs"
     if isinstance(surface, ZernikeRZToroidalSection):
         bdry_mode = "poincare"
+    if isinstance(surface, ChebyshevRZToroidalSurface):
+        bdry_mode = "lcfs"
+
     return surface, bdry_mode
 
 
@@ -164,6 +168,22 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, mirror=False):
                 sym=sym,
                 mirror=mirror,
             )
+            
+        if isinstance(surface, ChebyshevRZToroidalSurface):
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
+                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
+                modes_R=surface.R_basis.modes[
+                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
+                ],
+                modes_Z=surface.Z_basis.modes[
+                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
+                ],
+                NFP=NFP,
+                sym=sym,
+                mirror=mirror,
+            )
+        
         elif isinstance(surface, ZernikeRZToroidalSection):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(

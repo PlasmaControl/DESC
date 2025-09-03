@@ -560,13 +560,12 @@ if use_jax:  # noqa: C901
         JAX arrays cannot be directly broadcasted using MPI's Bcast, but numpy
         arrays can. If CUDA-aware MPI is available, JAX arrays on GPU can be
         broadcasted directly. This function checks the type of the array and
-        perform the broadcast safely. It assumes that for GPU backend CUDA-aware
-        MPI is available.
+        perform the broadcast safely.
 
         Parameters
         ----------
         arr : jnp.ndarray or np.ndarray
-            Array to broadcast. Only the root process needs to provide this.
+            Array to broadcast.
         comm : MPI.Comm
             MPI communicator.
         root : int
@@ -579,7 +578,10 @@ if use_jax:  # noqa: C901
         """
         if not desc_config["mpi-cuda"]:
             arr = np.array(arr)
-        return comm.Bcast(arr, root=root)
+        comm.Bcast(arr, root=root)
+        # don't use this returned value for root == rank, as it will replace the jax
+        # array with a numpy array, which is not ideal
+        return arr
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

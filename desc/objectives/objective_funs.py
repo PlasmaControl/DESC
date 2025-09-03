@@ -455,7 +455,7 @@ class ObjectiveFunction(IOAble):
 
             # get arrays by Bcast which uses buffers and faster than bcast
             x = alloc_array(message[1], device=self.objectives[obj_idx_rank[0]]._device)
-            safe_mpi_Bcast(x, self.comm, root=0)
+            x = safe_mpi_Bcast(x, self.comm, root=0)
 
             if "compute" in message[0]:
                 params = self.unpack_state(x)
@@ -474,7 +474,7 @@ class ObjectiveFunction(IOAble):
                 vs = alloc_array(
                     message[2], device=self.objectives[obj_idx_rank[0]]._device
                 )
-                safe_mpi_Bcast(vs, self.comm, root=0)
+                vs = safe_mpi_Bcast(vs, self.comm, root=0)
                 vs = jnp.split(vs, np.cumsum([t.dim_x for t in self.things]), axis=-1)
 
                 # put xi and vi on the same device as the objective

@@ -10,7 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import cheb_pts, fourier_pts
-from desc.utils import parse_argname_change, setdefault
+from desc.utils import parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -190,13 +190,14 @@ class GammaC(_Objective):
         try:
             import jax_finufft  # noqa: F401
         except ImportError:
-            warnings.warn(
+            warnif(
+                nufft_eps >= 1e-14,
                 colored(
                     "\njax-finufft is not installed.\n"
                     "Setting parameter nufft_eps to zero.\n"
-                    "Performance will deteriorate significantly.\n"
+                    "Performance will deteriorate significantly.\n",
                     "yellow",
-                )
+                ),
             )
             nufft_eps = 0.0
 

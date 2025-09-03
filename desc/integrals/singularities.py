@@ -466,10 +466,7 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def fourier(self, f):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
-        if (self.source_grid.num_zeta % 2) == 0:
-            i = (0, -1)
-        else:
-            i = 0
+        i = (0, -1) if (self.source_grid.num_zeta % 2 == 0) else 0
         return 2 * rfft2(
             self.source_grid.meshgrid_reshape(f, "rtz")[0],
             axes=(0, 1),
@@ -783,8 +780,7 @@ def singular_integral(
 
     """
     chunk_size = parse_argname_change(chunk_size, kwargs, "loop", "chunk_size")
-    if chunk_size == 0:
-        chunk_size = None
+    chunk_size = None if (chunk_size == 0) else chunk_size
 
     if isinstance(kernel, str):
         kernel = kernels[kernel]

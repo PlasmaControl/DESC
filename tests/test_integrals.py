@@ -698,7 +698,7 @@ class TestSingularities:
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
 
-class TestLaplaceField:
+class TestLaplace:
     """Test multiply connected Laplace solvers."""
 
     class _Z_hat_field:
@@ -735,15 +735,15 @@ class TestLaplaceField:
             grid.N - 1,
             M_coil=surface.M,
             N_coil=surface.N,
-            B_coil=TestLaplaceField._Z_hat_field(),
+            B_coil=TestLaplace._Z_hat_field(),
         )
         assert field.M != grid.M and field.N != grid.N
         data, _ = field.compute(
             ["Phi error", "num iter"] if just_err else "γ potential",
             grid,
             maxiter=maxiter,
+            full_output=True,
             chunk_size=chunk_size,
-            _full_output=True,
         )
         if maxiter > 0:
             print()
@@ -863,6 +863,7 @@ class TestLaplaceField:
             RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
+            maxiter=0,
             chunk_size=chunk_size,
             warn_fft=False,
             _midpoint_quad=_midpoint_quad,
@@ -969,28 +970,23 @@ class TestLaplaceField:
         plt.savefig(f"{name}.pdf")
 
     @pytest.mark.unit
-    def test_exterior_Neumann(self, maxiter=25, chunk_size=1000):
-        """Test Laplacian solver in exterior.
-
-        Singular integrals converge very slowly,
-        so grid.M and grid.N need to be large.
-        Iterations for inversion converges fast.
-        """
-        R0 = 10
+    def test_exterior_Neumann(self, maxiter=30, chunk_size=1000):
+        """Test Laplacian solver in exterior."""
+        # Fourier spectrum of G(x) becomes very wide at large R0 (e.g. 10 is large).
+        R0 = 2
         surface = FourierRZToroidalSurface(
             R_lmn=[R0, 1, 0.2],
             Z_lmn=[-2, -0.2],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        assert surface.NFP == 1
         x0 = rpz2xyz(np.array([R0, 0, 0]))
 
         def G(x):
             return np.reciprocal(_1_over_G(x - x0))
 
         assert surface.NFP == 1
-        grid = LinearGrid(M=50, N=50, NFP=surface.NFP)
+        grid = LinearGrid(M=30, N=30)
         data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
 
@@ -1001,38 +997,19 @@ class TestLaplaceField:
             data=data,
             problem="exterior Neumann",
             on_boundary=True,
-            chunk_size=chunk_size,
             maxiter=maxiter,
+            full_output=True,
+            chunk_size=chunk_size,
             basis="xyz",
-            _full_output=True,
         )
         assert data is RpZ_data
-        print()
-        print("The literature has proven that Phi error is ")
-        print("nearly independent of quadrature accuracy.")
-        print("Indeed, this example validates this; as due our other tests.")
         print("num iterations:", data["num iter"])
         print("Phi error     :", data["Phi error"])
 
-        np.testing.assert_allclose(
-            np.ptp(G(data["x"]) - data["Phi"]),
-            0,
-            atol=4e-4,
-            err_msg="Phi computation needs more resolution.",
-        )
+        np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=1e-6)
 
-        # This is to compute normal component of grad(Phi) which is
-        # not relevant for free surface optimization.
         np.testing.assert_allclose(
-            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
-            0,
-            # Map from Phi to the normal component of Phi is
-            # nonlinear interpolation problem, so if Phi.M,N is less
-            # than grid.M,N on which Phi was solved, then the max
-            # error in grad(Phi) may increase even though the higher
-            # harmonics of Phi have small contributtion to spectrum.
-            atol=4e-4,
-            err_msg="grad(Phi) computation needs more resolution.",
+            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]), 0, atol=1e-6
         )
 
     @pytest.mark.unit
@@ -1102,6 +1079,7 @@ class TestLaplaceField:
             RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
+            maxiter=0,
             chunk_size=chunk_size,
             warn_fft=False,
         )
@@ -1155,28 +1133,28 @@ class TestLaplaceField:
                         Z_lmn[(m, -n)] += C_z[(m, n)]
 
         grid = LinearGrid(rho=1, M=5, N=5)
-        R_bench = TestLaplaceField._manual_transform(
+        R_bench = TestLaplace._manual_transform(
             np.array(list(R_lmn.values())),
             np.array([mn[0] for mn in R_lmn.keys()]),
             np.array([mn[1] for mn in R_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        R_merk = TestLaplaceField._merkel_transform(
+        R_merk = TestLaplace._merkel_transform(
             np.array(list(C_r.values())),
             np.array([mn[0] for mn in C_r.keys()]),
             np.array([mn[1] for mn in C_r.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_bench = TestLaplaceField._manual_transform(
+        Z_bench = TestLaplace._manual_transform(
             np.array(list(Z_lmn.values())),
             np.array([mn[0] for mn in Z_lmn.keys()]),
             np.array([mn[1] for mn in Z_lmn.keys()]),
             -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        Z_merk = TestLaplaceField._merkel_transform(
+        Z_merk = TestLaplace._merkel_transform(
             np.array(list(C_z.values())),
             np.array([mn[0] for mn in C_z.keys()]),
             np.array([mn[1] for mn in C_z.keys()]),

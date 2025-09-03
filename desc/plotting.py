@@ -4061,10 +4061,6 @@ def plot_particle_trajectories(  # noqa: C901
 
     Examples
     --------
-    We will give couple of examples of how to plot particle trajectories, and trace
-    particles in general in DESC. First, we will trace particles using Equilibrium's
-    magnetic field.
-
     .. code-block:: python
 
         import desc
@@ -4094,38 +4090,6 @@ def plot_particle_trajectories(  # noqa: C901
         # Plot the particle trajectories
         plot_particle_trajectories(
             eq, model, initializer, ts=ts, fig=fig
-        )
-
-    One can also compare above particle trajectories with the field created by
-    a ``Coilset``, or any ``MagneticField`` subclass. As opposed to previous case, we
-    need to trace particle in lab coordinates. Since having the same initial points
-    will help for comparison, we will use same initializer and show how to use it with
-    model with ``frame`` set to `lab`.
-
-    .. code-block:: python
-
-        # an example coilset for precise QA equilibrium. Note that it is not perfect
-        # and trajectories might not match exactly.
-        field = desc.io.load('../tests/inputs/precise_QA_helical_coils.h5')
-
-        # Initializer classes are named after their input format. But they return
-        # the initial particle coordinates in whatever the model's frame is.
-        initializer = ManualParticleInitializerFlux(
-            rho0=rhos,
-            theta0=0,
-            zeta0=0,
-            xi0=0.7,
-            E = 1e-1,
-            m = 4.0,
-            q = 1.0,
-        )
-        model = VacuumGuidingCenterTrajectory(frame='lab')
-
-        # For visual purposes, we will plot the LCFS of the equilibrium
-        fig = plot_3d(eq, '|B|', alpha=0.5)
-        # Plot the particle trajectories
-        plot_particle_trajectories(
-            field, model, initializer, ts=ts, fig=fig
         )
 
     """

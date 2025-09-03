@@ -909,7 +909,7 @@ def trace_particles(
     bounds=None,
     event=None,
     chunk_size=None,
-    options={},
+    options=None,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -982,73 +982,10 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    y0, model_args = initializer.init_particles(model, field)
-    return _trace_particles(
-        field=field,
-        y0=y0,
-        model=model,
-        model_args=model_args,
-        ts=ts,
-        params=params,
-        stepsize_controller=stepsize_controller,
-        saveat=saveat,
-        rtol=rtol,
-        atol=atol,
-        max_steps=max_steps,
-        min_step_size=min_step_size,
-        solver=solver,
-        adjoint=adjoint,
-        bounds=bounds,
-        event=event,
-        chunk_size=chunk_size,
-        options=options,
-    )
-
-
-def _trace_particles(
-    field,
-    y0,
-    model,
-    model_args,
-    ts,
-    params=None,
-    stepsize_controller=None,
-    saveat=None,
-    rtol=1e-8,
-    atol=1e-8,
-    max_steps=None,
-    min_step_size=1e-10,
-    solver=Tsit5(),
-    adjoint=RecursiveCheckpointAdjoint(),
-    bounds=None,
-    event=None,
-    chunk_size=None,
-    options={},
-):
-    """Trace charged particles in an equilibrium or external magnetic field.
-
-    This is the jit friendly version of the `trace_particles` function. For full
-    documentation, see `trace_particles`. This function takes the outputs of
-    `initializer.init_particles` as inputs, rather than the particle initializer
-    itself. There won't be any checks on the y0 and model_args inputs, so make sure
-    they are in the correct format. One can use this function in an objective, where
-    the initial positions and velocities of particles are computed in the `build`
-    method. If the objective requires initialization of particles at each iteration,
-    make sure that the initializer can work under jit compilation which is not the
-    case for all of them.
-
-    Parameters
-    ----------
-    y0 : array-like
-        Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of ``initializer.init_particles``.
-    model_args : array-like
-        Additional arguments needed by the model, such as mass, charge, and
-        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
-        ``initializer.init_particles``.
-    """
     if not params:
         params = field.params_dict
+    if not options:
+        options = {}
 
     stepsize_controller = (
         stepsize_controller
@@ -1081,6 +1018,69 @@ def _trace_particles(
         else int((ts[1] - ts[0]) / min_step_size * 100)
     )
 
+    y0, model_args = initializer.init_particles(model, field)
+    return _trace_particles(
+        field=field,
+        y0=y0,
+        model=model,
+        model_args=model_args,
+        ts=ts,
+        params=params,
+        stepsize_controller=stepsize_controller,
+        saveat=saveat,
+        rtol=rtol,
+        atol=atol,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        solver=solver,
+        adjoint=adjoint,
+        bounds=bounds,
+        event=event,
+        chunk_size=chunk_size,
+        options=options,
+    )
+
+
+def _trace_particles(
+    field,
+    y0,
+    model,
+    model_args,
+    ts,
+    params,
+    stepsize_controller,
+    saveat,
+    max_steps,
+    min_step_size,
+    solver,
+    adjoint,
+    event,
+    chunk_size,
+    options,
+):
+    """Trace charged particles in an equilibrium or external magnetic field.
+
+    This is the jit friendly version of the `trace_particles` function. For full
+    documentation, see `trace_particles`. This function takes the outputs of
+    `initializer.init_particles` as inputs, rather than the particle initializer
+    itself. There won't be any checks on the y0 and model_args inputs, so make sure
+    they are in the correct format. One can use this function in an objective, where
+    the initial positions and velocities of particles are computed in the `build`
+    method. If the objective requires initialization of particles at each iteration,
+    make sure that the initializer can work under jit compilation which is not the
+    case for all of them. All the arguments must be passed with a value, see
+    ``trace_particles`` for default values for common use.
+
+    Parameters
+    ----------
+    y0 : array-like
+        Initial particle positions and velocities, stacked in horizontally [x0, v0].
+        The first output of ``initializer.init_particles``.
+    model_args : array-like
+        Additional arguments needed by the model, such as mass, charge, and
+        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
+        ``initializer.init_particles``.
+    """
     # convert cartesian-like for integration in flux coordinates
     if isinstance(field, Equilibrium):
         xp = y0[:, 0] * jnp.cos(y0[:, 1])

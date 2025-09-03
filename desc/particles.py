@@ -22,7 +22,6 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.geometry import Curve, Surface
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
@@ -407,9 +406,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Particle mass, in proton masses
-    q : float
+    q : array-like
         Particle charge, in units of elementary charge.
     """
 
@@ -423,15 +422,15 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
-        m = m * proton_mass
-        q = q * elementary_charge
-        E = E * JOULE_PER_EV
         rho0, theta0, zeta0, xi0, E, m, q = map(
             jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
         )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
         )
+        m = m * proton_mass
+        q = q * elementary_charge
+        E = E * JOULE_PER_EV
         self.m = m
         self.q = q
         self.rho0 = rho0
@@ -527,9 +526,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Particle mass, in proton masses
-    q : float
+    q : array-like
         Particle charge, in units of elementary charge.
     """
 
@@ -543,11 +542,11 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
+        R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
+        R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
         m = m * proton_mass
         q = q * elementary_charge
         E = E * JOULE_PER_EV
-        R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
-        R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
         self.m = m
         self.q = q
         self.R0 = R0
@@ -631,11 +630,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Curve object to initialize samples on.
     N : int
         Number of particles to generate.
-    E : float
+    E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Mass of particles, in proton masses.
-    q : float
+    q : array-like
         charge of particles, in units of elementary charge.
     xi_min, xi_max : float
         Minimum and maximum values for randomly sampled normalized parallel velocity.
@@ -648,20 +647,21 @@ class CurveParticleInitializer(AbstractParticleInitializer):
 
     def __init__(
         self,
-        curve: Curve,
-        N: int,
-        E: float = 3.5e6,
-        m: float = 4,
-        q: float = 2,
-        xi_min: float = -1,
-        xi_max: float = 1,
-        grid: Grid = None,
-        seed: int = 0,
+        curve,
+        N,
+        E=3.5e6,
+        m=4,
+        q=2,
+        xi_min=-1,
+        xi_max=1,
+        grid=None,
+        seed=0,
     ):
         self.curve = curve
-        self.E = jnp.full(N, E * JOULE_PER_EV)
-        self.m = jnp.full(N, m * proton_mass)
-        self.q = jnp.full(N, q * elementary_charge)
+        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
+        self.m = jnp.broadcast_to(m, (N,)) * proton_mass
+        self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
@@ -777,20 +777,21 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
 
     def __init__(
         self,
-        surface: Surface,
-        N: int,
-        E: float = 3.5e6,
-        m: float = 4,
-        q: float = 2,
-        xi_min: float = -1,
-        xi_max: float = 1,
-        grid: Grid = None,
-        seed: int = 0,
+        surface,
+        N,
+        E=3.5e6,
+        m=4,
+        q=2,
+        xi_min=-1,
+        xi_max=1,
+        grid=None,
+        seed=0,
     ):
         self.surface = surface
-        self.E = jnp.full(N, E * JOULE_PER_EV)
-        self.m = jnp.full(N, m * proton_mass)
-        self.q = jnp.full(N, q * elementary_charge)
+        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
+        self.m = jnp.broadcast_to(m, (N,)) * proton_mass
+        self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
@@ -930,10 +931,10 @@ def trace_particles(
         Defaults to field.params_dict.
     rtol, atol : float, optional
         relative and absolute tolerances for PID stepsize controller. Not used if
-        stepsize_controller is provided.
+        ``stepsize_controller`` is provided.
     stepsize_controller : diffrax.AbstractStepsizeController, optional
         Stepsize controller to use for the integration. If not provided, a
-        PIDController with the given rtol and atol will be used.
+        PIDController with the given ``rtol`` and ``atol`` will be used.
     saveat : diffrax.SaveAt, optional
         SaveAt object to specify where to save the output. If not provided, will
         save at the specified times in ts.
@@ -956,7 +957,8 @@ def trace_particles(
         an Equilibrium, the default bounds are set to
         [[0, 1], [-inf, inf], [-inf, inf]] for rho, theta, zeta coordinates.
         When tracing a MagneticField, the default bounds are set to
-        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates.
+        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
+        ``event`` is provided.
     event : diffrax.Event, optional
         Custom event function to stop integration. If not provided, the default
         event function will be used, which stops integration when particles leave the
@@ -978,7 +980,7 @@ def trace_particles(
         Position of each particle at each requested time, in
         either r,phi,z or rho,theta,zeta depending ``model.frame``.
     v : ndarray
-        Velocity of each particle at specified times. The exact number of meaning
+        Velocity of each particle at specified times. The exact number of columns
         will depend on ``model.vcoords``.
 
     """

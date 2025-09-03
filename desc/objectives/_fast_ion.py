@@ -192,7 +192,7 @@ class GammaC(_Objective):
         except ImportError:
             warnif(
                 nufft_eps >= 1e-14,
-                colored(
+                msg=colored(
                     "\njax-finufft is not installed.\n"
                     "Setting parameter nufft_eps to zero.\n"
                     "Performance will deteriorate significantly.\n",

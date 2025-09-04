@@ -824,7 +824,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
-    ensure_from_equilibrium : bool
+    ensure_from_eq : bool
         Whether to ensure the given surface is obtained through
         ``eq.get_surface_at(rho=...)``. If True, additional coordinate mapping is not
         performed, and particles are initialized directly on the flux surface. Defaults
@@ -832,7 +832,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         have the same theta and rho definitions.
     """
 
-    _static_attrs = ["N", "ensure_from_equilibrium"]
+    _static_attrs = ["N", "ensure_from_eq"]
 
     def __init__(
         self,
@@ -845,7 +845,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         xi_max=1,
         grid=None,
         seed=0,
-        ensure_from_equilibrium=False,
+        ensure_from_eq=False,
     ):
         self.surface = surface
         E, m, q = map(jnp.atleast_1d, (E, m, q))
@@ -857,7 +857,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
-        self.ensure_from_equilibrium = ensure_from_equilibrium
+        self.ensure_from_eq = ensure_from_eq
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -918,7 +918,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            if not self.ensure_from_equilibrium:
+            if not self.ensure_from_eq:
                 tol = 1e-8
                 x, out = field.map_coordinates(
                     coords=x,

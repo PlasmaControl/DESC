@@ -5,7 +5,7 @@ New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
-- Adds more arguments to `field_line_integrate` to give more control over it during optimization.
+- Adds more arguments to `field_line_integrate` to give more control over it during optimization. `field_line_integrate` function doesn't accept additional keyword-arguments, if it is necessary, they must be given through `options` dictionary.
 
 Bug Fixes
 ---------

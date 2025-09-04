@@ -699,16 +699,15 @@ _bounce1D_doc = {
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    # data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
     data=["min_tz |B|", "max_tz |B|", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     public=False,
     **_bounce1D_doc,
 )
-# @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging
 def f_tr1(params, transforms, profiles, data, **kwargs):
-
+    # debug_out = jnp.array([17])
     num_pitch = kwargs.get("num_pitch",1)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
@@ -768,8 +767,10 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # count_nz will be 3D [rho][alpha][pitch]
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
+    
+    debug_out = alpha_drift_out[0,0,0,0]
 
-    # specify energy
+    ''# specify energy
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
     e = 1.602*10**(-19) # C
     Z=2 # fully ionized alpha particle
@@ -930,5 +931,5 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
+    # data["f_tr1"] = debug_out
     return data
-    # data['f_tr1'] = omega_arr

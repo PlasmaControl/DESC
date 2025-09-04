@@ -24,6 +24,19 @@ from desc.integrals.basis import (
 )
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_mat, setdefault, take_mask
+from desc.integrals.quad_utils import (
+    bijection_from_disc,
+    grad_bijection_from_disc,
+    uniform,
+)
+from desc.utils import (
+    atleast_nd,
+    errorif,
+    # flatten_matrix,
+    # is_broadcastable,
+    setdefault,
+    take_mask,
+)
 
 _sentinel = -1e5
 
@@ -810,3 +823,47 @@ def _broadcast_for_bounce(pitch_inv):
     if jnp.ndim(pitch_inv) == 2:
         pitch_inv = pitch_inv[:, None]
     return pitch_inv
+
+
+def get_pitch_inv_quad(min_B, max_B, num_pitch):
+    """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
+
+    Parameters
+    ----------
+    min_B : jnp.ndarray
+        Minimum |B| value.
+    max_B : jnp.ndarray
+        Maximum |B| value.
+    num_pitch : int
+        Number of values.
+
+    Returns
+    -------
+    pitch_inv, weight : (jnp.ndarray, jnp.ndarray)
+        Shape (*min_B.shape, num_pitch).
+        1/λ values and weights.
+
+    """
+    errorif(
+        num_pitch > 1e5,
+        msg="Floating point error impedes detection of bounce points "
+        f"near global extrema. Choose {num_pitch} < 1e5.",
+    )
+    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
+    x, weight = uniform(num_pitch)
+    pitch_inv = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
+    weight = weight * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
+    
+    # manually setting pitch_inv for testing JOHN LABBATE SET
+    # pitch_inv = jnp.array([1.05]) # DESC_pyQSC_NAE_precise QH+well.h5, 
+    # pitch_inv = jnp.array([1.0]) # DESC_pyQSC_NAE_2022 QH nfp2.h5, DESC_pyQSC_NAE_2022 QH nfp3.h5, DESC_pyQSC_NAE_precise QA.h5
+    pitch_inv = jnp.array([5.8,5.9]) # wout_new_QH_aScaling.nc, wout_aten_rescaled.nc
+    # pitch_inv = jnp.array([5.2]) # wout_ITERModel_reference.nc
+    # pitch_inv = jnp.array([5.9]) # wout_aten_rescaled.nc, wout_QI_nfp3_rescaled.nc
+    # pitch_inv = jnp.array([5.7]) # wout_beta2.5_QA.nc
+    # pitch_inv = jnp.array([0.92]) # DESC_pyQSC_NAE_2022 QH nfp7.h5
+    # pitch_inv = jnp.array([1.3]) # wout_nfp2_beta_2.00.nc
+    # pitch_inv = jnp.array([2.0]) # qs_initial_guess.h5
+
+    
+    return pitch_inv, weight

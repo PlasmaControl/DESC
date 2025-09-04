@@ -1116,6 +1116,27 @@ class Bounce1D(Bounce):
         )
 
     @staticmethod
+    def reshape_data(grid, *arys):
+        """Reshape arrays for acceptable input to ``integrate``.
+
+        Parameters
+        ----------
+        grid : Grid
+            Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
+        arys : jnp.ndarray
+            Data evaluated on grid.
+
+        Returns
+        -------
+        f : jnp.ndarray
+            Shape (M, L, N).
+            Reshaped data which may be given to ``integrate``.
+
+        """
+        f = [grid.meshgrid_reshape(d, "arz") for d in arys]
+        return f if len(f) > 1 else f[0]
+
+    @staticmethod
     def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 

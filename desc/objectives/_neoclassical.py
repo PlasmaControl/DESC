@@ -13,9 +13,16 @@ from desc.grid import LinearGrid
 from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
 from desc.utils import parse_argname_change, setdefault
 
-from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+from ..integrals.quad_utils import (
+    automorphism_sin,
+    chebgauss2,
+    get_quadrature,
+    grad_automorphism_sin,
+)
+from desc.utils import Timer
 
 _bounce_overwrite = {
     "deriv_mode": """
@@ -429,3 +436,202 @@ def _vander_dft_cfl(x, grid):
 
 def _vander_dct_cfl(x, Y):
     return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[:, jnp.newaxis])
+
+
+
+# New resonance objective from John Anthony Labbate
+class TrappedResonance(_Objective):
+    """
+
+    Description
+    ----------
+    Creates Gaussian about a specified n lowest order resonances (p/q) for trapped particle motion
+    Vicinity to these resonance frequencies is penalized
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+
+    """
+
+    _coordinates = "r" # "rtz" if need all three coordinates
+    _units = "~" # dimensionless
+    _print_value_fmt = "Resonant frequency vicinity: "
+
+    def __init__(
+        self,
+        eq,
+        grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        rho=np.linspace(0.1, 0.9, 3),
+        alpha=np.linspace(0,2*np.pi,1),
+        *,
+        num_transit=2,
+        knots_per_transit=100,
+        num_quad=32,
+        num_pitch=2,
+        batch=True,
+        num_well=None,
+        Nemov=True,
+        name="TrappedResonance",
+        jac_chunk_size=None,
+    ):
+        # assign attributes and store inputs. No expensive calculations
+                # we don't have to do much here, mostly just call ``super().__init__()``
+        if target is None and bounds is None:
+            target = 1e-8 # default target value
+        self._grid = grid
+        rho, alpha = np.atleast_1d(rho, alpha)
+        self._dim_f = rho.size
+        self._constants = {
+            "quad_weights": 1,
+            "rho": rho,
+            "alpha": alpha,
+            "zeta": np.linspace(
+                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
+            ),
+        }
+        self._hyperparameters = {
+            "num_quad": num_quad,
+            "num_pitch": num_pitch,
+            "batch": batch,
+            "num_well": num_well,
+        }
+        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        self._key = "f_tr1"
+
+        super().__init__( 
+            things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        self._grid_1dr = LinearGrid(
+            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+        )
+        self._constants["quad"] = get_quadrature(
+            leggauss(self._hyperparameters.pop("num_quad")),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._constants["rho"]
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._constants["transforms_1dr"] = get_transforms(
+            self._keys_1dr, eq, self._grid_1dr
+        )
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + [self._key], eq, self._grid_1dr
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        # # We try to normalize things to order(1) by dividing things by some - not used by gammaC
+        # # characteristic scale for a given quantity.
+        # # See ``desc.objectives.compute_scaling_factors`` for examples.
+        # if self._normalize:
+            # scales = compute_scaling_factors(eq)
+        #     # since the objective has units of T^4/m^2, the normalization here is
+        #     # based on a characteristic field strength and minor radius.
+        #     self._normalization = (
+        #         scales["B"] ** 4 / scales["a"] ** 2
+        #     )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute TrappedResonance objective.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        result : ndarray
+            Γ_c as a function of the flux surface label.
+
+        """
+        if constants is None:
+            constants = self._constants
+        eq = self.things[0]
+        # TODO: compute all deps of gamma here
+        data = compute_fun(
+            eq,
+            self._keys_1dr,
+            params,
+            constants["transforms_1dr"],
+            constants["profiles"],
+        )
+        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
+        grid = eq._get_rtz_grid(
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
+            coordinates="raz",
+            iota=self._grid_1dr.compress(data["iota"]),
+            params=params,
+        )
+        data = {
+            key: grid.copy_data_from_other(data[key], self._grid_1dr)
+            for key in self._keys_1dr
+        }
+        quad2 = {}
+        if "quad2" in constants:
+            quad2["quad2"] = constants["quad2"]
+        data = compute_fun(
+            eq,
+            self._key, 
+            params,
+            get_transforms(self._key, eq, grid, jitable=True),
+            constants["profiles"],
+            data=data,
+            quad=constants["quad"],
+            N=-1,
+            nfp=eq.NFP,
+            bt_filter_flag=True,
+            rt_filter_flag=True,
+            **quad2,
+            **self._hyperparameters, # passes pitch inv as well as other parameters
+        )
+        # return grid.compress(data[self._key]) # return the value of the objective function evaluated at each point on the grid
+
+        return data[self._key]

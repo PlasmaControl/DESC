@@ -77,6 +77,9 @@ def _diag_to_full(d, e):
 
 
 if use_jax:  # noqa: C901
+
+    imap = jax.lax.map
+    
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop

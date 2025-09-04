@@ -53,7 +53,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import (
+    _map_clebsch_coordinates,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1225,7 +1231,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1258,6 +1264,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1334,61 +1341,67 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
-    def compute_theta_coords(
-        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    @staticmethod
+    def _map_clebsch_coordinates(
+        iota,
+        alpha,
+        zeta,
+        L_lmn,
+        lmbda,
+        guess=None,
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
+        return _map_clebsch_coordinates(
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            guess,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
+        )
+
+    def _compute_iota_under_jit(self, rho, params=None, profiles=None, **kwargs):
+        """Compute rotational transform in JITable manner.
 
         Parameters
         ----------
-        flux_coords : ndarray
-            Shape (k, 3).
-            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
+        rho : jnp.ndarray
+            Surface to compute rotational transform.
+        params : dict[str,jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
 
         Returns
         -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
+        iota : jnp.ndarray
+            Shape (len(rho), ).
 
         """
-        warnif(
-            True,
-            DeprecationWarning,
-            "Use map_coordinates instead of compute_theta_coords.",
-        )
-        return map_coordinates(
-            self,
-            coords=flux_coords,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
-        )
+        setdefault(params, self.params_dict)
+        if profiles is None:
+            profiles = get_profiles("iota", self)
+        if profiles["iota"] is None:
+            iota_profile = self.get_profile(["iota", "iota_r"], params=params, **kwargs)
+        else:
+            iota_profile = profiles["iota"]
+
+        if jnp.ndim(rho) < 2:
+            zero = jnp.zeros_like(rho)
+            rho = jnp.column_stack([rho, zero, zero])
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1430,42 +1443,52 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         rcond=None,
         copy=False,
+        tol=1e-9,
     ):
-        """Transform this equilibrium to use straight field line coordinates.
+        """Transform this equilibrium to use straight field line PEST coordinates.
 
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
+        The flux surfaces of the returned equilibrium usually differ from the original
+        by 1% when the default resolution parameters are used.
 
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+            Radial resolution to use for SFL equilibrium.
+            Default is ``3*eq.L``.
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+            Poloidal resolution to use for SFL equilibrium.
+            Default is ``4*eq.M``.
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+            toroidal resolution to use for SFL equilibrium.
+            Default is ``3*eq.N``.
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 2*L
+            Radial grid resolution to use for fit to Zernike series.
+            Default is ``1.5*L``.
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 2*M
+            Poloidal grid resolution to use for fit to Zernike series.
+            Default is ``1.5*M``.
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 2*N
+            Toroidal grid resolution to use for fit to Fourier series.
+            Default is ``N``.
         rcond : float, optional
-            cutoff for small singular values in least squares fit.
+            Cutoff for small singular values in the least squares fit.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
+        tol : float
+            Tolerance for coordinate mapping.
+            Default is ``1e-9``.
 
         Returns
         -------
-        eq_sfl : Equilibrium
+        eq_PEST : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
 
     @property
     def surface(self):
@@ -2079,26 +2102,16 @@ class Equilibrium(IOAble, Optimizable):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
-        basis_L = FourierZernikeBasis(
-            L=L,
-            M=M,
-            N=N,
-            NFP=na_eq.nfp,
-            sym="sin" if not na_eq.lasym else False,
-            spectral_indexing=spectral_indexing,
-        )
 
         transform_R = Transform(grid, basis_R, method="direct1")
         transform_Z = Transform(grid, basis_Z, method="direct1")
-        transform_L = Transform(grid, basis_L, method="direct1")
         A_R = transform_R.matrices["direct1"][0][0][0]
         A_Z = transform_Z.matrices["direct1"][0][0][0]
-        A_L = transform_L.matrices["direct1"][0][0][0]
 
         W = 1 / grid.nodes[:, 0].flatten() ** w
-        A_Rw = A_R * W[:, None]
-        A_Zw = A_Z * W[:, None]
-        A_Lw = A_L * W[:, None]
+        A_R = A_R * W[:, None]
+        A_Z = A_Z * W[:, None]
+        A_L = A_Z  # can just reuse Z for L, works for both sym and asym cases
 
         rho = grid.nodes[grid.unique_rho_idx, 0]
         R_1D = np.zeros((grid.num_nodes,))
@@ -2115,9 +2128,9 @@ class Equilibrium(IOAble, Optimizable):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
-        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
-        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
+        inputs["R_lmn"] = np.linalg.lstsq(A_R, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Z, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_L, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)

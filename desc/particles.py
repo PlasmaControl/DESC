@@ -371,6 +371,7 @@ def _compute_modB(x, field, params, **kwargs):
             spacing=jnp.zeros_like(x),
             sort=False,
             NFP=field.NFP,
+            jitable=True,
         )
         profiles = get_profiles("|B|", field, grid)
         transforms = get_transforms("|B|", field, grid, jitable=True)
@@ -638,6 +639,8 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Seed for rng.
     """
 
+    _static_attrs = ["N"]
+
     def __init__(
         self,
         curve,
@@ -700,7 +703,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         )
 
         # positions of the selected nodes in R, phi, Z coordinates
-        x = data["x"][self._chosen_idxs, :]
+        x = jnp.take(data["x"], self._chosen_idxs, axis=0)
         params = field.params_dict
 
         if model.frame == "flux":
@@ -718,12 +721,12 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 tol=tol,
                 full_output=True,
             )
-            if jnp.where(out[0] > tol)[0].any():
-                raise ValueError(
-                    "Mapping from lab to flux coordinates failed to achieve tolerance "
-                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
-                    "curve lies in the equilibrium."
-                )
+            x = eqx.error_if(
+                x,
+                (out[0] > tol).any(),
+                "Mapping from lab to flux coordinates failed to achieve tolerance "
+                f"{tol:.2e}. Make sure the curve lies in the equilibrium.",
+            )
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -772,6 +775,8 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     seed : int
         Seed for rng.
     """
+
+    _static_attrs = ["N"]
 
     def __init__(
         self,
@@ -840,12 +845,12 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         # root finding to find the correct theta and zeta coordinates from R, phi, Z
         # coordinates. We will use the surface's rho, theta, zeta coordinates as an
         # initial guess for the root finding.
-        zeta = data["zeta"][self._chosen_idxs]
-        theta = data["theta"][self._chosen_idxs]
+        zeta = jnp.take(data["zeta"], self._chosen_idxs, axis=0)
+        theta = jnp.take(data["theta"], self._chosen_idxs, axis=0)
         rho = self.surface.rho * jnp.ones_like(zeta)
         x_guess = jnp.array([rho, theta, zeta]).T
         # positions of the selected nodes in R, phi, Z coordinates
-        x = data["x"][self._chosen_idxs, :]
+        x = jnp.take(data["x"], self._chosen_idxs, axis=0)
 
         params = field.params_dict
 
@@ -865,12 +870,12 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                 tol=tol,
                 full_output=True,
             )
-            if jnp.where(out[0] > tol)[0].any():
-                raise ValueError(
-                    "Mapping from lab to flux coordinates failed to achieve tolerance "
-                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
-                    "surface lies in the equilibrium."
-                )
+            x = eqx.error_if(
+                x,
+                (out[0] > tol).any(),
+                "Mapping from lab to flux coordinates failed to achieve tolerance "
+                f"{tol:.2e}. Make sure the surface lies in the equilibrium.",
+            )
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params

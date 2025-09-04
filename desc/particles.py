@@ -669,9 +669,16 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
+    ensure_axis : bool
+        Whether to ensure the given curve is the magnetic axis of the equilibrium.
+        If True, additional coordinate mapping is not performed, and particles are
+        initialized directly on the magnetic axis. Defaults to False. Before setting
+        this to True, please make sure the curve is indeed the magnetic axis of the
+        equilibrium, and obtained through an equivalent function such as
+        ``eq.get_axis()``.
     """
 
-    _static_attrs = ["N"]
+    _static_attrs = ["N", "ensure_axis"]
 
     def __init__(
         self,
@@ -684,6 +691,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         xi_max=1,
         grid=None,
         seed=0,
+        ensure_axis=False,
     ):
         self.curve = curve
         E, m, q = map(jnp.atleast_1d, (E, m, q))
@@ -695,6 +703,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
+        self.ensure_axis = ensure_axis
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -749,22 +758,25 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            tol = 1e-8
-            x, out = field.map_coordinates(
-                coords=x,
-                inbasis=("R", "phi", "Z"),
-                outbasis=("rho", "theta", "zeta"),
-                maxiter=200,
-                guess=x_guess,
-                tol=tol,
-                full_output=True,
-            )
-            x = eqx.error_if(
-                x,
-                (out[0] > tol).any(),
-                "Mapping from lab to flux coordinates failed to achieve tolerance "
-                f"{tol:.2e}. Make sure the curve lies in the equilibrium.",
-            )
+            if not self.ensure_axis:
+                tol = 1e-8
+                x, out = field.map_coordinates(
+                    coords=x,
+                    inbasis=("R", "phi", "Z"),
+                    outbasis=("rho", "theta", "zeta"),
+                    maxiter=200,
+                    guess=x_guess,
+                    tol=tol,
+                    full_output=True,
+                )
+                x = eqx.error_if(
+                    x,
+                    (out[0] > tol).any(),
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Make sure the curve lies in the equilibrium.",
+                )
+            else:
+                x = x_guess
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -812,9 +824,15 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
+    ensure_from_equilibrium : bool
+        Whether to ensure the given surface is obtained through
+        ``eq.get_surface_at(rho=...)``. If True, additional coordinate mapping is not
+        performed, and particles are initialized directly on the flux surface. Defaults
+        to False. Before setting this to True, make sure the surface and Equilibrium
+        have the same theta and rho definitions.
     """
 
-    _static_attrs = ["N"]
+    _static_attrs = ["N", "ensure_from_equilibrium"]
 
     def __init__(
         self,
@@ -827,6 +845,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         xi_max=1,
         grid=None,
         seed=0,
+        ensure_from_equilibrium=False,
     ):
         self.surface = surface
         E, m, q = map(jnp.atleast_1d, (E, m, q))
@@ -838,6 +857,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
+        self.ensure_from_equilibrium = ensure_from_equilibrium
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -898,22 +918,25 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            tol = 1e-8
-            x, out = field.map_coordinates(
-                coords=x,
-                inbasis=("R", "phi", "Z"),
-                outbasis=("rho", "theta", "zeta"),
-                guess=x_guess,
-                maxiter=200,
-                tol=tol,
-                full_output=True,
-            )
-            x = eqx.error_if(
-                x,
-                (out[0] > tol).any(),
-                "Mapping from lab to flux coordinates failed to achieve tolerance "
-                f"{tol:.2e}. Make sure the surface lies in the equilibrium.",
-            )
+            if not self.ensure_from_equilibrium:
+                tol = 1e-8
+                x, out = field.map_coordinates(
+                    coords=x,
+                    inbasis=("R", "phi", "Z"),
+                    outbasis=("rho", "theta", "zeta"),
+                    guess=x_guess,
+                    maxiter=200,
+                    tol=tol,
+                    full_output=True,
+                )
+                x = eqx.error_if(
+                    x,
+                    (out[0] > tol).any(),
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Make sure the surface lies in the equilibrium.",
+                )
+            else:
+                x = x_guess
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params

@@ -4,7 +4,6 @@ import warnings
 from abc import ABC, abstractmethod
 
 import equinox as eqx
-import numpy as np
 from diffrax import (
     AbstractTerm,
     Event,
@@ -186,7 +185,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 "Integration in lab coordinates requires a MagneticField. If using an "
                 "Equilibrium, we recommend setting frame='flux' and converting the "
                 "output to lab coordinates only at the end by the helper function "
-                "Equilibrium.map_coordinates."
+                "Equilibrium.compute('x')."
             )
 
             return self._compute_lab_coordinates(
@@ -428,15 +427,12 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
         )
-        m = m * proton_mass
-        q = q * elementary_charge
-        E = E * JOULE_PER_EV
-        self.m = m
-        self.q = q
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         self.rho0 = rho0
         self.theta0 = theta0
         self.zeta0 = zeta0
-        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.v0 = jnp.sqrt(2 * E * JOULE_PER_EV / self.m)
         self.vpar0 = xi0 * self.v0
 
         errorif(
@@ -544,15 +540,12 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
     ):
         R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
         R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
-        m = m * proton_mass
-        q = q * elementary_charge
-        E = E * JOULE_PER_EV
-        self.m = m
-        self.q = q
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         self.R0 = R0
         self.phi0 = phi0
         self.Z0 = Z0
-        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.v0 = jnp.sqrt(2 * E * JOULE_PER_EV / self.m)
         self.vpar0 = xi0 * self.v0
 
     def init_particles(self, model, field, **kwargs):
@@ -744,7 +737,12 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 )
 
         v = jnp.sqrt(2 * self.E / self.m)
-        vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
+        vpar = jax.random.uniform(
+            key=jax.random.PRNGKey(self.seed),
+            shape=(v.size,),
+            minval=self.xi_min * v,
+            maxval=self.xi_max * v,
+        )
 
         return super()._return_particles(
             x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
@@ -886,7 +884,12 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                 )
 
         v = jnp.sqrt(2 * self.E / self.m)
-        vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
+        vpar = jax.random.uniform(
+            key=jax.random.PRNGKey(self.seed),
+            shape=(v.size,),
+            minval=self.xi_min * v,
+            maxval=self.xi_max * v,
+        )
 
         return super()._return_particles(
             x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs

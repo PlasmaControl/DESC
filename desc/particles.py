@@ -455,6 +455,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         kwargs : dict, optional
             source_grid for the magnetic field computation, if using a MagneticField
             object, can be passed as a keyword argument.
+            If you are trying to initialize particles in lab coordinates for a
+            MagneticField with flux coordinates, you must pass the Equilibrium
+            as keyword argument "eq" in kwargs.
 
         Returns
         -------
@@ -490,10 +493,23 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
                     "require multiple coordinate mapping, it is not implemented."
                 )
             elif isinstance(field, _MagneticField):
-                raise NotImplementedError(
-                    "If you have a MagneticField object, you cannot use input with "
-                    "flux coordinates since there is no easy mapping between the two."
-                )
+                eq = kwargs.pop("eq", None)
+                if isinstance(eq, Equilibrium):
+                    grid = Grid(
+                        x.T,
+                        spacing=jnp.zeros_like(x),
+                        sort=False,
+                        NFP=eq.NFP,
+                        jitable=True,
+                    )
+                    x = eq.compute("x", grid=grid)["x"]
+                else:
+                    raise NotImplementedError(
+                        "If you have a MagneticField object, you cannot use input with "
+                        "flux coordinates since there is no easy mapping between the "
+                        "two. You can pass the Equilibrium as a keyword argument 'eq' "
+                        "in kwargs to enable the mapping."
+                    )
         else:
             raise NotImplementedError
 
@@ -584,10 +600,26 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = field.map_coordinates(
+            # there is not much we can do for the guess here, but we need the
+            # guess for jit purposes
+            x_guess = jnp.zeros(x.shape)
+            x_guess = x_guess.at[:, 2].set(self.phi0)
+            x_guess = x_guess.at[:, 1].set(jnp.arctan2(self.Z0, self.R0))
+            tol = 1e-8
+            x, out = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
+                maxiter=200,
+                guess=x_guess,
+                tol=tol,
+                full_output=True,
+            )
+            x = eqx.error_if(
+                x,
+                (out[0] > tol).any(),
+                "Mapping from lab to flux coordinates failed to achieve tolerance "
+                f"{tol:.2e}. Make sure the points lie in the equilibrium.",
             )
             if field.iota is None:
                 iota = field.get_profile("iota")
@@ -1044,13 +1076,10 @@ def trace_particles(
         params=params,
         stepsize_controller=stepsize_controller,
         saveat=saveat,
-        rtol=rtol,
-        atol=atol,
         max_steps=max_steps,
         min_step_size=min_step_size,
         solver=solver,
         adjoint=adjoint,
-        bounds=bounds,
         event=event,
         chunk_size=chunk_size,
         options=options,

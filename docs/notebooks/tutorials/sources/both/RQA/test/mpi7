@@ -33,8 +33,7 @@ which mpirun
 # ---- Run MPI job ----
 if [ -f "$PYTHON_SCRIPT" ]; then
     echo "Running Python script $PYTHON_SCRIPT with $SLURM_NTASKS MPI ranks..."
-   # mpirun -n $SLURM_NTASKS python "$PYTHON_SCRIPT"
-$CONDA_PREFIX/bin/mpirun -n $SLURM_NTASKS python "$PYTHON_SCRIPT"
+   srun -n $SLURM_NTASKS python "$PYTHON_SCRIPT"
 else
     echo "Error: Python script $PYTHON_SCRIPT not found."
 fi

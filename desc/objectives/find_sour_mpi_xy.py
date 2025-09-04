@@ -322,14 +322,13 @@ def stick(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
 def B_sticks_vec(stick_data, coords, surface_grid, mpi_comm=None):
     """
     MPI-ready vectorized sticks computation.
-    Original argument names preserved.
-    Returns array of shape (3, coords.shape[0], num_wires)
+    Returns array of shape (3, Nsticks, Ncoords)
     """
     comm = mpi_comm or MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # Determine local coordinate slice
+    # Split coordinates across ranks
     N_coords = coords.shape[0]
     coords_per_rank = N_coords // size
     start = rank * coords_per_rank
@@ -337,27 +336,23 @@ def B_sticks_vec(stick_data, coords, surface_grid, mpi_comm=None):
     coords_local = coords[start:end]
 
     # Compute local sticks contribution
+    # stick() -> (Nsticks, Ncoords_local, 3)
     B_local = stick(
-        stick_data['x'],
-        0*stick_data['x'],
+        stick_data["x"],
+        0 * stick_data["x"],
         coords_local,
         surface_grid,
-        basis='rpz'
-    )  # (num_wires_local, len(coords_local), 3)
+        basis="rpz"
+    )
 
-    # Transpose to (3, coords_local, num_wires)
-    B_local = jnp.transpose(B_local, (2, 1, 0))
+    # Rearrange -> (3, Nsticks, Ncoords_local)
+    B_local = jnp.transpose(B_local, (2, 0, 1))
 
-    # Optional: gather local shapes/norms for verification
-    local_shape = B_local.shape
-    local_norm = jnp.linalg.norm(B_local)
-    all_shapes = comm.gather(local_shape, root=0)
-    all_norms = comm.gather(local_norm.item(), root=0)
+    # Gather full coords dimension across ranks
+    gathered = comm.allgather(B_local)  # list of arrays (3, Nsticks, coords_chunk)
+    B_global = jnp.concatenate(gathered, axis=2)  # (3, Nsticks, Ncoords)
 
-    # Barrier to ensure all ranks finished
-    comm.Barrier()
-
-    return B_local#, all_shapes, all_norms
+    return B_global
 
 # ---------------- K_sour ----------------
 def K_sour_vec(sdata1, sdata2, sdata3, sgrid, surface, N, d_0, tdata, ss_data):
@@ -419,7 +414,7 @@ def bn_res_vec_mpi_2d(
     B_sticks0 = jnp.transpose(B_sticks0, (0,2,1))
     
     # --- Combine locally ---
-    B_local = B_sour0 + B_wire_cont + B_sticks0   # still (3, coords, N)
+    B_local = B_sour0 + B_wire_cont #+ B_sticks0   # still (3, coords, N)
     
     # --- Optional: compute local norms for verification ---
     local_shape = B_local.shape

@@ -1,9 +1,11 @@
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["JAX_PLATFORM_NAME"] = "cpu"
+#import os
+#os.environ["CUDA_VISIBLE_DEVICES"] = ""
+#os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 import numpy as np
 import os
+
+from desc.backend import put, fori_loop, jnp, sign
 
 from scipy.io import netcdf_file
 import copy
@@ -19,8 +21,6 @@ import jax.numpy as jnp
 from jax import jit, jacfwd
 
 from netCDF4 import Dataset
-
-from desc.backend import put, fori_loop, jnp, sign
 
 from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
 
@@ -233,11 +233,6 @@ def main():
         print("=== Verification across ranks ===")
         for i, (shp, norm) in enumerate(zip(all_shapes, all_norms)):
             print(f"Rank {i}: local shape = {shp}, local norm = {norm}")
-
-        # Optionally: compute total estimated shape
-        coords_dim = coords.shape[0]
-        total_N = B_local.shape[2] * size  # conservative estimate
-        print(f"Estimated full matrix shape: ({3*coords_dim}, {total_N})")
 
     return B_local  # each rank keeps only its local slice
 

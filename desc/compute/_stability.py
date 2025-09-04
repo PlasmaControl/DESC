@@ -3494,7 +3494,7 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     n_zeta_max="int: 2 x maximum toroidal mode number",
     axisym="bool if the equilibrium is axisymmetric",
     n_zeta_axisym="bool: max axisym mode number to analyze",
-    compressible="bool: if the perturbation is compressible",
+    incompressible="bool: if the perturbation is compressible",
 )
 def _AGNI6(params, transforms, profiles, data, **kwargs):
     """
@@ -3532,7 +3532,6 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
-    compressible = kwargs.get("compressible", False)
     n_zeta_axisym = kwargs.get("n_zeta_axisym", 1)
 
     # For axisymmetric equilibria n_mode will decide the toroidal
@@ -4176,6 +4175,9 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
         "J^zeta",
         "|J|",
         "sqrt(g)_PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
+        "(sqrt(g)_PEST_p)|PEST",
         "finite-n instability drive",
         "iota",
         "iota_r",
@@ -4187,8 +4189,10 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     n_theta_max="int: 2 x maximum poloidal mode number",
     n_zeta_max="int: 2 x maximum toroidal mode number",
     axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
 )
-def _AGNI3(params, transforms, profiles, data, **kwargs):
+def _AGNI6(params, transforms, profiles, data, **kwargs):
     """
     AGNI: Analysis of Global Normal-modes in Ideal MHD.
 
@@ -4223,19 +4227,19 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     dpsi_r2_drho = 2 * psi_r * psi_rr
     diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
 
-    p0 = data["p"] / B_N**2
-    p0 = p0.at[p0 < 0].set(1e-8)
+    # Add a tiny shift because sometimes the pressure can be
+    # slightly negative in the edge
+    p0 = mu_0 * data["p"][:, None] / B_N**2 + 1e-12
 
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
-
     # For axisymmetric equilibria n_mode will decide the toroidal
     # mode number to analyze. Should work for n_mode = 0 (vertical instability)
+    # as long as it's internal.
     # For stellarator equilibrium n_mode will decide the n_mode family
-    n_mode = kwargs.get("n_mode", 1)
-
-    # n_mode = jnp.mod(n_mode, NFP)
+    n_mode_axisym = kwargs.get("n_mode_axisym", 1)
+    incompressible = kwargs.get("incompressible", False)
 
     n_rho_max = kwargs.get("n_rho_max", 8)
     n_theta_max = kwargs.get("n_theta_max", 8)
@@ -4243,13 +4247,11 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     if axisym:
         # Each componenet of xi can be written as the Fourier sum of two modes in
         # the toroidal direction
-        D_zeta0 = 1j * n_mode * jnp.array([[1]])
-        n_zeta_max = 1
-        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
+        D_zeta0 = n_zeta_axisym * jnp.array([[0, -1], [1, 0]])
+        n_zeta_max = 2
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
         D_zeta0 = fourier_diffmat(n_zeta_max)
-        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
 
     def _eval_1D(f, x):
         return jax.vmap(lambda x_val: f(x_val))(x)
@@ -4266,10 +4268,10 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         return eps + (1 - eps) * (lower + upper)
 
     # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
-
     dx_f = jax.grad(_f)
 
-    x = legendre_lobatto_nodes(len(x0) - 1)
+    # x = legendre_lobatto_nodes(len(x0) - 1)
+    x = legendre_lobatto_nodes(n_rho_max - 1)
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
     # scale_vector1 = jnp.ones_like(x0) * (2 * jnp.pi-1e-3)
@@ -4323,6 +4325,14 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 
+    sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
+    sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
+    sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
+
+    partial_z_log_sqrtg = (sqrtg_p / sqrtg).flatten()
+    partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
+    partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
+
     psi_r_over_sqrtg = psi_r / sqrtg
 
     g_rr = data["g_rr|PEST"][:, None] * 1 / a_N**2
@@ -4342,7 +4352,11 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     j_sup_zeta = mu_0 * data["J^zeta"][:, None] * a_N**2 / B_N
 
     # instability drive term
-    F = 1 * mu_0 * data["finite-n instability drive"][:, None] * (a_N / B_N) ** 2
+    F = -1 * mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
+
+    C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
+    C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
+    C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
 
     ####################
     ####----Q_ρρ----####
@@ -4618,13 +4632,24 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
     )
 
-    ### Shift the diagon of A to ensure positive definiteness
-    ### The estimate must be accurate. If A is diagonally dominant
-    ### use Gerhsgorin theorem to estimate the lowest eigenvalue
-    # A = A.at[jnp.diag_indices_from(A)].add(1e-11)
+    if incompressible is False:
+        # purely stabilizing and doesn't change the marginal stability
+        # For optimization purposes, it's recommended to set gamma = 0
+        gamma = 1.0
+        A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
+        A = A.at[theta_idx, theta_idx].add(
+            C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
+        )
+        A = A.at[zeta_idx, zeta_idx].add(C_zeta.T @ ((gamma * sqrtg * W * p0) * C_zeta))
+        A = A.at[rho_idx, theta_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_theta))
+        A = A.at[rho_idx, zeta_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_zeta))
+        A = A.at[theta_idx, zeta_idx].add(
+            C_theta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+        )
 
-    ## Instability drive term
-    # A = A.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+    ### Instability drive term
+    Au = jnp.zeros((3 * n_total, 3 * n_total))
+    Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
 
     A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
     A = A.at[zeta_idx, rho_idx].set(A[rho_idx, zeta_idx].T)
@@ -4636,8 +4661,9 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     D = jnp.diag(1 / jnp.sqrt(jnp.diag(B)))
 
-    A2 = D @ (A @ D.T)
-    B2 = D @ (B @ D.T)
+    A = D @ (A @ D.T)
+    Au = D @ (Au @ D.T)
+    B = D @ (B @ D.T)
 
     def component_to_node_permutn(N: int) -> jnp.ndarray:
         """
@@ -4701,17 +4727,17 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     B_blocks = jnp.zeros((n_total, 3, 3))
 
-    B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B2[rho_idx, rho_idx]))
-    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(B2[theta_idx, theta_idx]))
-    B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B2[zeta_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B[rho_idx, rho_idx]))
+    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(B[theta_idx, theta_idx]))
+    B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B[zeta_idx, zeta_idx]))
 
-    B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B2[rho_idx, theta_idx]))
+    B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B[rho_idx, theta_idx]))
     B_blocks = B_blocks.at[:, 1, 0].set(B_blocks[:, 0, 1])
 
-    B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B2[rho_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B[rho_idx, zeta_idx]))
     B_blocks = B_blocks.at[:, 0, 2].set(B_blocks[:, 2, 0])
 
-    B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B2[theta_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B[theta_idx, zeta_idx]))
     B_blocks = B_blocks.at[:, 2, 1].set(B_blocks[:, 1, 2])
 
     ##if ridge != 0.0:
@@ -4720,115 +4746,89 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     I3 = jnp.tile(jnp.eye(3), (L.shape[0], 1, 1))
     Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
 
-    # Assemble L_full from blocks of L (only for comparison with chol(B))
-    L_full = _assemble_diagblocks_comp_major(L, rho_idx, theta_idx, zeta_idx)
-    # L_test = jnp.linalg.cholesky(B)
-    ##max|L_full - L_test| = 3.55e-15
-
-    ## Shift the diagon of A to ensure positive definiteness
-    ## The estimate must be accurate. If A is diagonally dominant
-    ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-    # A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-11)
-
     # components to node permutations
     p = component_to_node_permutn(n_total)
-    A2 = A2[p][:, p]
+    A2 = A[p][:, p]
+    A2u = Au[p][:, p]
 
     # L^-1 A L^-T
     A2 = A2.reshape(n_total, 3, n_total, 3)
     A2 = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2, Linv)
     A2 = A2.reshape(3 * n_total, 3 * n_total)
 
+    A2u = A2u.reshape(n_total, 3, n_total, 3)
+    A2u = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2u, Linv)
+    A2u = A2u.reshape(3 * n_total, 3 * n_total)
+
     # node to component permutation
     pinv = jnp.empty_like(p)
     pinv = pinv.at[p].set(jnp.arange(3 * n_total))
+
     A2 = A2[pinv][:, pinv]
+    A2u = A2u[pinv][:, pinv]
 
-    ###w2, _ = jnp.linalg.eigh(A)
-    ###print(w2)
-    ## w4, _ = jnp.linalg.eigh((B2 + B2.T)/2)
-    ## print(w4)
-
-    # A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-11)
-
-    # apply dirichlet BC to ξ^ρ
+    # store indices needed to apply dirichlet BC to ξ^ρ
     keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
-    A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-9)
-
-    # A3 = A2[jnp.ix_(keep, keep)] + Au2[jnp.ix_(keep, keep)]
-    A3 = A2[jnp.ix_(keep, keep)]
-
-    w2, _ = jnp.linalg.eigh((A3 + A3.T) / 2)
-    print(w2)
-
-    pdb.set_trace()
-
-    sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
-    sqrtg_v = data["(sqrt(g)_PEST_v)|PEST"][:, None] * 1 / a_N**3
-    sqrtg_p = data["(sqrt(g)_PEST_p)|PEST"][:, None] * 1 / a_N**3
-
-    partial_z_log_sqrtg = (sqrtg_p / sqrtg).flatten()
-    partial_r_log_sqrtg = (sqrtg_r / sqrtg).flatten()
-    partial_v_log_sqrtg = (sqrtg_v / sqrtg).flatten()
-
-    C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
-    C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
-    C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
 
     # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
-    if compressible:
-        A = A.at[rho_idx, rho_idx].add(C_rho @ C_rho.T)
-        A = A.at[theta_idx, theta_idx].add(C_theta @ C_theta.T)
-        A = A.at[zeta_idx, zeta_idx].add(C_zeta @ C_zeta.T)
-        A = A.at[rho_idx, theta_idx].add(C_rho @ C_rho.T)
-        A = A.at[rho_idx, zeta_idx].add(C_rho @ C_zeta.T)
-        A = A.at[theta_idx, zeta_idx].add(C_theta @ C_zeta.T)
+    if incompressible:  # Only enforce compressibility here
+        # Assemble L_full from blocks of L (only for comparison with chol(B))
+        Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx, theta_idx, zeta_idx)
+        # L_test = jnp.linalg.cholesky(B)
+        ##max|L_full - L_test| = 3.55e-15
 
-    else:  # Impose ∇⋅𝛏 = 0
-        C = jnp.array([C_rho, C_theta, C_zeta])
+        # Concatenate once (N, 3N)
+        C = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
+
+        # Use the diagonal of D (you already built D earlier as diag(1/sqrt(diag(B))))
+        d = 1.0 / jnp.diag(D)  # (3N,)  == diag(D)
+        C_scaled = C * d[None, :]  # right-multiply by D via column scaling
+
+        # Apply L2^{-T} per node using your existing L2inv
+        Linv_T = jnp.swapaxes(Linv, 1, 2)  # (N, 3, 3)
+        C_node = C_scaled[:, p].reshape(n_total, n_total, 3)  # (N, N, 3)
+        Chat_node = jnp.einsum("mil, ilk -> mik", C_node, Linv_T)
+        Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
 
         # Orthogonal projector P = I - C^T (C C^T)^{-1} C, used implicitly via CTS:
-        G = sym(C @ C.T) + 1e-12 * jnp.eye(C.shape[0], C.dtype)  # Gram
+        G = Chat @ Chat.T
+        G = (G + G.T) / 2 + 1e-12 * jnp.eye(n_total)  # Gram matrix w ridge
+
+        # The will become one of the most expensive parts
         L = jnp.linalg.cholesky(G)
-        Y = jax.lax.linalg.triangular_solve(L, C, left_side=True, lower=True)
+        Y = jax.lax.linalg.triangular_solve(L, Chat, left_side=True, lower=True)
         S = jax.lax.linalg.triangular_solve(L.T, Y, left_side=True, lower=False)
-        CTS = C.T @ S  # = C^T (C C^T)^{-1} C
+        CTS = Chat.T @ S  # = C^T (C C^T)^{-1} C
 
         # Projected operator A_proj = P A P without forming P
-        A_proj = A - A @ CTS - CTS @ A + CTS @ A @ CTS
-        A_proj = sym(A_proj)
+        A2_proj = A2 - A2 @ CTS - CTS @ A2 + CTS @ A2 @ CTS
+        A2_proj = (A2_proj + A2_proj.T) / 2
 
-        # w, V = jnp.linalg.eigh(A_proj)
-        # jnp.linalg.cholesky(C @ C.T)
+        A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-9)
 
-    # tic = time.time()
-    # w, v = jax.scipy.linalg.eigh(A3, B2[jnp.ix_(keep, keep)])
-    # toc = time.time()
-    # print(toc-tic)
+        # Projected operator A_proj = P A P without forming P
+        A2u_proj = A2u - A2u @ CTS - CTS @ A2u + CTS @ A2u @ CTS
+        A2u_proj = (A2u_proj + A2u_proj.T) / 2
 
-    ### w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
-    # tic = time.time()
-    # w, v = jnp.linalg.eigh(A3)
+        A3_proj = A2_proj[jnp.ix_(keep, keep)] + A2u_proj[jnp.ix_(keep, keep)]
 
-    scale1 = 1e3
+        w, v = jnp.linalg.eigh((A3_proj + A3_proj.T) / 2)
+        print("w = ", w)
 
-    A3 = scale1 * np.asarray(A3[jnp.ix_(keep, keep)])
-    B2 = np.asarray(B2[jnp.ix_(keep, keep)])
-    print("arrays created!")
-    tic = time.time()
-    # w, v = eigsh(A3, k=10, which="SA", sigma=-1e-3, tol=1e-5, maxiter=100)
-    w, v = eigsh(
-        A3, M=B2, k=5, which="SA", sigma=-1.0, tol=1e-5, maxiter=200, mode="cayley"
-    )
+    else:
+        ## Shift the diagonal of A to ensure positive definiteness
+        ## The estimate must be accurate. If A is diagonally dominant
+        ## use Gerhsgorin theorem to estimate the lowest eigenvalue
+        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-9)
 
-    print(w)
-    toc = time.time()
-    print(toc - tic)
-    pdb.set_trace()
+        A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
 
-    data["finite-n lambda6"] = w / scale1
+        w, v = jnp.linalg.eigh((A3 + A3.T) / 2)
+        print(w)
+
+    data["finite-n lambda6"] = w
     data["finite-n eigenfunction6"] = v
 
     return data

@@ -691,7 +691,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             requested by the model which is equal to len(model.args). N is the number
             of particles.
         """
-        data = self.curve.compute(["x_s", "x", "ds"], grid=self.grid)
+        data = self.curve.compute(["x_s", "x", "ds", "phi"], grid=self.grid)
         # length of the line segment at each grid point
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
         self._chosen_idxs = jax.random.choice(
@@ -704,6 +704,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
 
         # positions of the selected nodes in R, phi, Z coordinates
         x = jnp.take(data["x"], self._chosen_idxs, axis=0)
+        zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
+        # this is not the best guess, but most likely scenario for this class
+        # is to initialize particles on the magnetic axis, for sake of jitable
+        # implementation, we use rho=0, theta=0 as the guess
+        x_guess = jnp.array([jnp.zeros(self.N), jnp.zeros(self.N), zeta]).T
         params = field.params_dict
 
         if model.frame == "flux":
@@ -718,6 +723,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
                 maxiter=200,
+                guess=x_guess,
                 tol=tol,
                 full_output=True,
             )

@@ -1089,7 +1089,6 @@ def test_plot_field_lines():
         nphi_per_transit=100,
         ntransit=2,
         endpoint=True,
-        chunk_size=10,
     )
 
 
@@ -1121,6 +1120,8 @@ def test_plot_field_lines_reversed():
         fig=fig,
         color="red",
         lw=10,
+        # test that passing options as dict works
+        options={"throw": True, "made_jump": None},
     )
     x1 = data1["X"][0]
     y1 = data1["Y"][0]

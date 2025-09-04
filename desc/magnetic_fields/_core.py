@@ -7,9 +7,10 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from diffrax import (
-    DiscreteTerminatingEvent,
+    Event,
     ODETerm,
     PIDController,
+    RecursiveCheckpointAdjoint,
     SaveAt,
     Tsit5,
     diffeqsolve,
@@ -24,7 +25,7 @@ from desc.basis import (
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.batching import batch_map
+from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
@@ -2579,13 +2580,17 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=None,
     min_step_size=1e-8,
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    stepsize_controller=None,
+    saveat=None,
+    event=None,
+    adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
-    **kwargs,
+    options=None,
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2603,9 +2608,11 @@ def field_line_integrate(
     source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
-        relative and absolute tolerances for ode integration
-    maxstep : int
-        maximum number of steps between different phis
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        ``stepsize_controller`` is provided.
+    max_steps : int
+        maximum number of steps for the integration. Defaults to
+        abs((phis[-1] - phis[0]) / min_step_size * 1000)
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver
@@ -2613,18 +2620,30 @@ def field_line_integrate(
         defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (0,np.inf)
+        box will be stopped, and NaN returned for points outside the box. Not used if
+        ``event`` is provided. Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (-np.inf,np.inf)
+        box will be stopped, and NaN returned for points outside the box. Not used if
+        ``event`` is provided. Defaults to (-np.inf, np.inf)
+    stepsize_controller : diffrax.StepsizeController, optional
+        Stepsize controller to use for the integration. Defaults to PIDController
+        with rtol and atol set to the provided values.
+    saveat : diffrax.SaveAt, optional
+        SaveAt object to specify at which points to save the results of the
+        integration. Defaults to saving at all phis.
+    event : diffrax.Event, optional
+        Event object to specify when to stop the integration. Defaults to stopping
+        when the trajectory leaves the bounds_R and bounds_Z bounding box.
+    adjoint : diffrax.AbstractAdjoint, optional
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-    kwargs: dict
-        keyword arguments to be passed into the ``diffrax.diffeqsolve``
+        Chunk of field lines to trace at once. If None, traces all at once.
+        Defaults to None.
+    options : dict, optional
+        Additional arguments to pass to the diffrax diffeqsolve.
 
     Returns
     -------
@@ -2632,6 +2651,9 @@ def field_line_integrate(
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
     """
+    if options is None:
+        options = {}
+
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     rshape = r0.shape
@@ -2644,66 +2666,106 @@ def field_line_integrate(
     min_step_size = jnp.where(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
     )
-
-    @jit
-    def odefun(s, rpz, args):
-        rpz = rpz.reshape((3, -1)).T
-        field = args[0]
-        r = rpz[:, 0]
-        br, bp, bz = (
-            scale
-            * field.compute_magnetic_field(
-                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-            ).T
-        )
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
+    max_steps = (
+        max_steps
+        if max_steps is not None
+        else int((phis[-1] - phis[0]) / min_step_size * 1000)
+    )
 
     # diffrax parameters
-
-    def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
-    kwargs.setdefault(
-        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    stepsize_controller = (
+        stepsize_controller
+        if stepsize_controller is not None
+        else PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
     )
-    kwargs.setdefault(
-        "discrete_terminating_event",
-        DiscreteTerminatingEvent(default_terminating_event_fxn),
-    )
-
-    term = ODETerm(odefun)
-    saveat = SaveAt(ts=phis)
-
-    intfun = lambda x: diffeqsolve(
-        term,
-        solver,
-        y0=x,
-        t0=phis[0],
-        t1=phis[-1],
-        saveat=saveat,
-        max_steps=maxstep * len(phis),
-        dt0=min_step_size,
-        args=(field,),
-        **kwargs,
-    ).ys
+    event = event if event is not None else Event(default_terminating_event)
+    saveat = saveat if saveat is not None else SaveAt(ts=phis)
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
-    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
-        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+        x = vmap_chunked(
+            _intfun_wrapper, in_axes=(0,) + 13 * (None,), chunk_size=chunk_size
+        )(
+            x0,
+            field,
+            params,
+            source_grid,
+            phis,
+            scale,
+            solver,
+            max_steps,
+            min_step_size,
+            saveat,
+            stepsize_controller,
+            event,
+            adjoint,
+            options,
+        )
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
     return r, z
+
+
+def _intfun_wrapper(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    options,
+):
+    """Wrapper for intfun."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    ).ys
+
+
+@jit
+def _odefun(s, rpz, args):
+    field, params, scale, source_grid = args
+    r = rpz[0]
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpz,
+            params,
+            basis="rpz",
+            source_grid=source_grid,
+        ).squeeze()
+    )
+    return jnp.array(
+        [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+    ).squeeze()
 
 
 class OmnigenousField(Optimizable, IOAble):

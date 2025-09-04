@@ -6,18 +6,26 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-from diffrax import Event, ODETerm, PIDController, SaveAt, Tsit5, diffeqsolve
+from diffrax import (
+    Event,
+    ODETerm,
+    PIDController,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
 from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign, vmap
+from desc.backend import jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.batching import batch_map
+from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
@@ -2578,7 +2586,9 @@ def field_line_integrate(
     stepsize_controller=None,
     saveat=None,
     event=None,
-    options={},
+    adjoint=RecursiveCheckpointAdjoint(),
+    chunk_size=None,
+    options=None,
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2596,7 +2606,8 @@ def field_line_integrate(
     source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
-        relative and absolute tolerances for ode integration
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        ``stepsize_controller`` is provided.
     max_steps : int
         maximum number of steps for the integration. Defaults to
         abs((phis[-1] - phis[0]) / min_step_size * 1000)
@@ -2607,21 +2618,28 @@ def field_line_integrate(
         defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (0,np.inf)
+        box will be stopped, and NaN returned for points outside the box. Not used if
+        ``event`` is provided. Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box.
-        Defaults to (-np.inf,np.inf)
+        box will be stopped, and NaN returned for points outside the box. Not used if
+        ``event`` is provided. Defaults to (-np.inf, np.inf)
     stepsize_controller : diffrax.StepsizeController, optional
         Stepsize controller to use for the integration. Defaults to PIDController
         with rtol and atol set to the provided values.
     saveat : diffrax.SaveAt, optional
-        SaveAt object to specify at which points to save the results of the integration.
-        Defaults to saving at all phis.
+        SaveAt object to specify at which points to save the results of the
+        integration. Defaults to saving at all phis.
     event : diffrax.Event, optional
         Event object to specify when to stop the integration. Defaults to stopping
         when the trajectory leaves the bounds_R and bounds_Z bounding box.
+    adjoint : diffrax.AbstractAdjoint, optional
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    chunk_size : int or None
+        Chunk of field lines to trace at once. If None, traces all at once.
+        Defaults to None.
     options : dict, optional
         Additional arguments to pass to the diffrax diffeqsolve.
 
@@ -2631,6 +2649,9 @@ def field_line_integrate(
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
     """
+    if options is None:
+        options = {}
+
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     rshape = r0.shape
@@ -2667,7 +2688,9 @@ def field_line_integrate(
     # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        x = vmap(_intfun_wrapper, in_axes=(0,) + 12 * (None,))(
+        x = vmap_chunked(
+            _intfun_wrapper, in_axes=(0,) + 13 * (None,), chunk_size=chunk_size
+        )(
             x0,
             field,
             params,
@@ -2680,6 +2703,7 @@ def field_line_integrate(
             saveat,
             stepsize_controller,
             event,
+            adjoint,
             options,
         )
 
@@ -2703,6 +2727,7 @@ def _intfun_wrapper(
     saveat,
     stepsize_controller,
     event,
+    adjoint,
     options,
 ):
     """Wrapper for intfun."""
@@ -2718,6 +2743,7 @@ def _intfun_wrapper(
         stepsize_controller=stepsize_controller,
         args=[field, params, scale, source_grid],
         event=event,
+        adjoint=adjoint,
         **options,
     ).ys
 

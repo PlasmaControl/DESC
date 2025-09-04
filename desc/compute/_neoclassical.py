@@ -286,8 +286,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             simp=True,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * jnp.pi
-        / (8 * 2**0.5)
+        * (jnp.pi / (8 * 2**0.5))
     )
     return data
 

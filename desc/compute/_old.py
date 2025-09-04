@@ -150,8 +150,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         )
         / data["fieldline length"]
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * jnp.pi
-        / (8 * 2**0.5)
+        * (jnp.pi / (8 * 2**0.5))
     )
     return data
 

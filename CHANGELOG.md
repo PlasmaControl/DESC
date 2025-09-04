@@ -4,6 +4,17 @@ Changelog
 New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds particle tracing capabilities in ``desc.particles`` module.
+    - Particle tracing is done via ``desc.particles.trace_particles`` function.
+    - Particles can be initialized in couple different ways:
+        - ``ManualParticleInitializerLab`` : Initializes particles at given positions in lab coordinates.
+        - ``ManualParticleInitializerFlux`` : Initializes particles at given positions in flux coordinates.
+        - ``CurveParticleInitializer`` : Initializes N particles on a given curve.
+        - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
+    - Implemented particle trajectory models are:
+        - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
+    - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
+    - ``_trace_particles`` function is differentiable version of the ``trace_particles`` which takes in the outputs of the particle initializer instead of initializing internally. Both modes of the automatic differentiation, forward or reverse, are possible by proper choice of ``adjoint`` argument of the function. See ``diffrax`` documentation for details.
 
 Bug Fixes
 ---------
@@ -28,17 +39,6 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
-- Adds particle tracing capabilities in ``desc.particles`` module.
-    - Particle tracing is done via ``desc.particles.trace_particles`` function.
-    - Particles can be initialized in couple different ways:
-        - ``ManualParticleInitializerLab`` : Initializes particles at given positions in lab coordinates.
-        - ``ManualParticleInitializerFlux`` : Initializes particles at given positions in flux coordinates.
-        - ``CurveParticleInitializer`` : Initializes N particles on a given curve.
-        - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
-    - Implemented particle trajectory models are:
-        - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
-    - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
-    - ``_trace_particles`` function is differentiable version of the ``trace_particles`` which takes in the outputs of the particle initializer instead of initializing internally. Both modes of the automatic differentiation, forward or reverse, are possible by proper choice of ``adjoint`` argument of the function. See ``diffrax`` documentation for details.
 
 Bug Fixes
 

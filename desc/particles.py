@@ -630,7 +630,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
                 raise NotImplementedError(
                     "If you have an Equilibrium object, you should use the model "
                     "in flux frame. Since trying to integrate in lab frame will "
-                    "require smultiple coordinate mapping, it is not implemented."
+                    "require multiple coordinate mappings, it is not implemented."
                 )
             x = x
         else:

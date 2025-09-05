@@ -36,7 +36,7 @@ One can manually initialize particles or use random particle generation on given
 Particle Tracing
 ****************
 The main function to use for particle tracing is ``desc.particles.trace_particles``.
-This function takes a field/equilibrium object, as well as particle initilizer and trajectory model, and returns the particle trajectories.
+This function takes a field/equilibrium object, as well as particle initializer and trajectory model, and returns the particle trajectories.
 
 .. autosummary::
     :toctree: _api/particles/

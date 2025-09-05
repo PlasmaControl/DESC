@@ -14,8 +14,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
 
-from desc.backend import sign, vmap
+from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
+from desc.batching import vmap_chunked
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
@@ -3904,16 +3905,15 @@ def plot_field_lines(
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
 
-    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
     color = kwargs.pop("color", "black")
-    figsize = kwargs.pop("figsize", (10, 10))
     title = kwargs.pop("title", "")
+    figsize = kwargs.pop("figsize", (10, 10))
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
-    lw = kwargs.pop("lw", 5)
-    ls = kwargs.pop("ls", "solid")
 
     assert (
         len(kwargs) == 0
@@ -4118,16 +4118,15 @@ def plot_particle_trajectories(  # noqa: C901
             else:
                 trace_kwargs["params"]["i_l"] = trace_kwargs["options"]["iota"].params
 
-    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
     color = kwargs.pop("color", "black")
-    figsize = kwargs.pop("figsize", (10, 10))
     title = kwargs.pop("title", "")
+    figsize = kwargs.pop("figsize", (10, 10))
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
-    lw = kwargs.pop("lw", 5)
-    ls = kwargs.pop("ls", "solid")
 
     assert (
         len(kwargs) == 0
@@ -4155,7 +4154,7 @@ def plot_particle_trajectories(  # noqa: C901
     # tracing an equilibrium gives rpz in flux coordinates
     if model.frame == "flux" and isinstance(field, Equilibrium):
         rtz = rpz.copy()
-        rpz = vmap(to_lab, in_axes=(0,))(rpz)
+        rpz = vmap_chunked(to_lab, in_axes=(0,), chunk_size=500)(rpz)
 
     rs = rpz[:, :, 0]
     phis = rpz[:, :, 1]

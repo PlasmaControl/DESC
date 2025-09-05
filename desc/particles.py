@@ -973,7 +973,7 @@ def trace_particles(
     rtol=1e-8,
     atol=1e-8,
     max_steps=None,
-    min_step_size=1e-10,
+    min_step_size=1e-8,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
     bounds=None,

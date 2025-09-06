@@ -105,7 +105,7 @@ class EffectiveRipple(_Objective):
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
 
-        This is the most important paramter to specify for performance.
+        This is the most important parameter to specify for performance.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int

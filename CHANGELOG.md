@@ -9,6 +9,12 @@ Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 
+Performance Improvements
+
+- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
+- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
+
+
 v0.15.0
 -------
 

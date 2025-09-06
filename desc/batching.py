@@ -34,7 +34,7 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan, vmap
-from desc.utils import errorif
+from desc.utils import errorif, identity
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -127,11 +127,6 @@ def _batch_and_remainder(x, batch_size: int):
         return treedef.unflatten(scan_leaves), None
 
 
-def _identity(y):
-    """Returns the input."""
-    return y
-
-
 _unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
 _concat = partial(tree_map, lambda y1, y2: jnp.concatenate((y1, y2)))
 _get_first_chunk = partial(tree_map, lambda x: x[0])
@@ -163,7 +158,7 @@ def _scan_reduce(
     return result
 
 
-def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
+def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     """A helper function to wrap f with a scan_fun.
 
     Refrences
@@ -198,7 +193,7 @@ def _evaluate_in_chunks(
     chunk_size,
     argnums,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
     *args,
     **kwargs,
 ):
@@ -249,7 +244,7 @@ def vmap_chunked(
     *,
     chunk_size=None,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
@@ -289,7 +284,7 @@ def vmap_chunked(
 
 
 def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=_identity
+    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=identity
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 

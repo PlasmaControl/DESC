@@ -45,6 +45,7 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
+    Elongation,
     ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
@@ -212,7 +213,7 @@ def run_qh_step(n, eq):
     objective = ObjectiveFunction(
         (
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
+            Elongation(eq=eq, bounds=(0, 4), weight=3.25),
         ),
     )
     R_modes = np.vstack(
@@ -242,7 +243,6 @@ def run_qh_step(n, eq):
         maxiter=50,
         verbose=3,
         copy=True,
-        options={},
     )
 
     return eq1

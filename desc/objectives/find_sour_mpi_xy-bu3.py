@@ -90,6 +90,24 @@ def _compute_magnetic_field_from_Current_vec(
     Kgrid, K_at_grid, surface, data, coords,
     basis="rpz", mpi_comm=None,
 ):
+    """
+    Compute B from general current on a grid, splitting along M (sources) and N (expansion index).
+
+    Contract (per rank):
+      returns B_local in XYZ basis shaped (3, coords.shape[0], N_local)
+
+    Inputs
+    ------
+    K_at_grid : (N, M, 3)  J in **RPZ** components if basis=='rpz', else XYZ comps if basis!='rpz'
+    coords    : grid-like or (R,3) RPZ points if basis=='rpz', else XYZ
+    data      : dict with keys:
+                  'x' -> (M,3) RPZ source locations
+                  '|e_theta x e_zeta|' and tangent vectors for weights, etc.
+
+    Splitting
+    ---------
+    World size is factorized as P_M * P_N. Rank index is mapped to (i_M, i_N).
+    """
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
     rank = mpi_comm.Get_rank()
@@ -115,6 +133,7 @@ def _compute_magnetic_field_from_Current_vec(
 
     # Convert input current to XYZ if provided in RPZ basis
     if basis == "rpz":
+        # 'phi' will vary by NFP later; here we keep base angles from grid_rpz
         K_xyz_full = rpz2xyz_vec(K_at_grid, phi=grid_rpz[:, 1])  # (N, M, 3)
     else:
         K_xyz_full = K_at_grid                                    # already XYZ
@@ -122,24 +141,22 @@ def _compute_magnetic_field_from_Current_vec(
     # Geometric weight for the Biot-Savart integral
     dV_full = Kgrid.weights * data["|e_theta x e_zeta|"] / Kgrid.NFP  # (M,)
 
-    # Split along sources (M) using 2D decomposition
+    # 2D MPI decomposition
     P_M, P_N = _factorize_2d(size)
     i_M = rank % P_M
-    i_N = rank // P_M  # Not used for N splitting
+    i_N = rank // P_M
 
+    # Split along sources (M)
     sM, eM = _split_indices(M, i_M, P_M)
     M_loc = eM - sM
     rs_rpz_local = grid_rpz[sM:eM, :]             # (M_loc, 3)
     dV_local = dV_full[sM:eM]                     # (M_loc,)
     K_xyz_M = K_xyz_full[:, sM:eM, :]             # (N, M_loc, 3)
 
-    # Split along N using all ranks (1D decomposition)
-    sN, eN = _split_indices(N, rank, size)  # Use size instead of P_N
+    # Split along expansion index (N)
+    sN, eN = _split_indices(N, i_N, P_N)
     N_loc = eN - sN
     K_xyz = K_xyz_M[sN:eN, :, :]                  # (N_loc, M_loc, 3)
-
-    # Debug print
-    print(f"[Rank {rank}] N split: sN={sN}, eN={eN}, N_loc={N_loc}, total N={N}")
 
     # Handle empty work paths
     R = coords_xyz.shape[0]
@@ -156,7 +173,8 @@ def _compute_magnetic_field_from_Current_vec(
         return B_acc_xyz + B_Nloc_3_R
 
     B_xyz = fori_loop(0, Kgrid.NFP, nfp_body, jnp.zeros((N_loc, 3, R), dtype=jnp.float64))
-    return jnp.transpose(B_xyz, (1, 2, 0))  # (3, R, N_loc)
+    # Return as (3, R, N_loc)
+    return jnp.transpose(B_xyz, (1, 2, 0))
 
 
 # ---------------- Field from contour current (AAA) ----------------
@@ -164,6 +182,12 @@ def _compute_magnetic_field_from_Current_Contour_vec(
     Kgrid, K_at_grid, surface, data, coords,
     basis="rpz", mpi_comm=None,
 ):
+    """
+    Same contract and splitting as _compute_magnetic_field_from_Current_vec,
+    but with contour-element weight (||e_theta||) instead of area element.
+
+    Returns per rank: (3, coords.shape[0], N_local)
+    """
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
     rank = mpi_comm.Get_rank()
@@ -192,10 +216,10 @@ def _compute_magnetic_field_from_Current_Contour_vec(
     # Contour metric (line element magnitude) instead of area element
     dl_full = Kgrid.weights * jnp.sqrt(dot(data["e_theta"], data["e_theta"])) / Kgrid.NFP  # (M,)
 
-    # Split along sources (M) using 2D decomposition
+    # 2D split
     P_M, P_N = _factorize_2d(size)
     i_M = rank % P_M
-    i_N = rank // P_M  # Not used for N splitting
+    i_N = rank // P_M
 
     sM, eM = _split_indices(M, i_M, P_M)
     M_loc = eM - sM
@@ -203,13 +227,9 @@ def _compute_magnetic_field_from_Current_Contour_vec(
     dl_local = dl_full[sM:eM]
     K_xyz_M = K_xyz_full[:, sM:eM, :]
 
-    # Split along N using all ranks (1D decomposition)
-    sN, eN = _split_indices(N, rank, size)  # Use size instead of P_N
+    sN, eN = _split_indices(N, i_N, P_N)
     N_loc = eN - sN
     K_xyz = K_xyz_M[sN:eN, :, :]
-
-    # Debug print
-    print(f"[Rank {rank}] N split: sN={sN}, eN={eN}, N_loc={N_loc}, total N={N}")
 
     R = coords_xyz.shape[0]
     if N_loc == 0 or M_loc == 0:
@@ -225,7 +245,8 @@ def _compute_magnetic_field_from_Current_Contour_vec(
 
     B_xyz = fori_loop(0, Kgrid.NFP, nfp_body, jnp.zeros((N_loc, 3, R), dtype=jnp.float64))
     return jnp.transpose(B_xyz, (1, 2, 0))  # (3, R, N_loc)
-    
+
+
 # ---------------- Sticks ----------------
 
 def stick2(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
@@ -268,83 +289,71 @@ def stick2(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
 
     return B_sticks
 
-def stick(
-    p2_,  # second point of the stick
-    p1_,  # first point of the stick
-    plasma_points,  # points on the plasma surface
-    surface_grid,  # Kgrid,
-    basis="rpz",
-):
-    """Computes the magnetic field on the plasma surface due to a unit current on the source wires.
-    
-        p2_: numpy.ndarray of dimension (N, 3)
-        p1_: numpy.ndarray of dimension (N, 3)
-        plasma_point: numpy.ndarray of dimension (M, 3)
-    
+def stick(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
     """
-    
-    #basis="rpz"
-    
+    Field of straight sticks (wires) replicated across NFP.
+    Returns (W_loc, R, 3) in XYZ if basis=='rpz' at coords.
+    Original entries preserved.
+    """
+    R = plasma_points.shape[0]
+
     def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
         phi2 = (p2_[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (2 * jnp.pi)
-
-        # TODO: Make sure p2s has the shape (N, 3)
         p2s = jnp.stack([p2_[:, 0], phi2, p2_[:, 2]], axis=1)
-
-        #print(p2s.shape)
         p2s = rpz2xyz(p2s)
+        a_s = p2s[:, None, :] - p1_[:, None, :]                  # (W_loc,1,3)
+        b_s = p1_[:, None, :] - plasma_points[None, :, :]        # (W_loc,R,3)
+        c_s = p2s[:, None, :] - plasma_points[None, :, :]        # (W_loc,R,3)
+        c_sxa_s = cross(c_s, a_s)                                # (W_loc,R,3)
 
-        # a_s.shape = b_s.shape = c_s.shape = (N, M, 3)
-        a_s = p2s[:, None, :] - p1_[:, None, :]
-        b_s = p1_[:, None, :] - plasma_points[None, :, :]
-        c_s = p2s[:, None, :] - plasma_points[None, :, :]
-
-        # if c_s and a_s are (N, 3), will work fine
-        c_sxa_s = cross(c_s, a_s)
-
-        f += (
-            1e-7
-            * ( #(
-                (
-                    jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=2), a_min=1e-8, a_max=None)
-                    * jnp.sum(c_s * c_s, axis=2) ** (1 / 2)
-                )
-                ** (-1)
-                * (jnp.sum(a_s * c_s, axis=2) - jnp.sum(a_s * b_s, axis=2)) )[:, :, None]
-                * c_sxa_s#.T
-            #).T
-        ) # (N, M, 3)
-        
+        denom = jnp.clip(jnp.sum(c_sxa_s * c_sxa_s, axis=2), a_min=1e-8) \
+                * (jnp.sum(c_s * c_s, axis=2) ** 0.5)            # (W_loc,R)
+        factor = 1e-7 * ((jnp.sum(a_s * c_s, axis=2) - jnp.sum(a_s * b_s, axis=2)) / denom)
+        f += factor[:, :, None] * c_sxa_s
         return f
 
-    b_stick = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros((p1_.shape[0], plasma_points.shape[0], plasma_points.shape[1])))
+    b_stick = fori_loop(
+        0, surface_grid.NFP, nfp_loop,
+        jnp.zeros((p1_.shape[0], R, 3), dtype=jnp.float64)
+    )
+    return b_stick  # (W_loc, R, 3) XYZ
 
-    if basis == "rpz":
-        b_stick = xyz2rpz_vec(b_stick, x=plasma_points[:, 0], y=plasma_points[:, 1])
 
-    return b_stick
+def B_sticks_vec(stick_data, coords, surface_grid, mpi_comm=None):
+    """
+    MPI-ready vectorized sticks computation.
+    Returns array of shape (3, Nsticks, Ncoords)
+    """
+    comm = mpi_comm or MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
 
-def B_sticks_vec(sgrid,
-    #surface,
-    #y,
-    coords,
-    ss_data,
-):
+    # Split coordinates across ranks
+    N_coords = coords.shape[0]
+    coords_per_rank = N_coords // size
+    start = rank * coords_per_rank
+    end = (rank + 1) * coords_per_rank if rank != size - 1 else N_coords
+    coords_local = coords[start:end]
 
-    pls_points = rpz2xyz(coords)  # eq_surf.compute(["x"], grid=Bgrid, basis="xyz")["x"]
+    # Compute local sticks contribution
+    # stick() -> (Nsticks, Ncoords_local, 3)
+    B_local = stick(
+        stick_data["x"],
+        0 * stick_data["x"],
+        coords_local,
+        surface_grid,
+        basis="rpz"
+    )
 
-    #r = ss_data["theta"].shape[0]  # Make r a Python int for indexing
+    # Rearrange -> (3, Nsticks, Ncoords_local)
+    B_local = jnp.transpose(B_local, (2, 0, 1))
 
-    b_stick_fun = stick(ss_data["x"],  # Location of the wire at the theta = pi cut, variable zeta position
-                                            0 * ss_data["x"],  # All wires at the center go to the origin
-                                            pls_points,
-                                            sgrid,
-                                            basis="rpz",
-                                            )
+    # Gather full coords dimension across ranks
+    gathered = comm.allgather(B_local)  # list of arrays (3, Nsticks, coords_chunk)
+    B_global = jnp.concatenate(gathered, axis=2)  # (3, Nsticks, Ncoords)
 
-    return b_stick_fun
-    
+    return B_global
+
 # ---------------- K_sour ----------------
 def K_sour_vec(sdata1, sdata2, sdata3, sgrid, surface, N, d_0, tdata, ss_data):
     """
@@ -360,54 +369,100 @@ def K_sour_vec(sdata1, sdata2, sdata3, sgrid, surface, N, d_0, tdata, ss_data):
     return K_sour_total  # (M, 3) injected along second axis; caller transposes to (N, M, 3)
 
 
+# ---------------- MPI-aware bn_res_vec (2D split over M and N) ----------------
 def bn_res_vec_mpi_2d(
     sdata1, sdata2, sdata3, sgrid, surface, N, d_0, coords, tdata,
     contour_data, stick_data, contour_grid, ss_data, AAA,
     mpi_comm=None,
 ):
     """
-    MPI-ready Biot-Savart computation: returns local slices.
-    Final B_total shape (3, coords.shape[0], N)
+    Build the residual matrix columns on each rank and return **local slice** only.
+
+    Per-rank outputs:
+      B_local_flat : (coords.shape[0] * 3, N_local)
+
+    Assembly is done by the caller (rank 0) via concatenation along axis=1.
     """
+    #if mpi_comm is None:
+    #    mpi_comm = MPI.COMM_WORLD
+    
+    comm = MPI.COMM_WORLD
+    rank = mpi_comm.Get_rank()
+    size = mpi_comm.Get_size()
 
-    from mpi4py import MPI
-    import jax.numpy as jnp
-
-    comm = mpi_comm or MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-
-    # --------- 1. Compute currents from sources ----------
+    # ---------- currents from sources (K_sour) ----------
     K_sour = K_sour_vec(sdata1, sdata2, sdata3, sgrid, surface, N, d_0, tdata, ss_data)
-    K_sour_N_M_3 = jnp.transpose(K_sour, (2, 0, 1))  # (N, M, 3)
+    # Your previous call used transpose (2,0,1) -> target (N, M, 3)
+    K_sour_N_M_3 = jnp.transpose(K_sour, (2, 0, 1))
 
     B_sour0 = _compute_magnetic_field_from_Current_vec(
         sgrid, K_sour_N_M_3, surface, sdata1, coords,
         basis="rpz", mpi_comm=mpi_comm
-    )  # (3, coords_local, N_slice)
+    )  # (3, R, N_loc)
 
-    # --------- 2. Contour currents ----------
-    AAA_N_M_3 = jnp.transpose(AAA, (2, 0, 1))
+    # ---------- contour currents (AAA) ----------
+    AAA_N_M_3 = jnp.transpose(AAA, (2, 0, 1))   # ensure (N, M, 3)
     B_wire_cont = _compute_magnetic_field_from_Current_Contour_vec(
         contour_grid, AAA_N_M_3, surface, contour_data, coords,
         basis="rpz", mpi_comm=mpi_comm
-    )  # (3, coords_local, N_slice)
+    )  # (3, R, N_loc)
 
-    # --------- 3. Sticks contribution ----------
-    B_sticks0 = np.transpose(B_sticks_vec(sgrid,coords, stick_data,),(2,1,0)) #mpi_comm=mpi_comm)  # (3, coords, N)
-
-    #print('Shape of Bsour: ' + str(B_sour0.shape))
-    print('Shape of Bstick: ' + str(B_sticks0.shape))
+    B_sticks0 = B_sticks_vec(#sgrid, 
+                             stick_data, coords, surface,
+                             mpi_comm=mpi_comm,)# split_targets=split_targets)
     
-    B_local = B_sour0 + B_wire_cont #+ B_sticks0 # (3, coords_local, N)
-    
-    # ---------- gather along N-axis ----------
-    B_parts = comm.gather(np.array(B_local), root=0)
+    B_sour0 = jnp.transpose(B_sour0, (0,2,1))      # (3, coords, N)
+    B_wire_cont = jnp.transpose(B_wire_cont, (0,2,1))
+    B_sticks0 = jnp.transpose(B_sticks0, (0,2,1))
 
-    if rank == 0:
-        print(f"[Rank 0] B_parts shapes: {[part.shape for part in B_parts]}")
-        B_full = np.concatenate(B_parts, axis=2)  # (3, coords.shape[0], N_fields)
-        print(f"[Rank 0] Final B_full shape: {B_full.shape}, expected (3, {coords.shape[0]}, {K_sour.shape[2]})")
-        return B_full + B_sticks0
-    else:
-        return None
+    parts_sour = comm.gather(B_sour0, root=0)
+    B_sour_full_np = np.concatenate(parts_sour, axis=2)
+    print('Bsour has shape: ' + str(B_sour_full_np.shape))
+    print('Bsticks has shape: ' + str(B_sticks0.shape))
+    #B_sour0_parts = comm.gather(B_sour0, root=0)
+    #B_wire_cont_parts = comm.gather(B_wire_cont, root=0)
+
+    #B_total = B_sour0_full + B_wire_cont_full
+    B_total = B_sour0 + B_wire_cont
+    
+    #if rank == 0:
+        # Only root has the full list
+    #    B_sour0_full = jnp.concatenate(B_sour0_parts, axis=1)
+    #    B_wire_cont_full = jnp.concatenate(B_wire_cont_parts, axis=1)
+
+    #    B_total = B_sour0_full + B_wire_cont_full# + B_sticks0_full
+    #else:
+    #    B_sour0_full = None
+    #    B_wire_cont_full = None
+
+    # Broadcast the final array to all ranks
+    #B_sour0_full = comm.bcast(B_sour0_full, root=0)
+    #B_wire_cont_full = comm.bcast(B_wire_cont_full, root=0)
+    
+    #B_sour0_full = jnp.concatenate(comm.gather(B_sour0, root=0), axis=1)
+    #B_wire_cont_full = jnp.concatenate(comm.gather(B_wire_cont, root=0), axis=1)
+    # --- Combine locally ---
+    #B_local = (B_sour0_full
+    #           + B_wire_cont_full
+               #+ B_sticks0 
+    #    )  
+        # still (3, coords, N)
+    
+    # --- Optional: compute local norms for verification ---
+    #local_shape = B_local.shape
+    #local_norm = jnp.linalg.norm(B_local)
+    
+    # --- Gather only shapes and norms, not full matrix ---
+    #all_shapes = mpi_comm.gather(local_shape, root=0)
+    #all_norms = mpi_comm.gather(local_norm.item(), root=0)
+    
+    # --- Flatten/reshape to standard 3D for consistency ---
+    # For example, keep (3, coords.shape[0], N) if needed
+    #B_local = jnp.reshape(B_local, (3, coords.shape[0], N))
+    
+    # --- Barrier to ensure all ranks finished ---
+    if mpi_comm is not None:
+        mpi_comm.Barrier()
+    
+    # --- Return the local array along with shapes/norms for verification ---
+    return B_total#, all_shapes, all_norms

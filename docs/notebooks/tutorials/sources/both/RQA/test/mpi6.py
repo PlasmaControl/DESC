@@ -189,6 +189,9 @@ A = compute_mask(contour_data, theta_coarse, zeta_coarse)
 AA = A[:, None, :] * contour_data['e_theta'][:, :, None]
 AAA = AA * ( jnp.sum(contour_data["e_theta"] * contour_data["e_theta"], axis = 1 ) ** (-1 / 2) * sign_vals )[:, None, None]
 
+print("AAA.shape:", AAA.shape)
+print("N_contours:", AAA.shape[1])
+
 # Generate the grid for the sticks
 
 # These are the sticks that are all located at the (theta = pi) cut
@@ -220,7 +223,7 @@ def main():
         print(f"Running MPI Biot-Savart with {size} ranks")
 
     # --- Compute local slice ---
-    B_local, all_shapes, all_norms = bn_res_vec_mpi_2d(
+    B_local = bn_res_vec_mpi_2d(
         sdata, sdata2, sdata3, sgrid, surf_winding, N, d0, coords,
         tdata, contour_data, stick_data, contour_grid, ss_data, AAA,
         mpi_comm=comm
@@ -231,8 +234,7 @@ def main():
 
     if rank == 0:
         print("=== Verification across ranks ===")
-        for i, (shp, norm) in enumerate(zip(all_shapes, all_norms)):
-            print(f"Rank {i}: local shape = {shp}, local norm = {norm}")
+        print(B_local.shape)
 
     return B_local  # each rank keeps only its local slice
 

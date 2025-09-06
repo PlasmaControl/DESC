@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=mpi7_bn
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=9          # MPI ranks per node
-#SBATCH --cpus-per-task=9         # CPU cores per MPI rank
-#SBATCH --mem=350G
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4          # MPI ranks per node
+#SBATCH --cpus-per-task=4         # CPU cores per MPI rank
+#SBATCH --mem=50G
 #SBATCH --time=00:10:00
 #SBATCH --output=mpi7.%j.out
 #SBATCH --error=mpi7.%j.err

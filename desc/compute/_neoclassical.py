@@ -892,7 +892,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     #     return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
-    data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
+    # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
+    data["f_tr1"] = res_arr
     return data
 
     # debugging

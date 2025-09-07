@@ -480,7 +480,7 @@ class TrappedResonance(_Objective):
         num_transit=2,
         knots_per_transit=100,
         num_quad=32,
-        num_pitch=1,
+        num_pitch=2,
         batch=True,
         num_well=None,
         Nemov=True,

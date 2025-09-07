@@ -461,6 +461,8 @@ class TrappedResonance(_Objective):
     _units = "~" # dimensionless
     _print_value_fmt = "Resonant frequency vicinity: "
 
+    _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]
+
     def __init__(
         self,
         eq,
@@ -478,7 +480,7 @@ class TrappedResonance(_Objective):
         num_transit=2,
         knots_per_transit=100,
         num_quad=32,
-        num_pitch=2,
+        num_pitch=1,
         batch=True,
         num_well=None,
         Nemov=True,
@@ -617,6 +619,7 @@ class TrappedResonance(_Objective):
         quad2 = {}
         if "quad2" in constants:
             quad2["quad2"] = constants["quad2"]
+
         data = compute_fun(
             eq,
             self._key, 

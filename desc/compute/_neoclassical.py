@@ -725,8 +725,6 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
 
     # noqa: unused dependency
-    # num_well = kwargs.get("num_well", None)
-    # num_pitch = kwargs.get("num_pitch", 64)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
         kwargs["quad"]
@@ -751,11 +749,11 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
         count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
 
-        return _alpha_drift, points, v_tau, count_nz
+        return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
 
 
     grid = transforms["grid"].source_grid
-    alpha_drift_out, points, vtau_out, count_nz = (
+    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = (
         _compute(
             alpha_drift, 
             {"gbdrift": data["gbdrift"]},
@@ -784,20 +782,9 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Set up calculation for resonance objective
     # Set which resonances to consider and create function for each considered resonance
     # consider the N lowest-order resonances over the range with minimum res_range_max and maximum res_range_max
-    res_arr1 = jnp.full(p_max*q_max + 1, 0) # maximum possible size of array of resonances, including the zero resonance
     obj_out = omega_arr * 0
     # sigma=jnp.ones((jnp.shape(omega_arr))) # for Gaussian
     # sigma = sigma*10 # can set to vary with order of resonance if desired
-
-    # def jnpmeanzeros(f,count_nz,axis=0):
-    #     return jnp.sum(f,axis=axis) / (f.shape[axis] - count_nz)
-
-    '''def false_branch_res_setup(indict): # do nothing
-        return indict['res_arr_set'], indict['res_arr']
-    def true_branch_res_setup(indict): # add to res_arr
-        res_arr = indict['res_arr']
-        res_arr = res_arr.at[indict['res_arr_set']].set(indict['p']/indict['q'])
-        return indict['res_arr_set']+1, res_arr'''
     
     def false_branch_res_setup(res_arr_set,res_arr,p,q): # do nothing
         return res_arr_set, res_arr
@@ -805,7 +792,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         res_arr = res_arr.at[res_arr_set].set(p/q)
         return res_arr_set+1, res_arr
 
-    res_arr = jnp.full(p_max*q_max + 1, 0.0) # maximum possible size of array of resonances, including the zero resonance
+    res_arr = jnp.full(p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance
     res_arr_set = 0
     # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
     for p in range(0,p_max+1): # include the zero resonance
@@ -814,34 +801,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
                 ~jnp.isin(p/q, res_arr),
                 jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
                 )
-            '''input_res_setup = {
-                'res_arr_set': res_arr_set,
-                'res_arr': res_arr,
-                'p': p,
-                'q': q,
-            }'''
-            '''res_arr_set, res_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, operand=input_res_setup )'''
             res_arr_set, res_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q )
-    # make size of res_arr such that it is the size of how many unique resonances there are
-    '''def true_branch_res(indict):
-        return indict['res_arr'].at[indict['count']].set(indict['res']), indict['count']+1
-    def false_branch_res(indict):
-        return indict['res_arr'], indict['count']
-    res_arr1 = jnp.full(res_arr_set+1, 0.0)
-    count=0
-    for res in res_arr:
-        res_arr1, count = jax.lax.cond( ~jnp.isin(res, res_arr1), true_branch_res, false_branch_res, operand={'res_arr': res_arr1,'res': res, 'count': count} )
-    '''
-
-    def true_branch_res(res_arr,count,res):   
-        return res_arr.at[count].set(res), count+1
-    def false_branch_res(res_arr,count,res):
-        return res_arr, count
-    res_arr1 = jnp.full(res_arr_set+1, 0.0)
-    count=0
-    for res in res_arr:
-        res_arr1, count = jax.lax.cond( ~jnp.isin(res, res_arr1), true_branch_res, false_branch_res, res_arr, count, res )
- 
 
     # for perfect equilibria, using the [0,0,0,0] value is acceptable. But for non-perfect, need to average over all non-zero wells and different field lines and filter
     num_wells = ado_shape[3]
@@ -856,7 +816,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     alpha_drift_out = jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0) # set barely-trapped particles to 0
 
     def jnpmean_nz(x,axis=0):
-        mask = x!=0
+        mask = x!=0.0
         count = jnp.sum(mask,axis) # how many wells that are not 0
         return jnp.sum(x,axis=axis) / count
 
@@ -902,7 +862,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],res_arr.shape[0]))
 
     y = omega_broad - res_broad
-    condition = abs(y) < 0.5 # check that corresponding omega value is less than 0.5 away from the resonance
+    condition = jnp.logical_and(abs(y) < 0.5, res_broad!=jnp.pi) # check that corresponding omega value is less than 0.5 away from the resonance and not jnp.pi (unset)
     # Set weights
     w = 1
     t = -1
@@ -912,6 +872,9 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         A * jnp.exp(-w * (( -((y+0.5)**2) + (y+0.5) )**t)),
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
+    
+    # obj_out = y[:,0,0]**2 # debugging
+    
     obj_out = jnp.sum(obj_out,axis=2) # outputs array with size (rho,pitch)
 
     # Gaussian method
@@ -931,4 +894,10 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
     return data
-    # data['f_tr1'] = omega_arr
+
+    # debugging
+    # idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
+    # idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
+    # idx_Zsc = eq_init.surface.Z_basis.get_idx(M=-1, N=2)
+    # idx_Zcs = eq_init.surface.Z_basis.get_idx(M=1, N=-2)
+    # debug = bd1**2 + bd2**2 + bd3**2 + bd4**2

@@ -336,7 +336,9 @@ def test_proximal_jac_atf(benchmark):
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build()
     x = prox.x(eq)
     prox.jac_scaled_error(x, prox.constants).block_until_ready()
@@ -364,7 +366,11 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
         constraint,
         eq,
         perturb_options={"verbose": 3},
-        solve_options={"verbose": 3, "maxiter": 0},
+        solve_options={
+            "verbose": 3,
+            "maxiter": 0,
+            "solve_during_proximal_build": False,
+        },
     )
     prox.build(verbose=3)
     x = prox.x(eq)
@@ -391,7 +397,9 @@ def test_proximal_freeb_compute(benchmark):
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -415,7 +423,9 @@ def test_proximal_freeb_jac(benchmark):
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -535,7 +545,9 @@ def _test_objective_ripple(benchmark, spline, method):
         ]
     )
     constraint = ObjectiveFunction([ForceBalance(eq)])
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build()
     x = prox.x(eq)
     _ = getattr(prox, method)(x, prox.constants).block_until_ready()

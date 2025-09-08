@@ -25,7 +25,7 @@ jobs:
         id: check_changes
         run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_changelog') && env.has_changes == 'true'}}
         uses: danieljimeneznz/ensure-files-changed@v4.1.1

@@ -9,6 +9,7 @@ from desc.compute._omnigenity import (
     _B_omni_nonsymmetric,
     _omnigenity_mapping_OOPS,
     _omnigenity_mapping_LandremanForm,
+    _raised_cosine_shape_reg,
 )
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -1084,8 +1085,6 @@ class OmnigenityHarmonics(_Objective):
         N_harmonics=None,
         eq_fixed=False,
         field_fixed=False,
-        S_function=None,
-        D_function=None,
         name="omnigenity_harmonics",
         jac_chunk_size=None,
     ):
@@ -1108,12 +1107,33 @@ class OmnigenityHarmonics(_Objective):
         self.M_harmonics = M_harmonics
         self.N_harmonics = N_harmonics
 
-        if self._field_type == "lcform" and (S_function is None or D_function is None):
-            raise ValueError(
-                "S_function and D_function must be provided for 'lcform' field_type."
-            )
-        self.S_function = S_function
-        self.D_function = D_function
+        # if self._field_type == "lcform" and (S_function is None or D_function is None):
+        #     raise ValueError(
+        #         "S_function and D_function must be provided for 'lcform' field_type."
+        #     )
+        # self.S_function = S_function
+        # self.D_function = D_function
+
+        self.S_function = None
+        self.D_function = None
+        if self._field_type == "lcform":
+            # Ensure the provided field supplies the required callable attributes
+            missing = []
+            if not hasattr(self._field, "_S_func"):
+                missing.append("_S_func")
+            if not hasattr(self._field, "_D_func"):
+                missing.append("_D_func")
+            if missing:
+                raise ValueError(
+                    "field_type 'lcform' requires field to define attributes: "
+                    + ", ".join(missing)
+                )
+            self.S_function = getattr(self._field, "_S_func")
+            self.D_function = getattr(self._field, "_D_func")
+            if not callable(self.S_function) or not callable(self.D_function):
+                raise ValueError(
+                    "field_type 'lcform' requires _S_func and _D_func to be callable"
+                )
 
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
@@ -1177,7 +1197,7 @@ class OmnigenityHarmonics(_Objective):
             eq_grid = self._eq_grid
         if self._field_grid is None:
             field_grid = LinearGrid(
-                rho=rho, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
+                rho=rho, M=2 * eq.M, N=2 * eq.N, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -1208,7 +1228,8 @@ class OmnigenityHarmonics(_Objective):
                 self._dim_f = 1 * M_harmonics * (2 * N_harmonics + 1)
             else:
                 self._is_imag = True
-                self._dim_f = 2 * M_harmonics * (2 * N_harmonics + 1)
+                # self._dim_f = 2 * M_harmonics * (2 * N_harmonics + 1)
+                self._dim_f = (2 * M_harmonics + 1) * (2 * N_harmonics + 1) + 1
             if self._normalize:
                 scales = compute_scaling_factors(eq)
                 self._normalization = scales["B"]
@@ -1229,7 +1250,7 @@ class OmnigenityHarmonics(_Objective):
         eq_rho = eq_grid.nodes[eq_grid.unique_rho_idx, 0]
         errorif(
             any(eq_rho != field_rho),
-            msg="eq_grid and field_grid must be the same surface(s), "
+            msg="eq_grid and field_grid must be the same surface(s),Now only single surface "
             + f"eq_grid has surfaces {eq_rho}, "
             + f"field_grid has surfaces {field_rho}",
         )
@@ -1251,6 +1272,27 @@ class OmnigenityHarmonics(_Objective):
             self._field_data_keys,
             obj=field,
             grid=field_grid,
+        )
+
+        from desc.transform import Transform
+        from desc.basis import DoubleFourierSeries
+        from desc.grid import Grid
+
+        grid_B = LinearGrid(
+            theta=field_grid.num_theta, zeta=field_grid.num_zeta, NFP=1, sym=False
+        )
+        field_transforms["|B|_eta_alpha"] = Transform(
+            grid_B,
+            DoubleFourierSeries(
+                M=M_harmonics,
+                N=N_harmonics,
+                NFP=1,
+                sym="cos" if not self._is_imag else False,
+            ),
+            derivs=0,
+            build=False,
+            build_pinv=True,
+            method="auto",
         )
 
         # I don't know why this is needed, but it is
@@ -1276,38 +1318,48 @@ class OmnigenityHarmonics(_Objective):
             )
             self._constants["eq_data"] = eq_data
         if self._field_fixed:
-            if self._field_type == "desc":
-                # precompute the field data since it is fixed during the optimization
-                field_data = compute_fun(
-                    "desc.magnetic_fields._core.OmnigenousField",
-                    self._field_data_keys,
-                    params=self._field.params_dict,
-                    transforms=self._constants["field_transforms"],
-                    profiles={},
-                    helicity=self._constants["helicity"],
-                )
-            elif self._field_type == "oops":
-                # precompute the field data since it is fixed during the optimization
-                field_data = compute_fun(
-                    "desc.magnetic_fields._core.OmnigenousFieldOOPS",
-                    self._field_data_keys,
-                    params=self._field.params_dict,
-                    transforms=self._constants["field_transforms"],
-                    profiles={},
-                    helicity=self._constants["helicity"],
-                )
-            elif self._field_type == "lcform":
-                # precompute the field data since it is fixed during the optimization
-                field_data = compute_fun(
-                    "desc.magnetic_fields._core.OmnigenousFieldLCForm",
-                    self._field_data_keys,
-                    params=self._field.params_dict,
-                    transforms=self._constants["field_transforms"],
-                    profiles={},
-                    helicity=self._constants["helicity"],
-                    S_func=self.S_function,
-                    D_func=self.D_function,
-                )
+            # if self._field_type == "desc":
+            #     # precompute the field data since it is fixed during the optimization
+            #     field_data = compute_fun(
+            #         "desc.magnetic_fields._core.OmnigenousField",
+            #         self._field_data_keys,
+            #         params=self._field.params_dict,
+            #         transforms=self._constants["field_transforms"],
+            #         profiles={},
+            #         helicity=self._constants["helicity"],
+            #     )
+            # elif self._field_type == "oops":
+            #     # precompute the field data since it is fixed during the optimization
+            #     field_data = compute_fun(
+            #         "desc.magnetic_fields._core.OmnigenousFieldOOPS",
+            #         self._field_data_keys,
+            #         params=self._field.params_dict,
+            #         transforms=self._constants["field_transforms"],
+            #         profiles={},
+            #         helicity=self._constants["helicity"],
+            #     )
+            # elif self._field_type == "lcform":
+            #     # precompute the field data since it is fixed during the optimization
+            #     field_data = compute_fun(
+            #         "desc.magnetic_fields._core.OmnigenousFieldLCForm",
+            #         self._field_data_keys,
+            #         params=self._field.params_dict,
+            #         transforms=self._constants["field_transforms"],
+            #         profiles={},
+            #         helicity=self._constants["helicity"],
+            #         S_func=self.S_function,
+            #         D_func=self.D_function,
+            #     )
+            field_data = compute_fun(
+                self._field,
+                self._field_data_keys,
+                params=self._field.params_dict,
+                transforms=self._constants["field_transforms"],
+                profiles={},
+                helicity=self._constants["helicity"],
+                S_func=self.S_function,
+                D_func=self.D_function,
+            )
             self._constants["field_data"] = field_data
 
         timer.stop("Precomputing transforms")
@@ -1472,22 +1524,63 @@ class OmnigenityHarmonics(_Objective):
         )
         B_mn = eq_data["|B|_mn_B"].reshape((eq_grid.num_rho, -1))
         B_eta_alpha = vmap(_compute_B_eta_alpha)(theta_B, zeta_B, B_mn)
+
         B_eta_alpha = B_eta_alpha.reshape(
             (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
         )
 
         # TODO: Need to figure out how to handle the matrix
         if self._field_type == "desc":
-            B_eta_alpha = B_eta_alpha[-1].T
+            B_eta_alpha = B_eta_alpha[-1].T.flatten(order="F")
         elif self._field_type == "oops" or self._field_type == "lcform":
-            B_eta_alpha = B_eta_alpha[-1]
+            B_eta_alpha = B_eta_alpha[-1].flatten(order="F")
+
+        # This part try using transform method
+        # B_eta_alpha = B_eta_alpha.reshape(
+        #     (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
+        # )[-1].flatten(order="F")
+
+        B_ea_mn = constants["field_transforms"]["|B|_eta_alpha"].fit(B_eta_alpha)
+
+        modes_index_xm_non_zero = (
+            constants["field_transforms"]["|B|_eta_alpha"].basis.modes[:, 1] != 0
+        )
+        B_ea_mn_non_zero = B_ea_mn[modes_index_xm_non_zero]
+        return B_ea_mn_non_zero
+
+        # B_eta_alpha = B_eta_alpha.reshape(
+        #     (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
+        # )
+
+        # TODO: Need to figure out how to handle the matrix
+        # if self._field_type == "desc":
+        #     B_eta_alpha = B_eta_alpha[-1].T
+        # elif self._field_type == "oops" or self._field_type == "lcform":
+        #     B_eta_alpha = B_eta_alpha[-1]
 
         # Now it only handle single surface
-        omnigenity_error = _B_omni_nonsymmetric(
-            B_eta_alpha,
-            self.M_harmonics,
-            self.N_harmonics,
-            field_grid,
-            is_imag=self._is_imag,
-        )
-        return omnigenity_error
+        # omnigenity_error = _B_omni_nonsymmetric(
+        #     B_eta_alpha,
+        #     self.M_harmonics,
+        #     self.N_harmonics,
+        #     field_grid,
+        #     is_imag=self._is_imag,
+        # )
+
+        # reg = _raised_cosine_shape_reg(B_eta_alpha,
+        #     self.M_harmonics,
+        #     self.N_harmonics,
+        #     field_grid
+        # )
+
+        # return reg + 2*omnigenity_error
+
+        # omnigenity_non_error = _B_omni_nonsymmetric(
+        #     B_eta_alpha,
+        #     self.M_harmonics,
+        #     self.N_harmonics,
+        #     field_grid,
+        #     is_imag=self._is_imag,
+        # )
+
+        # return omnigenity_non_error

@@ -13,7 +13,7 @@ import functools
 
 from interpax import interp1d
 
-from desc.backend import jnp, sign, vmap, switch, cond
+from desc.backend import jnp, sign, vmap, switch, cond, gammaln
 from jax.lax import dynamic_slice
 
 from ..utils import cross, dot, safediv
@@ -946,22 +946,25 @@ def _isodynamicity(params, transforms, profiles, data, **kwargs):
     label="S_{n}",
     units="~",
     units_long="None",
-    description="Omnigenity S coefficients, used in OOPS",
+    description="Omnigenity S coefficients, used in OOPS/LCForm",
     dim=1,
     params=["S_list"],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+    parameterization=[
+        "desc.magnetic_fields._core.OmnigenousFieldOOPS",
+        "desc.magnetic_fields._core.OmnigenousFieldLCForm",
+    ],
 )
 def _S_list(params, transforms, profiles, data, **kwargs):
     """
     S_list is a list of coefficients for the omnigenity S shape.
-    It is used in OOPS to define the omnigenity symmetry angle.
+    It is used in OOPS/LCForm to define the omnigenity symmetry angle.
     """
     if "S_list" not in params:
-        raise ValueError("S_list parameter is required for OOPS")
+        raise ValueError("S_list parameter is required for OOPS/LCForm")
     data["S_list"] = jnp.array(params["S_list"])
     return data
 
@@ -971,22 +974,25 @@ def _S_list(params, transforms, profiles, data, **kwargs):
     label="D_{n}",
     units="~",
     units_long="None",
-    description="Omnigenity D coefficients, used in OOPS",
+    description="Omnigenity D coefficients, used in OOPS/LCForm",
     dim=1,
     params=["D_list"],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
+    parameterization=[
+        "desc.magnetic_fields._core.OmnigenousFieldOOPS",
+        "desc.magnetic_fields._core.OmnigenousFieldLCForm",
+    ],
 )
 def _D_list(params, transforms, profiles, data, **kwargs):
     """
     D_list is a list of coefficients for the omnigenity D shape.
-    It is used in OOPS to define the omnigenity symmetry angle.
+    It is used in OOPS/LCForm to define the omnigenity symmetry angle.
     """
     if "D_list" not in params:
-        raise ValueError("D_list parameter is required for OOPS")
+        raise ValueError("D_list parameter is required for OOPS/LCForm")
     data["D_list"] = jnp.array(params["D_list"])
     return data
 
@@ -1063,12 +1069,14 @@ def _omni_map_zeta_B_OOPS(params, transforms, profiles, data, **kwargs):
 
 
 def _generate_S_shape(S_list, y):
+    # needed by OOPS
     n = S_list.size
     i = jnp.arange(1, n + 1, dtype=y.dtype).reshape((n,) + (1,) * y.ndim)
     return jnp.einsum("i...,i->...", jnp.sin(i * y[None, ...]), S_list)
 
 
 def _generate_D_shape(D_list, x):
+    # needed by OOPS
     n = D_list.size
     i = jnp.arange(n, dtype=x.dtype)
     k = ((2 * i + 1) / 2).reshape((n,) + (1,) * x.ndim)
@@ -1077,7 +1085,7 @@ def _generate_D_shape(D_list, x):
 
 def _map_toroidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
     S = _generate_S_shape(S_list, (alp2d - eta2d / iota) * nfp)
-    D = _generate_D_shape(D_list, eta2d)
+    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
     h_o = eta2d - S * D
     theta2d_trans_real = h_o
     zeta2d_trans_real = alp2d
@@ -1095,7 +1103,7 @@ def _map_poloidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
 
 def _map_helical_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
     S = _generate_S_shape(S_list, (alp2d + 1 / (1 + nfp / iota) * eta2d))
-    D = _generate_D_shape(D_list, eta2d)
+    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
     h_o = eta2d - S * D
     theta2d_trans_real = alp2d
     zeta2d_trans_real = -(h_o + alp2d) / nfp  # + jnp.pi/nfp
@@ -1170,54 +1178,54 @@ def _B_omni_OOPS(params, transforms, profiles, data, **kwargs):
     return data
 
 
-@register_compute_fun(
-    name="S_list",
-    label="S_{n}",
-    units="~",
-    units_long="None",
-    description="Omnigenity S coefficients, used in Landreman Form",
-    dim=1,
-    params=["S_list"],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[],
-    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
-)
-def _S_list(params, transforms, profiles, data, **kwargs):
-    """
-    S_list is a list of coefficients for the omnigenity S shape.
-    It is used in OOPS to define the omnigenity symmetry angle.
-    """
-    if "S_list" not in params:
-        raise ValueError("S_list parameter is required for Landreman Form")
-    data["S_list"] = jnp.array(params["S_list"])
-    return data
+# @register_compute_fun(
+#     name="S_list_LCForm",
+#     label="S_{LC,n}",
+#     units="~",
+#     units_long="None",
+#     description="Omnigenity S coefficients, used in Landreman Form",
+#     dim=1,
+#     params=["S_list"],
+#     transforms={},
+#     profiles=[],
+#     coordinates="rtz",
+#     data=[],
+#     parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+# )
+# def _S_list(params, transforms, profiles, data, **kwargs):
+#     """
+#     S_list_LCForm is a list of coefficients for the omnigenity S shape.
+#     It is used in OOPS to define the omnigenity symmetry angle.
+#     """
+#     if "S_list_LCForm" not in params:
+#         raise ValueError("S_list_LCForm parameter is required for Landreman Form")
+#     data["S_list_LCForm"] = jnp.array(params["S_list_LCForm"])
+#     return data
 
 
-@register_compute_fun(
-    name="D_list",
-    label="D_{n}",
-    units="~",
-    units_long="None",
-    description="Omnigenity D coefficients, used in Landreman Form",
-    dim=1,
-    params=["D_list"],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[],
-    parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
-)
-def _D_list(params, transforms, profiles, data, **kwargs):
-    """
-    D_list is a list of coefficients for the omnigenity D shape.
-    It is used in Landreman Form to define the omnigenity symmetry angle.
-    """
-    if "D_list" not in params:
-        raise ValueError("D_list parameter is required for OOPS")
-    data["D_list"] = jnp.array(params["D_list"])
-    return data
+# @register_compute_fun(
+#     name="D_list_LCForm",
+#     label="D_{LC,n}",
+#     units="~",
+#     units_long="None",
+#     description="Omnigenity D coefficients, used in Landreman Form",
+#     dim=1,
+#     params=["D_list"],
+#     transforms={},
+#     profiles=[],
+#     coordinates="rtz",
+#     data=[],
+#     parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
+# )
+# def _D_list(params, transforms, profiles, data, **kwargs):
+#     """
+#     D_list_LCForm is a list of coefficients for the omnigenity D shape.
+#     It is used in Landreman Form to define the omnigenity symmetry angle.
+#     """
+#     if "D_list_LCForm" not in params:
+#         raise ValueError("D_list_LCForm parameter is required for OOPS")
+#     data["D_list_LCForm"] = jnp.array(params["D_list_LCForm"])
+#     return data
 
 
 @register_compute_fun(
@@ -1439,9 +1447,95 @@ def _B_omni_nonsymmetric(
     error_coeffs_complex = nonsymmetric_block_complex.reshape(-1)
 
     if is_imag:
+        # error_coeffs = jnp.concatenate(
+        #     [error_coeffs_complex.real, error_coeffs_complex.imag], axis=0
+        # )
+
+        # imag_m0 = B_mn_shifted[center_theta, c0:c1].imag.reshape(-1)  # shape: (2N+1,)
+        # error_coeffs = jnp.concatenate(
+        #     [error_coeffs_complex.real, error_coeffs_complex.imag, imag_m0], axis=0
+        # )
+
+        real_part = jnp.ravel(nonsymmetric_block_complex.real)
+        imag_part = jnp.ravel(nonsymmetric_block_complex.imag)
+
+        # 2) 追加虚部 m=0, n∈[-N..N]
+        imag_m0 = jnp.ravel(
+            B_mn_shifted[center_theta, c0:c1].imag.reshape(-1)
+        )  # (2N+1,)
+
+        # 3) 追加不等式约束：B(m=0, n=+1) > 0  —— 以 hinge 罚实现
+        #    注意：这里直接从全频谱中取 n=+1（fftshift 后是 center_zeta+1）
+        b01_real = B_mn_shifted[center_theta, center_zeta + 1].real
+        pen_b01 = 1 * jnp.maximum(0.0, -b01_real + 0.1)  # 满足>0时为0，<0时为正
+
         error_coeffs = jnp.concatenate(
-            [error_coeffs_complex.real, error_coeffs_complex.imag], axis=0
+            [real_part, imag_part, imag_m0, pen_b01[None]], axis=0
         )
     else:
         error_coeffs = error_coeffs_complex.real
     return error_coeffs
+
+
+def _binom(n, k):
+    k = jnp.asarray(k)
+    valid = (k >= 0) & (k <= n)
+    val = jnp.exp(gammaln(n + 1.0) - gammaln(k + 1.0) - gammaln(n - k + 1.0))
+    return jnp.where(valid, val, 0.0)
+
+
+def _raised_cosine_shape_reg(
+    B_eta_alpha,
+    M_harmonics,
+    N_harmonics,
+    field_grid,
+):
+    """
+    惩罚项 R：对 m=0 行（极向对称分量）的 |B_{0,n}| 做“升余弦幂”形状约束（只控形状，不控幅），
+    并压制 |n|>q 的尾部。n=0 列默认不参与形状拟合。
+    """
+
+    q = 32
+    w_tail = 1.0
+    w_shape = 1.0
+    eps = 1e-12
+
+    # ===== 与前一致：取谱并 B00 归一化 =====
+    n_theta, n_zeta = B_eta_alpha.shape
+    B_mn = jnp.fft.fft2(B_eta_alpha / (field_grid.num_theta * field_grid.num_zeta))
+    b00 = B_mn[0, 0]
+    bnorm = jnp.where(b00 == 0, 1.0, b00)
+    B_mn_norm = B_mn / bnorm
+    B_shift = jnp.fft.fftshift(B_mn_norm)
+
+    center_theta = n_theta // 2
+    center_zeta = n_zeta // 2
+
+    # ===== 只取 m=0 行的 n∈[-N..N]（这就是 x_n 分量）=====
+    c0 = center_zeta - N_harmonics
+    c1 = center_zeta + N_harmonics + 1
+    row_m0 = B_shift[center_theta, c0:c1]  # shape: (2N+1,)
+    mag = jnp.abs(row_m0)  # 幅值谱 |B_{0,n}|
+
+    # ===== 目标模板：T_n ∝ C(2q, q-|n|)，对 |n|<=q；其它为 0 =====
+    n_range = jnp.arange(-N_harmonics, N_harmonics + 1)  # [-N..N]
+    n_abs = jnp.abs(n_range)
+
+    mask_n0 = n_abs == 0  # n=0 不参与形状拟合
+    mask_core = (n_abs >= 1) & (n_abs <= q)  # |n|∈[1..q]
+    mask_tail = n_abs > q  # |n|>q
+
+    T = _binom(2 * q, (q - n_abs).astype(float))  # C(2q, q-|n|)
+    T = jnp.where(mask_core, T, 0.0)  # 只保留核心区
+    T_norm = T / (jnp.linalg.norm(T) + eps)  # 归一化，纯形状比较
+
+    # ===== m=0 行的最优缩放 A（只控形状，不控幅）=====
+    T_fit = jnp.where(mask_core & (~mask_n0), T_norm, 0.0)
+    A = jnp.sum(mag * T_fit)  # 因 ‖T_norm‖=1，A=mag·T
+    resid_core = (mag - A * T_norm) * (mask_core & (~mask_n0))
+    R_shape = w_shape * jnp.sum(resid_core**2)
+
+    # ===== 尾部惩罚：希望 |n|>q 变小 =====
+    R_tail = w_tail * jnp.sum((mag * mask_tail) ** 2)
+
+    return R_shape + R_tail

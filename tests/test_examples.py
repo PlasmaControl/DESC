@@ -30,6 +30,8 @@ from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
+    OmnigenousFieldLCForm,
+    OmnigenousFieldOOPS,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -64,6 +66,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
+    OmnigenityHarmonics,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -75,6 +78,7 @@ from desc.objectives import (
     ToroidalFlux,
     VacuumBoundaryError,
     Volume,
+    MirrorRatio,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -1175,6 +1179,331 @@ def test_omnigenity_proximal():
             GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(eq=eq, field=field),  # field is not fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=2, verbose=3
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_omnigenityharmonics_qa():
+    """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
+    # Solov'ev examples has B_max contours at theta=pi, need to change to theta=0
+    eq = get("SOLOVEV")
+    rone = np.ones_like(eq.R_lmn)
+    rone[eq.R_basis.modes[:, 1] != 0] *= -1
+    eq.R_lmn *= rone
+    zone = np.ones_like(eq.Z_lmn)
+    zone[eq.Z_basis.modes[:, 1] != 0] *= -1
+    eq.Z_lmn *= zone
+    lone = np.ones_like(eq.L_lmn)
+    lone[eq.L_basis.modes[:, 1] != 0] *= -1
+    eq.L_lmn *= lone
+    eq.axis = eq.get_axis()
+    eq.surface = eq.get_surface_at(rho=1)
+    eq.Psi *= 5  # B0 = 1 T
+    eq.solve()
+
+    field = OmnigenousField(
+        L_B=1, M_B=4, L_x=1, M_x=1, N_x=1, NFP=eq.NFP, helicity=(1, 0)
+    )
+
+    eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_axis_grid = LinearGrid(
+        rho=1e-2, M=4 * eq.M, N=4 * eq.M, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, M=4 * eq.M, N=4 * eq.M, NFP=field.NFP, sym=False
+    )
+
+    objective = ObjectiveFunction(
+        (
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="desc",
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="desc",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        field,
+        objective,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    # Now Harmonics only focus on |B| shape, not |B| value
+    # x_lmn=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
+
+    field = OmnigenousFieldOOPS(
+        S_len=1,
+        D_len=1,
+        NFP=eq.NFP,
+        helicity=(1, 0),
+        S_list=np.array([0.01]),  # make it non-QS initially
+    )
+
+    objective = ObjectiveFunction(
+        (
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="oops",
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="oops",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        field,
+        objective,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    # S_list=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
+
+    def _S_func(x2d, y2d, S_list):
+        S = S_list[0] * (x2d) * jnp.sin(y2d)
+        return S
+
+    def _D_func(x2d, D_list):
+        p = D_list[0]
+        a = jnp.clip(jnp.pi - x2d, 0, jnp.pi)
+        D = (jnp.pi ** (p - 1)) ** (1 / p) * (a) ** (1 / p)
+        return D
+
+    field = OmnigenousFieldLCForm(
+        S_len=1,
+        D_len=1,
+        NFP=eq.NFP,
+        helicity=(1, 0),
+        S_func=_S_func,
+        D_func=_D_func,
+        S_list=np.array([0.01]),
+        D_list=np.array([1.0]),
+    )
+
+    objective = ObjectiveFunction(
+        (
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        field,
+        objective,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    # S_list=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_omnigenity_optimization():
+    """Test a realistic OP omnigenity optimization."""
+    # this same example is used in docs/notebooks/tutorials/omnigenity
+
+    # initial equilibrium from QP model
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+
+    # omnigenity optimization
+    field = OmnigenousField(
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+
+    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_half_grid = LinearGrid(
+        rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="desc",
+                eq_grid=eq_half_grid,
+                field_grid=field_half_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="desc",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+            ),
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        FixOmniBmax(field=field),
+        FixOmniMap(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
+        MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
+    )
+    optimizer = Optimizer("lsq-auglag")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=150, verbose=3
+    )
+    eq, _ = eq.solve(objective="force", verbose=3)
+    # check omnigenity error is low
+    f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
+    np.testing.assert_allclose(
+        f[2:-1], 0, atol=1.2e-2
+    )  # f[:2] is R0 and R0/a,f[-1] is mirror ratio
+    # check mirror ratio is correct
+    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([1]))
+    data = eq.compute("mirror ratio", grid=grid)
+    np.testing.assert_allclose(data["mirror ratio"], 0.25, atol=1e-2)
+
+
+def test_omnigenityharmonics_proximal():
+    """Test omnigenity optimization with proximal optimizer."""
+    # this only tests that the optimization runs, not that it gives a good result
+
+    # initial equilibrium and omnigenous field
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+    field = OmnigenousField(
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+
+    # first, test optimizing the equilibrium with the field fixed
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            OmnigenityHarmonics(
+                eq=eq, field=field, field_type="desc", field_fixed=True
+            ),  # field is fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+
+    # second, test optimizing both the equilibrium and the field simultaneously
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            OmnigenityHarmonics(
+                eq=eq, field=field, field_type="desc"
+            ),  # field is not fixed
         )
     )
     constraints = (

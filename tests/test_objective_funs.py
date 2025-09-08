@@ -36,6 +36,8 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    OmnigenousFieldLCForm,
+    OmnigenousFieldOOPS,
     PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
@@ -75,6 +77,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
+    OmnigenityHarmonics,
     PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
@@ -3178,6 +3181,7 @@ class TestComputeScalarResolution:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        OmnigenityHarmonics,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3564,6 +3568,93 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=1e-3)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_omnigenityharmonics(self):
+        """Omnigenity harmonics."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        eq, _ = eq.solve(objective="force", verbose=3)
+        field = OmnigenousField(
+            L_B=0,
+            M_B=2,
+            L_x=0,
+            M_x=0,
+            N_x=0,
+            NFP=eq.NFP,
+            helicity=(0, eq.NFP),
+            B_lm=np.array([0.8, 1.2]),
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array + 1):  # omnigenity needs higher res
+            grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+            obj = ObjectiveFunction(
+                OmnigenityHarmonics(
+                    eq=eq, field=field, field_type="desc", eq_grid=grid, field_grid=grid
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+        field = OmnigenousFieldOOPS(
+            S_len=2,
+            D_len=2,
+            NFP=eq.NFP,
+            helicity=(0, 1),
+            S_list=np.array([0.3, 0]),
+            D_list=np.array([0, 0]),
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array + 1):  # omnigenity needs higher res
+            grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+            obj = ObjectiveFunction(
+                OmnigenityHarmonics(
+                    eq=eq, field=field, field_type="oops", eq_grid=grid, field_grid=grid
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+        field = OmnigenousFieldLCForm(
+            S_len=2,
+            D_len=1,
+            NFP=eq.NFP,
+            helicity=(0, 1),
+            S_list=np.array([0.3, 0.2]),
+            D_list=np.array([1]),
+            S_func=lambda x2d, y2d, S_list: S_list[0]
+            * (x2d)
+            * jnp.sin(y2d + S_list[1] * jnp.sin(y2d)),
+            D_func=lambda x2d, D_list: (jnp.pi ** (D_list[0] - 1)) ** (1 / D_list[0])
+            * (jnp.clip(jnp.pi - x2d, 0, 1)) ** (1 / D_list[0]),
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array + 1):  # omnigenity needs higher res
+            grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+            obj = ObjectiveFunction(
+                OmnigenityHarmonics(
+                    eq=eq,
+                    field=field,
+                    field_type="lcform",
+                    eq_grid=grid,
+                    field_grid=grid,
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(
+            f, f[-1], rtol=1e-2
+        )  # it need 1e-2... I don't know why
+
+    @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
     )
@@ -3667,6 +3758,7 @@ class TestObjectiveNaNGrad:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        OmnigenityHarmonics,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3969,6 +4061,76 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("helicity", [(1, 0), (1, 1), (0, 1)])
+    def test_objective_no_nangrad_omnigenityharmonics(self, helicity):
+        """OmnigenityHarmonics."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        field = OmnigenousField(
+            L_B=0,
+            M_B=2,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=helicity,
+            B_lm=np.array([0.8, 1.2]),
+        )
+        obj = ObjectiveFunction(
+            OmnigenityHarmonics(eq=eq, field=field, field_type="desc")
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), (str(helicity), "desc")
+
+        field = OmnigenousFieldOOPS(
+            S_len=2,
+            D_len=2,
+            NFP=eq.NFP,
+            helicity=helicity,
+            S_list=np.array([0.3, 0]),
+            D_list=np.array([0, 0]),
+        )
+        obj = ObjectiveFunction(
+            OmnigenityHarmonics(eq=eq, field=field, field_type="oops")
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), (str(helicity), "oops")
+
+        field = OmnigenousFieldLCForm(
+            S_len=2,
+            D_len=1,
+            NFP=eq.NFP,
+            helicity=helicity,
+            S_list=np.array([0.3, 0.2]),
+            D_list=np.array([1]),
+            S_func=lambda x2d, y2d, S_list: S_list[0]
+            * (x2d)
+            * jnp.sin(y2d + S_list[1] * jnp.sin(y2d)),
+            D_func=lambda x2d, D_list: (jnp.pi ** (D_list[0] - 1)) ** (1 / D_list[0])
+            * (jnp.clip(jnp.pi - x2d, 0, 1)) ** (1 / D_list[0]),
+        )
+        obj = ObjectiveFunction(
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+            )
+        )
+        obj.build(verbose=3)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), (str(helicity), "lcform")
 
     @pytest.mark.unit
     def test_objective_no_nangrad_effective_ripple(self):

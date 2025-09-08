@@ -611,6 +611,7 @@ def to_sfl(
     N_grid=None,
     rcond=None,
     copy=False,
+    tol=1e-9,
 ):
     """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -618,29 +619,38 @@ def to_sfl(
     with respect to the straight field line coordinates, rather than the boundary
     coordinates. The new lambda value will be zero.
 
-    NOTE: Though the converted equilibrium will have the same flux surfaces,
-    the force balance error will likely be higher than the original equilibrium.
+    The flux surfaces of the returned equilibrium usually differ from the original
+    by 1% when the default resolution parameters are used.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use
     L : int, optional
-        radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+        Radial resolution to use for SFL equilibrium.
+        Default is ``3*eq.L``.
     M : int, optional
-        poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+        Poloidal resolution to use for SFL equilibrium.
+        Default is ``4*eq.M``.
     N : int, optional
-        toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+        toroidal resolution to use for SFL equilibrium.
+        Default is ``3*eq.N``.
     L_grid : int, optional
-        radial spatial resolution to use for fit to new basis. Default = 2*L
+        Radial grid resolution to use for fit to Zernike series.
+        Default is ``1.5*L``.
     M_grid : int, optional
-        poloidal spatial resolution to use for fit to new basis. Default = 2*M
+        Poloidal grid resolution to use for fit to Zernike series.
+        Default is ``1.5*M``.
     N_grid : int, optional
-        toroidal spatial resolution to use for fit to new basis. Default = 2*N
+        Toroidal grid resolution to use for fit to Fourier series.
+        Default is ``N``.
     rcond : float, optional
-        cutoff for small singular values in the least squares fit.
+        Cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
+    tol : float
+        Tolerance for coordinate mapping.
+        Default is ``1e-9``.
 
     Returns
     -------
@@ -648,22 +658,28 @@ def to_sfl(
         Equilibrium transformed to a straight field line coordinate representation.
 
     """
-    L = L or int(1.5 * eq.L)
-    M = M or int(1.5 * eq.M)
-    N = N or int(1.5 * eq.N)
-    L_grid = L_grid or int(2 * L)
-    M_grid = M_grid or int(2 * M)
-    N_grid = N_grid or int(2 * N)
+    L = L or int(3 * eq.L)
+    M = M or int(4 * eq.M)
+    N = N or int(3 * eq.N)
+    L_grid = L_grid or int(1.5 * L)
+    M_grid = M_grid or int(1.5 * M)
+    N_grid = N_grid or int(N)
 
     grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
     grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
     data = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(map_coordinates(eq, grid_PEST.nodes, ("rho", "theta_PEST", "zeta"))),
+        Grid(
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
     )
     data_bdry = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(map_coordinates(eq, grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"))),
+        Grid(
+            eq.map_coordinates(
+                grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+            )
+        ),
     )
 
     eq_PEST = eq.copy() if copy else eq

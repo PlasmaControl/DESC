@@ -3617,7 +3617,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
                 "must pass in a Grid object for argument grid!"
                 f" instead got type {type(grid)}"
             )
-        print(names)
+
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:

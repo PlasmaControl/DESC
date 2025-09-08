@@ -92,7 +92,7 @@ def _compute(
     surf_batch_size=1,
     simp=False,
     expand_out=True,
-    **kwargs
+    **kwargs,
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -145,10 +145,10 @@ def _compute(
 
     return grid.expand(out)
 
-    #if expand_out:
+    # if expand_out:
     #    assert out.ndim == 1, "Are you sure you want to expand to full grid?"
     #    return grid.expand(out)
-    #return out
+    # return out
 
 
 def _dH_ripple(data, B, pitch):

@@ -29,7 +29,7 @@ from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
 from desc.io import load
 from desc.magnetic_fields import (
@@ -1990,7 +1990,7 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    def test_objective_compute(self):
+    def test_objective_compute_against_compute(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
@@ -2000,7 +2000,7 @@ class TestObjectiveFunction:
         num_transit = 4
         num_well = 15 * num_transit
         num_quad = 16
-        num_pitch = 16
+        num_pitch = 10
         data = eq.compute(
             ["effective ripple", "Gamma_c"],
             grid=grid,
@@ -2021,11 +2021,8 @@ class TestObjectiveFunction:
             jac_chunk_size=1,
         )
         obj.build()
-        # TODO(#1094)
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict),
-            grid.compress(data["effective ripple"]),
-            rtol=0.004,
+            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
         )
         obj = GammaC(
             eq,
@@ -2041,6 +2038,25 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
+
+        obj = desc.objectives.BallooningStability(eq=eq)
+        obj.build()
+        data = eq.compute(
+            ["ideal ballooning lambda"],
+            grid=Grid.create_meshgrid(
+                [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
+                coordinates="raz",
+            ),
+        )
+        lam = data["ideal ballooning lambda"]
+        lambda0, w0, w1 = (
+            obj.constants["lambda0"],
+            obj.constants["w0"],
+            obj.constants["w1"],
+        )
+        lam = (lam - lambda0) * (lam >= lambda0)
+        lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
+        np.testing.assert_allclose(obj.compute(eq.params_dict), lam)
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):
@@ -3821,7 +3837,6 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
         ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
-
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
             modes_R=[[0, 0], [1, 0]],
@@ -3829,6 +3844,21 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
+
+        def test(normal):
+            ext_field = FourierPlanarCoil(center=[0, 0, 3.0], normal=normal)
+            obj = ObjectiveFunction(
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
+            )
+            obj.build()
+            g = obj.grad(obj.x(surf, ext_field))
+            assert not np.any(np.isnan(g)), "quadratic flux"
+
+        test([0, 0, 1])  # normal parallel to Z-axis
+        test([0, 0, -1])  # antiparallel
+        test([0, 1e-4, 1])  # nearly parallel
+        test([0, 1e-4, -1])  # nearly antiparallel
+
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)

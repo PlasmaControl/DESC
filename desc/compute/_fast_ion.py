@@ -64,7 +64,7 @@ def _drift2(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Fast ion confinement proxy",
+    description="Fast ion confinement proxy (scalar)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -181,7 +181,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -227,6 +227,7 @@ def _poloidal_drift(data, B, pitch):
 
 @register_compute_fun(
     name="gamma_c",
+<<<<<<< HEAD
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "small gamma_c"
@@ -239,6 +240,17 @@ def _poloidal_drift(data, B, pitch):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
+=======
+    label="\\sum_{w} \\gamma_c(\\rho, \\alpha, \\lambda, w)",
+    units="~",
+    units_long="None",
+    description="Fast ion confinement proxy",
+    dim=2,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+>>>>>>> master
     data=[
         "min_tz |B|",
         "max_tz |B|",
@@ -272,6 +284,7 @@ def _poloidal_drift(data, B, pitch):
         "spline",
     ],
 )
+<<<<<<< HEAD
 def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
@@ -291,6 +304,16 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
 
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.
+=======
+def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Nemov et al.
+
+    Returns
+    -------
+    ∑_w γ_c(ρ, α, λ, w) where w indexes a well.
+        Shape (num rho, num alpha, num pitch).
+
+>>>>>>> master
     """
     # noqa: unused dependency
     theta = kwargs["theta"]
@@ -304,7 +327,10 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+<<<<<<< HEAD
     spline = kwargs.get("spline", True)
+=======
+>>>>>>> master
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -313,6 +339,10 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+<<<<<<< HEAD
+=======
+    spline = kwargs.get("spline", True)
+>>>>>>> master
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -337,13 +367,18 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
                 points,
                 is_fourier=True,
             )
+<<<<<<< HEAD
 
             # This is γ_c π/2.
             gamma_c = jnp.arctan(
+=======
+            return (2 / jnp.pi) * jnp.arctan(
+>>>>>>> master
                 safediv(
                     drift1,
                     drift2
                     * bounce.interp_to_argmin(
+<<<<<<< HEAD
                         data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
                     ),
                 )
@@ -359,6 +394,17 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
     # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
     # of a log argument with units. Smoothness determined by positive lower bound
     # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+=======
+                        data["|grad(rho)|*|e_alpha|r,p|"],
+                        points,
+                        is_fourier=True,
+                    ),
+                )
+            ).sum(-1)
+
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+>>>>>>> master
     fun_data = {
         "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
@@ -367,6 +413,7 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
+<<<<<<< HEAD
 
     grid = transforms["grid"]
 
@@ -490,6 +537,19 @@ def _v_tau1(params, transforms, profiles, data, **kwargs):
         v_tau0, fun_data, data, theta, grid, num_pitch, surf_batch_size
     )
 
+=======
+    grid = transforms["grid"]
+    data["gamma_c"] = _compute(
+        gamma_c0,
+        fun_data,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+        expand_out=False,
+    )
+>>>>>>> master
     return data
 
 
@@ -502,7 +562,7 @@ def _v_tau1(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Fast ion confinement proxy "
+    description="Fast ion confinement proxy (scalar) "
     "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
@@ -723,6 +783,7 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
+<<<<<<< HEAD
 
             gamma_c = data["gamma_c"]
             gamma_c = jnp.sum(gamma_c, axis=-1)  # summing over all the wells
@@ -733,6 +794,11 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
                 jnp.heaviside(mask * jnp.sum(v_tau * poloidal_drift, axis=-1), 0),
                 axis=-2,
             )  # inner avg over lambda, outer avg over field lines
+=======
+            # This is γ_c π/2.
+            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
+>>>>>>> master
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -742,8 +808,14 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
         ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
+<<<<<<< HEAD
     data["Gamma_a Velasco"] = _compute(
         Gamma_a,
+=======
+
+    data["Gamma_c Velasco"] = _compute(
+        Gamma_c,
+>>>>>>> master
         {
             "cvdrift0": data["cvdrift0"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],

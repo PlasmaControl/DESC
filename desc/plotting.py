@@ -560,22 +560,6 @@ def plot_1d(  # noqa : C901
         plot_1d(eq, 'p')
 
     """
-    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
-    if "norm_F" in kwargs:
-        norm_F = kwargs.pop("norm_F")
-        warnings.warn(
-            FutureWarning(
-                "Argument norm_F has been deprecated. If you are trying to "
-                + "normalize |F| by magnetic pressure gradient, use  "
-                + "`name=|F|_normalized` instead. If you want to normalize by "
-                + "another quantity, use the `normalize` keyword argument."
-            )
-        )
-        if normalize is None and norm_F:
-            # replicate old behavior before #1683
-            normalize = "<|grad(|B|^2)|/2mu0>_vol"
-        elif normalize is not None and norm_F:
-            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1044,22 +1028,6 @@ def plot_3d(  # noqa : C901
         fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
-    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
-    if "norm_F" in kwargs:
-        norm_F = kwargs.pop("norm_F")
-        warnings.warn(
-            FutureWarning(
-                "Argument norm_F has been deprecated. If you are trying to "
-                + "normalize |F| by magnetic pressure gradient, use  "
-                + "`name=|F|_normalized` instead. If you want to normalize by "
-                + "another quantity, use the `normalize` keyword argument."
-            )
-        )
-        if normalize is None and norm_F:
-            # replicate old behavior before #1683
-            normalize = "<|grad(|B|^2)|/2mu0>_vol"
-        elif normalize is not None and norm_F:
-            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,

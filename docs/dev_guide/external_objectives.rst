@@ -142,14 +142,10 @@ issues with multiprocessing.
 
 ::
 
-    # TERPSICHORE only runs on a CPU, but DESC is optimized to run on a GPU.
-    # This decorator will run this function on a CPU, even if other functions are being
-    # run on a GPU.
-    @execute_on_cpu
     def terpsichore(eq, *, processes=1, path, exec):
         """TERPSICHORE driver function."""
-        # create temporary directory to store I/O files
-        tmp_path = os.path.join(path, "tmp-TERPS")
+        # create a temporary directory to store I/O files
+        tmp_path = os.path.join(path, "tmp_TERPS")
         os.mkdir(tmp_path)
 
         # write input files for each equilibrium in serial

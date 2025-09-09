@@ -8,5 +8,5 @@ to regularly maintain these objectives. Use these at your own risk!
 The external codes are not included with DESC, and you must obtain access to them to use
 these objectives. Those codes may not be publicly available and may require a license.
 
-`_terpsichore.py` was last tested on August 27, 2025 with DESC v0.15.0 and a version of
-TERPSICHORE built in January of 2025.
+`_terpsichore.py` was last tested on September 8, 2025 with DESC v0.15.0 and a version
+of TERPSICHORE compiled on Perlmutter in January of 2025.

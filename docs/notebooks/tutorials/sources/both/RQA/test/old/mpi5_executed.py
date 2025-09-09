@@ -12,6 +12,7 @@
 
 
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 
@@ -19,7 +20,7 @@ os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 
 import numpy as np
-#import os
+import os
 
 from scipy.io import netcdf_file
 import copy
@@ -196,8 +197,8 @@ plot_figure2( dot(B_s,B_s) ** (1/2), egrid,''r' $ | \mathbf{B_{s}} |$ ')
 N = 20 # Terms toa pproximate the infinite series
 
 # Numer of dipoles
-sMv = np.asarray([25,]) # Poloidal direction
-sNv = np.asarray([25,]) # Toroidal direction
+sMv = np.asarray([30,]) # Poloidal direction
+sNv = np.asarray([30,]) # Toroidal direction
 
 
 # In[14]:
@@ -303,48 +304,58 @@ coords = eq.compute(["x"], grid = egrid)['x']
 # In[22]:
 
 
+coords.shape[0]
+
+
+# In[23]:
+
+
 from mpi4py import MPI
-from desc.objectives.find_sour_mpi_sources import bn_res_vec_mpi
+from desc.objectives.find_sour_mpi_xy import bn_res_vec_mpi_2d #as bn_res_vec_orig
 
 def main():
+    # --- MPI setup ---
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     if rank == 0:
-        print(f"Running MPI Biot-Savart with {size} ranks")
+        print(f"Running MPI Biot-Savart with {size} ranks (CPU-only)")
 
-    # Example call to your MPI-aware bn_res_vec function
-    result = bn_res_vec_mpi(
+    # --- Compute local slice ---
+    local_result = bn_res_vec_mpi_2d(
         sdata, sdata2, sdata3, sgrid, surf_winding, N, d0, coords,
         tdata, contour_data, stick_data, contour_grid, ss_data, AAA,
         mpi_comm=comm
     )
 
-    all_chunks = comm.gather(result, root=0)
+    # --- Synchronize all ranks before gathering ---
+    comm.Barrier()
+
+    # --- Gather results to rank 0 ---
+    all_chunks = comm.gather(local_result, root=0)
 
     if rank == 0:
-        # Concatenate full matrix
-        B_total = np.vstack(all_chunks)
-        print("B_total.shape =", B_total.shape)
+        # Concatenate along the last axis (targets)
+        B_total = np.concatenate(all_chunks, axis=-1)
+        print("Fully assembled B_total.shape =", B_total.shape)
 
-        # Compute pseudoinverse
-        #B_pinv = np.linalg.pinv(B_total)  # or jnp.linalg.pinv
-        #print("B_inv_total.shape =", B_pinv.shape)
-    #else:
-        #B_pinv = None
+        # Optional: compute pseudoinverse
+        # B_pinv = np.linalg.pinv(B_total)
+        # print("B_pinv.shape =", B_pinv.shape)
+    else:
+        B_total = None
 
-    # --- Broadcast result if others need it ---
-    #B_pinv = comm.bcast(B_pinv, root=0)
+    # Broadcast full B_total to all ranks if needed
+    # B_total = comm.bcast(B_total, root=0)
 
-    # Now every rank has B_pinv if needed
-    #return B_total#B_pinv
+    return B_total if rank == 0 else None
 
 if __name__ == "__main__":
-    main()
+    B_total = main()
 
 
-# In[23]:
+# In[24]:
 
 
 #import jax

@@ -210,6 +210,17 @@ class VMECIO:
             warnings.filterwarnings(
                 "ignore", message="Left handed coordinates detected"
             )
+            sign = np.sign(
+                eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+            )
+            if sign == -1 and profile == "current":
+                # because we get current from buco, which itself is the integral
+                # of B_theta dtheta, if the boundary is left-handed, then the actual
+                # toroidal current profile is negative of what the buco integral
+                # says it is (due to ampere's law and the integral being in the CCW
+                # direction if the boundary is left-handed)
+                eq.c_l *= -1
+
             eq = ensure_positive_jacobian(eq)
 
         return eq
@@ -226,8 +237,24 @@ class VMECIO:
         M_grid=None,
         N_grid=None,
         verbose=1,
+        match_VMEC_wout=False,
     ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
+
+        NOTE: If the equilibrium is current-constrained, DESC will save for AC the
+        toroidal current (I) profile, not the current derivative (I') profile.
+        DESC will also save quantities in the VMEC left-handed convention, so
+        quantities like iota or the poloidal B field (bsupumns) will be opposite of
+        their sign in DESC.
+
+        NOTE: We do not claim to match every VMEC version, nor do we claim every
+        quantity is the same in the wout. Please see the source to see exactly how
+        DESC is computing each output quantity. The `match_VMEC_wout` flag changes
+        some of these computations to better match VMEC (which computes some quantities
+        with different assumption). This was done comparing against VMEC version 9.0
+        installed on the `portal` PPPL cluster as of March 2025.
+        If any of these quantities are in error or conflict, please submit an issue
+        detailing the quantity and what is different.
 
         Parameters
         ----------
@@ -249,6 +276,15 @@ class VMECIO:
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
+        match_VMEC_wout : bool
+            Whether or not to change some calculations to match what VMEC does.
+            There are some differences to how VMEC computes certain quantities, which
+            are not obvious/consistent with what the descriptions are
+            for the quantities. By default this is False, and DESC will compute
+            things faithful to what the quantity descriptions are. If True, some
+            calculations will be modified in order to match how the DESC developers
+            understand that VMEC computes them.
+            The affected quantities are `jdotb` and `jcurv`.
 
         Returns
         -------
@@ -371,6 +407,12 @@ class VMECIO:
                 "sqrt(g)",
                 "<|B|^2>",
                 "<J*B>",
+                "G_r",
+                "G",
+                "I_r",
+                "I",
+                "psi_r",
+                "sqrt(g)_Boozer",
             ],
             grid=grid_full,
         )
@@ -614,6 +656,7 @@ class VMECIO:
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
+
         buco[1:] = -grid_half.compress(data_half["I"])  # - for negative Jacobian
         buco[0] = 0
 
@@ -641,6 +684,25 @@ class VMECIO:
             8 * np.pi**2 * grid_half.compress(data_half["rho"])
         )
         vp[0] = 0
+
+        # over_r
+        over_r = file.createVariable("over_r", np.float64, ("radius",))
+        over_r.long_name = "average over each surface of sqrt(g)/R divided"
+        " by dV/ds and then multiplied by 4*pi^2, on half mesh"
+        over_r[:] = (
+            np.insert(
+                surface_averages(
+                    grid_half,
+                    data_half["sqrt(g)"] / data_half["R"] / data_half["V_r(r)"],
+                    sqrt_g=1,  # set to 1 here to do a simple average
+                    expand_out=False,
+                ),
+                [0],
+                [0.0],
+            )
+            * 4
+            * np.pi**2
+        )  # divide by 4pi^2 bc the V' is normalized
 
         # full mesh quantities
 
@@ -717,8 +779,30 @@ class VMECIO:
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B, on full mesh"
         jdotb.units = "N/m^3"
-        jdotb[:] = grid_full.compress(data_full["<J*B>"])
-        jdotb[0] = 0
+
+        if match_VMEC_wout:
+            # in VMEC, they use the form of parallel current from
+            # assuming Boozer coordinates, which is what we will also use here.
+            # this can differ a lot from our <J*B> quantity
+            JB = (
+                (
+                    data_full["G"] * data_full["I_r"] / data_full["psi_r"]
+                    - data_full["G_r"] * data_full["I"] / data_full["psi_r"]
+                )
+                / data_full["sqrt(g)_Boozer"]
+                * data_full["psi_r"]
+            )
+            JB = (
+                surface_averages(
+                    grid_full, JB, sqrt_g=data_full["sqrt(g)"], expand_out=False
+                )
+                / mu_0
+            )
+            jdotb[:] = JB
+        else:
+            JB = grid_full.compress(data_full["<J*B>"])
+
+            jdotb[:] = JB
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
@@ -729,17 +813,23 @@ class VMECIO:
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )
+        # TODO: VMEC extrapolates to the axis
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
+        # VMEC seems to NOT divide by the surface area, so
+        # our equivalent to match that would be setting `sqrt_g=1`
+        # in surface_averages fxn call
+        fsa_sqrt_g = 1 if match_VMEC_wout else data_full["sqrt(g)"]
         jcurv[:] = surface_averages(
             grid_full,
             data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
-            sqrt_g=data_full["sqrt(g)"],
+            sqrt_g=fsa_sqrt_g,
             expand_out=False,
         )
+        # TODO: VMEC extrapolates to the axis
         jcurv[0] = 0
 
         DShear = file.createVariable("DShear", np.float64, ("radius",))
@@ -1387,9 +1477,6 @@ class VMECIO:
 
         niter = file.createVariable("niter", np.int32)
         niter[:] = 1
-
-        over_r = file.createVariable("over_r", np.float64, ("radius",))
-        over_r[:] = np.zeros((file.dimensions["radius"].size,))
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))

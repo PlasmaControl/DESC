@@ -4,12 +4,15 @@ Changelog
 New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds``match_VMEC_wout`` flag to ``desc.vmec.VMECIO.save``, which changes the formula for the ``jdotb`` and ``jcurv`` variables to better match VMEC's wout files.
 
--
+
 Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- No longer negates the current profile in ``desc.compat.ensure_nested_jacobian`` when flipping from a left-handed to a right-handed coordinate system
+- Does, however, negate current in ``desc.vmec.VMECIO.load`` if the boundary is left-handed, since we get it from the ``buco`` ``wout`` variable, and the sign of that quantity is opposite the toroidal current profile's sign if the boundary is left-handed.
 
 Backend
 

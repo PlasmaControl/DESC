@@ -4,7 +4,6 @@ import warnings
 
 import numpy as np
 from orthax.legendre import leggauss
-from termcolor import colored
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
@@ -181,12 +180,9 @@ class EffectiveRipple(_Objective):
         except ImportError:
             warnif(
                 nufft_eps >= 1e-14,
-                msg=colored(
-                    "\njax-finufft is not installed.\n"
-                    "Setting parameter nufft_eps to zero.\n"
-                    "Performance will deteriorate significantly.\n",
-                    "yellow",
-                ),
+                "\njax-finufft is not installed.\n"
+                "Setting parameter nufft_eps to zero.\n"
+                "Performance will deteriorate significantly.\n",
             )
             nufft_eps = 0.0
 

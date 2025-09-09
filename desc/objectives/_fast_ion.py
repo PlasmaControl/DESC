@@ -4,7 +4,6 @@ import warnings
 
 import numpy as np
 from orthax.legendre import leggauss
-from termcolor import colored
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -103,7 +102,7 @@ class GammaC(_Objective):
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
 
-        This is the most important paramter to specify for performance.
+        This is the most important parameter to specify for performance.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
@@ -192,12 +191,9 @@ class GammaC(_Objective):
         except ImportError:
             warnif(
                 nufft_eps >= 1e-14,
-                msg=colored(
-                    "\njax-finufft is not installed.\n"
-                    "Setting parameter nufft_eps to zero.\n"
-                    "Performance will deteriorate significantly.\n",
-                    "yellow",
-                ),
+                "\njax-finufft is not installed.\n"
+                "Setting parameter nufft_eps to zero.\n"
+                "Performance will deteriorate significantly.\n",
             )
             nufft_eps = 0.0
 

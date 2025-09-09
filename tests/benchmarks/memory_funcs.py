@@ -73,7 +73,11 @@ def test_proximal_jac_w7x_with_eq_update():
         constraint,
         eq,
         perturb_options={"verbose": 0},
-        solve_options={"verbose": 0, "maxiter": 0},
+        solve_options={
+            "verbose": 0,
+            "maxiter": 0,
+            "solve_during_proximal_build": False,
+        },
     )
     prox.build(verbose=0)
     x = prox.x(eq)
@@ -97,7 +101,9 @@ def test_proximal_freeb_jac():
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -125,7 +131,9 @@ def test_proximal_freeb_jac_batched():
         jac_chunk_size=100,
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -152,7 +160,9 @@ def test_proximal_freeb_jac_blocked():
         deriv_mode="blocked",
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -196,11 +206,34 @@ def _test_proximal_ripple(spline, method):
         ]
     )
     constraint = ObjectiveFunction([ForceBalance(eq)])
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build(verbose=0)
     x = prox.x(eq)
     for _ in range(3):
         _ = getattr(prox, method)(x, prox.constants).block_until_ready()
+
+
+@pytest.mark.memory
+def test_eq_solve():
+    """Benchmark equilibrium solve with 2 steps."""
+    res = 12
+    eq = desc.examples.get("precise_QA")
+    eq.change_resolution(L=res, M=res, L_grid=2 * res, M_grid=2 * res)
+    # this test is mostly for intermediate operations, so having a chunk size
+    # of 100 will be fine to see their effect
+    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100, deriv_mode="batched")
+    obj.build(verbose=0)
+    eq.solve(
+        objective=obj,
+        optimizer="lsq-exact",
+        ftol=0,
+        xtol=0,
+        gtol=0,
+        maxiter=2,
+        verbose=0,
+    )
 
 
 if __name__ == "__main__":
@@ -222,5 +255,7 @@ if __name__ == "__main__":
         test_proximal_jac_ripple()
     elif func == "test_proximal_jac_ripple_spline":
         test_proximal_jac_ripple_spline()
+    elif func == "test_eq_solve":
+        test_eq_solve()
     else:
         print(f"Invalid function name {func}.")

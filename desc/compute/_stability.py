@@ -3496,7 +3496,7 @@ def _AGNI4(params, transforms, profiles, data, **kwargs):
     n_zeta_axisym="bool: max axisym mode number to analyze",
     incompressible="bool: if the perturbation is compressible",
 )
-def _AGNI6(params, transforms, profiles, data, **kwargs):
+def _AGNI5(params, transforms, profiles, data, **kwargs):
     """
     AGNI: Analysis of Global Normal-modes in Ideal MHD.
 
@@ -3526,7 +3526,7 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     dpsi_r2_drho = 2 * psi_r * psi_rr
     diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
 
-    p0 = data["p"] / B_N**2
+    p0 = mu_0 * data["p"] / B_N**2
     p0 = p0.at[p0 < 0].set(1e-8)
 
     n0 = 1e2
@@ -4635,17 +4635,24 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
         # For optimization purposes, it's recommended to set gamma = 0
-        gamma = 1.0
-        A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
-        A = A.at[theta_idx, theta_idx].add(
-            C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
-        )
-        A = A.at[zeta_idx, zeta_idx].add(C_zeta.T @ ((gamma * sqrtg * W * p0) * C_zeta))
-        A = A.at[rho_idx, theta_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_theta))
-        A = A.at[rho_idx, zeta_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_zeta))
-        A = A.at[theta_idx, zeta_idx].add(
-            C_theta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
-        )
+        gamma = 0.0
+        if gamma != 0.0:
+            A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
+            A = A.at[theta_idx, theta_idx].add(
+                C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
+            )
+            A = A.at[zeta_idx, zeta_idx].add(
+                C_zeta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+            )
+            A = A.at[rho_idx, theta_idx].add(
+                C_rho.T @ ((gamma * sqrtg * W * p0) * C_theta)
+            )
+            A = A.at[rho_idx, zeta_idx].add(
+                C_rho.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+            )
+            A = A.at[theta_idx, zeta_idx].add(
+                C_theta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+            )
 
     ### Instability drive term
     Au = jnp.zeros((3 * n_total, 3 * n_total))
@@ -4732,13 +4739,13 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B[zeta_idx, zeta_idx]))
 
     B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B[rho_idx, theta_idx]))
-    B_blocks = B_blocks.at[:, 1, 0].set(B_blocks[:, 0, 1])
+    B_blocks = B_blocks.at[:, 1, 0].set(jnp.diag(B[theta_idx, rho_idx]))
 
     B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B[rho_idx, zeta_idx]))
-    B_blocks = B_blocks.at[:, 0, 2].set(B_blocks[:, 2, 0])
+    B_blocks = B_blocks.at[:, 0, 2].set(jnp.diag(B[zeta_idx, rho_idx]))
 
     B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B[theta_idx, zeta_idx]))
-    B_blocks = B_blocks.at[:, 2, 1].set(B_blocks[:, 1, 2])
+    B_blocks = B_blocks.at[:, 2, 1].set(jnp.diag(B[zeta_idx, theta_idx]))
 
     ##if ridge != 0.0:
     ##    B_blocks = B_blocks + ridge * jnp.eye(3, dtype=B_blocks.dtype)[None, :, :]
@@ -4773,55 +4780,98 @@ def _AGNI6(params, transforms, profiles, data, **kwargs):
     keep = jnp.concatenate([keep_1, keep_2])
 
     # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
-    if incompressible:  # Only enforce compressibility here
+    if incompressible:  # Only enforce incompressibility here
         # Assemble L_full from blocks of L (only for comparison with chol(B))
         Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx, theta_idx, zeta_idx)
         # L_test = jnp.linalg.cholesky(B)
-        ##max|L_full - L_test| = 3.55e-15
+        ##max|Linv_full - L_test⁻¹| = 3.55e-15
 
         # Concatenate once (N, 3N)
         C = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
 
         # Use the diagonal of D (you already built D earlier as diag(1/sqrt(diag(B))))
-        d = 1.0 / jnp.diag(D)  # (3N,)  == diag(D)
+        d = jnp.diag(D)  # (3N,)  == diag(D)
         C_scaled = C * d[None, :]  # right-multiply by D via column scaling
 
-        # Apply L2^{-T} per node using your existing L2inv
+        # Apply L2⁻ᵀ per node using your existing L2inv
+        # Ĉ = C D L⁻ᵀ
         Linv_T = jnp.swapaxes(Linv, 1, 2)  # (N, 3, 3)
         C_node = C_scaled[:, p].reshape(n_total, n_total, 3)  # (N, N, 3)
         Chat_node = jnp.einsum("mil, ilk -> mik", C_node, Linv_T)
         Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
 
+        Chat = Chat[keep_1][:, keep]
         # Orthogonal projector P = I - C^T (C C^T)^{-1} C, used implicitly via CTS:
         G = Chat @ Chat.T
-        G = (G + G.T) / 2 + 1e-12 * jnp.eye(n_total)  # Gram matrix w ridge
+        G = (G + G.T) / 2 + 1e-12 * jnp.eye(
+            n_total - 2 * n_theta_max * n_zeta_max
+        )  # Gram matrix w ridge
 
         # The will become one of the most expensive parts
         L = jnp.linalg.cholesky(G)
+
+        # Cᵀ (L⁻ᵀ Ĉ L⁻¹)
         Y = jax.lax.linalg.triangular_solve(L, Chat, left_side=True, lower=True)
         S = jax.lax.linalg.triangular_solve(L.T, Y, left_side=True, lower=False)
         CTS = Chat.T @ S  # = C^T (C C^T)^{-1} C
 
-        # Projected operator A_proj = P A P without forming P
-        A2_proj = A2 - A2 @ CTS - CTS @ A2 + CTS @ A2 @ CTS
+        ## Projected operator A_proj = P A P without forming P
+        # A2_proj = A2 - A2 @ CTS - CTS @ A2 + CTS @ A2 @ CTS
+        # A2_proj = (A2_proj + A2_proj.T) / 2
+
+        # A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-9)
+
+        ## Projected operator A_proj = P A P without forming P
+        # A2u_proj = A2u - A2u @ CTS - CTS @ A2u + CTS @ A2u @ CTS
+        # A2u_proj = (A2u_proj + A2u_proj.T) / 2
+
+        # A3_proj = A2_proj[jnp.ix_(keep, keep)] + A2u_proj[jnp.ix_(keep, keep)]
+
+        # applying the boundary condition first
+        A2_bc = A2[jnp.ix_(keep, keep)]
+        A2u_bc = A2u[jnp.ix_(keep, keep)]
+
+        ## Projected operator
+        A2_proj = A2_bc - A2_bc @ CTS - CTS @ A2_bc + CTS @ A2_bc @ CTS
         A2_proj = (A2_proj + A2_proj.T) / 2
 
         A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-9)
 
-        # Projected operator A_proj = P A P without forming P
-        A2u_proj = A2u - A2u @ CTS - CTS @ A2u + CTS @ A2u @ CTS
+        A2u_proj = A2u_bc - A2u_bc @ CTS - CTS @ A2u_bc + CTS @ A2u_bc @ CTS
         A2u_proj = (A2u_proj + A2u_proj.T) / 2
 
-        A3_proj = A2_proj[jnp.ix_(keep, keep)] + A2u_proj[jnp.ix_(keep, keep)]
+        A3_proj = A2u_proj + A2_proj
 
         w, v = jnp.linalg.eigh((A3_proj + A3_proj.T) / 2)
-        print("w = ", w)
+
+        # v_full = np.concatenate((np.zeros((n_theta_max*n_zeta_max,)), v[:n_total-2*n_theta_max*n_zeta_max, 0], np.zeros((n_theta_max*n_zeta_max,)),v[n_total-2*n_theta_max*n_zeta_max:, 0]))
+        # Chat_test = C_scaled @ Linv_full.T
+        print(Chat @ v[:, 0])
+
+        # Q, R = jnp.linalg.qr(Chat.T, mode='reduced')
+        # P = jnp.eye(Q.shape[0]) - Q @ Q.T
+
+        # A4_bc = (A2_bc + A2u_bc)
+        # A4_bc = (A4_bc + A4_bc.T)/2
+        # A4_proj = P @ (A4_bc @ P)
+        # w1, v1 = jnp.linalg.eigh((A4_proj + A4_proj.T) / 2)
+
+        # print(Chat @ v1[:, 0])
+
+        # print("w = ", w, w1)
+        # pdb.set_trace()
 
     else:
         ## Shift the diagonal of A to ensure positive definiteness
         ## The estimate must be accurate. If A is diagonally dominant
         ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-9)
+
+        A2 = A2.at[jnp.diag_indices_from(A2)].add(9e-9)
+
+        w, v = jnp.linalg.eigh(
+            (A2[jnp.ix_(keep, keep)] + A2[jnp.ix_(keep, keep)].T) / 2
+        )
+        print("before instability =", w)
 
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
 

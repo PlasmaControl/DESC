@@ -201,7 +201,7 @@ def K_sour_vec(
                      )
 
     K_sour_total = ( ( - jnp.imag(omega_sour_fun)[:, None, :] * sdata1['e_v'][:, :, None]
-                      + jnp.imag(omega_sour_fun)[:, None, :] * sdata1['e_u'][:, :, None] ) * ( sdata1["lambda_iso"] ** (-1) )[:,None,None]
+                      + jnp.real(omega_sour_fun)[:, None, :] * sdata1['e_u'][:, :, None] ) * ( sdata1["lambda_iso"] ** (-1) )[:,None,None]
                    )
 
     return K_sour_total

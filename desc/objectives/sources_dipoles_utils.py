@@ -63,12 +63,23 @@ def v1_prime_eval(w0, N, d_0, data_or):
     
     def body_fun(n, carry):
         _product = carry
-        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"][:,None] - w0[None,:]) / gamma ) )
+        term = ( ((-1) ** n) * (p ** (n**2 + n)) ) * ( ( (2 * n + 1) / gamma ) * jnp.cos((2 * n + 1) * ( data_or["w"][:,None] - w0[None,:]) / gamma
+                                                                                        ) 
+                                                     )
         return _product + term
     
-    test = fori_loop( 0, N, body_fun, jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j)
+    test = fori_loop( 0, N, body_fun, jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) 
+                     + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j
+                    )
     
-    return test
+    #return test
+    return jnp.where(
+        jnp.abs(data_or["w"][:,None] - w0[None,:]) > d_0,
+        p ** (1 / 4) * fori_loop(0, N, body_fun, 
+                                 jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) ) 
+                                 + jnp.zeros( (data_or["w"].shape[0], w0.shape[0]) )*1j ),
+        0,
+    )
 
 
 #@jax.jit

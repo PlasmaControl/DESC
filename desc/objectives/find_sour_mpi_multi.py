@@ -4,28 +4,19 @@ from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.utils import cross, dot
 
-from .sources_dipoles_utils import (_compute_magnetic_field_from_Current, 
-                                    _compute_magnetic_field_from_Current_Contour,
+from .sources_dipoles_utils import (#_compute_magnetic_field_from_Current, 
+                                    #_compute_magnetic_field_from_Current_Contour,
                                     omega_sour,
                                     compute_mask,
                                     )
 
-# add these imports at top of your file
 from mpi4py import MPI
 import numpy as np
-
-"""
-MPI-aware Biot-Savart computation for DESC
-Splits source contributions (J * dV) across MPI ranks.
-Requires: mpi4py, jax, numpy, desc package
-"""
-
 
 # ---------------- Helper ----------------
 def _split_indices(n_items, rank, size):
     """Return start/end indices for a contiguous block for MPI rank."""
-    base = n_items // size
-    rem = n_items % size
+    base, rem = divmod(n_items, size)
     if rank < rem:
         start = rank * (base + 1)
         end = start + base + 1
@@ -65,8 +56,8 @@ def biot_savart_general_vec(re, rs, J, dV):
 
 # ---------------- MPI-Aware Magnetic Field ----------------
 def _compute_magnetic_field_from_Current_vec(Kgrid, K_at_grid, surface, data, coords,
-                                             basis="rpz", mpi_comm=None):
-    """MPI-aware Biot-Savart from volumetric currents."""
+                                             basis="rpz", mpi_comm=None, split_targets=True):
+    """MPI-aware Biot-Savart with optional splitting of both sources and targets."""
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
     rank = mpi_comm.Get_rank()
@@ -91,26 +82,39 @@ def _compute_magnetic_field_from_Current_vec(Kgrid, K_at_grid, surface, data, co
     _K = K_at_grid
     _dV = Kgrid.weights * data["|e_theta x e_zeta|"] / Kgrid.NFP
 
-    # Split sources across ranks
-    start_idx, end_idx = _split_indices(_rs.shape[0], rank, size)
-    local_rs = _rs[start_idx:end_idx, :]
-    local_dV = _dV[start_idx:end_idx]
-    local_K = _K[:, start_idx:end_idx, :]
+    # --- Split sources ---
+    start_src, end_src = _split_indices(_rs.shape[0], rank, size)
+    local_rs = _rs[start_src:end_src, :]
+    local_dV = _dV[start_src:end_src]
+    local_K = _K[:, start_src:end_src, :]
+
+    # --- Split targets optionally ---
+    if split_targets:
+        start_tgt, end_tgt = _split_indices(coords_xyz.shape[0], rank, size)
+        local_coords = coords_xyz[start_tgt:end_tgt, :]
+    else:
+        local_coords = coords_xyz
 
     def nfp_loop_local(j, f):
-        phi = (local_rs[:,1] + j*2*jnp.pi/Kgrid.NFP) % (2*jnp.pi)
+        phi = (local_rs[:,1] + j * 2 * jnp.pi / Kgrid.NFP) % (2 * jnp.pi)
         rs_rpz = jnp.vstack((local_rs[:,0], phi, local_rs[:,2])).T
         rs_xyz = rpz2xyz(rs_rpz)
         K_xyz = rpz2xyz_vec(local_K, phi=phi)
-        f += biot_savart_general_vec(coords_xyz, rs_xyz, K_xyz, local_dV)
+        f += biot_savart_general_vec(local_coords, rs_xyz, K_xyz, local_dV)
         return f
 
-    B_local = fori_loop(0, Kgrid.NFP, nfp_loop_local, jnp.zeros((N,3,coords_xyz.shape[0])))
-    B_local_np = np.asarray(B_local, dtype=np.float64)
-    B_global_np = np.empty_like(B_local_np)
-    mpi_comm.Allreduce(B_local_np, B_global_np, op=MPI.SUM)
-    B = jnp.asarray(B_global_np)
+    B_local = fori_loop(0, Kgrid.NFP, nfp_loop_local,
+                        jnp.zeros((N,3,local_coords.shape[0])))
 
+    B_local_np = np.asarray(B_local, dtype=np.float64)
+    if split_targets:
+        all_B = mpi_comm.allgather(B_local_np)
+        B_global_np = np.concatenate(all_B, axis=-1)
+    else:
+        B_global_np = np.empty_like(B_local_np)
+        mpi_comm.Allreduce(B_local_np, B_global_np, op=MPI.SUM)
+
+    B = jnp.asarray(B_global_np)
     if basis=="rpz":
         B = xyz2rpz_vec(jnp.transpose(B,(0,2,1)), x=coords_xyz[:,0], y=coords_xyz[:,1])
     if not vectorized:
@@ -118,8 +122,8 @@ def _compute_magnetic_field_from_Current_vec(Kgrid, K_at_grid, surface, data, co
     return B
 
 def _compute_magnetic_field_from_Current_Contour_vec(Kgrid, K_at_grid, surface, data, coords,
-                                                     basis="rpz", mpi_comm=None):
-    """MPI-aware Biot-Savart from contour currents."""
+                                                     basis="rpz", mpi_comm=None, split_targets=True):
+    """MPI-aware Biot-Savart from contour currents with 2D parallelization."""
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
     rank = mpi_comm.Get_rank()
@@ -143,53 +147,44 @@ def _compute_magnetic_field_from_Current_Contour_vec(Kgrid, K_at_grid, surface, 
     _K = K_at_grid
     _dV = Kgrid.weights * jnp.sqrt(dot(data["e_theta"], data["e_theta"])) / Kgrid.NFP
 
-    start_idx, end_idx = _split_indices(_rs.shape[0], rank, size)
-    local_rs = _rs[start_idx:end_idx,:]
-    local_dV = _dV[start_idx:end_idx]
-    local_K = _K[:, start_idx:end_idx,:]
+    # --- Split sources ---
+    start_src, end_src = _split_indices(_rs.shape[0], rank, size)
+    local_rs = _rs[start_src:end_src,:]
+    local_dV = _dV[start_src:end_src]
+    local_K = _K[:, start_src:end_src,:]
+
+    # --- Split targets optionally ---
+    if split_targets:
+        start_tgt, end_tgt = _split_indices(coords_xyz.shape[0], rank, size)
+        local_coords = coords_xyz[start_tgt:end_tgt, :]
+    else:
+        local_coords = coords_xyz
 
     def nfp_loop_local(j,f):
         phi = (local_rs[:,1] + j*2*jnp.pi/Kgrid.NFP) % (2*jnp.pi)
         rs_rpz = jnp.vstack((local_rs[:,0], phi, local_rs[:,2])).T
         rs_xyz = rpz2xyz(rs_rpz)
         K_xyz = rpz2xyz_vec(local_K, phi=phi)
-        f += biot_savart_general_vec(coords_xyz, rs_xyz, K_xyz, local_dV)
+        f += biot_savart_general_vec(local_coords, rs_xyz, K_xyz, local_dV)
         return f
 
-    B_local = fori_loop(0, Kgrid.NFP, nfp_loop_local, jnp.zeros((N,3,coords_xyz.shape[0])))
+    B_local = fori_loop(0, Kgrid.NFP, nfp_loop_local,
+                        jnp.zeros((N,3,local_coords.shape[0])))
     B_local_np = np.asarray(B_local, dtype=np.float64)
-    B_global_np = np.empty_like(B_local_np)
-    mpi_comm.Allreduce(B_local_np, B_global_np, op=MPI.SUM)
-    B = jnp.asarray(B_global_np)
 
+    if split_targets:
+        all_B = mpi_comm.allgather(B_local_np)
+        B_global_np = np.concatenate(all_B, axis=-1)
+    else:
+        B_global_np = np.empty_like(B_local_np)
+        mpi_comm.Allreduce(B_local_np, B_global_np, op=MPI.SUM)
+
+    B = jnp.asarray(B_global_np)
     if basis=="rpz":
         B = xyz2rpz_vec(jnp.transpose(B,(0,2,1)), x=coords_xyz[:,0], y=coords_xyz[:,1])
     if not vectorized:
         B = B[0]
     return B
-
-# ---------------- High-Level MPI Wrappers ----------------
-def B_sour_vec(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,coords,tdata,ss_data,mpi_comm=None):
-    return _compute_magnetic_field_from_Current_vec(
-        sgrid,
-        jnp.transpose(K_sour_vec(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,tdata,ss_data),(2,0,1)),
-        surface,
-        sdata1,
-        coords,
-        basis="rpz",
-        mpi_comm=mpi_comm
-    )
-
-def B_theta_contours_vec(surface, coords, ss_data, ss_grid, AAA, mpi_comm=None):
-    return _compute_magnetic_field_from_Current_Contour_vec(
-        ss_grid,
-        jnp.transpose(AAA,(2,0,1)),
-        surface,
-        ss_data,
-        coords,
-        basis="rpz",
-        mpi_comm=mpi_comm
-    )
 
 # ---------------- Stick / B_sticks_vec ----------------
 def stick(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
@@ -211,7 +206,7 @@ def stick(p2_, p1_, plasma_points, surface_grid, basis="rpz"):
         b_stick = xyz2rpz_vec(b_stick, x=plasma_points[:,0], y=plasma_points[:,1])
     return b_stick
 
-def B_sticks_vec(sgrid, surface, coords, ss_data, mpi_comm=None):
+def B_sticks_vec(sgrid, surface, coords, ss_data, mpi_comm=None, split_targets=True):
     """MPI-aware magnetic field from sticks."""
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
@@ -222,18 +217,25 @@ def B_sticks_vec(sgrid, surface, coords, ss_data, mpi_comm=None):
     N_wires = ss_data["x"].shape[0]
     N_coords = pls_points.shape[0]
 
+    # Split wires
     start_idx, end_idx = _split_indices(N_wires, rank, size)
     p1_local = 0 * ss_data["x"][start_idx:end_idx]
     p2_local = ss_data["x"][start_idx:end_idx]
 
     b_local = stick(p2_local, p1_local, pls_points, sgrid, basis="rpz")
 
-    full_shape = (N_wires, N_coords, 3)
-    b_local_full = np.zeros(full_shape, dtype=np.float64)
-    b_local_full[start_idx:end_idx, :, :] = np.asarray(b_local)
+    # Split targets if needed
+    if split_targets:
+        start_tgt, end_tgt = _split_indices(N_coords, rank, size)
+        b_local_np = np.asarray(b_local)[:, start_tgt:end_tgt, :]
+        all_B = mpi_comm.allgather(b_local_np)
+        b_global_np = np.concatenate(all_B, axis=1)
+    else:
+        b_local_full = np.zeros((N_wires, N_coords, 3), dtype=np.float64)
+        b_local_full[start_idx:end_idx, :, :] = np.asarray(b_local)
+        b_global_np = np.empty_like(b_local_full)
+        mpi_comm.Allreduce(b_local_full, b_global_np, op=MPI.SUM)
 
-    b_global_np = np.empty_like(b_local_full)
-    mpi_comm.Allreduce(b_local_full, b_global_np, op=MPI.SUM)
     return jnp.asarray(b_global_np)
 
 # ---------------- K_sour_vec ----------------
@@ -249,22 +251,34 @@ def K_sour_vec(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,tdata,ss_data):
 
 # ---------------- MPI-aware bn_res_vec ----------------
 def bn_res_vec_mpi(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,coords,tdata,
-                   contour_data,stick_data,contour_grid,ss_data,AAA, mpi_comm=None):
+                   contour_data,stick_data,contour_grid,ss_data,AAA, mpi_comm=None, split_targets=True):
     """MPI-aware Biot-Savart residual vector."""
     if mpi_comm is None:
         mpi_comm = MPI.COMM_WORLD
 
-    B_sour0 = B_sour_vec(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,coords,tdata,ss_data, mpi_comm=mpi_comm)
-    B_wire_cont = B_theta_contours_vec(surface, coords, contour_data, contour_grid, AAA, mpi_comm=mpi_comm)
-    B_sticks0 = B_sticks_vec(sgrid, surface, coords, stick_data, mpi_comm=mpi_comm)
+    B_sour0 = _compute_magnetic_field_from_Current_vec(
+        sgrid,
+        jnp.transpose(K_sour_vec(sdata1,sdata2,sdata3,sgrid,surface,N,d_0,tdata,ss_data),(2,0,1)),
+        surface,
+        sdata1,
+        coords,
+        basis="rpz",
+        mpi_comm=mpi_comm,
+        split_targets=split_targets
+    )
+
+    B_wire_cont = _compute_magnetic_field_from_Current_Contour_vec(
+        contour_grid,
+        jnp.transpose(AAA,(2,0,1)),
+        surface,
+        contour_data,
+        coords,
+        basis="rpz",
+        mpi_comm=mpi_comm,
+        split_targets=split_targets
+    )
+
+    B_sticks0 = B_sticks_vec(sgrid, surface, coords, stick_data, mpi_comm=mpi_comm, split_targets=split_targets)
 
     B_total = jnp.transpose(B_sour0 + B_wire_cont + B_sticks0, (1,2,0))
     return jnp.concatenate((B_total[:,0,:], B_total[:,1,:], B_total[:,2,:]))
-
-# ---------------- Example MPI usage ----------------
-if __name__ == "__main__":
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-    if rank == 0:
-        print(f"Running MPI with {size} ranks")

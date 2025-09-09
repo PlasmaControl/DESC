@@ -1,16 +1,24 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
 import functools
+from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, root, root_scalar, vmap
+from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.utils import check_posint, errorif, safenorm, setdefault, warnif
+from desc.utils import (
+    ResolutionWarning,
+    check_posint,
+    errorif,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 
 def _periodic(x, period):
@@ -30,7 +38,7 @@ def map_coordinates(  # noqa: C901
     outbasis=("rho", "theta", "zeta"),
     guess=None,
     params=None,
-    period=None,
+    period=(np.inf, np.inf, np.inf),
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -65,6 +73,7 @@ def map_coordinates(  # noqa: C901
     period : tuple of float
         Assumed periodicity for each quantity in ``inbasis``.
         Use ``np.inf`` to denote no periodicity.
+        Default assumes no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -115,33 +124,27 @@ def map_coordinates(  # noqa: C901
     # TODO (#1382): make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
         if inbasis == ("rho", "alpha", "zeta"):
+            errorif(
+                np.isfinite(period[1]),
+                msg=f"Period must be ∞ for inbasis={inbasis}, but got {period[1]}.",
+            )
             if "iota" in kwargs:
                 iota = kwargs.pop("iota")
+            elif "profiles" in kwargs:
+                iota = eq._compute_iota_under_jit(coords, params, **kwargs)
             else:
-                if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(
-                        ["iota", "iota_r"], params=params, **kwargs
-                    )
-                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
-            return _map_clebsch_coordinates(
-                coords=coords,
-                iota=iota,
-                L_lmn=params["L_lmn"],
-                L_basis=eq.L_basis,
-                guess=guess[:, 1] if guess is not None else None,
-                period=period[1] if period is not None else np.inf,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
+                iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
+            rho, alpha, zeta = coords.T
+            omega = 0  # TODO(#568)
+            coords = jnp.column_stack([rho, alpha + iota * (zeta + omega), zeta])
+            inbasis = ("rho", "theta_PEST", "zeta")
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(
                 coords=coords,
                 L_lmn=params["L_lmn"],
                 L_basis=eq.L_basis,
                 guess=guess[:, 1] if guess is not None else None,
-                period=period[1] if period is not None else np.inf,
+                period=period[1],
                 tol=tol,
                 maxiter=maxiter,
                 full_output=full_output,
@@ -154,7 +157,7 @@ def map_coordinates(  # noqa: C901
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
+    period = np.asarray(period)
     coords = _periodic(coords, period)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -340,7 +343,10 @@ def _map_PEST_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    # noqa: D202
+    errorif(
+        np.isfinite(period) and period != (2 * jnp.pi),
+        msg=f"Period must be ∞ or 2π, but got {period}.",
+    )
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
     def rootfun(theta, theta_PEST, rho, zeta):
@@ -376,131 +382,158 @@ def _map_PEST_coordinates(
         )
     )
     rho, theta_PEST, zeta = coords.T
+    theta = vecroot(
+        # Assume λ=0 for default initial guess.
+        setdefault(guess, theta_PEST),
+        theta_PEST,
+        rho,
+        zeta,
+    )
     if full_output:
-        theta, (res, niter) = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
-    else:
-        theta = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
+        theta, (res, niter) = theta
     out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:
         return out, (res, niter)
     return out
 
 
-# TODO(#568): decide later whether to assume given phi instead of zeta.
+def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
+    """Convert FourierZernikeBasis to set of Fourier series.
+
+    TODO(#1243) Do proper partial summation once the DESC
+    basis are improved to store the padded tensor product modes.
+    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+    The partial summation implemented here has a totally unnecessary FourierZernike
+    spectral to real transform and unnecessary N^2 FFT's of size N. Still the
+    performance improvement is significant. To avoid the transform and FFTs,
+    I suggest padding the FourierZernike basis modes to make the partial summation
+    trivial. Then this computation will likely take microseconds.
+
+    Parameters
+    ----------
+    lmbda : Transform
+        FourierZernikeBasis
+    L_lmn : jnp.ndarray
+        FourierZernikeBasis basis coefficients for λ.
+    omega : Transform
+        FourierZernikeBasis
+    W_lmn : jnp.ndarray
+        FourierZernikeBasis basis coefficients for ω.
+    iota : jnp.ndarray
+        Shape (lmbda.grid.num_rho, )
+
+    Returns
+    -------
+    lmbda_minus_iota_omega, modes
+        Spectral coefficients and modes.
+        Shape (num rho, num zeta, num modes).
+
+    """
+    grid = lmbda.grid
+    errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
+    # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
+    # TODO: (#568)
+    warnif(
+        grid.M > lmbda.basis.M,
+        ResolutionWarning,
+        msg="Poloidal grid resolution is higher than necessary for coordinate mapping.",
+    )
+    warnif(
+        grid.M < lmbda.basis.M,
+        ResolutionWarning,
+        msg="High frequency lambda modes will be truncated in coordinate mapping.",
+    )
+    lmbda_minus_iota_omega = lmbda.transform(L_lmn)
+    lmbda_minus_iota_omega = (
+        rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
+        .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
+        .divide(2)
+        * 2
+    )
+    return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
+
+
+@partial(jit, static_argnames=["tol", "maxiter"])
 def _map_clebsch_coordinates(
-    coords,
     iota,
+    alpha,
+    zeta,
     L_lmn,
-    L_basis,
+    lmbda,
     guess=None,
-    period=np.inf,
+    *,
     tol=1e-6,
     maxiter=30,
-    full_output=False,
     **kwargs,
 ):
     """Find θ for given Clebsch field line poloidal label α.
 
+    # TODO: input (rho, alpha, zeta) coordinates may be an arbitrary point cloud
+    #       and the partial summation will work without modification.
+    #       Clean up input parameter API to support this.
+
     Parameters
     ----------
-    coords : ndarray
-        Shape (k, 3).
-        Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
-        Each row is a different point in space.
     iota : ndarray
-        Shape (k, ).
-        Rotational transform on each node.
+        Shape (num iota, ).
+        Rotational transform.
+    alpha : ndarray
+        Shape (num alpha, ).
+        Field line labels.
+    zeta : ndarray
+        Shape (num zeta, ).
+        DESC toroidal angle.
     L_lmn : jnp.ndarray
-        Spectral coefficients for lambda.
-    L_basis : Basis
-        Spectral basis for lambda.
+        Spectral coefficients for λ.
+    lmbda : Transform
+        Transform for λ built on DESC coordinates [ρ, θ, ζ].
     guess : jnp.ndarray
-        Shape (k, ).
-        Optional initial guess for the computational coordinates.
-    period : float
-        Assumed periodicity for α.
-        Use ``np.inf`` to denote no periodicity.
+        Shape (num iota, num alpha, num zeta).
+        Optional initial guess for the DESC computational coordinate θ solution.
     tol : float
         Stopping tolerance.
     maxiter : int
         Maximum number of Newton iterations.
-    full_output : bool, optional
-        If True, also return a tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
         ``alpha``.
 
     Returns
     -------
-    out : ndarray
-        Shape (k, 3).
-        DESC computational coordinates [ρ, θ, ζ].
-    info : tuple
-        2 element tuple containing residuals and number of iterations for each point.
-        Only returned if ``full_output`` is True.
+    theta : ndarray
+        Shape (num iota, num alpha, num zeta).
+        DESC computational coordinates θ at given input meshgrid.
 
     """
     # noqa: D202
 
-    # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
-    def rootfun(theta, alpha, rho, zeta, iota):
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A = L_basis.evaluate(nodes)
-        lmbda = A @ L_lmn
-        alpha_k = theta + lmbda - iota * zeta
-        return _fixup_residual(alpha_k - alpha, period).squeeze()
+    def rootfun(theta, target, c_m):
+        c = (jnp.exp(1j * modes * theta) * c_m).real.sum()
+        target_k = theta + c
+        return target_k - target
 
-    def jacfun(theta, alpha, rho, zeta, iota):
-        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A1 = L_basis.evaluate(nodes, (0, 1, 0))
-        lmbda_t = jnp.dot(A1, L_lmn)
-        return 1 + lmbda_t.squeeze()
+    def jacfun(theta, target, c_m):
+        dc_dt = ((1j * jnp.exp(1j * modes * theta) * c_m).real * modes).sum()
+        return 1 + dc_dt
 
-    def fixup(x, *args):
-        return _periodic(x, period)
-
-    vecroot = jit(
-        vmap(
-            lambda x0, *p: root_scalar(
-                rootfun,
-                x0,
-                jac=jacfun,
-                args=p,
-                fixup=fixup,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
+    @partial(jnp.vectorize, signature="(),(),(m)->()")
+    def vecroot(guess, target, c_m):
+        return root_scalar(
+            rootfun,
+            guess,
+            jac=jacfun,
+            args=(target, c_m),
+            tol=tol,
+            maxiter=maxiter,
+            full_output=False,
+            **kwargs,
         )
-    )
-    rho, alpha, zeta = coords.T
-    if guess is None:
-        # Assume λ=0 for default initial guess.
-        guess = alpha + iota * zeta
-    if full_output:
-        theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
-    else:
-        theta = vecroot(guess, alpha, rho, zeta, iota)
 
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
-    if full_output:
-        return out, (res, niter)
-    return out
+    c_m, modes = _partial_sum(lmbda, L_lmn, None, None, iota)
+    c_m = c_m[:, jnp.newaxis]
+    target = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
+    # Assume λ − ι ω = 0 for default initial guess.
+    return vecroot(setdefault(guess, target), target, c_m)
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -578,111 +611,115 @@ def to_sfl(
     N_grid=None,
     rcond=None,
     copy=False,
+    tol=1e-9,
 ):
-    """Transform this equilibrium to use straight field line coordinates.
+    """Transform this equilibrium to use straight field line PEST coordinates.
 
     Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
     with respect to the straight field line coordinates, rather than the boundary
     coordinates. The new lambda value will be zero.
 
-    NOTE: Though the converted equilibrium will have the same flux surfaces,
-    the force balance error will likely be higher than the original equilibrium.
+    The flux surfaces of the returned equilibrium usually differ from the original
+    by 1% when the default resolution parameters are used.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use
     L : int, optional
-        radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+        Radial resolution to use for SFL equilibrium.
+        Default is ``3*eq.L``.
     M : int, optional
-        poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+        Poloidal resolution to use for SFL equilibrium.
+        Default is ``4*eq.M``.
     N : int, optional
-        toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+        toroidal resolution to use for SFL equilibrium.
+        Default is ``3*eq.N``.
     L_grid : int, optional
-        radial spatial resolution to use for fit to new basis. Default = 2*L
+        Radial grid resolution to use for fit to Zernike series.
+        Default is ``1.5*L``.
     M_grid : int, optional
-        poloidal spatial resolution to use for fit to new basis. Default = 2*M
+        Poloidal grid resolution to use for fit to Zernike series.
+        Default is ``1.5*M``.
     N_grid : int, optional
-        toroidal spatial resolution to use for fit to new basis. Default = 2*N
+        Toroidal grid resolution to use for fit to Fourier series.
+        Default is ``N``.
     rcond : float, optional
-        cutoff for small singular values in the least squares fit.
+        Cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
+    tol : float
+        Tolerance for coordinate mapping.
+        Default is ``1e-9``.
 
     Returns
     -------
-    eq_sfl : Equilibrium
+    eq_PEST : Equilibrium
         Equilibrium transformed to a straight field line coordinate representation.
 
     """
-    L = L or int(1.5 * eq.L)
-    M = M or int(1.5 * eq.M)
-    N = N or int(1.5 * eq.N)
-    L_grid = L_grid or int(2 * L)
-    M_grid = M_grid or int(2 * M)
-    N_grid = N_grid or int(2 * N)
+    L = L or int(3 * eq.L)
+    M = M or int(4 * eq.M)
+    N = N or int(3 * eq.N)
+    L_grid = L_grid or int(1.5 * L)
+    M_grid = M_grid or int(1.5 * M)
+    N_grid = N_grid or int(N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
-
-    toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
-    theta = grid.nodes[:, 1]
-    vartheta = theta + toroidal_coords["lambda"]
-    sfl_grid = Grid(np.array([grid.nodes[:, 0], vartheta, grid.nodes[:, 2]]).T)
-
-    bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
-    bdry_theta = bdry_grid.nodes[:, 1]
-    bdry_vartheta = bdry_theta + bdry_coords["lambda"]
-    bdry_sfl_grid = Grid(
-        np.array([bdry_grid.nodes[:, 0], bdry_vartheta, bdry_grid.nodes[:, 2]]).T
+    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
+    data = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
+    )
+    data_bdry = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(
+            eq.map_coordinates(
+                grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+            )
+        ),
     )
 
-    if copy:
-        eq_sfl = eq.copy()
-    else:
-        eq_sfl = eq
-    eq_sfl.change_resolution(L, M, N)
+    eq_PEST = eq.copy() if copy else eq
+    eq_PEST.change_resolution(L, M, N)
 
-    R_sfl_transform = Transform(
-        sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
-    )
-    R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
-    del R_sfl_transform  # these can take up a lot of memory so delete when done.
-
-    Z_sfl_transform = Transform(
-        sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
-    )
-    Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
-    del Z_sfl_transform
-    L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
-
-    R_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.R_basis,
+    eq_PEST.R_lmn = Transform(
+        grid_PEST,
+        eq_PEST.R_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    )
-    Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
-    del R_sfl_bdry_transform
+    ).fit(data["R"])
 
-    Z_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.Z_basis,
+    eq_PEST.Z_lmn = Transform(
+        grid_PEST,
+        eq_PEST.Z_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    )
-    Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
-    del Z_sfl_bdry_transform
+    ).fit(data["Z"])
 
-    eq_sfl.Rb_lmn = Rb_lmn_sfl
-    eq_sfl.Zb_lmn = Zb_lmn_sfl
-    eq_sfl.R_lmn = R_lmn_sfl
-    eq_sfl.Z_lmn = Z_lmn_sfl
-    eq_sfl.L_lmn = L_lmn_sfl
+    eq_PEST.L_lmn = np.zeros_like(eq_PEST.L_lmn)
 
-    return eq_sfl
+    eq_PEST.Rb_lmn = Transform(
+        grid_PEST_bdry,
+        eq_PEST.surface.R_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data_bdry["R"])
+
+    eq_PEST.Zb_lmn = Transform(
+        grid_PEST_bdry,
+        eq_PEST.surface.Z_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data_bdry["Z"])
+
+    return eq_PEST
 
 
 def get_rtz_grid(
@@ -770,45 +807,3 @@ def get_rtz_grid(
         **idx,
     )
     return desc_grid
-
-
-# TODO(#1383): deprecated, remove eventually
-def compute_theta_coords(
-    eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
-):
-    """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to use.
-    flux_coords : ndarray
-        Shape (k, 3).
-        Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-        Each row is a different point in space.
-    L_lmn : ndarray
-        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-    tol : float
-        Stopping tolerance.
-    maxiter : int
-        Maximum number of Newton iterations.
-    full_output : bool, optional
-        If True, also return a tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
-    kwargs : dict, optional
-        Additional keyword arguments to pass to ``root_scalar`` such as
-        ``maxiter_ls``, ``alpha``.
-
-    Returns
-    -------
-    coords : ndarray
-        Shape (k, 3).
-        DESC computational coordinates [ρ, θ, ζ].
-    info : tuple
-        2 element tuple containing residuals and number of iterations for each
-        point. Only returned if ``full_output`` is True.
-
-    """
-    return eq.compute_theta_coords(
-        flux_coords, L_lmn, tol, maxiter, full_output, **kwargs
-    )

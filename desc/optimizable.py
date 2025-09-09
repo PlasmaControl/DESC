@@ -16,6 +16,8 @@ class Optimizable(ABC):
     ``optimizable_parameter`` decorator.
     """
 
+    _static_attrs = ["_optimizable_params"]
+
     @property
     def optimizable_params(self):
         """list: string names of parameters that have been declared optimizable."""

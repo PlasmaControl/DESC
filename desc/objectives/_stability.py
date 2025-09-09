@@ -392,6 +392,14 @@ class BallooningStability(_Objective):
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_iota_keys",
+        "_Neigvals",
+        "_nturns",
+        "_nzetaperturn",
+        "_add_lcfs",
+    ]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Ideal ballooning lambda: "
@@ -533,6 +541,8 @@ class BallooningStability(_Objective):
             return x[:-1] if self._add_lcfs else x
 
         iota = get("iota")
+        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
+        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

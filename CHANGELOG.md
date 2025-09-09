@@ -4,6 +4,7 @@ Changelog
 New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adding AGNI, a finite-n ideal MHD stability solver and optimizer. The eigenvalues can be accessed using ``finite-n lambda'' whereas optimization against an instability can be performed using ``ObjectiveFunctionNameHere''.
 
 -
 Bug Fixes
@@ -35,6 +36,8 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+
 
 
 Bug Fixes

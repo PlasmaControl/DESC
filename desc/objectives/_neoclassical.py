@@ -180,7 +180,7 @@ class EffectiveRipple(_Objective):
         except ImportError:
             warnif(
                 nufft_eps >= 1e-14,
-                "\njax-finufft is not installed.\n"
+                msg="\njax-finufft is not installed.\n"
                 "Setting parameter nufft_eps to zero.\n"
                 "Performance will deteriorate significantly.\n",
             )

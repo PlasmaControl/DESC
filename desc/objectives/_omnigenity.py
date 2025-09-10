@@ -9,7 +9,6 @@ from desc.compute._omnigenity import (
     _B_omni_nonsymmetric,
     _omnigenity_mapping_OOPS,
     _omnigenity_mapping_LandremanForm,
-    _raised_cosine_shape_reg,
 )
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -983,7 +982,6 @@ class Isodynamicity(_Objective):
         )
         return data["isodynamicity"]
 
-
 class OmnigenityHarmonics(_Objective):
     """Omnigenity harmonics error.
 
@@ -1021,12 +1019,6 @@ class OmnigenityHarmonics(_Objective):
         Poloidal resolution of Spectral width. Default = field.M.
     N_harmonics : int, optional
         Toroidal resolution of Spectral width. Default = field.N.
-    S_function : callable, optional
-        Function S(η) defining the omnigenous field strength variation on a flux surface.
-        Required if `field_type='lcform'`.
-    D_function : callable, optional
-        Function D(η) defining the omnigenous field strength variation on a flux surface.
-        Required if `field_type='lcform'`.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
@@ -1106,14 +1098,6 @@ class OmnigenityHarmonics(_Objective):
         self.N_booz = N_booz
         self.M_harmonics = M_harmonics
         self.N_harmonics = N_harmonics
-
-        # if self._field_type == "lcform" and (S_function is None or D_function is None):
-        #     raise ValueError(
-        #         "S_function and D_function must be provided for 'lcform' field_type."
-        #     )
-        # self.S_function = S_function
-        # self.D_function = D_function
-
         self.S_function = None
         self.D_function = None
         if self._field_type == "lcform":
@@ -1276,7 +1260,6 @@ class OmnigenityHarmonics(_Objective):
 
         from desc.transform import Transform
         from desc.basis import DoubleFourierSeries
-        from desc.grid import Grid
 
         grid_B = LinearGrid(
             theta=field_grid.num_theta, zeta=field_grid.num_zeta, NFP=1, sym=False
@@ -1318,38 +1301,6 @@ class OmnigenityHarmonics(_Objective):
             )
             self._constants["eq_data"] = eq_data
         if self._field_fixed:
-            # if self._field_type == "desc":
-            #     # precompute the field data since it is fixed during the optimization
-            #     field_data = compute_fun(
-            #         "desc.magnetic_fields._core.OmnigenousField",
-            #         self._field_data_keys,
-            #         params=self._field.params_dict,
-            #         transforms=self._constants["field_transforms"],
-            #         profiles={},
-            #         helicity=self._constants["helicity"],
-            #     )
-            # elif self._field_type == "oops":
-            #     # precompute the field data since it is fixed during the optimization
-            #     field_data = compute_fun(
-            #         "desc.magnetic_fields._core.OmnigenousFieldOOPS",
-            #         self._field_data_keys,
-            #         params=self._field.params_dict,
-            #         transforms=self._constants["field_transforms"],
-            #         profiles={},
-            #         helicity=self._constants["helicity"],
-            #     )
-            # elif self._field_type == "lcform":
-            #     # precompute the field data since it is fixed during the optimization
-            #     field_data = compute_fun(
-            #         "desc.magnetic_fields._core.OmnigenousFieldLCForm",
-            #         self._field_data_keys,
-            #         params=self._field.params_dict,
-            #         transforms=self._constants["field_transforms"],
-            #         profiles={},
-            #         helicity=self._constants["helicity"],
-            #         S_func=self.S_function,
-            #         D_func=self.D_function,
-            #     )
             field_data = compute_fun(
                 self._field,
                 self._field_data_keys,
@@ -1502,7 +1453,6 @@ class OmnigenityHarmonics(_Objective):
                 zeta_B = field_data["zeta_B_LCForm"]
 
         # additional computations that cannot be part of the regular compute API
-
         def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
             nodes = jnp.vstack(
                 (
@@ -1535,11 +1485,6 @@ class OmnigenityHarmonics(_Objective):
         elif self._field_type == "oops" or self._field_type == "lcform":
             B_eta_alpha = B_eta_alpha[-1].flatten(order="F")
 
-        # This part try using transform method
-        # B_eta_alpha = B_eta_alpha.reshape(
-        #     (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
-        # )[-1].flatten(order="F")
-
         B_ea_mn = constants["field_transforms"]["|B|_eta_alpha"].fit(B_eta_alpha)
 
         modes_index_xm_non_zero = (
@@ -1547,40 +1492,3 @@ class OmnigenityHarmonics(_Objective):
         )
         B_ea_mn_non_zero = B_ea_mn[modes_index_xm_non_zero]
         return B_ea_mn_non_zero
-
-        # B_eta_alpha = B_eta_alpha.reshape(
-        #     (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
-        # )
-
-        # TODO: Need to figure out how to handle the matrix
-        # if self._field_type == "desc":
-        #     B_eta_alpha = B_eta_alpha[-1].T
-        # elif self._field_type == "oops" or self._field_type == "lcform":
-        #     B_eta_alpha = B_eta_alpha[-1]
-
-        # Now it only handle single surface
-        # omnigenity_error = _B_omni_nonsymmetric(
-        #     B_eta_alpha,
-        #     self.M_harmonics,
-        #     self.N_harmonics,
-        #     field_grid,
-        #     is_imag=self._is_imag,
-        # )
-
-        # reg = _raised_cosine_shape_reg(B_eta_alpha,
-        #     self.M_harmonics,
-        #     self.N_harmonics,
-        #     field_grid
-        # )
-
-        # return reg + 2*omnigenity_error
-
-        # omnigenity_non_error = _B_omni_nonsymmetric(
-        #     B_eta_alpha,
-        #     self.M_harmonics,
-        #     self.N_harmonics,
-        #     field_grid,
-        #     is_imag=self._is_imag,
-        # )
-
-        # return omnigenity_non_error

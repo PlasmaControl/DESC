@@ -42,8 +42,6 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
-    "plot_boozer_surface_LCForm",
-    "plot_boozer_surface_OOPS",
     "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",

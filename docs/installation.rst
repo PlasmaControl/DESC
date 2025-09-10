@@ -304,12 +304,23 @@ To verify your installation works, try the following.
 
     .. tab-item:: CPU
 
+        The following command should show an output stating the DESC version, the JAX version, and your device.
+
         .. code-block:: python
 
             from desc.backend import print_backend_info
             print_backend_info()
 
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
+
+        .. code-block:: sh
+
+            python -m desc -vv desc/examples/SOLOVEV
+
     .. tab-item:: CPU+GPU
+
+        The following command should show an output stating the DESC version, the JAX version, and your device.
 
         .. code-block:: python
 
@@ -318,19 +329,25 @@ To verify your installation works, try the following.
             from desc.backend import print_backend_info
             print_backend_info()
 
-You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
 
-You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__):
+        .. code-block:: sh
 
-.. code-block:: sh
+            python -m desc -vv desc/examples/SOLOVEV -g
 
-    python -m desc -vv desc/examples/SOLOVEV
+        If you installed DESC with FINUFFT on GPU, the following code should complete without error.
 
-For GPU, one can use,
+        .. code-block:: python
 
-.. code-block:: sh
-
-    python -m desc -vv desc/examples/SOLOVEV -g
+            from desc import set_device
+            from desc.examples import get
+            from desc.objectives import ObjectiveFunction, GammaC
+            set_device("gpu")
+            obj = ObjectiveFunction(GammaC(get("W7-X"), num_transit=1, num_pitch=1))
+            obj.build()
+            x = obj.x()
+            obj.compute_scaled_error(x).block_until_ready()
 
 
 Troubleshooting

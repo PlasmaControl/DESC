@@ -51,7 +51,7 @@ jobs:
           black desc/ tests/
 
       - name: Annotate diff changes using reviewdog
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@v1.22
         with:
           tool_name: blackfmt
 

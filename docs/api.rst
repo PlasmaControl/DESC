@@ -298,11 +298,6 @@ Particles
     desc.particles.ManualParticleInitializerLab
     desc.particles.SurfaceParticleInitializer
     desc.particles.VacuumGuidingCenterTrajectory
-
-.. autosummary::
-    :toctree: _api/particles
-    :recursive:
-
     desc.particles.trace_particles
 
 Perturbations

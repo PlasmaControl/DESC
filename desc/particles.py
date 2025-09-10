@@ -975,6 +975,8 @@ def trace_particles(
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
+    solver=Tsit5(),
+    adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
     options=None,
 ):
@@ -1013,6 +1015,13 @@ def trace_particles(
         When tracing a MagneticField, the default bounds are set to
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
         ``event`` is provided.
+    solver: diffrax.AbstractSolver, optional
+        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
+        explicit solver.
+    adjoint : diffrax.AbstractAdjoint, optional
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
     chunk_size : int, optional
         Chunk size for integration over particles. If not provided, the integration will
         be done over all particles at once without chunking.
@@ -1070,8 +1079,8 @@ def trace_particles(
         saveat=SaveAt(ts=ts),
         max_steps=max_steps,
         min_step_size=min_step_size,
-        solver=Tsit5(),
-        adjoint=RecursiveCheckpointAdjoint(),
+        solver=solver,
+        adjoint=adjoint,
         event=Event(default_event),
         chunk_size=chunk_size,
         options=options,
@@ -1120,13 +1129,6 @@ def _trace_particles(
     saveat : diffrax.SaveAt
         SaveAt object to specify where to save the output. If not provided, will
         save at the specified times in ts.
-    solver: diffrax.AbstractSolver
-        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
-        explicit solver.
-    adjoint : diffrax.AbstractAdjoint
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
-        supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
     event : diffrax.Event
         Custom event function to stop integration. If not provided, the default
         event function will be used, which stops integration when particles leave the

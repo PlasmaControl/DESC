@@ -24,7 +24,7 @@ from desc.equilibrium import Equilibrium
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot, errorif, safediv
+from desc.utils import cross, dot, errorif, safediv, setdefault
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
@@ -970,22 +970,18 @@ def trace_particles(
     model,
     ts,
     params=None,
-    stepsize_controller=None,
-    saveat=None,
     rtol=1e-8,
     atol=1e-8,
     max_steps=None,
     min_step_size=1e-8,
-    solver=Tsit5(),
-    adjoint=RecursiveCheckpointAdjoint(),
     bounds=None,
-    event=None,
     chunk_size=None,
     options=None,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
-    For jit friendly version of this function, see `_trace_particles`.
+    For jit friendly version of this function or to have more control over
+    the integration, see `_trace_particles`.
 
     Parameters
     ----------
@@ -1002,26 +998,13 @@ def trace_particles(
         Defaults to field.params_dict.
     rtol, atol : float, optional
         relative and absolute tolerances for PID stepsize controller. Not used if
-        ``stepsize_controller`` is provided.
-    stepsize_controller : diffrax.AbstractStepsizeController, optional
-        Stepsize controller to use for the integration. If not provided, a
-        PIDController with the given ``rtol`` and ``atol`` will be used.
-    saveat : diffrax.SaveAt, optional
-        SaveAt object to specify where to save the output. If not provided, will
-        save at the specified times in ts.
+        ``stepsize_controller`` is provided. Defaults to 1e-8
     max_steps : int
         maximum number of steps for whole integration. This will be passed
         to the diffrax.diffeqsolve function. Defaults to
-        (ts[1] - ts[0]) * 100 / min_step_size
+        (ts[1] - ts[0]) * 10 / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
-    solver: diffrax.AbstractSolver
-        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
-        explicit solver.
-    adjoint : diffrax.AbstractAdjoint
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
-        supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
     bounds : array of shape(3, 2), optional
         Bounds for particle tracing bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box. When tracing
@@ -1030,11 +1013,6 @@ def trace_particles(
         When tracing a MagneticField, the default bounds are set to
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
         ``event`` is provided.
-    event : diffrax.Event, optional
-        Custom event function to stop integration. If not provided, the default
-        event function will be used, which stops integration when particles leave the
-        bounds. If integration is stopped by the event, the output will contain NaN
-        values for the points outside the bounds.
     chunk_size : int, optional
         Chunk size for integration over particles. If not provided, the integration will
         be done over all particles at once without chunking.
@@ -1060,13 +1038,6 @@ def trace_particles(
     if not options:
         options = {}
 
-    stepsize_controller = (
-        stepsize_controller
-        if stepsize_controller is not None
-        else PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    )
-
-    saveat = saveat if saveat is not None else SaveAt(ts=ts)
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
         if isinstance(field, Equilibrium):
@@ -1084,12 +1055,8 @@ def trace_particles(
         k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
-    event = Event(default_event) if event is None else event
-    max_steps = (
-        max_steps
-        if max_steps is not None
-        else int((ts[1] - ts[0]) / min_step_size * 100)
-    )
+    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    max_steps = setdefault(max_steps, int((ts[1] - ts[0]) / min_step_size * 10))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(
@@ -1100,12 +1067,12 @@ def trace_particles(
         ts=ts,
         params=params,
         stepsize_controller=stepsize_controller,
-        saveat=saveat,
+        saveat=SaveAt(ts=ts),
         max_steps=max_steps,
         min_step_size=min_step_size,
-        solver=solver,
-        adjoint=adjoint,
-        event=event,
+        solver=Tsit5(),
+        adjoint=RecursiveCheckpointAdjoint(),
+        event=Event(default_event),
         chunk_size=chunk_size,
         options=options,
     )
@@ -1118,10 +1085,10 @@ def _trace_particles(
     model_args,
     ts,
     params,
-    stepsize_controller,
-    saveat,
     max_steps,
     min_step_size,
+    stepsize_controller,
+    saveat,
     solver,
     adjoint,
     event,
@@ -1134,12 +1101,9 @@ def _trace_particles(
     documentation, see `trace_particles`. This function takes the outputs of
     `initializer.init_particles` as inputs, rather than the particle initializer
     itself. There won't be any checks on the y0 and model_args inputs, so make sure
-    they are in the correct format. One can use this function in an objective, where
-    the initial positions and velocities of particles are computed in the `build`
-    method. If the objective requires initialization of particles at each iteration,
-    make sure that the initializer can work under jit compilation which is not the
-    case for all of them. All the arguments must be passed with a value, see
-    ``trace_particles`` for default values for common use.
+    they are in the correct format. One can use this function in an objective. All
+    the arguments must be passed with a value, see ``trace_particles`` for default
+    values for common use.
 
     Parameters
     ----------
@@ -1150,6 +1114,24 @@ def _trace_particles(
         Additional arguments needed by the model, such as mass, charge, and
         magnetic moment (mv⊥²/2|B|) of each particle. The second output of
         ``initializer.init_particles``.
+    stepsize_controller : diffrax.AbstractStepsizeController
+        Stepsize controller to use for the integration. If not provided, a
+        PIDController with the given ``rtol`` and ``atol`` will be used.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify where to save the output. If not provided, will
+        save at the specified times in ts.
+    solver: diffrax.AbstractSolver
+        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
+        explicit solver.
+    adjoint : diffrax.AbstractAdjoint
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    event : diffrax.Event
+        Custom event function to stop integration. If not provided, the default
+        event function will be used, which stops integration when particles leave the
+        bounds. If integration is stopped by the event, the output will contain NaN
+        values for the points outside the bounds.
     """
     # convert cartesian-like for integration in flux coordinates
     if isinstance(field, Equilibrium):
@@ -1214,7 +1196,7 @@ def _intfun_wrapper(
 ):
     """Wrapper for the integration function for vectorized inputs.
 
-    Defining a lambda function inside the ``trace_particles`` function leads
+    Defining a lambda function inside the ``_trace_particles`` function leads
     to recompilations, so instead we define the wrapper here.
     """
     return diffeqsolve(

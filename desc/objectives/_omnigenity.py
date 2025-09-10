@@ -6,7 +6,6 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import (
     _omnigenity_mapping,
-    _B_omni_nonsymmetric,
     _omnigenity_mapping_OOPS,
     _omnigenity_mapping_LandremanForm,
 )

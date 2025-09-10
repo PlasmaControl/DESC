@@ -292,17 +292,14 @@ class PiecewiseChebyshevSeries(IOAble):
         Chebyshev coefficients αₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
-    tag : str
-        Optional tag to remind shape of input.
 
     """
 
-    def __init__(self, cheb, domain=(-1, 1), tag="?"):
+    def __init__(self, cheb, domain=(-1, 1)):
         """Make piecewise series from given Chebyshev coefficients."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.cheb = jnp.atleast_2d(cheb)
         self.domain = domain
-        self._tag = tag
 
     @property
     def X(self):
@@ -313,11 +310,6 @@ class PiecewiseChebyshevSeries(IOAble):
     def Y(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
-
-    @property
-    def tag(self):
-        """Optional string tag specified by user to remind shape of input."""
-        return self._tag + f" = {self.cheb.shape}"
 
     def stitch(self):
         """Enforce continuity of the piecewise series."""

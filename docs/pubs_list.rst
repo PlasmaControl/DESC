@@ -7,15 +7,13 @@ Below is a running list of papers which utilize or build on the software.
 *Help keep this page up to date as new papers come out and publication details change.
 Open an issue on GitHub with suggestions on things to update.*
 
+Extending DESC
+--------------------
+
 #. D.W. Dudt and E. Kolemen. (2020).
    DESC: A stellarator equilibrium solver.
    [`Physics of Plasmas <https://doi.org/10.1063/5.0020743>`__]
    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2020/dudt2020desc.pdf>`__]
-
-#. M. Landreman. (2022).
-   Mapping the space of quasisymmetric stellarators using optimized near-axis expansion.
-   [`Journal of Plasma Physics <https://doi.org/10.1017/S0022377822001258>`__]
-   [`pdf <https://arxiv.org/abs/2209.11849>`__]
 
 #. D. Panici, R. Conlin, D.W. Dudt, K.E. Unalmis, and E. Kolemen. (2023).
    The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations.
@@ -57,15 +55,38 @@ Open an issue on GitHub with suggestions on things to update.*
    its applications.
    [`pdf <https://arxiv.org/abs/2412.01724>`__]
 
+#. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
+   High Order Free Boundary MHD Equilibria in DESC.
+   [`pdf <https://arxiv.org/abs/2412.05680>`__]
+
+#. R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis, Y. Elmacioglu,
+   D.W. Dudt, R. Conlin, and E. Kolemen. (2025).
+   Omnigenous umbilic stellarators.
+   [`pdf <https://arxiv.org/abs/2505.04211>`__]
+
+#. D. Panici, E. Rodriguez, R. Conlin, D.W. Dudt, and E. Kolemen. (2025).
+   Extending near-axis equilibria in DESC.
+   [`pdf <https://arxiv.org/abs/2506.05170>`__]
+
+#. D. Panici et al. (2025).
+   Surface Current Optimization and Coil-Cutting Algorithms for Stage-Two
+   Stellarator Optimization.
+   [`pdf <https://arxiv.org/abs/2508.09321>`__]
+
+
+Applying DESC
+--------------------
+
+#. M. Landreman. (2022).
+   Mapping the space of quasisymmetric stellarators using optimized near-axis expansion.
+   [`Journal of Plasma Physics <https://doi.org/10.1017/S0022377822001258>`__]
+   [`pdf <https://arxiv.org/abs/2209.11849>`__]
+
 #. R. Nies, E.J. Paul, D. Panici, S.R. Hudson, and A. Bhattacharjee. (2024).
    Exploration of the parameter space of quasisymmetric stellarator vacuum fields
    through adjoint optimization.
    [`Journal of Plasma Physics <https://doi.org/10.1017/S002237782400093X>`__]
    [`pdf <https://arxiv.org/abs/2404.02240>`__]
-
-#. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
-   High Order Free Boundary MHD Equilibria in DESC.
-   [`pdf <https://arxiv.org/abs/2412.05680>`__]
 
 #. C.P.S. Swanson, D.A. Gates, S.T.A. Kumar, M.F. Martin, T.G. Kruger, D.W. Dudt,
    P.J. Bonofiglo, and the Thea Energy team. (2025).
@@ -90,19 +111,10 @@ Open an issue on GitHub with suggestions on things to update.*
    SPEC calculations with elliptical geometry.
    [`Physics of Plasmas <https://doi.org/10.1063/5.0253843>`__]
 
-#. R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis, Y. Elmacioglu,
-   D.W. Dudt, R. Conlin, and E. Kolemen. (2025).
-   Omnigenous umbilic stellarators.
-   [`pdf <https://arxiv.org/abs/2505.04211>`__]
-
 #. L. Fu, E. Rodriguez, R. Conlin, and A. Bhattacharjee. (2025).
    Numerical asymptotics of near-axis expansions of quasisymmetric
    magnetohydrostatic equilibria with anisotropic pressure.
    [`pdf <https://arxiv.org/abs/2505.20475>`__]
-
-#. D. Panici, E. Rodriguez, R. Conlin, D.W. Dudt, and E. Kolemen. (2025).
-   Extending near-axis equilibria in DESC.
-   [`pdf <https://arxiv.org/abs/2506.05170>`__]
 
 #. S.A. Cadena et al. (2025).
    ConStellaration: A dataset of QI-like stellarator plasma boundaries
@@ -120,11 +132,6 @@ Open an issue on GitHub with suggestions on things to update.*
    Planar coil optimization for the Eos stellarator using sparse regression.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/adb5b7>`__]
    [`pdf <https://arxiv.org/abs/2502.07702>`__]
-
-#. D. Panici et al. (2025).
-   Surface Current Optimization and Coil-Cutting Algorithms for Stage-Two
-   Stellarator Optimization.
-   [`pdf <https://arxiv.org/abs/2508.09321>`__]
 
 #. T. Jeong, J. Jang, D. Panici, R. Gaur, H. Liu, R. Conlin, C. Zhu,
    E. Kolemen, and J.-K. Park. (2025).

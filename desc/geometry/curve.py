@@ -6,7 +6,9 @@ import warnings
 import numpy as np
 
 from desc.backend import jnp, put
-from desc.basis import FourierSeries
+from desc.basis import ChebyshevSeries, FourierSeries
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import rotation_matrix
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -62,6 +64,8 @@ class FourierRZCurve(Curve):
         "_Z_basis",
         "_sym",
         "_NFP",
+        "_mirror",
+        "_length",
     ]
 
     _static_attrs = Curve._static_attrs + ["_sym", "_NFP", "_R_basis", "_Z_basis"]
@@ -75,6 +79,8 @@ class FourierRZCurve(Curve):
         NFP=1,
         sym="auto",
         name="",
+        mirror=False,
+        length=None,
     ):
         super().__init__(name)
         R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
@@ -102,16 +108,53 @@ class FourierRZCurve(Curve):
                 sym = True
             else:
                 sym = False
+
+        self._mirror = mirror
+        if self.mirror:
+            assert (sym == False) or (sym == None), NotImplementedError(
+                f"mirror sym expected false or None but given {sym}"
+            )
+            assert NFP == 1, NotImplementedError(
+                f"mirror NFP expected 1 but given {NFP}"
+            )
+            Basis = ChebyshevSeries
+
+        else:
+            Basis = FourierSeries
+
         self._sym = sym
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
+
+        self._NFP = int(NFP)
+        self._R_basis = Basis(N, int(NFP), sym="cos" if sym else False)
+        self._Z_basis = Basis(N, int(NFP), sym="sin" if sym else False)
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
+
+        if self.mirror:
+            if length == None:
+                self.length = self.R_n[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+            else:
+                self.length = length
+        else:
+            self.length = None
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror"""
+        return self._mirror
+
+    @property
+    def length(self):
+        """float or None: length of the mirror"""
+        return self._length
+
+    @length.setter
+    def length(self, new):
+        self._length = new
 
     @property
     def sym(self):

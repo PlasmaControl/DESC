@@ -521,7 +521,8 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit.
+        θ over one toroidal transit. ``T.cheb`` broadcasts with
+        shape (num rho, num alpha, num transit, Y).
 
     Notes
     -----
@@ -571,7 +572,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     domain = (0, 2 * jnp.pi)
     T = FourierChebyshevSeries(theta, domain).compute_cheb(fieldline).swapaxes(0, -3)
-    T = PiecewiseChebyshevSeries(T, domain, "(nᵨ, n_α, nₜᵣₐₙₛᵢₜ, n_cheb)")
+    T = PiecewiseChebyshevSeries(T, domain)
     T.stitch()
     assert T.cheb.shape == (
         *theta.shape[:-2],
@@ -591,7 +592,8 @@ def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit.
+        θ over one toroidal transit. ``T.cheb`` should broadcast with
+        shape (num rho, num alpha, num transit, T.Y).
     f : jnp.ndarray
         Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -616,11 +618,10 @@ def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
         Set of 1D Chebyshev spectral coefficients of ``f`` on field lines.
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        ``f`` over one toroidal transit.
+        ``f`` over one toroidal transit. ``f.cheb`` broadcasts with
+        shape (num rho, num alpha, num transit, Y).
 
     """
-    tag = "(nᵨ, n_α, nₜᵣₐₙₛᵢₜ, n_cheb)"
-    assert T._tag == tag
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
     # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| = Y.
@@ -637,7 +638,7 @@ def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     )[..., None, None, :, :]
     f = irfft_mmt(T.evaluate(Y), f, num_theta, _modes=m_modes)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
-    f = PiecewiseChebyshevSeries(f, T.domain, tag)
+    f = PiecewiseChebyshevSeries(f, T.domain)
     assert f.cheb.shape == (*T.cheb.shape[:-1], Y)
     return f
 
@@ -664,7 +665,8 @@ def fast_cubic_spline(
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit.
+        θ over one toroidal transit. ``T.cheb`` should broadcast with
+        shape (num rho, num alpha, num transit, T.Y).
     f : jnp.ndarray
         Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -703,7 +705,7 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert (not check) or (T._tag == "(nᵨ, n_α, nₜᵣₐₙₛᵢₜ, n_cheb)" and T.cheb.ndim >= 3)
+    assert T.cheb.ndim >= 3
     lines = T.cheb.shape[:-2]
 
     num_zeta = (Y + NFP - 1) // NFP

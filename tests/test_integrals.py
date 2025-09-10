@@ -904,8 +904,7 @@ class TestBouncePoints:
         cheb = FourierChebyshevSeries(f(zeta).reshape(X, Y)).compute_cheb(
             fourier_pts(X)
         )
-        cheb = PiecewiseChebyshevSeries(cheb, tag="(n_alpha, n_cheb)")
-        print(cheb.tag)
+        cheb = PiecewiseChebyshevSeries(cheb)
         pitch_inv = 3
         z1, z2 = cheb.intersect1d(pitch_inv)
         cheb.check_intersect1d(z1, z2, pitch_inv)

@@ -122,10 +122,10 @@ On Your Local Machine
             conda create --name desc-env -c conda-forge 'python>=3.10, <=3.13' 'fftw' 'gxx<12'
             conda activate desc-env
 
-            export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             sed -i '/^jax-finufft/d' requirements.txt
 
+            export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
             pip install --editable .
             pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
 
@@ -246,10 +246,10 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
                 conda create --name desc-env -c conda-forge 'python=3.12' 'fftw' 'gxx<12'
                 conda activate desc-env
 
-                export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
                 sed -i '/^jax-finufft/d' requirements.txt
 
+                export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 pip install --editable .
                 pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
 
@@ -326,6 +326,7 @@ To verify your installation works, try the following.
 
             from desc import set_device
             set_device('gpu')
+
             from desc.backend import print_backend_info
             print_backend_info()
 
@@ -341,9 +342,11 @@ To verify your installation works, try the following.
         .. code-block:: python
 
             from desc import set_device
+            set_device("gpu")
+
             from desc.examples import get
             from desc.objectives import ObjectiveFunction, GammaC
-            set_device("gpu")
+
             obj = ObjectiveFunction(GammaC(get("W7-X"), num_transit=1, num_pitch=1))
             obj.build()
             x = obj.x()

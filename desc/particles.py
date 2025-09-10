@@ -604,7 +604,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             # guess for jit purposes
             x_guess = jnp.zeros(x.shape)
             x_guess = x_guess.at[:, 2].set(self.phi0)
-            x_guess = x_guess.at[:, 1].set(jnp.arctan2(self.Z0, self.R0))
+            x_guess = x_guess.at[:, 1].set(
+                jnp.arctan2(self.Z0, self.R0 - field.compute("R0")["R0"])
+            )
             tol = 1e-8
             x, out = field.map_coordinates(
                 coords=x,
@@ -669,8 +671,8 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
-    ensure_axis : bool
-        Whether to ensure the given curve is the magnetic axis of the equilibrium.
+    is_curve_magnetic_axis : bool
+        Whether user ensures the given curve is the magnetic axis of the equilibrium.
         If True, additional coordinate mapping is not performed, and particles are
         initialized directly on the magnetic axis. Defaults to False. Before setting
         this to True, please make sure the curve is indeed the magnetic axis of the
@@ -678,7 +680,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         ``eq.get_axis()``.
     """
 
-    _static_attrs = ["N", "ensure_axis"]
+    _static_attrs = ["N", "is_curve_magnetic_axis"]
 
     def __init__(
         self,
@@ -691,7 +693,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         xi_max=1,
         grid=None,
         seed=0,
-        ensure_axis=False,
+        is_curve_magnetic_axis=False,
     ):
         self.curve = curve
         E, m, q = map(jnp.atleast_1d, (E, m, q))
@@ -703,7 +705,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
-        self.ensure_axis = ensure_axis
+        self.is_curve_magnetic_axis = is_curve_magnetic_axis
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -758,7 +760,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            if not self.ensure_axis:
+            if not self.is_curve_magnetic_axis:
                 tol = 1e-8
                 x, out = field.map_coordinates(
                     coords=x,
@@ -824,15 +826,15 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
-    ensure_from_eq : bool
-        Whether to ensure the given surface is obtained through
+    is_surface_from_eq : bool
+        Whether user ensures the given surface is obtained through
         ``eq.get_surface_at(rho=...)``. If True, additional coordinate mapping is not
         performed, and particles are initialized directly on the flux surface. Defaults
         to False. Before setting this to True, make sure the surface and Equilibrium
         have the same theta and rho definitions.
     """
 
-    _static_attrs = ["N", "ensure_from_eq"]
+    _static_attrs = ["N", "is_surface_from_eq"]
 
     def __init__(
         self,
@@ -845,7 +847,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         xi_max=1,
         grid=None,
         seed=0,
-        ensure_from_eq=False,
+        is_surface_from_eq=False,
     ):
         self.surface = surface
         E, m, q = map(jnp.atleast_1d, (E, m, q))
@@ -857,7 +859,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
-        self.ensure_from_eq = ensure_from_eq
+        self.is_surface_from_eq = is_surface_from_eq
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -918,7 +920,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            if not self.ensure_from_eq:
+            if not self.is_surface_from_eq:
                 tol = 1e-8
                 x, out = field.map_coordinates(
                     coords=x,

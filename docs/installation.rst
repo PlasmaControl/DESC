@@ -127,7 +127,7 @@ On Your Local Machine
             sed -i '/^jax-finufft/d' requirements.txt
 
             pip install --editable .
-            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary='jax-finufft >= 1.1.0' 'jax-finufft >= 1.1.0'
+            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
 
         Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
         in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
@@ -234,7 +234,7 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
             If the following instructions do not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
-            These instructions were verified to work on the Della and Stellar clusters at Princeton on August 26, 2025.
+            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
 
             .. code-block:: sh
 
@@ -251,7 +251,7 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
                 sed -i '/^jax-finufft/d' requirements.txt
 
                 pip install --editable .
-                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary='jax-finufft >= 1.1.0' 'jax-finufft >= 1.1.0'
+                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
 
             Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
             in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.

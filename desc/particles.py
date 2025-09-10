@@ -747,11 +747,6 @@ class CurveParticleInitializer(AbstractParticleInitializer):
 
         # positions of the selected nodes in R, phi, Z coordinates
         x = jnp.take(data["x"], self._chosen_idxs, axis=0)
-        zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
-        # this is not the best guess, but most likely scenario for this class
-        # is to initialize particles on the magnetic axis, for sake of jitable
-        # implementation, we use rho=0, theta=0 as the guess
-        x_guess = jnp.array([jnp.zeros(self.N), jnp.zeros(self.N), zeta]).T
         params = field.params_dict
 
         if model.frame == "flux":
@@ -760,6 +755,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
+            zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
+            # this is not the best guess, but most likely scenario for this class
+            # is to initialize particles on the magnetic axis, for sake of jitable
+            # implementation, we use rho=0, theta=0 as the guess
+            x_guess = jnp.array([jnp.zeros(self.N), jnp.zeros(self.N), zeta]).T
             if not self.is_curve_magnetic_axis:
                 tol = 1e-8
                 x, out = field.map_coordinates(
@@ -901,14 +901,6 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             replace=True,
             p=sqrtg / sqrtg.sum(),
         )
-        # eq and surface might not have the same theta definition, so we will do a
-        # root finding to find the correct theta and zeta coordinates from R, phi, Z
-        # coordinates. We will use the surface's rho, theta, zeta coordinates as an
-        # initial guess for the root finding.
-        zeta = jnp.take(data["zeta"], self._chosen_idxs, axis=0)
-        theta = jnp.take(data["theta"], self._chosen_idxs, axis=0)
-        rho = self.surface.rho * jnp.ones_like(zeta)
-        x_guess = jnp.array([rho, theta, zeta]).T
         # positions of the selected nodes in R, phi, Z coordinates
         x = jnp.take(data["x"], self._chosen_idxs, axis=0)
 
@@ -920,6 +912,14 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
+            # eq and surface might not have the same theta definition, so we will do a
+            # root finding to find the correct theta and zeta coordinates from R, phi, Z
+            # coordinates. We will use the surface's rho, theta, zeta coordinates as an
+            # initial guess for the root finding.
+            zeta = jnp.take(data["zeta"], self._chosen_idxs, axis=0)
+            theta = jnp.take(data["theta"], self._chosen_idxs, axis=0)
+            rho = self.surface.rho * jnp.ones_like(zeta)
+            x_guess = jnp.array([rho, theta, zeta]).T
             if not self.is_surface_from_eq:
                 tol = 1e-8
                 x, out = field.map_coordinates(

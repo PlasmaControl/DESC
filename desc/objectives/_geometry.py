@@ -510,6 +510,15 @@ class PlasmaVesselDistance(_Objective):
         bounds_default="``bounds=(1,np.inf)``.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_equil_data_keys",
+        "_surface_fixed",
+        "_surface_data_keys",
+        "_use_signed_distance",
+        "_use_softmin",
+    ]
+
     _coordinates = "rtz"
     _units = "(m)"
     _print_value_fmt = "Plasma-vessel distance: "

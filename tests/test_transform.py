@@ -361,15 +361,16 @@ class TestTransform:
         basis2 = FourierSeries(N, NFP, sym="sin")
         basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
 
-        t1f.change_resolution(grid, basis1)
-        t2f.change_resolution(grid, basis2)
-        t3f.change_resolution(grid, basis3)
-        t1d1.change_resolution(grid, basis1)
-        t2d1.change_resolution(grid, basis2)
-        t3d1.change_resolution(grid, basis3)
-        t1d2.change_resolution(grid, basis1)
-        t2d2.change_resolution(grid, basis2)
-        t3d2.change_resolution(grid, basis3)
+        # should pass the methods, otherwise default might change
+        t1f.change_resolution(grid, basis1, method="fft")
+        t2f.change_resolution(grid, basis2, method="fft")
+        t3f.change_resolution(grid, basis3, method="fft")
+        t1d1.change_resolution(grid, basis1, method="direct1")
+        t2d1.change_resolution(grid, basis2, method="direct1")
+        t3d1.change_resolution(grid, basis3, method="direct1")
+        t1d2.change_resolution(grid, basis1, method="direct2")
+        t2d2.change_resolution(grid, basis2, method="direct2")
+        t3d2.change_resolution(grid, basis3, method="direct2")
 
         for d in t1f.derivatives:
             dr = d[0]

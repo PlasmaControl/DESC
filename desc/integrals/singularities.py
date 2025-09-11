@@ -1029,7 +1029,7 @@ def compute_B_plasma(
     The magnetic field due to the plasma current can be written as a Biot-Savart
     integral over the plasma volume:
 
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/| 𝐫 − 𝐫' |³ d³𝐫'
 
     Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
     a point in the plasma volume.
@@ -1037,14 +1037,14 @@ def compute_B_plasma(
     This 3D integral can be converted to a 2D integral over the plasma boundary using
     the virtual casing principle [1]_
 
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
-            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/| 𝐫 − 𝐫' |³ d²𝐫'
+            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ | 𝐫 − 𝐫' |³ d²𝐫'
             + 𝐁(𝐫)/2
 
     Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
     Because the total field is tangent, the first term in the integrand is zero leaving
 
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ | 𝐫 − 𝐫' |³ d²𝐫' + 𝐁(𝐫)/2
 
     Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
 

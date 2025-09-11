@@ -24,10 +24,8 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        Unless ``fwd`` is specified, ``jac_chunk_size=1`` is recommended to reduce
-        memory consumption. In ``rev`` mode, reducing the pitch angle parameter
-        ``pitch_batch_size`` does not reduce memory consumption, so it is recommended
-        to retain the default for that.
+        In ``rev`` mode, reducing the pitch angle parameter ``pitch_batch_size`` does not
+        reduce memory consumption, so it is recommended to retain the default for that.
         """
 }
 

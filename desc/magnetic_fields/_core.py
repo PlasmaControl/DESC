@@ -2626,7 +2626,9 @@ def field_line_integrate(
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
     options : dict, optional
-        Additional arguments to pass to the diffrax diffeqsolve.
+        Additional arguments to pass to the diffrax diffeqsolve. If user wants to
+        provide ``stepsize_controller``, ``saveat``, ``event``, or ``adjoint``, they
+        should use ``_field_line_integrate``.
 
     Returns
     -------
@@ -2637,6 +2639,12 @@ def field_line_integrate(
     if options is None:
         options = {}
 
+    assert not {"stepsize_controller", "saveat", "event", "adjoint"} & set(
+        options.keys()
+    ), (
+        "To provide stepsize_controller, saveat, event, or adjoint, use "
+        "`_field_line_integrate`."
+    )
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
 

@@ -3,7 +3,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from diffrax import Dopri5
+from diffrax import (
+    Dopri5,
+    Event,
+    PIDController,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    Tsit5,
+)
 from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp
@@ -30,6 +37,7 @@ from desc.magnetic_fields import (
     read_BNORM_file,
     solve_regularized_surface_current,
 )
+from desc.magnetic_fields._core import _field_line_integrate
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
 from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
@@ -1202,23 +1210,82 @@ class TestMagneticFields:
 
     @pytest.mark.unit
     def test_field_line_integrate_jax_transforms(self, capsys):
-        """Test field line integration JAX transformable."""
+        """Test field line integration is JAX transformable."""
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        r0 = [10.001]
-        z0 = [0.0]
-        phis = [0, 2 * np.pi]
+        r0 = np.array([10.001])
+        z0 = np.array([0.0])
+        phis = np.array([0, 2 * np.pi])
 
-        def fun0(r0, z0, field):
-            return field_line_integrate(r0, z0, phis, field, max_steps=1000)
+        def default_terminating_event(t, y, args, **kwargs):
+            return jnp.logical_or(y[0] < 0, y[0] > np.inf)
+
+        # close over unhashable objects
+        solver = Tsit5()
+        saveat = SaveAt(ts=phis)
+        stepsize_controller = PIDController(rtol=1e-6, atol=1e-6)
+        event = Event(default_terminating_event)
+        adjoint = RecursiveCheckpointAdjoint()
+
+        def fun0(
+            r0,
+            z0,
+            phis,
+            field,
+            params,
+            source_grid,
+            max_steps,
+            min_step_size,
+            chunk_size,
+            options,
+        ):
+            return _field_line_integrate(
+                r0,
+                z0,
+                phis=phis,
+                field=field,
+                params=params,
+                source_grid=source_grid,
+                solver=solver,
+                max_steps=max_steps,
+                min_step_size=min_step_size,
+                saveat=saveat,
+                stepsize_controller=stepsize_controller,
+                event=event,
+                adjoint=adjoint,
+                chunk_size=chunk_size,
+                options=options,
+            )
 
         # check if it is jittable
-        r, z = jit(fun0)(r0, z0, field)
+        r, z = jit(fun0, static_argnames="max_steps")(
+            r0,
+            z0,
+            phis,
+            field=field,
+            params=None,
+            source_grid=None,
+            max_steps=1000,
+            min_step_size=1e-8,
+            chunk_size=None,
+            options={},
+        )
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
         # make sure that the function is not recompiled
         with jax.log_compiles():
-            r, z = jit(fun0)([10.002], z0, field)
+            r, z = jit(fun0, static_argnames="max_steps")(
+                np.array([10.002]),
+                z0,
+                phis,
+                field=field,
+                params=None,
+                source_grid=None,
+                max_steps=1000,
+                min_step_size=1e-8,
+                chunk_size=None,
+                options={},
+            )
 
         out = capsys.readouterr()
         assert out.out == ""
@@ -1228,8 +1295,24 @@ class TestMagneticFields:
         fieldT = ToroidalMagneticField(2, 10)
 
         def fun(r0):
-            r0 = [r0]
-            r, _ = field_line_integrate(r0, z0, phis, fieldT, max_steps=1000)
+            r0 = jnp.array([r0])
+            r, _ = _field_line_integrate(
+                r0,
+                z0,
+                phis=phis,
+                field=fieldT,
+                params=None,
+                source_grid=None,
+                solver=solver,
+                max_steps=1000,
+                min_step_size=1e-8,
+                saveat=saveat,
+                stepsize_controller=stepsize_controller,
+                event=event,
+                adjoint=adjoint,
+                chunk_size=None,
+                options={},
+            )
             return jnp.squeeze(r[-1])
 
         df_dr = jax.grad(jit(fun))(10.1)

@@ -89,10 +89,11 @@ On Your Local Machine
                 # run jupyter
                 uv run --with jupyter jupyter lab
 
-    .. tab-item:: CPU+GPU
+    .. tab-item:: CPU+GPU (partial support)
 
         For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
+        These instructions install GPU support for a subset of the features in DESC.
 
         .. code-block:: sh
 
@@ -104,7 +105,32 @@ On Your Local Machine
             pip install --editable .
 
         Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
-        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
+
+        You may optionally install developer requirements if you want to run tests.
+
+        .. code-block:: sh
+
+            pip install -r devtools/dev-requirements.txt
+
+    .. tab-item:: CPU+GPU (with FINUFFT)
+
+        .. code-block:: sh
+
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
+            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.13' 'fftw' 'gxx<12'
+            conda activate desc-env
+
+            sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+            sed -i '/^jax-finufft/d' requirements.txt
+
+            export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
+            pip install --editable .
+            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+
+        Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
 
         You may optionally install developer requirements if you want to run tests.
 
@@ -208,18 +234,27 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
             If the following instructions do not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
-            These instructions were verified to work on the Della and Stellar clusters at Princeton on June 4, 2025.
-
-            First install DESC with CPU support.
+            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
 
             .. code-block:: sh
 
                 module load anaconda3/2024.10
-                conda create --name desc-env python=3.12 -y
-                conda activate desc-env
+                module load cudatoolkit/12.9
+
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
+                conda create --name desc-env -c conda-forge 'python=3.12' 'fftw' 'gxx<12'
+                conda activate desc-env
+
+                sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+                sed -i '/^jax-finufft/d' requirements.txt
+
+                export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 pip install --editable .
+                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+
+            Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+            in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
 
             You may optionally install developer requirements if you want to run tests.
 
@@ -227,12 +262,6 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
                 pip install -r devtools/dev-requirements.txt
 
-            Now install the gpu-compatible JAX that matches the version required by DESC.
-            Do not use the ``--upgrade`` or ``-U`` flags as that may install an incompatible version of JAX.
-
-            .. code-block:: sh
-
-                pip install "jax[cuda12]"
 
         .. dropdown:: RAVEN (IPP, Germany)
 
@@ -275,33 +304,53 @@ To verify your installation works, try the following.
 
     .. tab-item:: CPU
 
+        The following command should show an output stating the DESC version, the JAX version, and your device.
+
         .. code-block:: python
 
             from desc.backend import print_backend_info
             print_backend_info()
 
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
+
+        .. code-block:: sh
+
+            python -m desc -vv desc/examples/SOLOVEV
+
     .. tab-item:: CPU+GPU
+
+        The following command should show an output stating the DESC version, the JAX version, and your device.
 
         .. code-block:: python
 
             from desc import set_device
             set_device('gpu')
+
             from desc.backend import print_backend_info
             print_backend_info()
 
-You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
 
-You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__):
+        .. code-block:: sh
 
-.. code-block:: sh
+            python -m desc -vv desc/examples/SOLOVEV -g
 
-    python -m desc -vv desc/examples/SOLOVEV
+        If you installed DESC with FINUFFT on GPU, the following code should complete without error.
 
-For GPU, one can use,
+        .. code-block:: python
 
-.. code-block:: sh
+            from desc import set_device
+            set_device("gpu")
 
-    python -m desc -vv desc/examples/SOLOVEV -g
+            from desc.examples import get
+            from desc.objectives import ObjectiveFunction, GammaC
+
+            obj = ObjectiveFunction(GammaC(get("W7-X"), num_transit=1, num_pitch=1))
+            obj.build()
+            x = obj.x()
+            obj.compute_scaled_error(x).block_until_ready()
 
 
 Troubleshooting

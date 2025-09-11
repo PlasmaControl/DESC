@@ -2626,7 +2626,7 @@ def _B_dot_grad_grad_rho(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="finite-n instability drive",
     label="(\\mathbf{J} \\times (\\nabla \\rho))/{(g^{\\rho \\rho})}^2"
-    + " \\mathbf{B} \\cdot \\cdot \\mathbf{\\nabla} (\\mathbf{\\nabla} \\rho)",
+    + " \\mathbf{B} \\cdot \\mathbf{\\nabla} (\\mathbf{\\nabla} \\rho)",
     units="T A \\cdot m^{-1}",
     units_long="Tesla Amperes / meter",
     description="finite-n instability drive term",

@@ -604,9 +604,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             # guess for jit purposes
             x_guess = jnp.zeros(x.shape)
             x_guess = x_guess.at[:, 2].set(self.phi0)
-            x_guess = x_guess.at[:, 1].set(
-                jnp.arctan2(self.Z0, self.R0 - field.compute("R0")["R0"])
-            )
+            x_guess = x_guess.at[:, 1].set(jnp.arctan2(self.Z0, self.R0))
             tol = 1e-8
             x, out = field.map_coordinates(
                 coords=x,

@@ -2585,10 +2585,6 @@ def field_line_integrate(
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
-    stepsize_controller=None,
-    saveat=None,
-    event=None,
-    adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
     options=None,
 ):
@@ -2612,7 +2608,7 @@ def field_line_integrate(
         ``stepsize_controller`` is provided.
     max_steps : int
         maximum number of steps for the integration. Defaults to
-        abs((phis[-1] - phis[0]) / min_step_size * 1000)
+        abs((phis[-1] - phis[0]) * 1000)
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver
@@ -2626,19 +2622,6 @@ def field_line_integrate(
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box. Not used if
         ``event`` is provided. Defaults to (-np.inf, np.inf)
-    stepsize_controller : diffrax.StepsizeController, optional
-        Stepsize controller to use for the integration. Defaults to PIDController
-        with rtol and atol set to the provided values.
-    saveat : diffrax.SaveAt, optional
-        SaveAt object to specify at which points to save the results of the
-        integration. Defaults to saving at all phis.
-    event : diffrax.Event, optional
-        Event object to specify when to stop the integration. Defaults to stopping
-        when the trajectory leaves the bounds_R and bounds_Z bounding box.
-    adjoint : diffrax.AbstractAdjoint, optional
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
-        supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
@@ -2656,21 +2639,11 @@ def field_line_integrate(
 
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
-    rshape = r0.shape
-    r0 = r0.flatten()
-    z0 = z0.flatten()
-    x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
-    # scale to make toroidal field (bp) positive
-    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
     min_step_size = jnp.where(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
     )
-    max_steps = (
-        max_steps
-        if max_steps is not None
-        else int((phis[-1] - phis[0]) / min_step_size * 1000)
-    )
+    max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
 
     # diffrax parameters
     def default_terminating_event(t, y, args, **kwargs):
@@ -2678,13 +2651,72 @@ def field_line_integrate(
         Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
-    stepsize_controller = (
-        stepsize_controller
-        if stepsize_controller is not None
-        else PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    return _field_line_integrate(
+        r0=r0,
+        z0=z0,
+        phis=phis,
+        field=field,
+        params=params,
+        source_grid=source_grid,
+        solver=solver,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        saveat=SaveAt(ts=phis),
+        stepsize_controller=PIDController(rtol=rtol, atol=atol, dtmin=min_step_size),
+        event=Event(default_terminating_event),
+        adjoint=RecursiveCheckpointAdjoint(),
+        chunk_size=chunk_size,
+        options=options,
     )
-    event = event if event is not None else Event(default_terminating_event)
-    saveat = saveat if saveat is not None else SaveAt(ts=phis)
+
+
+def _field_line_integrate(
+    r0,
+    z0,
+    phis,
+    field,
+    params,
+    source_grid,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    chunk_size,
+    options,
+):
+    """Jit/AD friendly field line integrator.
+
+    This function gives more control over the integration and is also JIT and AD
+    friendly. One can use this function inside an objective. All arguments must
+    have a value. For description of the full set of arguments, see
+    ``field_line_integrate``. There won't be any cchecks on the arguments here,
+    so make sure they are valid before using this function.
+
+    Parameters
+    ----------
+    stepsize_controller : diffrax.StepsizeController, optional
+        Stepsize controller to use for the integration. Defaults to PIDController
+        with rtol and atol set to the provided values.
+    saveat : diffrax.SaveAt, optional
+        SaveAt object to specify at which points to save the results of the
+        integration. Defaults to saving at all phis.
+    event : diffrax.Event, optional
+        Event object to specify when to stop the integration. Defaults to stopping
+        when the trajectory leaves the bounds_R and bounds_Z bounding box.
+    adjoint : diffrax.AbstractAdjoint, optional
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    """
+    rshape = r0.shape
+    r0 = r0.flatten()
+    z0 = z0.flatten()
+    x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+    # scale to make toroidal field (bp) positive
+    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445

@@ -24,7 +24,7 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        In ``rev`` mode, reducing the pitch angle parameter ``pitch_batch_size`` does not
+        In ``rev`` mode, reducing the parameter ``pitch_batch_size`` does not
         reduce memory consumption, so it is recommended to retain the default for that.
         """
 }

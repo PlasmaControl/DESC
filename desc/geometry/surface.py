@@ -45,7 +45,7 @@ class ChebyshevRZToroidalSurface(Surface):
 
     This mirrors FourierRZToroidalSurface, but replaces the toroidal Fourier
     direction with a non-periodic Chebyshev coordinate ``phi``. Suitable for
-    tube-like / straight configurations where the toroidal angle is not periodic.
+    racetrack configurations where the surface has straight sections.
 
     Parameters
     ----------

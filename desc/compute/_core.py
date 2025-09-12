@@ -601,6 +601,7 @@ def _R_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_ttz(params, transforms, profiles, data, **kwargs):
@@ -624,6 +625,7 @@ def _R_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_tz(params, transforms, profiles, data, **kwargs):
@@ -647,6 +649,7 @@ def _R_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_tzz(params, transforms, profiles, data, **kwargs):
@@ -669,6 +672,7 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_z(params, transforms, profiles, data, **kwargs):
@@ -691,6 +695,7 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_zz(params, transforms, profiles, data, **kwargs):
@@ -713,6 +718,7 @@ def _R_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _R_zzz(params, transforms, profiles, data, **kwargs):
@@ -1410,6 +1416,7 @@ def _Z_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_ttz(params, transforms, profiles, data, **kwargs):
@@ -1433,6 +1440,7 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_tz(params, transforms, profiles, data, **kwargs):
@@ -1456,6 +1464,7 @@ def _Z_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_tzz(params, transforms, profiles, data, **kwargs):
@@ -1478,6 +1487,7 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
@@ -1500,6 +1510,7 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_zz(params, transforms, profiles, data, **kwargs):
@@ -1522,6 +1533,7 @@ def _Z_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _Z_zzz(params, transforms, profiles, data, **kwargs):
@@ -2651,6 +2663,7 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
@@ -2674,6 +2687,7 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
@@ -2697,6 +2711,7 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_tzz(params, transforms, profiles, data, **kwargs):
@@ -2719,6 +2734,7 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
@@ -2741,6 +2757,7 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
@@ -2763,6 +2780,7 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
@@ -2996,6 +3014,7 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_ttz(params, transforms, profiles, data, **kwargs):
@@ -3019,6 +3038,7 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_tz(params, transforms, profiles, data, **kwargs):
@@ -3042,6 +3062,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_tzz(params, transforms, profiles, data, **kwargs):
@@ -3064,6 +3085,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
@@ -3087,6 +3109,7 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
@@ -3110,6 +3133,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ChebyshevRZToroidalSurface",
     ],
 )
 def _phi_zzz(params, transforms, profiles, data, **kwargs):

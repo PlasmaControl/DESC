@@ -491,33 +491,33 @@ class FixEndCapLambda(_FixedObjective):
             self._idx = idx
         else:  # specified modes
             raise NotImplementedError("Specifying Modes not implemented")
-            #--no-verify modes = np.atleast_2d(self._modes)
-            #--no-verify dtype = {
-            #--no-verify     "names": ["f{}".format(i) for i in range(3)],
-            #--no-verify     "formats": 3 * [modes.dtype],
-            #--no-verify }
-            #--no-verify _, idx, modes_idx = np.intersect1d(
-            #--no-verify     eq.Z_basis.modes.astype(modes.dtype).view(dtype),
-            #--no-verify     modes.view(dtype),
-            #--no-verify     return_indices=True,
-            #--no-verify )
-            #--no-verify self._idx = idx
-            #--no-verify # rearrange modes and weights to match order of eq.Z_basis.modes
-            #--no-verify # and eq.Z_lmn,
-            #--no-verify # necessary so that the A matrix rows match up with the target b
-            #--no-verify modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
-            #--no-verify if self._sum_weights is not None:
-            #--no-verify     self._sum_weights = np.atleast_1d(self._sum_weights)
-            #--no-verify     self._sum_weights = self._sum_weights[modes_idx]
+            # --no-verify modes = np.atleast_2d(self._modes)
+            # --no-verify dtype = {
+            # --no-verify     "names": ["f{}".format(i) for i in range(3)],
+            # --no-verify     "formats": 3 * [modes.dtype],
+            # --no-verify }
+            # --no-verify _, idx, modes_idx = np.intersect1d(
+            # --no-verify     eq.Z_basis.modes.astype(modes.dtype).view(dtype),
+            # --no-verify     modes.view(dtype),
+            # --no-verify     return_indices=True,
+            # --no-verify )
+            # --no-verify self._idx = idx
+            # --no-verify # rearrange modes and weights to match order of eq.Z_basis.modes
+            # --no-verify # and eq.Z_lmn,
+            # --no-verify # necessary so that the A matrix rows match up with the target b
+            # --no-verify modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
+            # --no-verify if self._sum_weights is not None:
+            # --no-verify     self._sum_weights = np.atleast_1d(self._sum_weights)
+            # --no-verify     self._sum_weights = self._sum_weights[modes_idx]
 
-            #--no-verify if idx.size < modes.shape[0]:
-            #--no-verify     warnings.warn(
-            #--no-verify         colored(
-            #--no-verify             "Some of the given modes are not in the basis, "
-            #--no-verify             + "these modes will not be fixed.",
-            #--no-verify             "yellow",
-            #--no-verify         )
-            #--no-verify     )
+            # --no-verify if idx.size < modes.shape[0]:
+            # --no-verify     warnings.warn(
+            # --no-verify         colored(
+            # --no-verify             "Some of the given modes are not in the basis, "
+            # --no-verify             + "these modes will not be fixed.",
+            # --no-verify             "yellow",
+            # --no-verify         )
+            # --no-verify     )
 
         Nmodes = np.unique(modes[:, 2])
         self._Nmodes = Nmodes
@@ -693,8 +693,8 @@ class MatchEndCapR(_FixedObjective):
         idx_N = {N: i for i, N in enumerate(Nmodes)}
 
         # Find all the Zernike lm modes
-        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
-        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
+        # --no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        # --no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
         LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
 
@@ -836,8 +836,8 @@ class MatchEndCapZ(_FixedObjective):
         idx_N = {N: i for i, N in enumerate(Nmodes)}
 
         # Find all the Zernike lm modes
-        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
-        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
+        # --no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        # --no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
         LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
 
@@ -981,8 +981,8 @@ class MatchEndCapLambda(_FixedObjective):
         idx_N = {N: i for i, N in enumerate(Nmodes)}
 
         # Find all the Zernike lm modes
-        #--no-verify LMmodes = np.unique(modes[:, :2], axis=0)
-        #--no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
+        # --no-verify LMmodes = np.unique(modes[:, :2], axis=0)
+        # --no-verify idx_LM = {tuple(lm): i for i, lm in enumerate(LMmodes)}
 
         LM_pairs, row_idx = np.unique(modes[:, :2], axis=0, return_inverse=True)
 
@@ -1018,7 +1018,6 @@ class MatchEndCapLambda(_FixedObjective):
         return f
 
 
-
 class MatchEndCapRz(_Objective):
     """Linear constraint: match ∂R/∂z at z=0 and z=2π for all (ρ, θ).
 
@@ -1043,7 +1042,7 @@ class MatchEndCapRz(_Objective):
     def __init__(self, eq, name="MatchEndCapRz (∂R/∂z: 0 ↔ 2π)"):
         super().__init__(
             things=eq,
-            target=0.0,           # enforce A @ R_lmn = 0
+            target=0.0,  # enforce A @ R_lmn = 0
             bounds=None,
             weight=1.0,
             normalize=False,
@@ -1056,17 +1055,17 @@ class MatchEndCapRz(_Objective):
         eq = self.things[0]
 
         # All (l,m,n) Chebyshev–Zernike modes for R
-        modes = eq.R_basis.modes            # shape: (num_modes, 3) with columns [l, m, n]
+        modes = eq.R_basis.modes  # shape: (num_modes, 3) with columns [l, m, n]
         num_modes_total = eq.R_basis.num_modes
 
         # Unique n's and (l,m)'s
-        Nvals  = np.unique(modes[:, 2])
+        Nvals = np.unique(modes[:, 2])
         LMvals = np.unique(modes[:, :2], axis=0)
 
         # --- Weights for first z-derivative endpoint difference ---
         # w_n = (n^2/π) * ( (-1)^(n-1) - 1 )
         n = Nvals.astype(int)
-        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+        w_n = (n**2 / np.pi) * ((-1.0) ** (n - 1) - 1.0)
 
         # Fast indexers
         idx_N = {N: i for i, N in enumerate(Nvals)}
@@ -1079,7 +1078,7 @@ class MatchEndCapRz(_Objective):
         A = np.zeros((self._dim_f, num_modes_total))
 
         # Fill A: in the row for (l,m), place w_n in the column for (l,m,n)
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.R_basis.get_idx(L=l, M=m, N=n_)
             A[row, col] = w_n[idx_N[n_]]
@@ -1090,8 +1089,6 @@ class MatchEndCapRz(_Objective):
     def compute(self, params, constants=None):
         # Linear objective output; framework compares to target (0.0)
         return jnp.dot(self._A, params["R_lmn"])
-
-
 
 
 class MatchEndCapRzz(_Objective):
@@ -1119,7 +1116,7 @@ class MatchEndCapRzz(_Objective):
     def __init__(self, eq, name="MatchEndCapRzz (∂²R/∂z²: 0 ↔ 2π)"):
         super().__init__(
             things=eq,
-            target=0.0, 
+            target=0.0,
             bounds=None,
             weight=1.0,
             normalize=False,
@@ -1132,17 +1129,17 @@ class MatchEndCapRzz(_Objective):
         eq = self.things[0]
 
         # All (l,m,n) Chebyshev–Zernike modes for R
-        modes = eq.R_basis.modes            # shape: (num_modes, 3) with columns [l, m, n]
+        modes = eq.R_basis.modes  # shape: (num_modes, 3) with columns [l, m, n]
         num_modes_total = eq.R_basis.num_modes
 
         # Unique n's and (l,m)'s
-        Nvals  = np.unique(modes[:, 2]).astype(int)
+        Nvals = np.unique(modes[:, 2]).astype(int)
         LMvals = np.unique(modes[:, :2], axis=0)
 
         # --- Weights for second z-derivative endpoint difference ---
         # w_n = ([n^2 (n^2 - 1)] / [3 π^2]) * ( (-1)^n - 1 )
         n = Nvals
-        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0) ** n - 1.0)
 
         # Fast indexers
         idx_N = {N: i for i, N in enumerate(Nvals)}
@@ -1155,7 +1152,7 @@ class MatchEndCapRzz(_Objective):
         A = np.zeros((self._dim_f, num_modes_total))
 
         # Fill A: in the row for (l,m), place w_n in the column for (l,m,n)
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.R_basis.get_idx(L=l, M=m, N=int(n_))
             A[row, col] = w_n[idx_N[int(n_)]]
@@ -1199,11 +1196,11 @@ class MatchEndCapZz(_Objective):
         modes = eq.Z_basis.modes
         num_modes_total = eq.Z_basis.num_modes
 
-        Nvals  = np.unique(modes[:, 2]).astype(int)
+        Nvals = np.unique(modes[:, 2]).astype(int)
         LMvals = np.unique(modes[:, :2], axis=0)
 
         n = Nvals
-        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+        w_n = (n**2 / np.pi) * ((-1.0) ** (n - 1) - 1.0)
 
         idx_N = {N: i for i, N in enumerate(Nvals)}
         idx_LM = {L: {} for L, _ in LMvals}
@@ -1213,7 +1210,7 @@ class MatchEndCapZz(_Objective):
         self._dim_f = LMvals.shape[0]
         A = np.zeros((self._dim_f, num_modes_total))
 
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.Z_basis.get_idx(L=l, M=m, N=int(n_))
             A[row, col] = w_n[idx_N[int(n_)]]
@@ -1258,11 +1255,11 @@ class MatchEndCapZzz(_Objective):
         modes = eq.Z_basis.modes
         num_modes_total = eq.Z_basis.num_modes
 
-        Nvals  = np.unique(modes[:, 2]).astype(int)
+        Nvals = np.unique(modes[:, 2]).astype(int)
         LMvals = np.unique(modes[:, :2], axis=0)
 
         n = Nvals
-        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0) ** n - 1.0)
 
         idx_N = {N: i for i, N in enumerate(Nvals)}
         idx_LM = {L: {} for L, _ in LMvals}
@@ -1272,7 +1269,7 @@ class MatchEndCapZzz(_Objective):
         self._dim_f = LMvals.shape[0]
         A = np.zeros((self._dim_f, num_modes_total))
 
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.Z_basis.get_idx(L=l, M=m, N=int(n_))
             A[row, col] = w_n[idx_N[int(n_)]]
@@ -1294,7 +1291,7 @@ class MatchEndCapLambdaz(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(rad)"   # units for Lambda; change if you use different convention
+    _units = "(rad)"  # units for Lambda; change if you use different convention
     _print_value_fmt = "Lambda_z endcap match error: "
 
     def __init__(self, eq, name="MatchEndCapLambdaz (∂Λ/∂z: 0 ↔ 2π)"):
@@ -1314,11 +1311,11 @@ class MatchEndCapLambdaz(_Objective):
         modes = eq.L_basis.modes
         num_modes_total = eq.L_basis.num_modes
 
-        Nvals  = np.unique(modes[:, 2]).astype(int)
+        Nvals = np.unique(modes[:, 2]).astype(int)
         LMvals = np.unique(modes[:, :2], axis=0)
 
         n = Nvals
-        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+        w_n = (n**2 / np.pi) * ((-1.0) ** (n - 1) - 1.0)
 
         idx_N = {N: i for i, N in enumerate(Nvals)}
         idx_LM = {L: {} for L, _ in LMvals}
@@ -1328,7 +1325,7 @@ class MatchEndCapLambdaz(_Objective):
         self._dim_f = LMvals.shape[0]
         A = np.zeros((self._dim_f, num_modes_total))
 
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.L_basis.get_idx(L=l, M=m, N=int(n_))
             A[row, col] = w_n[idx_N[int(n_)]]
@@ -1370,11 +1367,11 @@ class MatchEndCapLambdazz(_Objective):
         modes = eq.L_basis.modes
         num_modes_total = eq.L_basis.num_modes
 
-        Nvals  = np.unique(modes[:, 2]).astype(int)
+        Nvals = np.unique(modes[:, 2]).astype(int)
         LMvals = np.unique(modes[:, :2], axis=0)
 
         n = Nvals
-        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0) ** n - 1.0)
 
         idx_N = {N: i for i, N in enumerate(Nvals)}
         idx_LM = {L: {} for L, _ in LMvals}
@@ -1384,7 +1381,7 @@ class MatchEndCapLambdazz(_Objective):
         self._dim_f = LMvals.shape[0]
         A = np.zeros((self._dim_f, num_modes_total))
 
-        for (l, m, n_) in modes:
+        for l, m, n_ in modes:
             row = idx_LM[l][m]
             col = eq.L_basis.get_idx(L=l, M=m, N=int(n_))
             A[row, col] = w_n[idx_N[int(n_)]]

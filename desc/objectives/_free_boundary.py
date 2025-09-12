@@ -399,13 +399,19 @@ class BoundaryError(_Objective):
         ``source_grid``. That is a subset of
         ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
         If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
+        Defaults to a heuristic meant to minimize the anisotropy in the resulting polar
+        domain grid. Compute time and memory do not depend on this parameter.
     q : int
-        Order of integration on the local singular grid.
+        Order of integration on the local singular grid. Default is
+        ``sqrt(source_grid.num_modes)//2``. Compute time and memory do not depend
+        strongly on this parameter.
     source_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both. Compute time
+        scales like M_grid^2 * N_grid^2, memory cost scales like
+        M_grid^2 * N_grid^2 / B_plasma_chunk_size.
     field_grid : Grid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool

@@ -1016,3 +1016,381 @@ class MatchEndCapLambda(_FixedObjective):
         """
         f = jnp.dot(self._A, params["L_lmn"])
         return f
+
+
+
+class MatchEndCapRz(_Objective):
+    """Linear constraint: match ∂R/∂z at z=0 and z=2π for all (ρ, θ).
+
+    Builds a constant matrix A such that A @ R_lmn = 0, where rows are (l,m)
+    and columns are (l,m,n). The column weights are the endpoint *difference*
+    of the first z-derivative of the Chebyshev basis T_n((z-π)/π).
+
+    Using x=(z-π)/π,  d/dz = (1/π) d/dx, and T'_n(±1)=n^2 (±1)^{n-1},
+    the per-n weight is:
+        w_n = (1/π) [T'_n(-1) - T'_n(1)]
+            = (n^2/π) * ((-1)^(n-1) - 1)
+
+    This constrains only the even-n combination; odd n drop out.
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "R_z endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapRz (∂R/∂z: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0,           # enforce A @ R_lmn = 0
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+
+        # All (l,m,n) Chebyshev–Zernike modes for R
+        modes = eq.R_basis.modes            # shape: (num_modes, 3) with columns [l, m, n]
+        num_modes_total = eq.R_basis.num_modes
+
+        # Unique n's and (l,m)'s
+        Nvals  = np.unique(modes[:, 2])
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        # --- Weights for first z-derivative endpoint difference ---
+        # w_n = (n^2/π) * ( (-1)^(n-1) - 1 )
+        n = Nvals.astype(int)
+        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+
+        # Fast indexers
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        # One equation per (l,m)
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        # Fill A: in the row for (l,m), place w_n in the column for (l,m,n)
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.R_basis.get_idx(L=l, M=m, N=n_)
+            A[row, col] = w_n[idx_N[n_]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        # Linear objective output; framework compares to target (0.0)
+        return jnp.dot(self._A, params["R_lmn"])
+
+
+
+
+class MatchEndCapRzz(_Objective):
+    """Linear constraint: match ∂²R/∂z² at z=0 and z=2π for all (ρ, θ).
+
+    Builds a constant matrix A such that A @ R_lmn = 0, where rows are (l,m)
+    and columns are (l,m,n). The column weights are the endpoint *difference*
+    of the second z-derivative of the Chebyshev basis T_n((z-π)/π).
+
+    Using x=(z-π)/π, d²/dz² = (1/π²) d²/dx², and
+        T''_n(±1) = [n²(n²-1)/3] (±1)^n,
+    the per-n weight is:
+        w_n = (1/π²) [T''_n(-1) - T''_n(1)]
+            = ([n²(n²-1)] / [3 π²]) * ( (-1)^n - 1 )
+
+    This constrains only the odd-n combination; even n drop out.
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "R_zz endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapRzz (∂²R/∂z²: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0, 
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+
+        # All (l,m,n) Chebyshev–Zernike modes for R
+        modes = eq.R_basis.modes            # shape: (num_modes, 3) with columns [l, m, n]
+        num_modes_total = eq.R_basis.num_modes
+
+        # Unique n's and (l,m)'s
+        Nvals  = np.unique(modes[:, 2]).astype(int)
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        # --- Weights for second z-derivative endpoint difference ---
+        # w_n = ([n^2 (n^2 - 1)] / [3 π^2]) * ( (-1)^n - 1 )
+        n = Nvals
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+
+        # Fast indexers
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        # One equation per (l,m)
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        # Fill A: in the row for (l,m), place w_n in the column for (l,m,n)
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.R_basis.get_idx(L=l, M=m, N=int(n_))
+            A[row, col] = w_n[idx_N[int(n_)]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        # Linear objective output; framework compares to target (0.0)
+        return jnp.dot(self._A, params["R_lmn"])
+
+
+# ---------- Z (first derivative) ----------
+class MatchEndCapZz(_Objective):
+    """Linear constraint: match ∂Z/∂z at z=0 and z=2π for all (ρ, θ).
+
+    Using x=(z-π)/π ⇒ d/dz = (1/π) d/dx and T'_n(±1)=n²(±1)^{n-1},
+    per-n weight: w_n = (1/π)[T'_n(-1) - T'_n(1)] = (n²/π) ((-1)^{n-1} - 1).
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z_z endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapZz (∂Z/∂z: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0,
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+        modes = eq.Z_basis.modes
+        num_modes_total = eq.Z_basis.num_modes
+
+        Nvals  = np.unique(modes[:, 2]).astype(int)
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        n = Nvals
+        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.Z_basis.get_idx(L=l, M=m, N=int(n_))
+            A[row, col] = w_n[idx_N[int(n_)]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        return jnp.dot(self._A, params["Z_lmn"])
+
+
+# ---------- Z (second derivative) ----------
+class MatchEndCapZzz(_Objective):
+    """Linear constraint: match ∂²Z/∂z² at z=0 and z=2π for all (ρ, θ).
+
+    Using x=(z-π)/π ⇒ d²/dz² = (1/π²) d²/dx² and
+    T''_n(±1) = [n²(n²-1)/3] (±1)^n,
+    per-n weight: w_n = (1/π²)[T''_n(-1)-T''_n(1)]
+                  = ([n²(n²-1)]/[3π²]) ((-1)^n - 1).
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z_zz endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapZzz (∂²Z/∂z²: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0,
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+        modes = eq.Z_basis.modes
+        num_modes_total = eq.Z_basis.num_modes
+
+        Nvals  = np.unique(modes[:, 2]).astype(int)
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        n = Nvals
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.Z_basis.get_idx(L=l, M=m, N=int(n_))
+            A[row, col] = w_n[idx_N[int(n_)]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        return jnp.dot(self._A, params["Z_lmn"])
+
+
+# ---------- Lambda (first derivative) ----------
+class MatchEndCapLambdaz(_Objective):
+    """Linear constraint: match ∂Λ/∂z at z=0 and z=2π for all (ρ, θ).
+
+    Per-n weight: w_n = (n²/π) ((-1)^{n-1} - 1).
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(rad)"   # units for Lambda; change if you use different convention
+    _print_value_fmt = "Lambda_z endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapLambdaz (∂Λ/∂z: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0,
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+        modes = eq.L_basis.modes
+        num_modes_total = eq.L_basis.num_modes
+
+        Nvals  = np.unique(modes[:, 2]).astype(int)
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        n = Nvals
+        w_n = (n**2 / np.pi) * ((-1.0)**(n - 1) - 1.0)
+
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.L_basis.get_idx(L=l, M=m, N=int(n_))
+            A[row, col] = w_n[idx_N[int(n_)]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        return jnp.dot(self._A, params["L_lmn"])
+
+
+# ---------- Lambda (second derivative) ----------
+class MatchEndCapLambdazz(_Objective):
+    """Linear constraint: match ∂²Λ/∂z² at z=0 and z=2π for all (ρ, θ).
+
+    Per-n weight: w_n = ([n²(n²-1)]/[3π²]) ((-1)^n - 1).
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(rad)"
+    _print_value_fmt = "Lambda_zz endcap match error: "
+
+    def __init__(self, eq, name="MatchEndCapLambdazz (∂²Λ/∂z²: 0 ↔ 2π)"):
+        super().__init__(
+            things=eq,
+            target=0.0,
+            bounds=None,
+            weight=1.0,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        eq = self.things[0]
+        modes = eq.L_basis.modes
+        num_modes_total = eq.L_basis.num_modes
+
+        Nvals  = np.unique(modes[:, 2]).astype(int)
+        LMvals = np.unique(modes[:, :2], axis=0)
+
+        n = Nvals
+        w_n = (n**2 * (n**2 - 1)) / (3.0 * np.pi**2) * ((-1.0)**n - 1.0)
+
+        idx_N = {N: i for i, N in enumerate(Nvals)}
+        idx_LM = {L: {} for L, _ in LMvals}
+        for row, (L, M) in enumerate(LMvals):
+            idx_LM[L][M] = row
+
+        self._dim_f = LMvals.shape[0]
+        A = np.zeros((self._dim_f, num_modes_total))
+
+        for (l, m, n_) in modes:
+            row = idx_LM[l][m]
+            col = eq.L_basis.get_idx(L=l, M=m, N=int(n_))
+            A[row, col] = w_n[idx_N[int(n_)]]
+
+        self._A = A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        return jnp.dot(self._A, params["L_lmn"])

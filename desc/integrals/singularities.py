@@ -514,14 +514,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
     """Returns new dictionaries with only required data."""
-    x = rpz2xyz(jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]]))
     # only need θ, ζ for change of variable with nonzero η
-    keys = ["phi", "theta", "zeta"]
+    keys = ["R", "phi", "Z", "theta", "zeta"]
     if hasattr(kernel, "eval_keys"):
         keys = keys + kernel.eval_keys
     # to skip batching stuff that is not needed
     eval_data = {key: jnp.asarray(eval_data[key]) for key in keys if key in eval_data}
-    eval_data["x"] = x
     if eval_grid is not None:
         # Casting to JAX arrays reduces memory usage.
         if "theta" not in eval_data:
@@ -841,10 +839,15 @@ def _dx(eval_data, source_data, diag=False):
     source_x = rpz2xyz(
         jnp.column_stack([source_data["R"], source_data["phi"], source_data["Z"]])
     )
-    eval_x = eval_data["x"]
+    eval_x = rpz2xyz(
+        jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]])
+    )
     if not diag:
         eval_x = eval_x[:, jnp.newaxis]
     return eval_x - source_x
+
+
+_dx.keys = ["R", "phi", "Z"]
 
 
 def _1_over_G(dx, keepdims=False):
@@ -885,9 +888,6 @@ def _grad_G(dx):
 
     """
     return safediv(dx, 4 * jnp.pi * safenorm(dx, axis=-1, keepdims=True) ** 3)
-
-
-_dx.keys = ["R", "phi", "Z"]
 
 
 def _kernel_1_over_r(eval_data, source_data, ds, diag=False):

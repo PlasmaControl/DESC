@@ -822,7 +822,6 @@ def _dx(eval_data, source_data, diag=False):
     ----------
     eval_data : dict[str, jnp.ndarray]
         x data evaluated on eval grid.
-        ``eval_data["x"]`` should be in xyz basis.
     source_data : dict[str, jnp.ndarray]
         y data evaluated on source grid.
     diag : bool

@@ -3137,7 +3137,7 @@ def _phi_zzz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _rho(params, transforms, profiles, data, **kwargs):
-    data["rho"] = transforms["grid"].nodes[:, 0]
+    data["rho"] = jnp.asarray(transforms["grid"].nodes[:, 0])
     return data
 
 
@@ -3159,7 +3159,7 @@ def _rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _theta(params, transforms, profiles, data, **kwargs):
-    data["theta"] = transforms["grid"].nodes[:, 1]
+    data["theta"] = jnp.asarray(transforms["grid"].nodes[:, 1])
     return data
 
 
@@ -3485,5 +3485,5 @@ def _theta_PEST_ttz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _zeta(params, transforms, profiles, data, **kwargs):
-    data["zeta"] = transforms["grid"].nodes[:, 2]
+    data["zeta"] = jnp.asarray(transforms["grid"].nodes[:, 2])
     return data

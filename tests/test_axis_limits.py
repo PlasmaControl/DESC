@@ -77,6 +77,7 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
+    "n_rho x grad(theta)",
     "J^theta_PEST",
     "(J^theta_PEST_v)|PEST",
     "(J^theta_PEST_p)|PEST",

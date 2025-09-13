@@ -372,3 +372,11 @@ class TestFastInterp:
         f = func(x, y).reshape(m, n)
         fc = FourierChebyshevSeries(f)
         np.testing.assert_allclose(fc.evaluate(m, n), f, rtol=1e-6)
+
+
+@pytest.mark.unit
+def test_fft_interp2d():
+    """Test https://github.com/f0uriest/interpax/pull/117."""
+    from desc.integrals._fourier import _test_fft_interp2d
+
+    return _test_fft_interp2d()

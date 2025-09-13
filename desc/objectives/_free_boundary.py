@@ -882,7 +882,7 @@ class FreeSurfaceError(_Objective):
     Warnings
     --------
     If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
-    must be smooth and divergence free until GitHub issue #1796 is resolved.
+    should be smooth and divergence free until GitHub issue #1796 is resolved.
 
     Parameters
     ----------
@@ -907,15 +907,14 @@ class FreeSurfaceError(_Objective):
         Default is default grid of coil magnetic field.
     q : int
         Order of integration on the local singular grid.
+    xtol : float
+        Stopping tolerance for fixed point method. Default is ``1e-7``.
     maxiter : int
         Maximum number of iterations for fixed point method.
-        Default is ``-1``, which means that matrix inversion will be used.
-        If positive, then performs that many fixed point iterations until
-        ``maxiter`` or an error tolerance of ``1e-7`` is reached.
-        It is recommended to set this parameter to a positive value, for example
-        ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
-        An advantage of such a fixed point method is that the Jacobian of the
-        optimization may be computed more efficiently.
+        If non-positive then the linear operator will be inverted instead.
+        If positive, then performs that many fixed point iterations until ``maxiter``
+        or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
+        error of ``1e-5`` as illustrated in [1]. Default is ``25``.
     chunk_size : int or None
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -947,6 +946,7 @@ class FreeSurfaceError(_Objective):
         "_B_coil",
         "_use_same_grid",
         "_q",
+        "_xtol",
         "_maxiter",
         "_chunk_size",
         "_B_coil_chunk_size",
@@ -966,7 +966,8 @@ class FreeSurfaceError(_Objective):
         grid=None,
         coil_grid=None,
         q=None,
-        maxiter=-1,
+        xtol=1e-7,
+        maxiter=25,
         chunk_size=None,
         B_coil_chunk_size=None,
         I_sheet=0.0,
@@ -1014,6 +1015,7 @@ class FreeSurfaceError(_Objective):
         self._coil_grid = coil_grid
         self._use_same_grid = grid.equiv(eval_grid)
         self._q = q
+        self._xtol = xtol
         self._maxiter = maxiter
         self._chunk_size = chunk_size
         self._B_coil_chunk_size = B_coil_chunk_size
@@ -1196,6 +1198,7 @@ class FreeSurfaceError(_Objective):
                 constants["source_transforms"],
                 constants["profiles"],
                 data=data,
+                xtol=self._xtol,
                 maxiter=self._maxiter,
                 chunk_size=self._chunk_size,
                 B_coil_chunk_size=self._B_coil_chunk_size,
@@ -1211,6 +1214,7 @@ class FreeSurfaceError(_Objective):
             constants["eval_transforms"],
             constants["profiles"],
             data=outer,
+            xtol=self._xtol,
             maxiter=self._maxiter,
             chunk_size=self._chunk_size,
             B_coil_chunk_size=self._B_coil_chunk_size,

@@ -502,7 +502,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
+def plot_1d(  # noqa : C901
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+):
     """Plot 1D profiles.
 
     Parameters
@@ -515,6 +517,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -556,6 +560,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     # If the quantity is a flux surface function, call plot_fsa.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
@@ -571,6 +581,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=default_L,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -584,6 +595,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=rho,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -602,6 +614,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     data, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 1D
     if len(plot_axes) != 1:
@@ -644,11 +660,24 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+    if normalize:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data
@@ -915,11 +944,12 @@ def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
     return ijk
 
 
-def plot_3d(
+def plot_3d(  # noqa : C901
     eq,
     name,
     grid=None,
     log=False,
+    normalize=None,
     fig=None,
     return_data=False,
     **kwargs,
@@ -936,6 +966,8 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -996,6 +1028,12 @@ def plot_3d(
         fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
@@ -1031,6 +1069,10 @@ def plot_3d(
             chunk_size=kwargs.pop("chunk_size", None),
             B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     errorif(
         len(kwargs) != 0,
@@ -1068,7 +1110,6 @@ def plot_3d(
             ticktext=[f"{l:.0e}" for l in levels],
             tickvals=ticks,
         )
-
     else:
         cbar = dict(
             title=LatexNodes2Text().latex_to_text(label),
@@ -1077,6 +1118,14 @@ def plot_3d(
         )
         cmin = None
         cmax = None
+
+    if normalize:
+        parameterization = _parse_parameterization(eq)
+        label = "{} / {}".format(
+            "$" + data_index[parameterization][name]["label"] + "$",
+            "$" + data_index[parameterization][normalize]["label"] + "$",
+        )
+        cbar["title"] = LatexNodes2Text().latex_to_text(label)
 
     meshdata = go.Mesh3d(
         x=X.flatten(),
@@ -1149,6 +1198,11 @@ def plot_3d(
         font=dict(family="Times"),
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
+
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, plot_data
@@ -4259,7 +4313,7 @@ def plot_gammac(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``X``, ``Y``, ``Y_B``, ``num_quad``: int
+        * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
         * ``num_transit``, ``pitch_batch_size``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
@@ -4285,15 +4339,11 @@ def plot_gammac(
     if rho is None:
         rho = np.array([0.5], dtype=float)
     else:
-        rho = np.asarray(rho, dtype=float)
-        if rho.size != 1:
-            raise ValueError("rho must be a scalar or length-1 array")
-        rho = rho.reshape(
-            1,
-        )
+        rho = np.asarray(rho, dtype=float).ravel()
+        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
 
     if alphas is None:
-        alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
+        alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
 
     if num_pitch is None:
         num_pitch = 16
@@ -4301,10 +4351,11 @@ def plot_gammac(
     # TODO(#1352)
     X = kwargs.pop("X", 16)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", 24)
+    Y_B = kwargs.pop("Y_B", Y * 2)
     num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 4)
-    num_transit = kwargs.pop("num_transit", 1)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_transit = kwargs.pop("num_transit", 2)
+    num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4315,21 +4366,19 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    # Compute bounce integral
-    theta = Bounce2D.compute_theta(eq, X, Y, rho)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=theta,
+        theta=Bounce2D.compute_theta(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,
         num_pitch=num_pitch,
+        num_well=num_well,
         pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
-    data_full = grid.compress(data0["gamma_c"])
 
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
@@ -4344,7 +4393,7 @@ def plot_gammac(
     im = ax.contourf(
         inv_pitch,
         alphas,
-        data_full[0],
+        data0["gamma_c"][0],
         cmap=cmap,
     )
 
@@ -4371,7 +4420,7 @@ def plot_gammac(
         data = {
             "inv_pitch": inv_pitch,
             "alpha": alphas,
-            "gammac": data_full[0],
+            "gammac": data0["gamma_c"][0],
         }
         return fig, ax, data
 

@@ -29,17 +29,20 @@ from .data_index import register_compute_fun
 _doc = {
     "Phi_0": """jnp.ndarray :
         Initial guess for iteration.
-        Initial guess must be periodic to converge to true solution.
+        """,
+    "xtol": """float :
+        Stopping tolerance for fixed point method. Default is ``1e-7``.
         """,
     "maxiter": """int :
         Maximum number of iterations for fixed point method.
-        Default is ``-1``, which means that matrix inversion will be used.
-        If positive, then performs that many fixed point iterations until
-        ``maxiter`` or an error tolerance of ``1e-7`` is reached.
-        It is recommended to set this parameter to a positive value, for example
-        ``maxiter=20`` yields an error of ``1e-5`` as illustrated in [1].
-        An advantage of such a fixed point method is that the Jacobian of the
-        optimization may be computed more efficiently.
+        If non-positive then the linear operator will be inverted instead.
+        If positive, then performs that many fixed point iterations until ``maxiter``
+        or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
+        error of ``1e-5`` as illustrated in [1]. Default is ``25``.
+        """,
+    "full_output": """bool
+        Whether to compute the maximum error ``Phi error`` and store the number of
+        iterations ``num iter`` used for the fixed point method. Default is ``False``.
         """,
     "chunk_size": """int or None :
         Size to split integral computation into chunks.
@@ -49,16 +52,12 @@ _doc = {
         small number due to bugs in JAX or XLA.
         """,
     "_midpoint_quad": """bool :
-        Set to ``True`` to perform double layer potential quadrature
-        with midpoint rule. Default is ``False``.
+        Set to ``True`` to perform double layer potential quadrature with a midpoint
+        rule. Default is ``False``. This is intended for developer use.
         """,
     "_D_quad": """bool
-        Set to ``True`` to perform double layer potential quadrature
-        without removing singularities. Default is ``False``.
-        """,
-    "_full_output": """bool
-        Whether to return the maximum relative error and
-        number of iterations for the fixed point method.
+        Set to ``True`` to perform double layer potential quadrature without removing
+        singularities. Default is ``False``. This is intended for developer use.
         """,
 }
 
@@ -86,11 +85,11 @@ def _D_plus_half(
     prune_data : bool
         Whether the data should be pruned. Default is True.
     _midpoint_quad : bool
-        Set to ``True`` to perform double layer potential quadrature
-        with midpoint rule. Default is ``False``.
+        Set to ``True`` to perform double layer potential quadrature with a midpoint
+        rule. Default is ``False``. This is intended for developer use.
     _D_quad : bool
-        Set to ``True`` to perform double layer potential quadrature
-        without removing singularities. Default is ``False``.
+        Set to ``True`` to perform double layer potential quadrature without removing
+        singularities. Default is ``False``. This is intended for developer use.
 
     """
     if basis is None:
@@ -134,7 +133,7 @@ def _D_plus_half(
             _prune_data=prune_data,
         )
     if ndim == 1:
-        result = result.squeeze(axis=-1)
+        result = result.squeeze(-1)
 
     if _D_quad:
         result += eval_data["Phi(x) (periodic)"] / 2
@@ -171,8 +170,6 @@ def _lsmr_compute_potential(
         source_grid,
         _kernel_dipole_plus_half,
     )
-    # could compute these in objective build
-    # and avoid computing if they are passed in as kwargs
     Phi = basis.evaluate(potential_grid)
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi if same_grid else basis.evaluate(source_grid)
@@ -194,12 +191,11 @@ def _lsmr_compute_potential(
             well_posed = None
         # This system is negative definite, but perhaps not symmetric. (For example,
         # there is discretization error in the quadrature that could destroy symmetry).
-        # Lineax assumes ``tag=negative_semidefinite`` means the operator is symmetric.
-        # Hence we do not set that tag even when ``well_posed`` is true.
+        # Lineax assumes negative semidefinite means the operator is symmetric.
+        # Hence we do not set that tag even when well_posed is true.
     # else the system is positive definite but the same logic applies.
     D = lx.MatrixLinearOperator(D)
 
-    # TODO: https://github.com/patrick-kidger/lineax/pull/86
     return lx.linear_solve(
         D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
     ).value
@@ -230,7 +226,7 @@ def _iteration_operator(
     ) / xi
 
 
-@partial(jit, static_argnames=["xtol", "maxiter", "chunk_size", "_full_output"])
+@partial(jit, static_argnames=["xtol", "maxiter", "full_output", "chunk_size"])
 def _fixed_point_potential(
     boundary_condition,
     potential_data,
@@ -239,9 +235,9 @@ def _fixed_point_potential(
     Phi_0=None,
     *,
     xtol=1e-7,
-    maxiter=20,
+    maxiter=25,
+    full_output=False,
     chunk_size=None,
-    _full_output=False,
 ):
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
@@ -263,7 +259,7 @@ def _fixed_point_potential(
         maxiter,
         method="simple",
         scalar=True,
-        full_output=_full_output,
+        full_output=full_output,
     )
 
 
@@ -286,6 +282,9 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     # Grids with resolution less than source grid yield poor convergence
     # due to FFT frequency spectrum truncation.
+    # TODO: Can now support eval grid of half resolution thanks to
+    #       https://github.com/f0uriest/interpax/pull/117. Can use
+    #       Same data. See note in singularities.py.
     grid = transforms["grid"]
     data["interpolator"] = get_interpolator(grid, grid, data, **kwargs)
     return data
@@ -317,7 +316,7 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
         data["interpolator"],
         _kernel_monopole,
         chunk_size=kwargs.get("chunk_size", None),
-    ).squeeze(axis=-1)
+    ).squeeze(-1)
     return data
 
 
@@ -337,13 +336,13 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     **_doc,
 )
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
 
-    if kwargs.get("maxiter", -1) > 0:
+    if kwargs.get("maxiter", 25) > 0:
         errorif(
             "interior" in kwargs["problem"],
             msg="maxiter cannot be positive for interior Neumann problem.",
@@ -355,7 +354,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             data["interpolator"],
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
-        if kwargs.get("_full_output", False):
+        if kwargs.get("full_output", False):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
@@ -622,8 +621,9 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    problem='str :Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     on_boundary="bool : Whether RpZcoords are on boundary surface.",
+    public=False,
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
@@ -931,7 +931,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
 
     boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
 
-    if kwargs.get("maxiter", -1) > 0:
+    if kwargs.get("maxiter", 25) > 0:
         data["Phi (periodic)"] = _fixed_point_potential(
             boundary_condition,
             data,
@@ -939,7 +939,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data["interpolator"],
             **{key: kwargs[key] for key in _doc if key in kwargs},
         )
-        if kwargs.get("_full_output", False):
+        if kwargs.get("full_output", False):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 

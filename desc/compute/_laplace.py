@@ -308,7 +308,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
                 potential_grid.num_zeta,
                 dx=dt,
                 dy=dz,
-            ).reshape(-1, order="F")
+            ).ravel(order="F")
 
         data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
         zeta = potential_grid.nodes[:, 2]

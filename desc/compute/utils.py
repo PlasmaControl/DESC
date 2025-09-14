@@ -194,6 +194,8 @@ def _convert_basis(p, data, basis):
     if basis == "xyz":
 
         for name in data.keys():
+            if name == "potential data":
+                continue
             errorif(
                 data_index[p][name]["dim"] == (3, 3),
                 NotImplementedError,

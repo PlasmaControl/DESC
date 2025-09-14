@@ -280,11 +280,6 @@ def _fixed_point_potential(
 )
 def _interpolator(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    # Grids with resolution less than source grid yield poor convergence
-    # due to FFT frequency spectrum truncation.
-    # TODO: Can now support eval grid of half resolution thanks to
-    #       https://github.com/f0uriest/interpax/pull/117. Can use
-    #       Same data. See note in singularities.py.
     grid = transforms["grid"]
     data["interpolator"] = get_interpolator(grid, grid, data, **kwargs)
     return data

@@ -44,7 +44,10 @@ from desc.integrals._bounce_utils import (
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
+    _best_params,
+    _best_ratio,
     _get_polar_quadrature,
+    _vanilla_params,
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -56,13 +59,10 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _1_over_G,
-    _best_params,
-    _best_ratio,
+    _G,
     _grad_G,
     _kernel_BS_plus_grad_S,
     _kernel_nr_over_r3,
-    _vanilla_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import (
@@ -982,9 +982,6 @@ class TestLaplace:
         )
         x0 = rpz2xyz(np.array([R0, 0, 0]))
 
-        def G(x):
-            return np.reciprocal(_1_over_G(x - x0))
-
         assert surface.NFP == 1
         grid = LinearGrid(M=30, N=30)
         data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
@@ -1006,10 +1003,16 @@ class TestLaplace:
         print("num iterations:", data["num iter"])
         print("Phi error     :", data["Phi error"])
 
-        np.testing.assert_allclose(np.ptp(G(data["x"]) - data["Phi"]), 0, atol=1e-6)
+        np.testing.assert_allclose(
+            np.ptp(_G(data["x"] - x0) - data["Phi"]),
+            0,
+            atol=1e-6,
+        )
 
         np.testing.assert_allclose(
-            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]), 0, atol=1e-6
+            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
+            0,
+            atol=1e-6,
         )
 
     @pytest.mark.unit

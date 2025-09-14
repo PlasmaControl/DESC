@@ -1064,8 +1064,6 @@ class FreeSurfaceError(_Objective):
         """
         eq = self.things[0]
 
-        # TODO (#1243, #1154): Partial summation to evaluate Rb_lmn only.
-        #   Then pass in transforms=eq_transforms in eval_transforms
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
         eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
         if self._use_same_grid:

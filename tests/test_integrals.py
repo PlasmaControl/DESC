@@ -1,6 +1,7 @@
 """Test integration algorithms."""
 
 from functools import partial
+from itertools import product
 
 import numpy as np
 import pytest
@@ -570,10 +571,20 @@ class TestSingularities:
     """Tests for high order singular integration."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
-    def test_biest_interpolators(self, interpolator):
+    @pytest.mark.parametrize(
+        "interpolator, settings",
+        product(
+            [FFTInterpolator, DFTInterpolator],
+            [
+                (_f_2d, *_f_2d_nyquist_freq(), 1),
+                (lambda x, y: np.cos(6 * x) ** 2 + np.sin(30 * y) + 1, 12, 1, 30),
+            ],
+        ),
+    )
+    def test_biest_interpolators(self, interpolator, settings):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        s_grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        f, M, N, NFP = settings
+        s_grid = LinearGrid(M=M, N=N, NFP=NFP)
         h_t = 2 * np.pi / s_grid.num_theta
         h_z = 2 * np.pi / s_grid.num_zeta / s_grid.NFP
 
@@ -585,15 +596,14 @@ class TestSingularities:
         dz = sz / 2 * h_z * r * np.cos(w)
 
         e_grid = LinearGrid(
-            0, theta=s_grid.num_theta // 2 + 1, zeta=s_grid.num_zeta // 2 + 1
+            theta=s_grid.num_theta // 2 + 1, zeta=s_grid.num_zeta // 2 + 1, NFP=NFP
         )
         interp = interpolator(e_grid, s_grid, st, sz, q)
         theta = e_grid.nodes[:, 1]
         zeta = e_grid.nodes[:, 2]
-        f = _f_2d(s_grid.nodes[:, 1], s_grid.nodes[:, 2])
+        _f = f(s_grid.nodes[:, 1], s_grid.nodes[:, 2])
         for i in range(dt.size):
-            truth = _f_2d(theta + dt[i], zeta + dz[i])
-            np.testing.assert_allclose(interp(f, i), truth)
+            np.testing.assert_allclose(interp(_f, i), f(theta + dt[i], zeta + dz[i]))
 
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
@@ -835,7 +845,6 @@ class TestLaplace:
         _D_quad=False,
     ):
         """Test Laplacian solver in interior."""
-        atol = 4e-5
         if surface is None:
             surface = FourierRZToroidalSurface(
                 R_lmn=[10, 1, 0.2],
@@ -847,7 +856,7 @@ class TestLaplace:
         data = surface.compute("n_rho", grid=grid)
         data["B0*n"] = -data["n_rho"][:, 2]
 
-        RpZ_grid = LinearGrid(M=15, N=15, NFP=surface.NFP)
+        RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
         RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
         RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
 
@@ -863,20 +872,18 @@ class TestLaplace:
             RpZ_grid=RpZ_grid,
             problem="interior Neumann",
             on_boundary=True,
-            maxiter=0,
             chunk_size=chunk_size,
-            warn_fft=False,
             _midpoint_quad=_midpoint_quad,
             _D_quad=_D_quad,
         )
         err = np.ptp(data["Z"] - data["Phi"])
         if just_err:
             return err
-        np.testing.assert_allclose(err, 0, atol=atol)
+        np.testing.assert_allclose(err, 0, atol=2e-5)
         np.testing.assert_allclose(
             dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
             -RpZ_data["B0*n"],
-            atol=atol,
+            atol=5e-6,
         )
 
     @pytest.mark.skip

@@ -20,6 +20,7 @@ from desc.integrals.quad_utils import (
 )
 from desc.io import IOAble
 from desc.utils import (
+    apply,
     check_posint,
     dot,
     parse_argname_change,
@@ -415,7 +416,7 @@ def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
     if hasattr(kernel, "eval_keys"):
         keys = keys + kernel.eval_keys
 
-    eval_data = {key: jnp.asarray(eval_data[key]) for key in keys if key in eval_data}
+    eval_data = apply(eval_data, jnp.asarray, keys)
     if eval_grid is not None:
         # Casting to JAX arrays reduces memory usage.
         if "theta" not in eval_data:
@@ -425,9 +426,7 @@ def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):
 
     # Can't prune ω because ω is need to interpolate ϕ in _singular_part.
     keys = kernel.keys + ["omega", "theta", "zeta"]
-    source_data = {
-        key: jnp.asarray(source_data[key]) for key in keys if key in source_data
-    }
+    source_data = apply(source_data, jnp.asarray, keys)
     # to avoid adding keys to dictionary during iteration
     if "theta" not in source_data:
         source_data["theta"] = jnp.asarray(source_grid.nodes[:, 1])

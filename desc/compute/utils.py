@@ -631,10 +631,11 @@ def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
     for name in params_list:
         if name not in params:
             p = getattr(obj, name)
-            if isinstance(p, dict):
-                params[name] = p.copy()
-            else:
-                params[name] = p if p is None else jnp.atleast_1d(p)
+            params[name] = (
+                p.copy()
+                if isinstance(p, dict)
+                else (None if (p is None) else jnp.atleast_1d(p))
+            )
     return params
 
 

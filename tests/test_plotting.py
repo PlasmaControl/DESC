@@ -149,6 +149,15 @@ class TestPlot1D:
         fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_plot_1d_normalized(self):
+        """Test plotting normalized flux surface average <|B|> on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_1d(eq, "<|B|>", log=True, normalize="<|B|>_vol")
+        ax.set_ylim([9e-1, 1.1e0])
+        return fig
+
 
 class TestPlot2D:
     """Tests for plot_2d."""
@@ -280,6 +289,26 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
+
+    @pytest.mark.unit
+    def test_3d_tz_normalized(self):
+        """Test 3d plot of normalized force on interior surface."""
+        eq = get("DSHAPE_CURRENT")
+        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        fig, data = plot_3d(
+            eq,
+            "|F|",
+            log=True,
+            grid=grid,
+            return_data=True,
+            normalize="<|grad(p)|>_vol",
+        )
+        assert "X" in data.keys()
+        assert "Y" in data.keys()
+        assert "Z" in data.keys()
+
+        assert "|F|" in data.keys()
+        assert "normalization" in data.keys()
 
     @pytest.mark.unit
     def test_3d_rz(self):

@@ -4,7 +4,7 @@ Changelog
 New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
-- Adds keyword argument `normalize` to plot\_1d, plot\_3d. `normalize` is a string to use for normalization.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Adding AGNI, a finite-n ideal MHD stability solver and optimizer. The eigenvalues can be accessed using `finite-n lambda` whereas optimization against an instability can be performed using `ObjectiveFunctionNameHere`.
 
 Bug Fixes

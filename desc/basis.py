@@ -1236,7 +1236,7 @@ class ChebyshevFourierSeries(_Basis):
             n = n[nidx]
 
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        #toroidal = chebyshev_z(z[:, np.newaxis], n, NFP=self.NFP, dz=derivatives[2])
+        # toroidal = chebyshev_z(z[:, np.newaxis], n, NFP=self.NFP, dz=derivatives[2])
         toroidal = chebyshev_z(z[:, np.newaxis], n, NFP=self.NFP, dz=0)
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
@@ -2031,16 +2031,16 @@ def chebyshev_z(z, l, NFP=1, dz=0):
     y : ndarray, shape(N,K)
         basis function(s) evaluated at specified points
 
-        """
+    """
     z, l = map(jnp.asarray, (z, l))
-    z = jnp.mod(z, 2*np.pi/NFP)
-    z_shift = z * NFP/ np.pi - 1
+    z = jnp.mod(z, 2 * np.pi / NFP)
+    z_shift = z * NFP / np.pi - 1
     if dz == 0:
         a = 0.12
         z_shift = z_shift + a * jnp.sin(jnp.pi * (z_shift + 1))
         return jnp.cos(l * NFP * jnp.arccos(z_shift))
-        #return jnp.cos(l * jnp.arccos(z_shift))
-    #elif dz in [1, 2, 3, 4]:
+        # return jnp.cos(l * jnp.arccos(z_shift))
+    # elif dz in [1, 2, 3, 4]:
     #    if dz == 1:
     #        diff = (
     #            (
@@ -2099,7 +2099,6 @@ def chebyshev_z(z, l, NFP=1, dz=0):
             "Analytic z derivatives of Chebyshev polynomials "
             + "have not been implemented higher than third order."
         )
-
 
 
 @jit

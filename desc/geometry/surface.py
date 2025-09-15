@@ -125,8 +125,12 @@ class ChebyshevRZToroidalSurface(Surface):
 
         from desc.basis import ChebyshevFourierSeries
 
-        self._R_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=self._NFP, sym=False)
-        self._Z_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=self._NFP, sym=False)
+        self._R_basis = ChebyshevFourierSeries(
+            M=self._M, N=self._N, NFP=self._NFP, sym=False
+        )
+        self._Z_basis = ChebyshevFourierSeries(
+            M=self._M, N=self._N, NFP=self._NFP, sym=False
+        )
 
         # Map provided (m,n) -> current basis ordering (l=0)
         R_full = np.zeros(self.R_basis.num_modes)

@@ -835,7 +835,7 @@ def _kernel_biot_savart_A(eval_data, source_data, ds, diag=False):
         ds
         * source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
         * (-mu_0 * K)
-        * _G(_dx(eval_data, source_data, diag))
+        * _G(_dx(eval_data, source_data, diag), keepdims=True)
     )
 
 
@@ -1059,7 +1059,7 @@ def compute_B_plasma(
 
     eval_data = eq.compute(_dx.keys + ["B", "n_rho"], grid=eval_grid)
     source_data = eq.compute(
-        _kernel_biot_savart_A.keys + ["|e_theta x e_zeta|"], grid=source_grid
+        _kernel_biot_savart.keys + ["|e_theta x e_zeta|"], grid=source_grid
     )
     if hasattr(eq.surface, "Phi_mn"):
         source_data = eq.surface.compute("K", grid=source_grid, data=source_data)
@@ -1067,7 +1067,7 @@ def compute_B_plasma(
 
     interpolator = get_interpolator(eval_grid, source_grid, source_data)
     Bplasma = virtual_casing_biot_savart(
-        eval_data, source_data, interpolator, chunk_size
+        eval_data, source_data, interpolator, chunk_size=chunk_size
     )
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma += eval_data["B"] / 2

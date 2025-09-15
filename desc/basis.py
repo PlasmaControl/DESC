@@ -20,6 +20,7 @@ __all__ = [
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
+    "ChebyshevFourierSeries",
 ]
 
 
@@ -1118,6 +1119,160 @@ class ChebyshevDoubleFourierBasis(_Basis):
             self._set_up()
 
 
+class ChebyshevFourierSeries(_Basis):
+    """2D basis set for use on a single flux surface.
+
+    Fourier series in the poloidal coordinates.
+    Chebyshev seris in the toroidal coordinates.
+
+    Parameters
+    ----------
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+        Now only NFP=1 is implemented
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+        now only no sym is implemented
+
+    """
+
+    def __init__(self, M, N, L=0, NFP=1, sym=False):
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = sym
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, M=0, N=0):
+        """Get mode numbers for double Fourier series.
+
+        Parameters
+        ----------
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        dim_pol = 2 * M + 1
+        dim_tor = N + 1
+        m = np.arange(dim_pol) - M
+        n = np.arange(dim_tor)
+        mm, nn = np.meshgrid(m, n)
+        mm = mm.reshape((-1, 1), order="F")
+        nn = nn.reshape((-1, 1), order="F")
+        z = np.zeros_like(mm)
+        y = np.hstack([z, mm, nn])
+        return y
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None, unique=False):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        unique : bool, optional
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if modes is None:
+            modes = self.modes
+        if derivatives[0] != 0:
+            return jnp.zeros((grid.nodes.shape[0], modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((len(grid.nodes), 0))
+
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+
+        # TODO: avoid duplicate calculations when mixing derivatives
+        r, t, z = grid.nodes.T
+        l, m, n = modes.T
+
+        if unique:
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                m, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                n, return_index=True, return_inverse=True, axis=0
+            )
+            t = t[tidx]
+            z = z[zidx]
+            m = m[midx]
+            n = n[nidx]
+
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        #toroidal = chebyshev_z(z[:, np.newaxis], n, NFP=self.NFP, dz=derivatives[2])
+        toroidal = chebyshev_z(z[:, np.newaxis], n, NFP=self.NFP, dz=0)
+        if unique:
+            poloidal = poloidal[toutidx][:, moutidx]
+            toroidal = toroidal[zoutidx][:, noutidx]
+
+        return poloidal * toroidal
+
+    def change_resolution(self, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        self._NFP = NFP if NFP is not None else self.NFP
+        if M != self._M or N != self._N or sym != self.sym:
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self._M, self._N)
+            self._set_up()
+
+
 class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
@@ -1856,6 +2011,95 @@ def chebyshev(r, l, dr=0):
             "Analytic radial derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
+
+
+@functools.partial(jit, static_argnums=3)
+def chebyshev_z(z, l, NFP=1, dz=0):
+    """Shifted Chebyshev polynomial.
+
+    Parameters
+    ----------
+    z : ndarray, shape(N,)
+        toroidal coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        toroidal mode number(s)
+    dz : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+        """
+    z, l = map(jnp.asarray, (z, l))
+    z = jnp.mod(z, 2*np.pi/NFP)
+    z_shift = z * NFP/ np.pi - 1
+    if dz == 0:
+        a = 0.12
+        z_shift = z_shift + a * jnp.sin(jnp.pi * (z_shift + 1))
+        return jnp.cos(l * NFP * jnp.arccos(z_shift))
+        #return jnp.cos(l * jnp.arccos(z_shift))
+    #elif dz in [1, 2, 3, 4]:
+    #    if dz == 1:
+    #        diff = (
+    #            (
+    #                -l * z_shift * chebyshev_z(z, l, NFP, dz - 1)
+    #                + l * chebyshev_z(z, l - 1, NFP, dz - 1)
+    #            )
+    #            / (1 - z_shift**2)
+    #            / np.pi
+    #        )
+    #    elif dz == 2:
+    #        diff = (
+    #            -(l**2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift**2)
+    #            + (l * z_shift * jnp.sin(l * jnp.arccos(z_shift)))
+    #            / (jnp.sqrt(1 - z_shift**2) * (1 - z_shift**2))
+    #        ) / np.pi**2
+    #    elif dr == 3:
+    #        diff = (
+    #            -(3 * l**2 * z_shift * jnp.cos(l * jnp.arccos(z_shift)))
+    #            / (1 - z_shift**2) ** 2
+    #            + (3 * l * z_shift**2 * jnp.sin(l * jnp.arccos(z_shift)))
+    #            / (1 - z_shift**2) ** (5 / 2)
+    #            + (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2) ** (3 / 2)
+    #            - (l**3 * jnp.sin(l * jnp.arccos(z_shift)))
+    #            / (1 - z_shift**2) ** (3 / 2)
+    #        ) / np.pi**3
+    #    elif dr == 4:
+    #        diff = (
+    #            l
+    #            * (
+    #                (
+    #                    l
+    #                    * (4 + 11 * z_shift**2 + l**2 * (-1 + z_shift**2))
+    #                    * jnp.cos(l * jnp.arccos(z_shift))
+    #                )
+    #                / (-1 + z_shift**2) ** 3
+    #                + (
+    #                    3
+    #                    * z_shift
+    #                    * (3 + 2 * z_shift**2 + 2 * l**2 * (-1 + z_shift**2))
+    #                    * jnp.sin(l * jnp.arccos(z_shift))
+    #                )
+    #                / (1 - z_shift**2) ** (7 / 2)
+    #            )
+    #        ) / np.pi**4
+    #    prod = 1
+    #    for k in range(int(dz)):
+    #        prod *= (l**2 - k**2) / (2 * k + 1)
+    #    sign = (-1) ** (l + dz)
+    #    left_val = sign * prod / np.pi**dz
+    #    right_val = prod / np.pi**dz
+    #    diff = jnp.where(z_shift == -1, left_val, diff)
+    #    diff = jnp.where(z_shift == 1, right_val, diff)
+    #    return diff
+    else:
+        raise NotImplementedError(
+            "Analytic z derivatives of Chebyshev polynomials "
+            + "have not been implemented higher than third order."
+        )
+
 
 
 @jit

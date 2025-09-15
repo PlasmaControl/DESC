@@ -64,11 +64,12 @@ class ChebyshevRZToroidalSurface(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
+        "_NFP",
         "_rho",
         "_mirror",
         "_length",
     ]
-    _static_attrs = Surface._static_attrs + ["_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -79,6 +80,7 @@ class ChebyshevRZToroidalSurface(Surface):
         modes_Z=None,
         M=None,
         N=None,
+        NFP=1,
         rho=1.0,
         name="",
         check_orientation=True,
@@ -104,6 +106,7 @@ class ChebyshevRZToroidalSurface(Surface):
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP", False)
         MR = int(np.max(abs(modes_R[:, 0]))) if modes_R.size else 0
         NR = int(np.max(abs(modes_R[:, 1]))) if modes_R.size else 0
         MZ = int(np.max(abs(modes_Z[:, 0]))) if modes_Z.size else 0
@@ -111,9 +114,8 @@ class ChebyshevRZToroidalSurface(Surface):
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
         self._L = 0
+        self._NFP = NFP
 
-        # Chebyshev toroidal coordinate is non-periodic; force NFP = 1
-        self._NFP = 1
         self._rho = float(rho)
         self._name = name
         self._mirror = bool(mirror)
@@ -123,8 +125,8 @@ class ChebyshevRZToroidalSurface(Surface):
 
         from desc.basis import ChebyshevFourierSeries
 
-        self._R_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=1, sym=False)
-        self._Z_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=1, sym=False)
+        self._R_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=self._NFP, sym=False)
+        self._Z_basis = ChebyshevFourierSeries(M=self._M, N=self._N, NFP=self._NFP, sym=False)
 
         # Map provided (m,n) -> current basis ordering (l=0)
         R_full = np.zeros(self.R_basis.num_modes)
@@ -206,7 +208,7 @@ class ChebyshevRZToroidalSurface(Surface):
         _ = kwargs.pop("L", None)  # no radial variation on the surface
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
-        # --no-verify _NFP = kwargs.pop("NFP", None)  # ignored (forced to 1)
+        NFP = kwargs.pop("NFP", None)
         # --no-verify _sym = kwargs.pop("sym", None)  # no symmetry coupling
         assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
 
@@ -217,6 +219,7 @@ class ChebyshevRZToroidalSurface(Surface):
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        NFP = check_nonnegint(NFP, "NFP")
 
         if ((N is not None) and (N != self.N)) or ((M is not None) and (M != self.M)):
             M = int(M if M is not None else self.M)
@@ -299,6 +302,7 @@ class ChebyshevRZToroidalSurface(Surface):
         coords,
         theta,
         phi=None,
+        NFP=1,
         M=6,
         N=6,
         check_orientation=True,
@@ -331,6 +335,7 @@ class ChebyshevRZToroidalSurface(Surface):
         """
         M = check_nonnegint(M, "M", False)
         N = check_nonnegint(N, "N", False)
+        NFP = check_nonnegint(NFP, "NFP", False)
         theta = np.asarray(theta)
         assert coords.shape[0] == theta.size, "coords and theta must have same length"
         if phi is None:
@@ -354,8 +359,8 @@ class ChebyshevRZToroidalSurface(Surface):
         from desc.basis import ChebyshevFourierSeries
         from desc.transform import Transform
 
-        R_basis = ChebyshevFourierSeries(M=M, N=N, NFP=1, sym=False)
-        Z_basis = ChebyshevFourierSeries(M=M, N=N, NFP=1, sym=False)
+        R_basis = ChebyshevFourierSeries(M=M, N=N, NFP=NFP, sym=False)
+        Z_basis = ChebyshevFourierSeries(M=M, N=N, NFP=NFP, sym=False)
 
         if w is None:
             tR = Transform(nodes, R_basis, build=False, build_pinv=True, rcond=rcond)
@@ -387,6 +392,7 @@ class ChebyshevRZToroidalSurface(Surface):
             modes_Z=Z_basis.modes[:, 1:],
             M=M,
             N=N,
+            NFP=NFP,
             rho=1.0,
             name="",
             check_orientation=check_orientation,

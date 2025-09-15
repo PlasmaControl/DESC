@@ -42,7 +42,17 @@ class Transform(IOAble):
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
-    _static_attrs = ["_derivatives"]
+    _static_attrs = [
+        "_basis",
+        "_derivatives",
+        "_method",
+        "_rcond",
+        "_built",
+        "_built_pinv",
+        "num_n_modes",
+        "num_lm_modes",
+        "pad_dim",
+    ]
 
     def __init__(
         self,
@@ -133,15 +143,34 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = 4  # hardcode max derivative order for now,
-        matrices = {
-            "direct1": {
-                i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
-                for i in range(n + 1)
-            },
-            "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
-            "direct2": {i: {} for i in range(n + 1)},
-        }
+        n = 4  # hardcode max derivative order for now
+        ndi = self.derivatives[:, 0].max()
+        ndj = self.derivatives[:, 1].max()
+        ndk = self.derivatives[:, 2].max()
+        if self.method == "jitable":
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
+                    for i in range(n + 1)
+                },
+            }
+        elif self.method == "fft":
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+            }
+        elif self.method == "direct2":
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+                "direct2": {k: {} for k in range(ndk + 1)},
+            }
+        elif self.method == "direct1":
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
+                    for i in range(ndi + 1)
+                },
+            }
+
         return matrices
 
     def _check_inputs_fft(self, grid, basis):
@@ -434,7 +463,7 @@ class Transform(IOAble):
             "before being used.",
         )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             Ainv = self.matrices["pinv"]
             c = jnp.matmul(Ainv, x)
         elif self.method == "direct2":
@@ -481,7 +510,7 @@ class Transform(IOAble):
             f" of grid nodes ({self.grid.num_nodes}).",
         )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -668,7 +697,10 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+
+        Transform compute method.
+        """
         return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter

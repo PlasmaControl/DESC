@@ -9,7 +9,6 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
@@ -17,9 +16,12 @@ from desc.utils import (
     check_posint,
     errorif,
     parse_argname_change,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     safenorm,
     warnif,
+    xyz2rpz_vec,
 )
 
 
@@ -315,6 +317,8 @@ class _BIESTInterpolator(IOAble, ABC):
         "_shift_t",
         "_shift_z",
     ]
+
+    _static_attrs = ["_q"]
 
     def __init__(self, eval_grid, source_grid, st, sz, q):
         check_posint(eval_grid.NFP)

@@ -12,6 +12,7 @@ from functools import partial
 import lineax as lx
 
 from desc.backend import fixed_point, jit, jnp
+from desc.integrals._fourier import fft_interp2d
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -22,7 +23,7 @@ from desc.integrals.singularities import (
     get_interpolator,
     singular_integral,
 )
-from desc.utils import cross, dot, errorif
+from desc.utils import apply, cross, dot
 
 from .data_index import register_compute_fun
 
@@ -148,7 +149,6 @@ def _lsmr_compute_potential(
     interpolator,
     basis,
     problem,
-    same_grid=True,
     chunk_size=None,
     _midpoint_quad=False,
     _D_quad=False,
@@ -172,7 +172,9 @@ def _lsmr_compute_potential(
     )
     Phi = basis.evaluate(potential_grid)
     potential_data["Phi(x) (periodic)"] = Phi
-    source_data["Phi (periodic)"] = Phi if same_grid else basis.evaluate(source_grid)
+    source_data["Phi (periodic)"] = (
+        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
+    )
 
     D = _D_plus_half(
         potential_data,
@@ -277,16 +279,61 @@ def _fixed_point_potential(
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     q="int : Order of quadrature in polar domain.",
+    potential_grid="""LinearGrid :
+        Grid to evaluate potential on boundary.
+        If not given, default is to interpolate to source grid.
+        """,
+    warn_fft="""bool :
+        Whether to warn if the interpolation will be lossy. Default is ``True``.
+        """,
 )
 def _interpolator(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    # Grids with resolution less than source grid yield poor convergence
-    # due to FFT frequency spectrum truncation.
-    # TODO: Can now support eval grid of half resolution thanks to
-    #       https://github.com/f0uriest/interpax/pull/117. Can use
-    #       Same data. See note in singularities.py.
     grid = transforms["grid"]
-    data["interpolator"] = get_interpolator(grid, grid, data, **kwargs)
+    potential_grid = kwargs.get("potential_grid", grid)
+    data["interpolator"] = get_interpolator(potential_grid, grid, data, **kwargs)
+
+    if potential_grid == grid:
+        data["potential data"] = apply(data, subset=("R", "phi", "Z"))
+    else:
+        dt = 2 * jnp.pi / grid.num_theta
+        dz = 2 * jnp.pi / grid.num_zeta / grid.NFP
+
+        # TODO: just interpolate Rb_mn, Zb_mn, and omegab_mn onto potential grid
+        #       to avoid interpolation on oversampled grid
+        def fun(x):
+            return fft_interp2d(
+                grid.meshgrid_reshape(x, "rtz")[0],
+                potential_grid.num_theta,
+                potential_grid.num_zeta,
+                dx=dt,
+                dy=dz,
+            ).ravel(order="F")
+
+        data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
+        zeta = potential_grid.nodes[:, 2]
+        data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
+
+    return data
+
+
+@register_compute_fun(
+    name="potential data",
+    label="potential data",
+    units="~",
+    units_long="not applicable",
+    description="RpZ position on the potential grid",
+    dim=1,
+    coordinates="rtz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["interpolator"],
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    public=False,
+)
+def _potential_grid_position(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
     return data
 
 
@@ -311,7 +358,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
 def _S_B0_n(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["S[B0*n]"] = singular_integral(
-        data,
+        data.get("potential data", data),
         data,
         data["interpolator"],
         _kernel_monopole,
@@ -342,17 +389,13 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
 
-    if kwargs.get("maxiter", 25) > 0:
-        errorif(
-            "interior" in kwargs["problem"],
-            msg="maxiter cannot be positive for interior Neumann problem.",
-        )
+    if (kwargs.get("maxiter", 25) > 0) and (kwargs["problem"] != "interior Neumann"):
         data["Phi (periodic)"] = _fixed_point_potential(
             data["S[B0*n]"],
             data,
             data,
             data["interpolator"],
-            **{key: kwargs[key] for key in _doc if key in kwargs},
+            **apply(kwargs, subset=_doc),
         )
         if kwargs.get("full_output", False):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
@@ -362,7 +405,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
             data["S[B0*n]"],
-            data,
+            data.get("potential data", data),
             data,
             data["interpolator"],
             transforms["Phi"].basis,
@@ -628,7 +671,6 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
     chunk_size = kwargs.get("chunk_size", None)
-    interpolator = kwargs.get("eval_interpolator", data.get("interpolator", None))
     sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
 
     if kwargs["on_boundary"]:
@@ -638,7 +680,7 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
             * singular_integral(
                 RpZ_data,
                 data,
-                interpolator,
+                kwargs.get("eval_interpolator", data.get("interpolator", None)),
                 _kernel_BS_plus_grad_S,
                 chunk_size=chunk_size,
             )
@@ -937,7 +979,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             data,
             data,
             data["interpolator"],
-            **{key: kwargs[key] for key in _doc if key in kwargs},
+            **apply(kwargs, subset=_doc),
         )
         if kwargs.get("full_output", False):
             data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
@@ -947,7 +989,7 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
     else:
         data["Phi_mn"] = _lsmr_compute_potential(
             boundary_condition,
-            data,
+            data.get("potential data", data),
             data,
             data["interpolator"],
             transforms["Phi"].basis,

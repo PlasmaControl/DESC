@@ -555,8 +555,7 @@ def _best_params(grid, ratio):
     assert grid.can_fft2
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    q = grid.num_nodes if (grid.num_zeta > 1) else (Nt * Nz)
-    q = int(jnp.sqrt(q) / 2)
+    q = jnp.sqrt(grid.num_nodes if (grid.num_zeta > 1) else (Nt * Nz)) // 2
     s = min(q, Nt, Nz)
     # Size of singular region in real space = s * h * |e_.|
     # For it to be a circle, choose radius ~ equal

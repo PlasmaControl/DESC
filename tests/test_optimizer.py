@@ -409,7 +409,8 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled_error = lambda x, *args: objective._jac_scaled_error(
+    objective.build()
+    objective.jac_scaled_error = lambda x, *args: objective.jac_scaled_error(
         x
     ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
 
@@ -447,7 +448,13 @@ def test_overstepping():
         options={
             "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0, "order": 1},
-            "solve_options": {"verbose": 0, "maxiter": 2},
+            "solve_options": {
+                "verbose": 0,
+                "maxiter": 2,
+                # Hidden kwarg just for debug/tests, to not solve
+                # during build
+                "solve_during_proximal_build": False,
+            },
         },
     )
 
@@ -704,6 +711,8 @@ def test_scipy_constrained_solve():
     obj = ObjectiveFunction(ForceBalance(eq=eq))
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        warnings.filterwarnings("ignore", message=".*no equil.*")
+
         eq2, result = eq.optimize(
             objective=obj,
             constraints=constraints,
@@ -1220,8 +1229,8 @@ def test_proximal_jacobian():
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1233,8 +1242,8 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)

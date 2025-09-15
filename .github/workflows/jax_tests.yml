@@ -2,12 +2,12 @@ name: Dependency test JAX
 
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
   workflow_dispatch:
 
 jobs:
   jax_tests:
-    if: ${{ github.event.label.name == 'test_jax' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'test_jax') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -21,7 +21,7 @@ jobs:
                       # 0.4.36 has a bug that causes tests to fail
         group: [1, 2]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:

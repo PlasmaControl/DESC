@@ -48,6 +48,7 @@ Contour Plots of 2-D data
 
     desc.plotting.plot_3d
     desc.plotting.plot_coils
+    desc.plotting.plot_field_lines
 
 
 Specialized Plots for QS Metrics
@@ -59,6 +60,15 @@ Specialized Plots for QS Metrics
     desc.plotting.plot_boozer_surface
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_qs_error
+
+
+Plotting energetic particle proxies
+-----------------------------------
+.. autosummary::
+    :toctree: _api/plotting
+    :recursive:
+
+    desc.plotting.plot_gammac
 
 
 Misc Plotting Utilities

@@ -43,7 +43,17 @@ class Transform(IOAble):
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
-    _static_attrs = ["_derivatives"]
+    _static_attrs = [
+        "_basis",
+        "_derivatives",
+        "_method",
+        "_rcond",
+        "_built",
+        "_built_pinv",
+        "num_n_modes",
+        "num_lm_modes",
+        "pad_dim",
+    ]
 
     def __init__(
         self,
@@ -135,15 +145,34 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = 4  # hardcode max derivative order for now,
-        matrices = {
-            "direct1": {
-                i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
-                for i in range(n + 1)
-            },
-            "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
-            "direct2": {i: {} for i in range(n + 1)},
-        }
+        n = 4  # hardcode max derivative order for now
+        ndi = self.derivatives[:, 0].max()
+        ndj = self.derivatives[:, 1].max()
+        ndk = self.derivatives[:, 2].max()
+        if self.method == "jitable":
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
+                    for i in range(n + 1)
+                },
+            }
+        elif self.method == "fft":
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+            }
+        elif self.method == "direct2":
+            matrices = {
+                "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+                "direct2": {k: {} for k in range(ndk + 1)},
+            }
+        elif self.method == "direct1":
+            matrices = {
+                "direct1": {
+                    i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
+                    for i in range(ndi + 1)
+                },
+            }
+
         return matrices
 
     def _check_inputs_fft(self, grid, basis):
@@ -204,16 +233,13 @@ class Transform(IOAble):
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
         self.pad_dim = self.grid.num_zeta - self.num_n_modes
         self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
-        offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
         )[1]
         col = np.where(
-            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+            basis.modes[None, :, 2] == np.arange(-basis.N, basis.N + 1)[:, None, None]
         )[0]
-        self.fft_index = np.atleast_1d(
-            np.squeeze(self.num_n_modes * row + col + offset)
-        )
+        self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],
@@ -456,7 +482,7 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             Ainv = self.matrices["pinv"]
             c = jnp.matmul(Ainv, x)
         elif self.method == "direct2":
@@ -506,7 +532,7 @@ class Transform(IOAble):
                 )
             )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -693,7 +719,10 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+
+        Transform compute method.
+        """
         return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter

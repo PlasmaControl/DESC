@@ -23,6 +23,11 @@ tests/benchmarks/.benchmarks/
 *.swp
 *.swo
 .pymon
+.vscode/
+
+.DS_Store
+compare1.py
+compare2.py
 
 # see https://github.com/github/gitignore/blob/main/Python.gitignore
 # pyenv

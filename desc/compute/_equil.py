@@ -822,6 +822,45 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     )
     return data
 
+## these next two tools are for anisotropic F, but need to be tested 
+
+@register_compute_fun(
+    name="|F|_a",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Magnitude of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["F_anisotropic"],
+)
+def _Fmag_a(params, transforms, profiles, data, **kwargs):
+    data["|F|_a"] = safenorm(data["F_anisotropic"], axis=-1)
+    return data
+    
+@register_compute_fun(
+    name="<|F|>_a_vol",
+    label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Volume average of magnitude of force balance error",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["|F|_a", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
+)
+def _Fmag_a_vol(params, transforms, profiles, data, **kwargs):
+    data["<|F|>_a_vol"] = (
+        jnp.sum(data["|F|_a"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
+    )
+    return data
+
 
 @register_compute_fun(
     name="e^helical",
@@ -921,6 +960,79 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
         - data["grad(p)"].T
     ).T
 
+    return data
+
+
+@register_compute_fun(
+    name="F_anisotropic_3D",
+    label="F_{anisotropic}_3D",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Anisotropic force balance error, but accounting for 3D pressure (p_perp)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "B", "grad(beta_a)", "beta_a", "grad(|B|^2)", "grad(p_perp)"],
+)
+def _F_anisotropic_3D(params, transforms, profiles, data, **kwargs):
+    data["F_anisotropic_3D"] = (
+        (1 - data["beta_a"]) * cross(data["J"], data["B"]).T
+        - dot(data["B"], data["grad(beta_a)"]) * data["B"].T / mu_0
+        - data["beta_a"] * data["grad(|B|^2)"].T / (2 * mu_0)
+        - data["grad(p_perp)"].T
+    ).T
+
+    return data
+
+
+@register_compute_fun(
+    name="F_anisotropic_3D_explicit",
+    label="F_{\\text{anisotropic}}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Full 3D anisotropic MHD force vector using p_perp and p_parallel",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B",
+        "J",
+        "|B|",
+        "p_perp",
+        "p_parallel",
+        "grad(p_perp)",
+        "grad(p_parallel)",
+        "grad(B)",
+    ],
+)
+def _F_anisotropic_3D_explicit(params, transforms, profiles, data, **kwargs):
+    B = data["B"]
+    Bmag = data["|B|"]
+    b = B / Bmag[:, None]  # Unit vector along B
+
+    # Pressure anisotropy and its gradient
+    delta_p = data["p_parallel"] - data["p_perp"]
+    grad_delta_p = data["grad(p_parallel)"] - data["grad(p_perp)"]
+
+    # Curvature: (b · ∇)b
+    gradB = data["grad(B)"]
+    dBds = jnp.einsum("ni,nij->nj", b, gradB) / Bmag[:, None]
+    curvature = dBds - b * jnp.einsum("ni,ni->n", b, dBds)[:, None]
+
+    # Gradient of delta_p projected along b
+    grad_delta_p_parallel = jnp.einsum("ni,ni->n", b, grad_delta_p)[:, None] * b
+
+    # Full divergence of Pi
+    div_Pi = data["grad(p_perp)"] + delta_p[:, None] * curvature + grad_delta_p_parallel
+
+    # Final anisotropic force
+    F_aniso = jnp.cross(data["J"], data["B"]) - div_Pi
+
+    data["F_anisotropic_3D_explicit"] = F_aniso
     return data
 
 

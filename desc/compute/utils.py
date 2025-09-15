@@ -277,6 +277,10 @@ def _get_deps_1_key(p, key, has_axis):
 
 
     """
+    # import pdb
+    # pdb.set_trace()
+    # print(p, data_index[p])
+    # print(p)
     if has_axis:
         if "full_with_axis_dependencies" in data_index[p][key]:
             return data_index[p][key]["full_with_axis_dependencies"]["data"]

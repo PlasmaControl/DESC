@@ -881,8 +881,11 @@ class FreeSurfaceError(_Objective):
 
     Warnings
     --------
-    If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
-    should be smooth and divergence free until GitHub issue #1796 is resolved.
+    Bugs with the optimizer may cause the optimizer to stall in the optimization
+    landscape of this objective. See GitHub issue #1208 to resolve.
+    Also, if ``field`` is an instance of ``FreeSurfaceOuterField``, then
+    ``field._B_coil`` should be smooth and divergence free until GitHub issue #1796
+    is resolved.
 
     Parameters
     ----------

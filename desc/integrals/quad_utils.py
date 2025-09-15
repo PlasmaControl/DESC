@@ -486,11 +486,11 @@ def _get_polar_quadrature(q):
     w = jnp.linspace(0, jnp.pi, Nw, endpoint=False)
     dw = jnp.ones_like(w) * jnp.pi / Nw
     r, w = jnp.meshgrid(r, w)
-    r = r.flatten()
-    w = w.flatten()
+    r = r.ravel()
+    w = w.ravel()
     dr, dw = jnp.meshgrid(dr, dw)
-    dr = dr.flatten()
-    dw = dw.flatten()
+    dr = dr.ravel()
+    dw = dw.ravel()
     return r, w, dr, dw
 
 
@@ -520,7 +520,7 @@ def _vanilla_params(grid):
     """
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    q = int(jnp.sqrt(grid.num_nodes) // 2)
     s = min(q, Nt, Nz)
     return s, s, q
 
@@ -555,8 +555,7 @@ def _best_params(grid, ratio):
     assert grid.can_fft2
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    q = grid.num_nodes if (grid.num_zeta > 1) else (Nt * Nz)
-    q = int(jnp.sqrt(q) / 2)
+    q = int(jnp.sqrt(grid.num_nodes if (grid.num_zeta > 1) else (Nt * Nz)) // 2)
     s = min(q, Nt, Nz)
     # Size of singular region in real space = s * h * |e_.|
     # For it to be a circle, choose radius ~ equal

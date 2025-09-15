@@ -577,7 +577,7 @@ class TestSingularities:
             [FFTInterpolator, DFTInterpolator],
             [
                 (_f_2d, *_f_2d_nyquist_freq(), 1),
-                (lambda x, y: np.cos(6 * x) ** 2 + np.sin(30 * y) + 1, 12, 1, 30),
+                (lambda x, y: np.cos(6 * x) ** 2 + np.sin(90 * y) + 1, 12, 3, 30),
             ],
         ),
     )

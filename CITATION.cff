@@ -22,21 +22,31 @@ authors:
     affiliation: Princeton University
     orcid: 'https://orcid.org/0000-0003-0736-4360'
     email: dpanici@princeton.edu
-  - given-names: Egemen
-    family-names: Kolemen
-    email: ekolemen@princeton.edu
-    affiliation: Princeton University
-    orcid: 'https://orcid.org/0000-0003-4212-3247'
   - given-names: Kaya
     family-names: Unalmis
     email: kunalmis@princeton.edu
     affiliation: Princeton University
     orcid: 'https://orcid.org/0000-0002-1755-6764'
+  - given-names: Yigit
+    family-names: Elmacioglu
+    email: ye2698@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0009-0002-7747-2834'
+  - given-names: Rahul
+    family-names: Gaur
+    email: rg6256@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0003-4367-9052'
   - given-names: Patrick
     family-names: Kim
     email: sungha.p.kim@gmail.com
     affiliation: University of Maryland, College Park
     orcid: 'https://orcid.org/0000-0003-3201-1831'
+  - given-names: Egemen
+    family-names: Kolemen
+    email: ekolemen@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0003-4212-3247'
 identifiers:
   - type: doi
     value: 10.5281/zenodo.4876504

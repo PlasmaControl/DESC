@@ -185,7 +185,6 @@ class SourceFreeField(FourierRZToroidalSurface):
             if RpZ_grid is None:
                 errorif(RpZ_data is not None, msg="Please supply RpZ_grid.")
             else:
-                warn_fft = kwargs.pop("warn_fft", True)
                 kwargs["eval_interpolator"] = get_interpolator(
                     eval_grid=RpZ_grid,
                     source_grid=grid,
@@ -198,7 +197,6 @@ class SourceFreeField(FourierRZToroidalSurface):
                         override_grid,
                         **kwargs,
                     ),
-                    warn_fft=warn_fft,
                     **kwargs,
                 )
 

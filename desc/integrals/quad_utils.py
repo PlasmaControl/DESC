@@ -492,3 +492,101 @@ def _get_polar_quadrature(q):
     dr = dr.flatten()
     dw = dw.flatten()
     return r, w, dr, dw
+
+
+def _vanilla_params(grid):
+    """Parameters for support size and quadrature resolution.
+
+    These parameters do not account for grid anisotropy.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    s = min(q, Nt, Nz)
+    return s, s, q
+
+
+def _best_params(grid, ratio):
+    """Parameters for heuristic support size and quadrature resolution.
+
+    These parameters account for global grid anisotropy which ensures
+    more robust convergence across a wider aspect ratio range.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+    ratio : float or jnp.ndarray
+        Best ratio.
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    assert grid.can_fft2
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    q = grid.num_nodes if (grid.num_zeta > 1) else (Nt * Nz)
+    q = int(jnp.sqrt(q) / 2)
+    s = min(q, Nt, Nz)
+    # Size of singular region in real space = s * h * |e_.|
+    # For it to be a circle, choose radius ~ equal
+    # s_t * h_t * |e_t| = s_z * h_z * |e_z|
+    # s_z / s_t = h_t / h_z  |e_t| / |e_z| = Nz*NFP/Nt |e_t| / |e_z|
+    # Denote ratio = < |e_z| / |e_t| > and
+    #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
+    # Also want sqrt(s_z*s_t) ~ s = q.
+    s_ratio = jnp.sqrt(Nz / Nt / ratio)
+    st = jnp.clip(jnp.ceil(s / s_ratio).astype(int), None, Nt)
+    sz = jnp.clip(jnp.ceil(s * s_ratio).astype(int), None, Nz)
+    if s_ratio.size == 1:
+        st = int(st)
+        sz = int(sz)
+    return st, sz, q
+
+
+def _best_ratio(data):
+    """Ratio to make singular integration partition ~circle in real space.
+
+    Parameters
+    ----------
+    data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on single flux surface grid that ``can_fft2``
+        with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+
+    """
+    scale = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+        data["e_theta"], axis=-1
+    )
+    return jnp.mean(scale * data["|e_theta x e_zeta|"]) / jnp.mean(
+        data["|e_theta x e_zeta|"]
+    )

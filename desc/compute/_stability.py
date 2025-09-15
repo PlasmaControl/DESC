@@ -1889,7 +1889,7 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    ## transposed part of the mixed term along the ρ-ρ block diagonal
+    ## Transposed part of the mixed term along the ρ-ρ block diagonal
     A = A.at[rho_idx, rho_idx].add(
         -1
         * (
@@ -1909,7 +1909,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
             + D_zeta.T @ ((psi_r2 * W * g_rv) * D_zeta)
         )
     )
-
     ######################
     ####-----Q_13-----####
     ######################

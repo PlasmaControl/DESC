@@ -1277,9 +1277,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         keep_2 = jnp.arange(n_total, 2 * n_total)
         keep = jnp.concatenate([keep_1, keep_2])
 
-        d_r = 1.0 / jnp.diag(D)[rho_idx]      
-        d_t = 1.0 / jnp.diag(D)[theta_idx]    
-        d_z = 1.0 / jnp.diag(D)[zeta_idx]     
+        d_r = 1.0 / jnp.diag(D)[rho_idx]
+        d_v = 1.0 / jnp.diag(D)[theta_idx]
+        d_z = 1.0 / jnp.diag(D)[zeta_idx]
 
         # Because ∂√g/∂ζ = 0
         C_zeta_inv = D_zeta0_inv[None, ...] * d_z[None, :]
@@ -1457,8 +1457,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
 
             Chat = Chat[keep_1][:, keep]
-            row_norm = jnp.clip(jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf)
-            Chat = Chat/row_norm
+            row_norm = jnp.clip(
+                jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf
+            )
+            Chat = Chat / row_norm
 
             # Orthogonal projector P = I - C^T (L_G L_G^T)⁻¹ Ĉ
             G = Chat @ Chat.T
@@ -1497,10 +1499,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             # Small for modes far from marginality
             print(Chat @ v[:, 0])
 
-            #--no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
-            #--no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
-            #--no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
-            #--no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
+            # --no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
+            # --no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
+            # --no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
+            # --no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
 
         else:
             ## Shift the diagonal of A to ensure positive definiteness

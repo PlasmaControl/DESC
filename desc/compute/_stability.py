@@ -10,19 +10,14 @@ expensive computations.
 """
 
 import pdb
-import time
 from functools import partial
 
-import numpy as np
 from jax.scipy.linalg import solve_triangular
 from scipy.constants import mu_0
-from scipy.linalg import eigh
-from scipy.sparse.linalg import eigsh
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..diffmat_utils import (
-    D1_FD_4,
+from ..diffmat_utils import (  # --no-verify D1_FD_4,
     fourier_diffmat,
     legendre_D1,
     legendre_lobatto_nodes,
@@ -528,74 +523,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         # apply dirichlet BC to X
         w, v = jnp.linalg.eigh(A[..., 1:-1, 1:-1])
 
-    elif diffmat == "Lele":
-
-        def _eval_1D(f, x, scale, shift):
-            return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
-
-        def _f(x, scale, shift):
-            y = x / scale
-            y = y - shift
-            return y
-
-        dx_f = jax.grad(_f, argnums=0)
-
-        num_alpha = grid.num_alpha
-        num_rho = grid.num_rho
-        num_zeta = grid.num_zeta
-
-        ## The points in the supplied grid must be consistent with how
-        ## the kronecker product is created
-        x0 = grid.nodes[:: num_alpha * num_rho, 2]
-
-        # The factor of two because we are mapping from (-1, 1) -> (-ntor pi, ntor pi)
-        scale = (x0[-1] - x0[0]) / 2
-        shift = 1 + x0[0] / scale
-
-        x = _eval_1D(_f, x0, scale, shift)
-        # x = x0
-
-        scale_vector1 = (_eval_1D(dx_f, x, scale, shift)) ** -1
-
-        scale_x1 = scale_vector1[:, None]
-
-        h = x[1] - x[0]
-
-        # Get differentiation matrices
-        # RG: setting the gradient to 0 to save some memory?
-        A, B = create_lele_D1_6_matrix(num_zeta, h)
-
-        D1_lele = jnp.linalg.solve(A, B)
-
-        D_zeta = jax.lax.stop_gradient(D1_lele * scale_x1)
-
-        idx = jnp.arange(num_zeta)
-        ## Simpson's gives oscillatory eigenfunctions
-        # w0   = 2.0 + 2.0 * (idx & 1)
-        # w0   = w0.at[jnp.array([0, num_zeta-1])].set(1.0)
-        # w0   = (h / 3.0) * w0
-        # Uniform weights
-        w0 = h
-
-        w = w0
-
-        wg = -1 * w * g
-
-        # Row scaling D_rho by wg
-        A = D_zeta.T @ (wg[..., :, None] * D_zeta)
-
-        # the scale due to the derivative
-        wc = w * c
-
-        A = A.at[..., idx, idx].add(wc)
-
-        b_inv = jnp.sqrt(jnp.reciprocal(w * f))
-
-        A = (b_inv[..., :, None] * A) * b_inv[..., None, :]
-
-        # apply dirichlet BC to X
-        w, v = jnp.linalg.eigh(A[..., 1:-1, 1:-1])
-
     else:
         # toroidal step size between points along field lines is assumed uniform
         dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
@@ -798,8 +725,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     axisym="bool: if the equilibrium is axisymmetric",
     n_mode_axisym="int: toroidal mode number to study",
     incompressible="bool: imposes incompressibility",
-    stable_only="bool: for testing only, materialize "+
-    "and eigendecompose the stable part of the matrix"
+    stable_only="bool: for testing only, materialize "
+    + "and eigendecompose the stable part of the matrix",
 )
 def _AGNI(params, transforms, profiles, data, **kwargs):
     """
@@ -822,25 +749,19 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     B_N = params["Psi"] / (jnp.pi * a_N**2)
 
     iota = data["iota"][:, None]
-    iota_r = data["iota_r"][:, None]
 
     psi_r = data["psi_r"][:, None] / (0.5 * a_N**2 * B_N)
-    psi_rr = data["psi_rr"][:, None] / (0.5 * a_N**2 * B_N)
 
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
 
-    iota_psi_r = iota * psi_r
     iota_psi_r2 = iota * psi_r2
-
-    dpsi_r2_drho = 2 * psi_r * psi_rr
-    diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
 
     # Add a tiny shift because sometimes the pressure can be
     # slightly negative in the edge
     p0 = mu_0 * data["p"][:, None] / B_N**2 + 1e-12
 
-    # Arbitrary choice. Mostly used to decide the range of eigenvalues of 
+    # Arbitrary choice. Mostly used to decide the range of eigenvalues of
     # the mass matrix
     n0 = 1e2
 
@@ -850,7 +771,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # mode number to analyze.
     n_mode_axisym = kwargs.get("n_mode_axisym", 1)
     incompressible = kwargs.get("incompressible", False)
-    stable_only = kwargs.get("stable_only", False)
+    # --no-verify stable_only = kwargs.get("stable_only", False)
 
     n_rho_max = kwargs.get("n_rho_max", 8)
     n_theta_max = kwargs.get("n_theta_max", 8)
@@ -859,10 +780,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         if n_mode_axisym == 0 and incompressible:
             return NotImplementedError
         else:
-            # Each componenet of xi can be written as the Fourier sum of 
+            # Each componenet of xi can be written as the Fourier sum of
             # two modes in the toroidal direction
             D_zeta0 = n_mode_axisym * jnp.array([[0, -1], [1, 0]])
-            D_zeta0_inv = 1/n_mode_axisym * jnp.array([[0, 1], [-1, 0]])
+            D_zeta0_inv = 1 / n_mode_axisym * jnp.array([[0, 1], [-1, 0]])
             n_zeta_max = 2
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
@@ -878,21 +799,17 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
         eps = 1.0e-3
-        # eps1 = 1.5e-2
-        # return eps + (1 - eps1) * (lower + upper)
         return eps + (1 - eps) * (lower + upper)
 
     # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
     dx_f = jax.grad(_f)
 
-    # x = legendre_lobatto_nodes(len(x0) - 1)
     x = legendre_lobatto_nodes(n_rho_max - 1)
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
-    # scale_vector1 = jnp.ones_like(x0) * (2 * jnp.pi-1e-3)
 
-    # scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
-    # h = (1-1e-3)/(n_rho_max-1)
+    # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
+    # --no-verify h = (1-1e-3)/(n_rho_max-1)
 
     scale_x1 = scale_vector1[:, None]
 
@@ -900,9 +817,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # RG: setting the gradient to 0 to save some memory?
     D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
 
-    # D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
-    # D_rho0, W0 = D1_FD_4(n_rho_max, h)
-    # D_rho0 = D_rho0 * scale_x1
+    # --no-verify D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
+    # --no-verify D_rho0, W0 = D1_FD_4(n_rho_max, h)
+    # --no-verify D_rho0 = D_rho0 * scale_x1
 
     D_theta0 = fourier_diffmat(n_theta_max)
 
@@ -913,8 +830,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     wtheta = 2 * jnp.pi / n_theta_max
     wzeta = 2 * jnp.pi / n_zeta_max
 
-    W = jnp.diag(jnp.kron(wrho * wtheta * wzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
-
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
@@ -923,9 +838,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     D_theta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
     D_zeta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
 
-    D_rhoT = jax.lax.stop_gradient(jnp.kron(D_rho0.T, jnp.kron(I_theta0, I_zeta0)))
     D_thetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0.T, I_zeta0)))
     D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0.T)))
+
+    W = jnp.diag(jnp.kron(wrho * wtheta * wzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
 
@@ -933,7 +849,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     rho_idx = slice(0, n_total)
     theta_idx = slice(n_total, 2 * n_total)
     zeta_idx = slice(2 * n_total, 3 * n_total)
-    all_idx = slice(0, 3 * n_total)
 
     ## Create the full matrix
     A = jnp.zeros((3 * n_total, 3 * n_total))
@@ -1253,7 +1168,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # To improve performance set gamma = 0
         exact = False
         if exact:
-            gamma = 5/3
+            gamma = 5 / 3
             A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
             A = A.at[theta_idx, theta_idx].add(
                 C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
@@ -1323,10 +1238,14 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         return perm
 
-    def _assemble_diagblocks_comp_major(blocks, rho_idx, theta_idx, zeta_idx, sym=False):
+    def _assemble_diagblocks_comp_major(
+        blocks, rho_idx, theta_idx, zeta_idx, sym=False
+    ):
         """
         blocks: (N,3,3). Works for L (lower-tri) or B_blocks (symmetric).
+
         *_idx:  python slices for component-major ranges.
+
         NOTE that it currently only works for assembling lower diagonal
         matrices such as the ones formed by cholesky. Generalize logic later.
         """
@@ -1344,23 +1263,25 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         big = big.at[zeta_idx, theta_idx].set(jnp.diag(blocks[:, 2, 1]))
 
         if sym:
-            big = big.at[rho_idx,   theta_idx].set(jnp.diag(blocks[:, 0, 1]))
-            big = big.at[rho_idx,   zeta_idx ].set(jnp.diag(blocks[:, 0, 2]))
-            big = big.at[theta_idx, zeta_idx ].set(jnp.diag(blocks[:, 1, 2]))
+            big = big.at[rho_idx, theta_idx].set(jnp.diag(blocks[:, 0, 1]))
+            big = big.at[rho_idx, zeta_idx].set(jnp.diag(blocks[:, 0, 2]))
+            big = big.at[theta_idx, zeta_idx].set(jnp.diag(blocks[:, 1, 2]))
 
         return big
 
     if axisym and incompressible:
 
         # store indices needed to apply dirichlet BC to ξ^ρ
-        keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+        keep_1 = jnp.arange(
+            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
+        )
         keep_2 = jnp.arange(n_total, 2 * n_total)
         keep = jnp.concatenate([keep_1, keep_2])
 
         # Because ∂√g/∂ζ = 0
         C_zeta_inv = D_zeta0_inv[None, ...]
 
-        # batched inversion 
+        # batched inversion
         C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
         C_zeta_inv_C_rho_reshaped = C_zeta_inv @ C_rho_reshaped
         C_zeta_inv_C_rho = C_zeta_inv_C_rho_reshaped.reshape(n_total, n_total)
@@ -1403,8 +1324,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # Fill out the lower part using symmetry
         A = A.at[theta_idx, rho_idx].set(A[rho_idx, theta_idx].T)
 
-
-        # A2u only has a non-zero rho-rho component 
+        # A2u only has a non-zero rho-rho component
         Au = Au.at[rho_idx, rho_idx].add(
             C_zeta_inv_C_rho.T @ Au[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
         )
@@ -1446,10 +1366,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A_LTinv = jax.lax.linalg.triangular_solve(L.T, A, left_side=False, lower=False)
         Ahat = jax.lax.linalg.triangular_solve(L, A_LTinv, left_side=True, lower=True)
 
-        Ahat_alt = jnp.linalg.inv(L) @ A @ jnp.linalg.inv(L.T)
-
         # (L⁻¹ Aᵤ L⁻ᵀ)
-        Au_LTinv = jax.lax.linalg.triangular_solve(L.T, Au, left_side=False, lower=False)
+        Au_LTinv = jax.lax.linalg.triangular_solve(
+            L.T, Au, left_side=False, lower=False
+        )
         Auhat = jax.lax.linalg.triangular_solve(L, Au_LTinv, left_side=True, lower=True)
 
         w0, v0 = jnp.linalg.eigh(
@@ -1462,7 +1382,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         w, v = jnp.linalg.eigh((A2 + A2.T) / 2)
         print("after instability =", w)
 
-    else: # if non-axisymmetric or compressible or both
+    else:  # if non-axisymmetric or compressible or both
         B_blocks = jnp.zeros((n_total, 3, 3))
 
         B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B[rho_idx, rho_idx]))
@@ -1480,7 +1400,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         L = jnp.linalg.cholesky(B_blocks)  # (N,3,3)
         I3 = jnp.tile(jnp.eye(3), (L.shape[0], 1, 1))
-        Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
+        Linv = jax.lax.linalg.triangular_solve(
+            L, I3, left_side=True, lower=True
+        )  # (N,3,3)
 
         # components to node permutations
         p = component_to_node_permutn(n_total)
@@ -1504,17 +1426,19 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A2u = A2u[pinv][:, pinv]
 
         # store indices needed to apply dirichlet BC to ξ^ρ
-        keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+        keep_1 = jnp.arange(
+            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
+        )
         keep_2 = jnp.arange(n_total, 3 * n_total)
         keep = jnp.concatenate([keep_1, keep_2])
 
         if incompressible:  # Only enforce incompressibility here
             # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
 
-            # Assemble L_full from blocks of L (only for comparison with chol(B))
-            Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx, theta_idx, zeta_idx)
-            # L_test = jnp.linalg.cholesky(B)
-            ##max|Linv_full - L_test⁻¹| = 3.55e-15
+            ## Assemble L_full from blocks of L (only for comparison)
+            # --no-verify Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx)
+            # --no-verify L_test = jnp.linalg.cholesky(B)
+            ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
 
             # Concatenate once (N, 3N)
             C = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
@@ -1555,8 +1479,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
             A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-9)
 
-            #w0, v0 = jnp.linalg.eigh((A2_proj + A2_proj.T) / 2)
-            #print(w0)
+            # --no-verify w0, v0 = jnp.linalg.eigh((A2_proj + A2_proj.T) / 2)
+            # --no-verify print(w0)
 
             A2u_proj = A2u_bc - A2u_bc @ CTS - CTS @ A2u_bc + CTS @ A2u_bc @ CTS
             A2u_proj = (A2u_proj + A2u_proj.T) / 2
@@ -1647,24 +1571,17 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     B_N = params["Psi"] / (jnp.pi * a_N**2)
 
     iota = data["iota"][:, None]
-    iota_r = data["iota_r"][:, None]
 
     psi_r = data["psi_r"][:, None] / (0.5 * a_N**2 * B_N)
-    psi_rr = data["psi_rr"][:, None] / (0.5 * a_N**2 * B_N)
 
     psi_r2 = psi_r**2
-    psi_r3 = psi_r**3
 
     iota_psi_r = iota * psi_r
     iota_psi_r2 = iota * psi_r2
 
-    dpsi_r2_drho = 2 * psi_r * psi_rr
-    diota_psi_r2_drho = iota_r * psi_r**2 + iota * dpsi_r2_drho
-
     p0 = data["p"] / B_N**2
     p0 = p0.at[p0 < 0].set(1e-8)
 
-    # n0 = (p0 ** (1 / 3) + 1e-4 / (psi_r2.flatten()))
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
@@ -1673,8 +1590,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     # mode number to analyze. Should work for n_mode = 0 (vertical instability)
     # For stellarator equilibrium n_mode will decide the n_mode family
     n_mode = kwargs.get("n_mode", 1)
-
-    # n_mode = jnp.mod(n_mode, NFP)
 
     n_rho_max = kwargs.get("n_rho_max", 8)
     n_theta_max = kwargs.get("n_theta_max", 8)
@@ -1709,25 +1624,22 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     x = legendre_lobatto_nodes(len(x0) - 1)
 
     scale_vector1 = (_eval_1D(dx_f, x)) ** -1
-    # scale_vector1 = jnp.ones_like(x0) * (2 * jnp.pi-1e-3)
-
-    # scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
-    # h = (1-1e-3)/(n_rho_max-1)
+    # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
+    # --no-verify h = (1-1e-3)/(n_rho_max-1)
 
     scale_x1 = scale_vector1[:, None]
 
     # Get differentiation matrices
     # RG: setting the gradient to 0 to save some memory?
     D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
-    # D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
-    # D_rho0, W0 = D1_FD_4(n_rho_max, h)
-    # D_rho0 = D_rho0 * scale_x1
+    # --no-verify D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
+    # --no-verify D_rho0, W0 = D1_FD_4(n_rho_max, h)
+    # --no-verify D_rho0 = D_rho0 * scale_x1
 
     D_theta0 = fourier_diffmat(n_theta_max)
 
     wrho = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
     wrho = wrho.at[jnp.abs(wrho) < 1e-12].set(0.0)
-    # w0 = jnp.diag((2*jnp.pi-1e-3)/n_rho_max * jnp.ones_like(x0))
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -1737,7 +1649,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     D_theta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0, I_zeta0)))
     D_zeta = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0)))
 
-    D_rhoT = jax.lax.stop_gradient(jnp.kron(D_rho0.T, jnp.kron(I_theta0, I_zeta0)))
     D_thetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0.T, I_zeta0)))
     D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0.T)))
 
@@ -1755,7 +1666,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     rho_idx = slice(0, n_total)
     theta_idx = slice(n_total, 2 * n_total)
     zeta_idx = slice(2 * n_total, 3 * n_total)
-    all_idx = slice(0, 3 * n_total)
 
     ### assuming uniform spacing in and θ and ζ
     wtheta = 2 * jnp.pi / n_theta_max
@@ -1766,7 +1676,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 
     sqrtg2 = sqrtg**2
-    psi_r_over_sqrtg = psi_r / sqrtg
 
     g_rr = data["g_rr|PEST"][:, None] * 1 / a_N**2
     g_vv = data["g_vv|PEST"][:, None] * 1 / a_N**2
@@ -1862,21 +1771,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, zeta_idx].add(
         -1 * (D_rho * psi_r.T).T @ ((psi_r * W * g_pp) * D_theta)
     )
-
-    # C = A.copy()
-    # C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
-    # C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
-    # C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
-
-    ## apply dirichlet BC to ξ^ρ
-    # keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
-    # keep_2 = jnp.arange(n_total, 3 * n_total)
-    # keep = jnp.concatenate([keep_1, keep_2])
-
-    # w, v = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
-    ## w, v = jnp.linalg.eigh(C[n_theta_max*n_zeta_max:, n_theta_max*n_zeta_max:])
-    # print(w)
-    # pdb.set_trace()
 
     ####################
     ####----Q_12----####
@@ -1990,7 +1884,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
         1 * (((W * g_vp) * (D_rho * psi_r.T)).T @ (D_rho * iota_psi_r.T))
     )
 
-
     # Mixed Q-J term
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -2039,21 +1932,17 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     ## diagonal |J|^2 term
     A = A.at[rho_idx, rho_idx].add(jnp.diag((W * sqrtg2 * J2).flatten()))
 
-    #--no-verify C = A.copy()
-    #--no-verify C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
-    #--no-verify C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
-    #--no-verify C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
+    # --no-verify C = A.copy()
+    # --no-verify C = C.at[theta_idx, rho_idx].set(C[rho_idx, theta_idx].T)
+    # --no-verify C = C.at[zeta_idx, rho_idx].set(C[rho_idx, zeta_idx].T)
+    # --no-verify C = C.at[zeta_idx, theta_idx].set(C[theta_idx, zeta_idx].T)
 
-    #--no-verify# apply dirichlet BC to ξ^ρ
-    #--no-verify keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - (n_theta_max * n_zeta_max))
-    #--no-verify keep_2 = jnp.arange(n_total, 3 * n_total)
-    #--no-verify keep = jnp.concatenate([keep_1, keep_2])
+    # --no-verify #apply dirichlet BC to ξ^ρ
+    # --no-verify keep_2 = jnp.arange(n_total, 3 * n_total)
+    # --no-verify keep = jnp.concatenate([keep_1, keep_2])
 
-    #--no-verify w, v = jnp.linalg.eigh(C)
-    #--no-verify#w, v = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
-    #--no-verify#w, v = jnp.linalg.eigh(C[n_theta_max*n_zeta_max:, n_theta_max*n_zeta_max:])
-    #--no-verify print(w)
-    #--no-verify pdb.set_trace()
+    # --no-verify w, v = jnp.linalg.eigh(C)
+    # --no-verify w, v = jnp.linalg.eigh(C[jnp.ix_(keep, keep)])
 
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * sqrtg2 * g_rr).flatten()))
@@ -2096,10 +1985,10 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     A2 = D @ (A @ D.T)
     B2 = D @ (B @ D.T)
 
-    #--no-verify w4, _ = jnp.linalg.eigh((B2 + B2.T) / 2)
-    #--no-verify print(w4)
-    #--no-verify w2, _ = jnp.linalg.eigh((A2 + A2.T)/2)
-    #--no-verify print(w2)
+    # --no-verify w4, _ = jnp.linalg.eigh((B2 + B2.T) / 2)
+    # --no-verify print(w4)
+    # --no-verify w2, _ = jnp.linalg.eigh((A2 + A2.T)/2)
+    # --no-verify print(w2)
 
     A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-11)
 
@@ -2113,19 +2002,12 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     pdb.set_trace()
 
     L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
-    # Linv = jnp.linalg.inv(L)
-    # Right-multiply by L^{-T}:  ALt = A L^{-T}
     ALt = solve_triangular(L, A3.T, lower=True).T
-    # Left-multiply by L^{-1}:   C = L^{-1} (A L^{-T})
     A3 = solve_triangular(L, ALt, lower=True)
 
-    # w, v = jnp.linalg.eigh(Linv @ A[jnp.ix_(keep, keep)] @ Linv.T)
     w, v = jnp.linalg.eigh(A3)
 
     data["finite-n lambda_alt"] = w
     data["finite-n eigenfunction_alt"] = v
 
     return data
-
-
-

@@ -981,6 +981,7 @@ def trace_particles(
     adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
     options=None,
+    throw=True,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1033,6 +1034,9 @@ def trace_particles(
                 Iota profile of the Equilibrium, if it does not have one.
             - source_grid: Grid
                 Source grid to use for field computation.
+    throw : bool, optional
+        Whether to throw an error if the integration fails. If False, will return NaN
+        for the points where the integration failed. Defaults to True.
 
     Returns
     -------
@@ -1086,6 +1090,7 @@ def trace_particles(
         event=Event(default_event),
         chunk_size=chunk_size,
         options=options,
+        throw=throw,
     )
 
 
@@ -1105,6 +1110,7 @@ def _trace_particles(
     event,
     chunk_size,
     options,
+    throw,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1149,7 +1155,7 @@ def _trace_particles(
         # we only want to map over initial positions and particle arguments
         # Note: vmap with keyword arguments is weird, not using it for now
         yt = vmap_chunked(
-            _intfun_wrapper, in_axes=(0, 0) + 12 * (None,), chunk_size=chunk_size
+            _intfun_wrapper, in_axes=(0, 0) + 13 * (None,), chunk_size=chunk_size
         )(
             y0,
             model_args,
@@ -1165,6 +1171,7 @@ def _trace_particles(
             model,
             saveat,
             options,
+            throw,
         )
 
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
@@ -1198,6 +1205,7 @@ def _intfun_wrapper(
     model,
     saveat,
     options,
+    throw,
 ):
     """Wrapper for the integration function for vectorized inputs.
 
@@ -1217,4 +1225,5 @@ def _intfun_wrapper(
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
         event=event,
+        throw=throw,
     ).ys

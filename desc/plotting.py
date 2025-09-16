@@ -4093,8 +4093,6 @@ def plot_particle_trajectories(  # noqa: C901
         )
 
     """
-    from diffrax import diffeqsolve
-
     from desc.equilibrium import Equilibrium
 
     if "params" not in kwargs:
@@ -4103,9 +4101,6 @@ def plot_particle_trajectories(  # noqa: C901
         kwargs["options"] = {}
     trace_kwargs = {}
     for key in inspect.signature(trace_particles).parameters:
-        if key in kwargs:
-            trace_kwargs[key] = kwargs.pop(key)
-    for key in inspect.signature(diffeqsolve).parameters:
         if key in kwargs:
             trace_kwargs[key] = kwargs.pop(key)
 

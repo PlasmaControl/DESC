@@ -189,9 +189,17 @@ class ForceBalanceDeflated(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
+    eqs: list of Equilibrium
+        list of Equilibrium objects to use in deflation operator.
+    sigma: float, optional
+        sigma term in deflation operator
+    power: float, optional
+        power parameter in deflation operator.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+
+
 
     """
 
@@ -209,6 +217,7 @@ class ForceBalanceDeflated(_Objective):
         eq,
         eqs,
         sigma=0.05,
+        power=2,
         target=None,
         bounds=None,
         weight=1,
@@ -225,6 +234,7 @@ class ForceBalanceDeflated(_Objective):
         self._grid = grid
         self._eqs = eqs
         self._sigma = sigma
+        self._power = power
         super().__init__(
             things=eq,
             target=target,
@@ -332,7 +342,9 @@ class ForceBalanceDeflated(_Objective):
             for eq in self._eqs
         ]
         diffs = jnp.vstack(diffs)
-        deflation_parameter = jnp.prod(1 / jnp.linalg.norm(diffs, axis=1) + self._sigma)
+        deflation_parameter = jnp.prod(
+            1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+        )
         return jnp.concatenate([fr, fb]) * deflation_parameter
 
 

@@ -365,7 +365,7 @@ def test_init_surface_particles():
     surf = eq.get_surface_at(rho=rho)
     # rho=0.8 surface is not inside eq but inside eq_large
     surf_large = eq_large.get_surface_at(rho=rho)
-    grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid)
 
     N = 100
     particles = SurfaceParticleInitializer(

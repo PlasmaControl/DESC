@@ -21,7 +21,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
 from desc.utils import cross, dot, errorif, safediv, setdefault
@@ -704,6 +704,8 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
         self.is_curve_magnetic_axis = is_curve_magnetic_axis
+        if self.grid is None:
+            self.grid = LinearGrid(N=self.curve.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -858,6 +860,8 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
         self.is_surface_from_eq = is_surface_from_eq
+        if self.grid is None:
+            self.grid = LinearGrid(M=self.surface.M, N=self.surface.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.

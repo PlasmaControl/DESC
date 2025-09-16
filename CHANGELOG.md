@@ -2,8 +2,9 @@ Changelog
 =========
 
 New Features
-------------
+
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:
@@ -15,9 +16,8 @@ New Features
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 
--
 Bug Fixes
----------
+
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
 

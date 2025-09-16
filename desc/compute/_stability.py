@@ -1295,7 +1295,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         C_zeta_inv_C_theta = C_zeta_inv @ C_theta
 
         ## Incompressibility gives us
-        ## ξ^ζ = −((C_ζ D⁻¹)⁻¹ C_ρ D⁻¹ ξ^ρ + (C_ζ D⁻¹)⁻¹ C_θ D⁻¹ ξ^θ)
+        ## ξ^ρ = D⁻¹ ξₛ^ρ
+        ## ξ^ζ = −((C_ζ D⁻¹)⁻¹ C_ρ D⁻¹ ξₛ^ρ + (C_ζ D⁻¹)⁻¹ C_θ D⁻¹ ξₛ^θ)
 
         # Impose incompressibility
         A = A.at[rho_idx, rho_idx].add(
@@ -1311,7 +1312,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             -1
             * (
                 A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + C_zeta_inv_C_rho @ A[zeta_idx, theta_idx]
+                + C_zeta_inv_C_rho.T @ A[zeta_idx, theta_idx]
             )
             + C_zeta_inv_C_rho.T @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
         )
@@ -1346,7 +1347,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             -1
             * (
                 B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + C_zeta_inv_C_rho @ B[zeta_idx, theta_idx]
+                + C_zeta_inv_C_rho.T @ B[zeta_idx, theta_idx]
             )
             + C_zeta_inv_C_rho.T @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
         )

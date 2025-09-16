@@ -1029,7 +1029,7 @@ def trace_particles(
         Chunk size for integration over particles. If not provided, the integration will
         be done over all particles at once without chunking.
     options : dict, optional
-        Additional keyword arguments to pass to the field computation, such as
+        Additional keyword arguments to pass to the field computation,
             - iota : Profile
                 Iota profile of the Equilibrium, if it does not have one.
             - source_grid: Grid

@@ -972,8 +972,8 @@ def trace_particles(
     model,
     ts,
     params=None,
-    rtol=1e-8,
-    atol=1e-8,
+    rtol=1e-5,
+    atol=1e-5,
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
@@ -1002,11 +1002,11 @@ def trace_particles(
         Defaults to field.params_dict.
     rtol, atol : float, optional
         relative and absolute tolerances for PID stepsize controller. Not used if
-        ``stepsize_controller`` is provided. Defaults to 1e-8
+        ``stepsize_controller`` is provided. Defaults to 1e-5
     max_steps : int
         maximum number of steps for whole integration. This will be passed
         to the diffrax.diffeqsolve function. Defaults to
-        (ts[1] - ts[0]) * 10 / min_step_size
+        (ts[-1] - ts[0]) * 10 / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     bounds : array of shape(3, 2), optional
@@ -1067,7 +1067,7 @@ def trace_particles(
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    max_steps = setdefault(max_steps, int((ts[1] - ts[0]) / min_step_size * 10))
+    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size * 10))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(
@@ -1176,6 +1176,7 @@ def _trace_particles(
     if isinstance(field, Equilibrium):
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
+        theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
         x = x.at[:, :, 0].set(rho)
         x = x.at[:, :, 1].set(theta)
 

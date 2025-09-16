@@ -2488,12 +2488,24 @@ def test_PointBMeasurement_fixed_bdry():
         eq_target,
         dummy_coil,
         measurement_coords=meas_loc_rpz,
-        target=0,
+        target=[0, 0, 0],
+        basis="rpz",
+        field_fixed=True,
+    )
+    meas_loc_rpz2 = [
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.3],
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.15],
+    ]
+    diag2 = PointBMeasurement(
+        eq_target,
+        dummy_coil,
+        measurement_coords=meas_loc_rpz2,
+        target=[0, 0, 0],
         basis="rpz",
         field_fixed=True,
     )
 
-    obj = MagneticDiagnostics(eq_target, dummy_coil, diag, field_fixed=True)
+    obj = MagneticDiagnostics(eq_target, dummy_coil, [diag, diag2], field_fixed=True)
     obj.build()
     target_fin_beta = obj.compute(*obj.xs(eq_target))
 
@@ -2502,16 +2514,29 @@ def test_PointBMeasurement_fixed_bdry():
 
     # optimize for matching the Bplasma external measurement,
     # only allowing pressure scale to vary
-    obj = PointBMeasurement(
+    meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
+    dummy_coil = ToroidalMagneticField(0, 0)
+    diag = PointBMeasurement(
         eq,
         dummy_coil,
         measurement_coords=meas_loc_rpz,
-        target=target_fin_beta,
+        target=target_fin_beta[0],
+        basis="rpz",
+        field_fixed=True,
+    )
+    meas_loc_rpz2 = [0.8, 2 * np.pi / eq.NFP / 2, 0.3]
+    diag2 = PointBMeasurement(
+        eq,
+        dummy_coil,
+        measurement_coords=meas_loc_rpz2,
+        target=target_fin_beta[1],
         basis="rpz",
         field_fixed=True,
     )
 
-    obj = ObjectiveFunction(MagneticDiagnostics(eq, dummy_coil, obj, field_fixed=True))
+    obj = ObjectiveFunction(
+        MagneticDiagnostics(eq, dummy_coil, [diag, diag2], field_fixed=True)
+    )
 
     cons = (
         ForceBalance(eq),

@@ -1,5 +1,7 @@
 """Objectives for experimental reconstruction problems."""
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 
 from desc.backend import jnp
@@ -12,7 +14,43 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 
 
-class PointBMeasurement(_Objective):
+class _MagneticMeasurement(_Objective, ABC):
+    """Base class for magnetic diagnostics objectives.
+
+    Subclasses of this class must implement a _compute method, which should
+    compute the same values as the compute method, but _compute should accept
+    the total B field at the necessary evaluation points as its only input,
+    and so should not compute B.
+
+    Subclasses must also define a ``self._all_eval_x_rpz`` attribute in their build
+    method, which contains every R,phi,Z point at which the total B must be evaluated
+    at. These are the points at which _compute should expect the B passed in to be
+    computed at.
+    """
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+        assert hasattr(self, "_all_eval_x_rpz"), (
+            "Subclasses of _MagneticMeasurement must define self._all_eval_x_rpz in"
+            "  their build method!"
+        )
+
+    @abstractmethod
+    def _compute(self, B):
+        """Compute magnetic diagnostic signal using passed-in total field."""
+
+
+class PointBMeasurement(_MagneticMeasurement):
     """Target B at a point in real space, outside the plasma.
 
     This objective will calculate the magnetic field at a point,
@@ -123,6 +161,9 @@ class PointBMeasurement(_Objective):
             ), "Must pass in same number of direction vectors as measurements"
             # make the direction vectors unit norm
             directions = directions / jnp.linalg.norm(directions, axis=1)[:, None]
+        else:
+            # FIXME: this is just because of laziness/reducing complexity
+            assert bounds is None, "Cannot use bounds without specifying directions"
         errorif(
             basis not in ["xyz", "rpz"],
             ValueError,
@@ -216,7 +257,7 @@ class PointBMeasurement(_Objective):
             self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
 
-        self._all_eval_x = self._measurement_coords
+        self._all_eval_x_rpz = self._measurement_coords
 
         # dim_f is number of B components we  have,
         # which is coords.size, if no directions are given,
@@ -375,7 +416,7 @@ class MagneticDiagnostics(_Objective):
         External field produced by coils or other sources outside the plasma.
     magnetic_diagnostics: tuple of _Objective
         Tuple of the magnetic diagnostic signals, for example
-        (PointBMeasurement, FluxLoop). each of these should have a self._all_eval_x
+        (PointBMeasurement, FluxLoop). each of these should have a self._all_eval_x_rpz
         attribute, which will be used by this wrapper class to compute the B field
         over every evaluation point needed for the sub-objectives
     field_grid : Grid, optional
@@ -453,7 +494,9 @@ class MagneticDiagnostics(_Objective):
         assert len(
             magnetic_diagnostics
         ), "Must supply at least one diagnostic sub-objective"
-        # TODO: ABC for _MagneticDiagnostic ??
+        assert all(
+            [isinstance(diag, _MagneticMeasurement) for diag in magnetic_diagnostics]
+        ), "Must pass in only subclasses of _MagneticMeasurement"
         self._magnetic_diagnostics = magnetic_diagnostics
         self._vacuum = vacuum
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
@@ -532,23 +575,47 @@ class MagneticDiagnostics(_Objective):
             self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
 
-        self._all_eval_x = np.vstack(
-            [diag._all_eval_x for diag in self._magnetic_diagnostics]
+        self._all_eval_x_rpz = np.vstack(
+            [diag._all_eval_x_rpz for diag in self._magnetic_diagnostics]
         )
+        # make the indices of the overall eval_x_rpz array corresponding
+        # to each sub-objective
+        self._eval_x_idxs = [
+            np.arange(self._magnetic_diagnostics[0]._all_eval_x_rpz.shape[0])
+        ]
+        for i in range(1, len(self._magnetic_diagnostics)):
+            self._eval_x_idxs.append(
+                np.arange(self._magnetic_diagnostics[i]._all_eval_x_rpz.shape[0])
+                + self._eval_x_idxs[i - 1][-1]
+                + 1
+            )
 
         # dim_f is number of signals we have across all diags
         self._dim_f = np.sum([diag._dim_f for diag in self._magnetic_diagnostics])
 
-        # the targets are the sub-objective targets
-        # TODO: what if some sub objectives have target, and others have bounds???
-        # could make them ALL bounds and have some bounds top/bottom be
-        # different, to account for this? would need to change our bounds check to
-        # be bounds[0] <= bounds[1], which I THINK is fine
-        assert np.all(
-            [diag._bounds is None for diag in self._magnetic_diagnostics]
-        ), "must use target, not bounds, for MagneticDiagnostics objective"
-
-        self._target = np.hstack([diag._target for diag in self._magnetic_diagnostics])
+        # to account for some sub-objectives having bounds and others having target,
+        # just always use bounds here
+        bounds_lower = np.hstack(
+            [
+                (
+                    diag._target * np.ones(diag._dim_f)
+                    if hasattr(diag, "_target")
+                    else diag._bounds[0] * np.ones(diag._dim_f)
+                )
+                for diag in self._magnetic_diagnostics
+            ]
+        )
+        bounds_upper = np.hstack(
+            [
+                (
+                    diag._target * np.ones(diag._dim_f)
+                    if hasattr(diag, "_target")
+                    else diag._bounds[1] * np.ones(diag._dim_f)
+                )
+                for diag in self._magnetic_diagnostics
+            ]
+        )
+        self._bounds = (bounds_lower, bounds_upper)
 
         self._weight = self._weight * np.hstack(
             [diag._weight * np.ones(diag._dim_f) for diag in self._magnetic_diagnostics]
@@ -576,7 +643,7 @@ class MagneticDiagnostics(_Objective):
         # pre-calc field contrib to B if field are fixed
         if self._field_fixed:
             self._B_from_field = self._field.compute_magnetic_field(
-                self._all_eval_x,
+                self._all_eval_x_rpz,
                 basis="rpz",
                 source_grid=self._field_grid,
             )
@@ -655,7 +722,7 @@ class MagneticDiagnostics(_Objective):
         else:
 
             Bcoil = self._field.compute_magnetic_field(
-                self._all_eval_x,
+                self._all_eval_x_rpz,
                 basis="rpz",
                 source_grid=self._field_grid,
                 params=field_params,
@@ -664,14 +731,21 @@ class MagneticDiagnostics(_Objective):
         if not self._vacuum:
             Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                 self._field,  # this is unused, just pass a dummy variable in
-                self._all_eval_x,
+                self._all_eval_x_rpz,
                 source_grid=self._vc_source_grid,
                 compute_A_or_B="B",
                 data=plasma_surf_data,
             )
         else:
-            Bplasma = jnp.zeros_like(self._all_eval_x)
+            Bplasma = jnp.zeros_like(self._all_eval_x_rpz)
         B = Bplasma + Bcoil
 
-        signals = jnp.hstack([diag._compute(B) for diag in self._magnetic_diagnostics])
+        # compute diagnostic signals using the _compute method of each sub, which
+        # accepts the total B at the diagnostic eval pts as input.
+        signals = jnp.hstack(
+            [
+                diag._compute(B[idx, :])
+                for diag, idx in zip(self._magnetic_diagnostics, self._eval_x_idxs)
+            ]
+        )
         return signals

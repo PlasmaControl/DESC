@@ -1277,24 +1277,25 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         keep_2 = jnp.arange(n_total, 2 * n_total)
         keep = jnp.concatenate([keep_1, keep_2])
 
-        d_r = 1.0 / jnp.diag(D)[rho_idx]      
-        d_t = 1.0 / jnp.diag(D)[theta_idx]    
-        d_z = 1.0 / jnp.diag(D)[zeta_idx]     
+        d_r = 1.0 / jnp.diag(D)[rho_idx]
+        d_v = 1.0 / jnp.diag(D)[theta_idx]
+        d_z = 1.0 / jnp.diag(D)[zeta_idx]
 
-        # Because ∂√g/∂ζ = 0
-        C_zeta_inv = D_zeta0_inv[None, ...] * d_z[None, :]
+        ## Because ∂√g/∂ζ = 0
+        C_zeta_inv = jax.lax.stop_gradient(
+            jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0_inv))
+        )
+        C_zeta_inv = C_zeta_inv * d_z[None, :]
 
         # batched inversion
-        C_rho_reshaped = C_rho.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
-        C_zeta_inv_C_rho_reshaped = C_zeta_inv @ (C_rho_reshaped * d_r[None, :])
-        C_zeta_inv_C_rho = C_zeta_inv_C_rho_reshaped.reshape(n_total, n_total)
+        C_rho = C_rho * d_r[None, :]
+        C_zeta_inv_C_rho = C_zeta_inv @ C_rho
 
-        C_theta_reshaped = C_theta.reshape(n_rho_max * n_theta_max, n_zeta_max, n_total)
-        C_zeta_inv_C_theta_reshaped = C_zeta_inv @ (C_theta_reshaped * d_v[None, :])
-        C_zeta_inv_C_theta = C_zeta_inv_C_theta_reshaped.reshape(n_total, n_total)
+        C_theta = C_theta * d_v[None, :]
+        C_zeta_inv_C_theta = C_zeta_inv @ C_theta
 
         ## Incompressibility gives us
-        ## ξ^ζ = −(C_ζ⁻¹ C_ρ ξ^ρ + C_ζ⁻¹ C_θ ξ^θ)
+        ## ξ^ζ = −((C_ζ D⁻¹)⁻¹ C_ρ D⁻¹ ξ^ρ + (C_ζ D⁻¹)⁻¹ C_θ D⁻¹ ξ^θ)
 
         # Impose incompressibility
         A = A.at[rho_idx, rho_idx].add(
@@ -1362,6 +1363,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # Fill out the lower part using symmetry
         B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
 
+        A = A[jnp.ix_(keep, keep)]
+        Au = Au[jnp.ix_(keep, keep)]
+        B = B[jnp.ix_(keep, keep)]
+
         # The will become one of the most expensive parts
         L = jnp.linalg.cholesky(B)
 
@@ -1375,12 +1380,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         )
         Auhat = jax.lax.linalg.triangular_solve(L, Au_LTinv, left_side=True, lower=True)
 
-        w0, v0 = jnp.linalg.eigh(
-            (Ahat[jnp.ix_(keep, keep)] + Ahat[jnp.ix_(keep, keep)].T) / 2
-        )
+        w0, v0 = jnp.linalg.eigh((Ahat + Ahat.T) / 2)
         print("before instability =", w0)
 
-        A2 = Ahat[jnp.ix_(keep, keep)] + Auhat[jnp.ix_(keep, keep)]
+        A2 = Ahat + Auhat
 
         w, v = jnp.linalg.eigh((A2 + A2.T) / 2)
         print("after instability =", w)
@@ -1457,8 +1460,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
 
             Chat = Chat[keep_1][:, keep]
-            row_norm = jnp.clip(jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf)
-            Chat = Chat/row_norm
+            row_norm = jnp.clip(
+                jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf
+            )
+            Chat = Chat / row_norm
 
             # Orthogonal projector P = I - C^T (L_G L_G^T)⁻¹ Ĉ
             G = Chat @ Chat.T
@@ -1497,10 +1502,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             # Small for modes far from marginality
             print(Chat @ v[:, 0])
 
-            #--no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
-            #--no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
-            #--no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
-            #--no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
+            # --no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
+            # --no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
+            # --no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
+            # --no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
 
         else:
             ## Shift the diagonal of A to ensure positive definiteness

@@ -782,7 +782,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             # Each componenet of xi can be written as the Fourier sum of
             # two modes in the toroidal direction
             D_zeta0 = n_mode_axisym * jnp.array([[0, -1], [1, 0]])
-            D_zeta0_inv = 1 / n_mode_axisym * jnp.array([[0, 1], [-1, 0]])
             n_zeta_max = 2
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
@@ -1281,18 +1280,14 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         d_v = 1.0 / jnp.diag(D)[theta_idx]
         d_z = 1.0 / jnp.diag(D)[zeta_idx]
 
-        ## Because ∂√g/∂ζ = 0
-        C_zeta_inv = jax.lax.stop_gradient(
-            jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0_inv))
-        )
-        C_zeta_inv = C_zeta_inv * d_z[None, :]
+        C_zeta = C_zeta * d_z[None, :]
 
-        # batched inversion
+        # TODO: convert to batched inversion for speed
         C_rho = C_rho * d_r[None, :]
-        C_zeta_inv_C_rho = C_zeta_inv @ C_rho
+        C_zeta_inv_C_rho = jnp.linalg.solve(C_zeta, C_rho)
 
         C_theta = C_theta * d_v[None, :]
-        C_zeta_inv_C_theta = C_zeta_inv @ C_theta
+        C_zeta_inv_C_theta = jnp.linalg.solve(C_zeta, C_theta)
 
         ## Incompressibility gives us
         ## ξ^ρ = D⁻¹ ξₛ^ρ
@@ -1364,10 +1359,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # Fill out the lower part using symmetry
         B = B.at[theta_idx, rho_idx].set(B[rho_idx, theta_idx].T)
 
-        A = A[jnp.ix_(keep, keep)]
-        Au = Au[jnp.ix_(keep, keep)]
-        B = B[jnp.ix_(keep, keep)]
-
         # The will become one of the most expensive parts
         L = jnp.linalg.cholesky(B)
 
@@ -1381,13 +1372,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         )
         Auhat = jax.lax.linalg.triangular_solve(L, Au_LTinv, left_side=True, lower=True)
 
-        w0, v0 = jnp.linalg.eigh((Ahat + Ahat.T) / 2)
-        print("before instability =", w0)
-
-        A2 = Ahat + Auhat
+        A2 = Ahat[jnp.ix_(keep, keep)] + Auhat[jnp.ix_(keep, keep)]
 
         w, v = jnp.linalg.eigh((A2 + A2.T) / 2)
-        print("after instability =", w)
 
     else:  # if non-axisymmetric or compressible or both
         B_blocks = jnp.zeros((n_total, 3, 3))

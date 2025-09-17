@@ -464,6 +464,7 @@ def solve_continuation_automatic(  # noqa: C901
     verbose=1,
     checkpoint_path=None,
     jac_chunk_size="auto",
+    shaping_first=True,
     **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
@@ -495,6 +496,10 @@ def solve_continuation_automatic(  # noqa: C901
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
+    shaping_first : bool
+        whether to force applying the shaping perturbations first before
+        pressure and current. This is the most robust option for finite
+        beta equilibria, especially at higher beta, but may be less efficient.
     **kwargs : dict, optional
         * ``mres_step``: int, default 6. The amount to increase Mpol by at each
           continuation step
@@ -547,7 +552,13 @@ def solve_continuation_automatic(  # noqa: C901
 
     # for zero current we want to do shaping before pressure to avoid having a
     # tokamak with zero current but finite pressure (non-physical)
-    if eq.current is not None and np.all(eq.current(np.linspace(0, 1, 20)) == 0):
+    # this is the most robust path to take, but not the most efficient for
+    # stellarators.
+    if (
+        eq.current is not None
+        and np.all(eq.current(np.linspace(0, 1, 20)) == 0)
+        or shaping_first
+    ):
         eqfam = _add_shaping(
             eq,
             eqfam,

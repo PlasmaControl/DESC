@@ -87,6 +87,13 @@
    dev_guide/notebooks/derivatives.ipynb
 
 
+.. toctree::
+   :maxdepth: 1
+   :caption: DESC Showcase
+   :titlesonly:
+
+   pubs_list
+
 Indices and tables
 ==================
 

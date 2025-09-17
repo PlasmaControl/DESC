@@ -1213,5 +1213,7 @@ def apply(d, fun=identity, subset=None, exclude=None):
     """
     if subset is None:
         subset = d.keys()
+    elif isinstance(subset, str):
+        subset = (subset,)
     exclude = () if (exclude is None) else exclude
     return {k: fun(d[k]) for k in subset if k not in exclude}

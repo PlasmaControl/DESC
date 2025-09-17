@@ -4368,7 +4368,7 @@ def plot_gammac(
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X, Y, rho),
+        angle=Bounce2D.angle(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,

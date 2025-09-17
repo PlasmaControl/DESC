@@ -1530,6 +1530,27 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="delta",
+    label="\\delta",
+    units="~",
+    units_long="None",
+    description=(
+        "Stream map which is (2π, 2π/NFP) periodic in coordinates (θ, ζ) and (ϑ, ζ), "
+        "and also (2π, ∞) periodic in Clebsch coordinates (α, ζ)."
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda", "iota", "omega"],
+)
+def _delta(params, transforms, profiles, data, **kwargs):
+    data["delta"] = data["lambda"] - data["iota"] * data["omega"]
+    return data
+
+
+@register_compute_fun(
     name="alpha",
     label="\\alpha",
     units="~",

@@ -198,6 +198,9 @@ class ForceBalanceDeflated(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+    params_to_deflate_with: list of str
+        Which params to use in the deflation operator to define the
+        state to deflate, defaults to ["Rb_mn","Zb_mn"]
 
 
 
@@ -206,6 +209,7 @@ class ForceBalanceDeflated(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    _static_attrs = _Objective._static_attrs + ["_params_to_deflate_with"]
 
     _equilibrium = True
     _coordinates = "rtz"
@@ -218,6 +222,7 @@ class ForceBalanceDeflated(_Objective):
         eqs,
         sigma=0.05,
         power=2,
+        params_to_deflate_with=["Rb_mn", "Zb_mn"],
         target=None,
         bounds=None,
         weight=1,
@@ -235,6 +240,7 @@ class ForceBalanceDeflated(_Objective):
         self._eqs = eqs
         self._sigma = sigma
         self._power = power
+        self._params_to_deflate_with = params_to_deflate_with
         super().__init__(
             things=eq,
             target=target,
@@ -332,7 +338,7 @@ class ForceBalanceDeflated(_Objective):
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
-        keys = ["Rb_lmn", "Zb_lmn"]
+        keys = self._params_to_deflate_with
         # TODO: better to do only surface, or every key? seems like can obtain
         # very different results depending on if using only surf or every key, but
         # at same time, only the surface matters as far as closeness of solution

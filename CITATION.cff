@@ -9,8 +9,8 @@ type: software
 authors:
   - given-names: Daniel
     family-names: Dudt
-    email: ddudt@princeton.edu
-    affiliation: Princeton University
+    email: daniel@thea.energy
+    affiliation: Thea Energy
     orcid: 'https://orcid.org/0000-0002-4557-3529'
   - given-names: Rory
     family-names: Conlin

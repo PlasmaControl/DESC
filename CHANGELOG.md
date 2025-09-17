@@ -4,8 +4,8 @@ Changelog
 New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 
--
 Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).

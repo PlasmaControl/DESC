@@ -502,7 +502,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
+def plot_1d(  # noqa : C901
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+):
     """Plot 1D profiles.
 
     Parameters
@@ -515,6 +517,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -556,6 +560,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     # If the quantity is a flux surface function, call plot_fsa.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
@@ -571,6 +581,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=default_L,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -584,6 +595,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=rho,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -602,6 +614,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     data, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 1D
     if len(plot_axes) != 1:
@@ -644,11 +660,24 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+    if normalize:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data
@@ -915,11 +944,12 @@ def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
     return ijk
 
 
-def plot_3d(
+def plot_3d(  # noqa : C901
     eq,
     name,
     grid=None,
     log=False,
+    normalize=None,
     fig=None,
     return_data=False,
     **kwargs,
@@ -936,6 +966,8 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -996,6 +1028,12 @@ def plot_3d(
         fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
@@ -1031,6 +1069,10 @@ def plot_3d(
             chunk_size=kwargs.pop("chunk_size", None),
             B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     errorif(
         len(kwargs) != 0,
@@ -1068,7 +1110,6 @@ def plot_3d(
             ticktext=[f"{l:.0e}" for l in levels],
             tickvals=ticks,
         )
-
     else:
         cbar = dict(
             title=LatexNodes2Text().latex_to_text(label),
@@ -1077,6 +1118,14 @@ def plot_3d(
         )
         cmin = None
         cmax = None
+
+    if normalize:
+        parameterization = _parse_parameterization(eq)
+        label = "{} / {}".format(
+            "$" + data_index[parameterization][name]["label"] + "$",
+            "$" + data_index[parameterization][normalize]["label"] + "$",
+        )
+        cbar["title"] = LatexNodes2Text().latex_to_text(label)
 
     meshdata = go.Mesh3d(
         x=X.flatten(),
@@ -1149,6 +1198,11 @@ def plot_3d(
         font=dict(family="Times"),
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
+
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, plot_data

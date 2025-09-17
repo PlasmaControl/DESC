@@ -815,19 +815,23 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     num_wells = ado_shape[3]
     num_fieldlines = ado_shape[1]
 
-    points_0 = points[0][:][:][:][:]
-    points_1 = points[1][:][:][:][:]
+    def tb_btfilter(iotas,points,N,nfp,alpha_drift_out): # Perform barely trapped filter
+        points_0 = points[0][:][:][:][:]
+        points_1 = points[1][:][:][:][:]
+        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas[0] - N*nfp)) # zeta->chi assuming delta(alpha)=0
+        # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
+        return jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0) # set barely-trapped particles to 0
+    def fb_btfilter(iotas,points,N,nfp,alpha_drift_out): # Do nothing
+        return alpha_drift_out
+    
+    # Perform (or don't) barely-trapped filtering
+    alpha_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out)
 
-    # For non-nan entries, perform barely trapped filter
-    delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas[0] - N*nfp)) # zeta->chi assuming delta(alpha)=0
-    # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
-    alpha_drift_out = jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0) # set barely-trapped particles to 0
 
     def jnpmean_nz(x,axis=0):
         mask = x!=0.0
         count = jnp.sum(mask,axis) # how many wells that are not 0
         return jnp.sum(x,axis=axis) / count
-
     def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "nan" elements in JAX numpy
         # x is an array with size: (num_wells*num_fieldlines,num_rho,num_pitch)
         xbar = jnpmean_nz(x,axis=axis)
@@ -836,23 +840,32 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         sq_diff = (x - xbar) ** 2
         return jnp.sqrt(jnpmean_nz(sq_diff,axis=0)) # returning an array with size: (num_rho,num_pitch)
 
-    # Average and standard deviation per-surface and pitch inverse
+
     alpha_drift_out = jnp.transpose(alpha_drift_out, (1,3,0,2)) # rearrange for flattening
     alpha_drift_out = jnp.reshape(alpha_drift_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2])) # flatten array to average simultaneously over wells and field lines
+    
+    # Average and standard deviation per-surface and pitch inverse
+    # alpha_drift_out = jnp.transpose(alpha_drift_out, (1,3,0,2)) # rearrange for flattening
+    # alpha_drift_out = jnp.reshape(alpha_drift_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2])) # flatten array to average simultaneously over wells and field lines
     alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=0) # does not include zero wells in averaging, should be size [rho][pitch] / size [rho][pitch]
     alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=0)
     
     # resize alpha_drift_avg and alpha_drift_std to make computation possible
-    alpha_drift_avg = jnp.broadcast_to(alpha_drift_avg[..., None], (ado_shape[0], ado_shape[2], num_wells*num_fieldlines))
+    alpha_drift_avg = jnp.broadcast_to(alpha_drift_avg[..., None], (ado_shape[0], ado_shape[2], ado_shape[3]*ado_shape[1]))
     alpha_drift_avg = jnp.transpose(alpha_drift_avg, (2,0,1)) # rearrange to match alpha_drift_avg above
-    alpha_drift_std = jnp.broadcast_to(alpha_drift_std[..., None], (ado_shape[0], ado_shape[2], num_wells*num_fieldlines)) 
+    alpha_drift_std = jnp.broadcast_to(alpha_drift_std[..., None], (ado_shape[0], ado_shape[2], ado_shape[3]*ado_shape[1])) 
     alpha_drift_std = jnp.transpose(alpha_drift_std, (2,0,1)) # rearrange to match alpha_drift_std above
 
-    # Ripple-trapped filter
-    alpha_drift_out = jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
-    
+    def tb_rtfilter(alpha_drift_out): # Perform ripple-trapped filter
+        return jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
+    def fb_rtfilter(alpha_drift_out): # Do nothing
+        return alpha_drift_out
+
+    # Perform (or don't) ripple-trapped filtering
+    alpha_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out)
+
     # Average per-surface and pitch inverse
-    alpha_drift_avg_1 = jnpmean_nz(alpha_drift_out,axis=0) # average simultaneously over wells and field lines
+    alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=0) # average simultaneously over wells and field lines
 
     # Calculate tau
     vtau_out = jnp.transpose(vtau_out, (1,3,0,2))
@@ -860,7 +873,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     tau_arr = jnpmean_nz(vtau_out,axis=0) / jnp.sqrt(v2) # vtau->tau
 
     # Calculate omega (per surface per pitch angle)
-    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas[0]))) * (m_alpha*v2/(Z*e)) * alpha_drift_avg_1 # shape [rho][pitch]
+    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas[0]))) * (m_alpha*v2/(Z*e)) * alpha_drift_avg # shape [rho][pitch]
     # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
 
 
@@ -898,8 +911,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     #     return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
-    data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
-    # data["f_tr1"] = omega_arr # debugging
+    # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
+    data["f_tr1"] = omega_arr # debugging
     return data
 
     # debugging

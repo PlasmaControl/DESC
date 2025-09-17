@@ -630,8 +630,8 @@ class TrappedResonance(_Objective):
             quad=constants["quad"],
             N=-1,
             nfp=eq.NFP,
-            bt_filter_flag=True,
-            rt_filter_flag=True,
+            bt_filter_flag=False,
+            rt_filter_flag=False,
             **quad2,
             **self._hyperparameters, # passes pitch inv as well as other parameters
         )

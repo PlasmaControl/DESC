@@ -4,7 +4,9 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.backend import jnp
+from desc.backend import tree_broadcast as jax_tree_broadcast
+from desc.backend import tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -38,7 +40,23 @@ class _CoilObjective(_Objective):
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
         If a list, must have the same structure as coil.
-
+    target : float, list, optional
+        Target values for the coil objective.
+        If a float, target is applied to all coils.
+        If a list, must have the same structure as coil.
+    bounds : tuple, optional
+        Upper and lower bounds for the coil objective.
+        If used, should consist of a tuple (-,-), with
+        each entry a float or list satisfying requirements
+        of "target". Cannot be used with "target."
+    weight: float, list, optional
+        Weight for the coil objective during optimization.
+        If a list, must have the same structure as coil.
+    indices: bool, list, optional
+        Boolean indicating whether particular coils in a CoilSet
+        should be optimized according to the objective. Default
+        is to optimize all coils. If a list, must have the same structure
+        as coil.
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
@@ -52,6 +70,7 @@ class _CoilObjective(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -61,6 +80,15 @@ class _CoilObjective(_Objective):
         self._grid = grid
         self._data_keys = data_keys
         self._normalize = normalize
+
+        coil_tree = coilset_tree(coil)
+        indices = jax_tree_broadcast(indices, coil_tree)
+        arr0, _ = tree_flatten(tree_map(lambda x: int(x), indices))
+        self._mask = jnp.array(arr0)
+
+        arr1, _ = tree_flatten(jax_tree_broadcast(weight, coil_tree))
+        weight = arr1
+
         super().__init__(
             things=[coil],
             target=target,
@@ -73,6 +101,14 @@ class _CoilObjective(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
         )
+
+        if bounds:
+            arr0, _ = tree_flatten(jax_tree_broadcast(bounds[0], coil_tree))
+            arr1, _ = tree_flatten(jax_tree_broadcast(bounds[1], coil_tree))
+            self._bounds = (arr0, arr1)
+        elif target:
+            arr, _ = tree_flatten(jax_tree_broadcast(target, coil_tree))
+            self._target = arr
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
         """Build constant arrays.
@@ -194,7 +230,6 @@ class _CoilObjective(_Objective):
             transforms=constants["transforms"],
             grid=self._grid,
         )
-
         return data
 
 
@@ -229,6 +264,7 @@ class CoilLength(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -246,6 +282,7 @@ class CoilLength(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -2686,3 +2723,36 @@ class SurfaceCurrentRegularization(_Objective):
         elif self._regularization == "sqrt(Phi)":
             K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
         return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+
+def coilset_tree(cset):
+    """Utility for decomposing a CoilSet into structured list.
+
+    Parameters
+    ----------
+    cset : CoilSet
+        CoilSet to be decomposed.
+
+    Returns
+    -------
+    t: (Potentially nested) lists of zeros
+        E.g. given a MixedCoilSet consisting of [CoilSet, CoilSet, CoilSet]
+        with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
+
+    """
+    ## Local import to avoid circular import
+    from desc.coils import CoilSet, _Coil
+
+    t = cset.copy()
+
+    def recurse(t):
+        if isinstance(t, CoilSet):
+            return recurse(t.coils)
+        if isinstance(t, _Coil) and not isinstance(t, CoilSet):
+            return 0
+        if isinstance(t, list):
+            for idx in range(0, len(t)):
+                t[idx] = recurse(t[idx])
+        return t
+
+    return recurse(t)

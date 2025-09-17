@@ -1266,6 +1266,8 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
+        if hasattr(self, "_mask"):
+            f = jnp.multiply(f, self._mask)
         return jnp.atleast_1d(f)
 
     @jit
@@ -1275,6 +1277,8 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
+        if hasattr(self, "_mask"):
+            f = jnp.multiply(f, self._mask)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
     @jit
@@ -1284,7 +1288,10 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        f = jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        if hasattr(self, "_mask"):
+            f = jnp.multiply(f, self._mask)
+        return f
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""

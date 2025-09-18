@@ -222,7 +222,7 @@ class ForceBalanceDeflated(_Objective):
         eqs,
         sigma=0.05,
         power=2,
-        params_to_deflate_with=["Rb_mn", "Zb_mn"],
+        params_to_deflate_with=["Rb_lmn", "Zb_lmn"],
         target=None,
         bounds=None,
         weight=1,

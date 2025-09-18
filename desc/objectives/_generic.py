@@ -668,3 +668,125 @@ class ObjectiveFromUser(_Objective):
         )
         f = self._fun_wrapped(data)
         return f
+
+
+class DeflationOperator(_Objective):
+    r"""Deflation operator to be added to objective to find new solutions.
+
+    Deflation is done on the passed-in list of parameters. This objective
+    value will be large if the current state is close to one of the already-found
+    states given by `things_to_deflate`, thus enabling new solutions to be found,
+    and guarantees that old solutions are not found (as the objective increases
+    without bound as an already-found solution is approached)
+
+    Parameters
+    ----------
+    thing : Optimizable
+        Optimizable that will be optimized to satisfy the Objective.
+    things_to_deflate: list of Equilibrium
+        list of objects to use in deflation operator. Should be same type
+        as thing.
+    params_to_deflate_with: list of str
+        Which params to use in the deflation operator to define which part of the
+        state to deflate, defaults to list(thing.params_dict.keys()) (e.g. entire
+        state)
+    sigma: float, optional
+        sigma term in deflation operator
+    power: float, optional
+        power parameter in deflation operator.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + ["_params_to_deflate_with"]
+
+    _coordinates = "rtz"
+    _units = "~"
+    _print_value_fmt = "Deflation error: "
+
+    def __init__(
+        self,
+        thing,
+        things_to_deflate,
+        params_to_deflate_with=None,
+        sigma=1.0,
+        power=2,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Deflation",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        # TODO: recommmend bounds with some lower bound as a large pos constant
+        # following work of Tarek 2022 https://arxiv.org/pdf/2201.11926 ?
+        assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
+        self._things_to_deflate = things_to_deflate
+        self._sigma = sigma
+        self._power = power
+        if params_to_deflate_with is None:
+            params_to_deflate_with = list(thing.params_dict.keys())
+        self._params_to_deflate_with = params_to_deflate_with
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = 1
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deflation error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : scalar
+            deflation error.
+
+        """
+        keys = self._params_to_deflate_with
+
+        diffs = [
+            jnp.concatenate([params[key] - thing.params_dict[key] for key in keys])
+            for thing in self._things_to_deflate
+        ]
+        diffs = jnp.vstack(diffs)
+        deflation_parameter = jnp.prod(
+            1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+        )
+        return deflation_parameter

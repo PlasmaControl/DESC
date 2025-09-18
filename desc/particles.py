@@ -4,7 +4,6 @@ import warnings
 from abc import ABC, abstractmethod
 
 import equinox as eqx
-import numpy as np
 from diffrax import (
     AbstractTerm,
     Event,
@@ -22,11 +21,10 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.geometry import Curve, Surface
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot, errorif, safediv
+from desc.utils import cross, dot, errorif, safediv, setdefault
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
@@ -187,7 +185,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 "Integration in lab coordinates requires a MagneticField. If using an "
                 "Equilibrium, we recommend setting frame='flux' and converting the "
                 "output to lab coordinates only at the end by the helper function "
-                "Equilibrium.map_coordinates."
+                "Equilibrium.compute('x')."
             )
 
             return self._compute_lab_coordinates(
@@ -369,10 +367,11 @@ class AbstractParticleInitializer(IOAble, ABC):
 def _compute_modB(x, field, params, **kwargs):
     if isinstance(field, Equilibrium):
         grid = Grid(
-            x.T,
+            x,
             spacing=jnp.zeros_like(x),
             sort=False,
             NFP=field.NFP,
+            jitable=True,
         )
         profiles = get_profiles("|B|", field, grid)
         transforms = get_transforms("|B|", field, grid, jitable=True)
@@ -407,9 +406,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Particle mass, in proton masses
-    q : float
+    q : array-like
         Particle charge, in units of elementary charge.
     """
 
@@ -423,21 +422,18 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
-        m = m * proton_mass
-        q = q * elementary_charge
-        E = E * JOULE_PER_EV
         rho0, theta0, zeta0, xi0, E, m, q = map(
             jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
         )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
         )
-        self.m = m
-        self.q = q
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         self.rho0 = rho0
         self.theta0 = theta0
         self.zeta0 = zeta0
-        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.v0 = jnp.sqrt(2 * E * JOULE_PER_EV / self.m)
         self.vpar0 = xi0 * self.v0
 
         errorif(
@@ -459,6 +455,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         kwargs : dict, optional
             source_grid for the magnetic field computation, if using a MagneticField
             object, can be passed as a keyword argument.
+            If you are trying to initialize particles in lab coordinates for a
+            MagneticField with flux coordinates, you must pass the Equilibrium
+            as keyword argument "eq" in kwargs.
 
         Returns
         -------
@@ -494,10 +493,23 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
                     "require multiple coordinate mapping, it is not implemented."
                 )
             elif isinstance(field, _MagneticField):
-                raise NotImplementedError(
-                    "If you have a MagneticField object, you cannot use input with "
-                    "flux coordinates since there is no easy mapping between the two."
-                )
+                eq = kwargs.pop("eq", None)
+                if isinstance(eq, Equilibrium):
+                    grid = Grid(
+                        x,
+                        spacing=jnp.zeros_like(x),
+                        sort=False,
+                        NFP=eq.NFP,
+                        jitable=True,
+                    )
+                    x = eq.compute("x", grid=grid)["x"]
+                else:
+                    raise NotImplementedError(
+                        "If you have a MagneticField object, you cannot use input with "
+                        "flux coordinates since there is no easy mapping between the "
+                        "two. You can pass the Equilibrium as a keyword argument 'eq' "
+                        "in kwargs to enable the mapping."
+                    )
         else:
             raise NotImplementedError
 
@@ -527,9 +539,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Particle mass, in proton masses
-    q : float
+    q : array-like
         Particle charge, in units of elementary charge.
     """
 
@@ -543,17 +555,14 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
-        m = m * proton_mass
-        q = q * elementary_charge
-        E = E * JOULE_PER_EV
         R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
         R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
-        self.m = m
-        self.q = q
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         self.R0 = R0
         self.phi0 = phi0
         self.Z0 = Z0
-        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.v0 = jnp.sqrt(2 * E * JOULE_PER_EV / self.m)
         self.vpar0 = xi0 * self.v0
 
     def init_particles(self, model, field, **kwargs):
@@ -591,10 +600,26 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            x = field.map_coordinates(
+            # there is not much we can do for the guess here, but we need the
+            # guess for jit purposes
+            x_guess = jnp.zeros(x.shape)
+            x_guess = x_guess.at[:, 2].set(self.phi0)
+            x_guess = x_guess.at[:, 1].set(jnp.arctan2(self.Z0, self.R0))
+            tol = 1e-8
+            x, out = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
                 outbasis=("rho", "theta", "zeta"),
+                maxiter=200,
+                guess=x_guess,
+                tol=tol,
+                full_output=True,
+            )
+            x = eqx.error_if(
+                x,
+                (out[0] > tol).any(),
+                "Mapping from lab to flux coordinates failed to achieve tolerance "
+                f"{tol:.2e}. Make sure the points lie in the equilibrium.",
             )
             if field.iota is None:
                 iota = field.get_profile("iota")
@@ -605,7 +630,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
                 raise NotImplementedError(
                     "If you have an Equilibrium object, you should use the model "
                     "in flux frame. Since trying to integrate in lab frame will "
-                    "require smultiple coordinate mapping, it is not implemented."
+                    "require multiple coordinate mappings, it is not implemented."
                 )
             x = x
         else:
@@ -631,11 +656,11 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Curve object to initialize samples on.
     N : int
         Number of particles to generate.
-    E : float
+    E : array-like
         Initial particle kinetic energy, in eV
-    m : float
+    m : array-like
         Mass of particles, in proton masses.
-    q : float
+    q : array-like
         charge of particles, in units of elementary charge.
     xi_min, xi_max : float
         Minimum and maximum values for randomly sampled normalized parallel velocity.
@@ -644,29 +669,43 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
+    is_curve_magnetic_axis : bool
+        Whether user ensures the given curve is the magnetic axis of the equilibrium.
+        If True, additional coordinate mapping is not performed, and particles are
+        initialized directly on the magnetic axis. Defaults to False. Before setting
+        this to True, please make sure the curve is indeed the magnetic axis of the
+        equilibrium, and obtained through an equivalent function such as
+        ``eq.get_axis()``.
     """
+
+    _static_attrs = ["N", "is_curve_magnetic_axis"]
 
     def __init__(
         self,
-        curve: Curve,
-        N: int,
-        E: float = 3.5e6,
-        m: float = 4,
-        q: float = 2,
-        xi_min: float = -1,
-        xi_max: float = 1,
-        grid: Grid = None,
-        seed: int = 0,
+        curve,
+        N,
+        E=3.5e6,
+        m=4,
+        q=2,
+        xi_min=-1,
+        xi_max=1,
+        grid=None,
+        seed=0,
+        is_curve_magnetic_axis=False,
     ):
         self.curve = curve
-        self.E = jnp.full(N, E * JOULE_PER_EV)
-        self.m = jnp.full(N, m * proton_mass)
-        self.q = jnp.full(N, q * elementary_charge)
+        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
+        self.m = jnp.broadcast_to(m, (N,)) * proton_mass
+        self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
+        self.is_curve_magnetic_axis = is_curve_magnetic_axis
+        if self.grid is None:
+            self.grid = LinearGrid(N=self.curve.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -695,7 +734,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             requested by the model which is equal to len(model.args). N is the number
             of particles.
         """
-        data = self.curve.compute(["x_s", "x", "ds"], grid=self.grid)
+        data = self.curve.compute(["x_s", "x", "ds", "phi"], grid=self.grid)
         # length of the line segment at each grid point
         sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
         self._chosen_idxs = jax.random.choice(
@@ -707,7 +746,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         )
 
         # positions of the selected nodes in R, phi, Z coordinates
-        x = data["x"][self._chosen_idxs, :]
+        x = jnp.take(data["x"], self._chosen_idxs, axis=0)
         params = field.params_dict
 
         if model.frame == "flux":
@@ -716,21 +755,30 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            tol = 1e-8
-            x, out = field.map_coordinates(
-                coords=x,
-                inbasis=("R", "phi", "Z"),
-                outbasis=("rho", "theta", "zeta"),
-                maxiter=200,
-                tol=tol,
-                full_output=True,
-            )
-            if jnp.where(out[0] > tol)[0].any():
-                raise ValueError(
-                    "Mapping from lab to flux coordinates failed to achieve tolerance "
-                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
-                    "curve lies in the equilibrium."
+            zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
+            # this is not the best guess, but most likely scenario for this class
+            # is to initialize particles on the magnetic axis, for sake of jitable
+            # implementation, we use rho=0, theta=0 as the guess
+            x_guess = jnp.array([jnp.zeros(self.N), jnp.zeros(self.N), zeta]).T
+            if not self.is_curve_magnetic_axis:
+                tol = 1e-8
+                x, out = field.map_coordinates(
+                    coords=x,
+                    inbasis=("R", "phi", "Z"),
+                    outbasis=("rho", "theta", "zeta"),
+                    maxiter=200,
+                    guess=x_guess,
+                    tol=tol,
+                    full_output=True,
                 )
+                x = eqx.error_if(
+                    x,
+                    (out[0] > tol).any(),
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Make sure the curve lies in the equilibrium.",
+                )
+            else:
+                x = x_guess
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -744,7 +792,12 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 )
 
         v = jnp.sqrt(2 * self.E / self.m)
-        vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
+        vpar = jax.random.uniform(
+            key=jax.random.PRNGKey(self.seed),
+            shape=(v.size,),
+            minval=self.xi_min * v,
+            maxval=self.xi_max * v,
+        )
 
         return super()._return_particles(
             x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
@@ -773,29 +826,42 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Grid used to discretize curve.
     seed : int
         Seed for rng.
+    is_surface_from_eq : bool
+        Whether user ensures the given surface is obtained through
+        ``eq.get_surface_at(rho=...)``. If True, additional coordinate mapping is not
+        performed, and particles are initialized directly on the flux surface. Defaults
+        to False. Before setting this to True, make sure the surface and Equilibrium
+        have the same theta and rho definitions.
     """
+
+    _static_attrs = ["N", "is_surface_from_eq"]
 
     def __init__(
         self,
-        surface: Surface,
-        N: int,
-        E: float = 3.5e6,
-        m: float = 4,
-        q: float = 2,
-        xi_min: float = -1,
-        xi_max: float = 1,
-        grid: Grid = None,
-        seed: int = 0,
+        surface,
+        N,
+        E=3.5e6,
+        m=4,
+        q=2,
+        xi_min=-1,
+        xi_max=1,
+        grid=None,
+        seed=0,
+        is_surface_from_eq=False,
     ):
         self.surface = surface
-        self.E = jnp.full(N, E * JOULE_PER_EV)
-        self.m = jnp.full(N, m * proton_mass)
-        self.q = jnp.full(N, q * elementary_charge)
+        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
+        self.m = jnp.broadcast_to(m, (N,)) * proton_mass
+        self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
         self.N = N
         self.seed = seed
+        self.is_surface_from_eq = is_surface_from_eq
+        if self.grid is None:
+            self.grid = LinearGrid(M=self.surface.M, N=self.surface.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -837,16 +903,8 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             replace=True,
             p=sqrtg / sqrtg.sum(),
         )
-        # eq and surface might not have the same theta definition, so we will do a
-        # root finding to find the correct theta and zeta coordinates from R, phi, Z
-        # coordinates. We will use the surface's rho, theta, zeta coordinates as an
-        # initial guess for the root finding.
-        zeta = data["zeta"][self._chosen_idxs]
-        theta = data["theta"][self._chosen_idxs]
-        rho = self.surface.rho * jnp.ones_like(zeta)
-        x_guess = jnp.array([rho, theta, zeta]).T
         # positions of the selected nodes in R, phi, Z coordinates
-        x = data["x"][self._chosen_idxs, :]
+        x = jnp.take(data["x"], self._chosen_idxs, axis=0)
 
         params = field.params_dict
 
@@ -856,22 +914,33 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                     "Mapping from lab to flux coordinates requires an Equilibrium. "
                     "Please use Equilibrium object with the model."
                 )
-            tol = 1e-8
-            x, out = field.map_coordinates(
-                coords=x,
-                inbasis=("R", "phi", "Z"),
-                outbasis=("rho", "theta", "zeta"),
-                guess=x_guess,
-                maxiter=200,
-                tol=tol,
-                full_output=True,
-            )
-            if jnp.where(out[0] > tol)[0].any():
-                raise ValueError(
-                    "Mapping from lab to flux coordinates failed to achieve tolerance "
-                    f"{tol:.2e}. Maximum residual is {max(out[0]):2e}. Make sure the "
-                    "surface lies in the equilibrium."
+            # eq and surface might not have the same theta definition, so we will do a
+            # root finding to find the correct theta and zeta coordinates from R, phi, Z
+            # coordinates. We will use the surface's rho, theta, zeta coordinates as an
+            # initial guess for the root finding.
+            zeta = jnp.take(data["zeta"], self._chosen_idxs, axis=0)
+            theta = jnp.take(data["theta"], self._chosen_idxs, axis=0)
+            rho = self.surface.rho * jnp.ones_like(zeta)
+            x_guess = jnp.array([rho, theta, zeta]).T
+            if not self.is_surface_from_eq:
+                tol = 1e-8
+                x, out = field.map_coordinates(
+                    coords=x,
+                    inbasis=("R", "phi", "Z"),
+                    outbasis=("rho", "theta", "zeta"),
+                    guess=x_guess,
+                    maxiter=200,
+                    tol=tol,
+                    full_output=True,
                 )
+                x = eqx.error_if(
+                    x,
+                    (out[0] > tol).any(),
+                    "Mapping from lab to flux coordinates failed to achieve tolerance "
+                    f"{tol:.2e}. Make sure the surface lies in the equilibrium.",
+                )
+            else:
+                x = x_guess
             if field.iota is None:
                 iota = field.get_profile("iota")
                 params["i_l"] = iota.params
@@ -885,7 +954,12 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
                 )
 
         v = jnp.sqrt(2 * self.E / self.m)
-        vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
+        vpar = jax.random.uniform(
+            key=jax.random.PRNGKey(self.seed),
+            shape=(v.size,),
+            minval=self.xi_min * v,
+            maxval=self.xi_max * v,
+        )
 
         return super()._return_particles(
             x=x, v=v, vpar=vpar, model=model, field=field, params=params, **kwargs
@@ -898,22 +972,22 @@ def trace_particles(
     model,
     ts,
     params=None,
-    stepsize_controller=None,
-    saveat=None,
-    rtol=1e-8,
-    atol=1e-8,
+    rtol=1e-5,
+    atol=1e-5,
     max_steps=None,
-    min_step_size=1e-10,
+    min_step_size=1e-8,
+    bounds=None,
     solver=Tsit5(),
     adjoint=RecursiveCheckpointAdjoint(),
-    bounds=None,
-    event=None,
     chunk_size=None,
-    options={},
+    options=None,
+    throw=True,
+    return_aux=False,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
-    For jit friendly version of this function, see `_trace_particles`.
+    For jit friendly version of this function or to have more control over
+    the integration, see `_trace_particles`.
 
     Parameters
     ----------
@@ -930,47 +1004,44 @@ def trace_particles(
         Defaults to field.params_dict.
     rtol, atol : float, optional
         relative and absolute tolerances for PID stepsize controller. Not used if
-        stepsize_controller is provided.
-    stepsize_controller : diffrax.AbstractStepsizeController, optional
-        Stepsize controller to use for the integration. If not provided, a
-        PIDController with the given rtol and atol will be used.
-    saveat : diffrax.SaveAt, optional
-        SaveAt object to specify where to save the output. If not provided, will
-        save at the specified times in ts.
+        ``stepsize_controller`` is provided. Defaults to 1e-5
     max_steps : int
         maximum number of steps for whole integration. This will be passed
         to the diffrax.diffeqsolve function. Defaults to
-        (ts[1] - ts[0]) * 100 / min_step_size
+        (ts[-1] - ts[0]) * 10 / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
-    solver: diffrax.AbstractSolver
-        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
-        explicit solver.
-    adjoint : diffrax.AbstractAdjoint
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
-        supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
     bounds : array of shape(3, 2), optional
         Bounds for particle tracing bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box. When tracing
         an Equilibrium, the default bounds are set to
         [[0, 1], [-inf, inf], [-inf, inf]] for rho, theta, zeta coordinates.
         When tracing a MagneticField, the default bounds are set to
-        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates.
-    event : diffrax.Event, optional
-        Custom event function to stop integration. If not provided, the default
-        event function will be used, which stops integration when particles leave the
-        bounds. If integration is stopped by the event, the output will contain NaN
-        values for the points outside the bounds.
+        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
+        ``event`` is provided.
+    solver: diffrax.AbstractSolver, optional
+        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
+        explicit solver.
+    adjoint : diffrax.AbstractAdjoint, optional
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
     chunk_size : int, optional
         Chunk size for integration over particles. If not provided, the integration will
         be done over all particles at once without chunking.
     options : dict, optional
-        Additional keyword arguments to pass to the field computation, such as
+        Additional keyword arguments to pass to the field computation,
             - iota : Profile
                 Iota profile of the Equilibrium, if it does not have one.
             - source_grid: Grid
                 Source grid to use for field computation.
+    throw : bool, optional
+        Whether to throw an error if the integration fails. If False, will return NaN
+        for the points where the integration failed. Defaults to True.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (x, v, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
@@ -978,85 +1049,15 @@ def trace_particles(
         Position of each particle at each requested time, in
         either r,phi,z or rho,theta,zeta depending ``model.frame``.
     v : ndarray
-        Velocity of each particle at specified times. The exact number of meaning
+        Velocity of each particle at specified times. The exact number of columns
         will depend on ``model.vcoords``.
 
     """
-    y0, model_args = initializer.init_particles(model, field)
-    return _trace_particles(
-        field=field,
-        y0=y0,
-        model=model,
-        model_args=model_args,
-        ts=ts,
-        params=params,
-        stepsize_controller=stepsize_controller,
-        saveat=saveat,
-        rtol=rtol,
-        atol=atol,
-        max_steps=max_steps,
-        min_step_size=min_step_size,
-        solver=solver,
-        adjoint=adjoint,
-        bounds=bounds,
-        event=event,
-        chunk_size=chunk_size,
-        options=options,
-    )
-
-
-def _trace_particles(
-    field,
-    y0,
-    model,
-    model_args,
-    ts,
-    params=None,
-    stepsize_controller=None,
-    saveat=None,
-    rtol=1e-8,
-    atol=1e-8,
-    max_steps=None,
-    min_step_size=1e-10,
-    solver=Tsit5(),
-    adjoint=RecursiveCheckpointAdjoint(),
-    bounds=None,
-    event=None,
-    chunk_size=None,
-    options={},
-):
-    """Trace charged particles in an equilibrium or external magnetic field.
-
-    This is the jit friendly version of the `trace_particles` function. For full
-    documentation, see `trace_particles`. This function takes the outputs of
-    `initializer.init_particles` as inputs, rather than the particle initializer
-    itself. There won't be any checks on the y0 and model_args inputs, so make sure
-    they are in the correct format. One can use this function in an objective, where
-    the initial positions and velocities of particles are computed in the `build`
-    method. If the objective requires initialization of particles at each iteration,
-    make sure that the initializer can work under jit compilation which is not the
-    case for all of them.
-
-    Parameters
-    ----------
-    y0 : array-like
-        Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of ``initializer.init_particles``.
-    model_args : array-like
-        Additional arguments needed by the model, such as mass, charge, and
-        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
-        ``initializer.init_particles``.
-    """
     if not params:
         params = field.params_dict
+    if not options:
+        options = {}
 
-    stepsize_controller = (
-        stepsize_controller
-        if stepsize_controller is not None
-        else PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    )
-
-    saveat = saveat if saveat is not None else SaveAt(ts=ts)
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
         if isinstance(field, Equilibrium):
@@ -1074,13 +1075,81 @@ def _trace_particles(
         k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
-    event = Event(default_event) if event is None else event
-    max_steps = (
-        max_steps
-        if max_steps is not None
-        else int((ts[1] - ts[0]) / min_step_size * 100)
+    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size * 10))
+
+    y0, model_args = initializer.init_particles(model, field)
+    return _trace_particles(
+        field=field,
+        y0=y0,
+        model=model,
+        model_args=model_args,
+        ts=ts,
+        params=params,
+        stepsize_controller=stepsize_controller,
+        saveat=SaveAt(ts=ts),
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        solver=solver,
+        adjoint=adjoint,
+        event=Event(default_event),
+        chunk_size=chunk_size,
+        options=options,
+        throw=throw,
+        return_aux=return_aux,
     )
 
+
+def _trace_particles(
+    field,
+    y0,
+    model,
+    model_args,
+    ts,
+    params,
+    max_steps,
+    min_step_size,
+    stepsize_controller,
+    saveat,
+    solver,
+    adjoint,
+    event,
+    chunk_size,
+    options,
+    throw,
+    return_aux,
+):
+    """Trace charged particles in an equilibrium or external magnetic field.
+
+    This is the jit friendly version of the `trace_particles` function. For full
+    documentation, see `trace_particles`. This function takes the outputs of
+    `initializer.init_particles` as inputs, rather than the particle initializer
+    itself. There won't be any checks on the y0 and model_args inputs, so make sure
+    they are in the correct format. One can use this function in an objective. All
+    the arguments must be passed with a value, see ``trace_particles`` for default
+    values for common use.
+
+    Parameters
+    ----------
+    y0 : array-like
+        Initial particle positions and velocities, stacked in horizontally [x0, v0].
+        The first output of ``initializer.init_particles``.
+    model_args : array-like
+        Additional arguments needed by the model, such as mass, charge, and
+        magnetic moment (mv⊥²/2|B|) of each particle. The second output of
+        ``initializer.init_particles``.
+    stepsize_controller : diffrax.AbstractStepsizeController
+        Stepsize controller to use for the integration. If not provided, a
+        PIDController with the given ``rtol`` and ``atol`` will be used.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify where to save the output. If not provided, will
+        save at the specified times in ts.
+    event : diffrax.Event
+        Custom event function to stop integration. If not provided, the default
+        event function will be used, which stops integration when particles leave the
+        bounds. If integration is stopped by the event, the output will contain NaN
+        values for the points outside the bounds.
+    """
     # convert cartesian-like for integration in flux coordinates
     if isinstance(field, Equilibrium):
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
@@ -1092,8 +1161,8 @@ def _trace_particles(
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments
         # Note: vmap with keyword arguments is weird, not using it for now
-        yt = vmap_chunked(
-            _intfun_wrapper, in_axes=(0, 0) + 12 * (None,), chunk_size=chunk_size
+        out = vmap_chunked(
+            _intfun_wrapper, in_axes=(0, 0) + 13 * (None,), chunk_size=chunk_size
         )(
             y0,
             model_args,
@@ -1109,8 +1178,9 @@ def _trace_particles(
             model,
             saveat,
             options,
+            throw,
         )
-
+    yt = out.ys
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
 
     x = yt[:, :, :3]
@@ -1120,10 +1190,14 @@ def _trace_particles(
     if isinstance(field, Equilibrium):
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
+        theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
         x = x.at[:, :, 0].set(rho)
         x = x.at[:, :, 1].set(theta)
 
-    return x, v
+    if not return_aux:
+        return x, v
+    else:
+        return x, v, (out.stats, out.result)
 
 
 def _intfun_wrapper(
@@ -1141,10 +1215,11 @@ def _intfun_wrapper(
     model,
     saveat,
     options,
+    throw,
 ):
     """Wrapper for the integration function for vectorized inputs.
 
-    Defining a lambda function inside the ``trace_particles`` function leads
+    Defining a lambda function inside the ``_trace_particles`` function leads
     to recompilations, so instead we define the wrapper here.
     """
     return diffeqsolve(
@@ -1160,4 +1235,5 @@ def _intfun_wrapper(
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
         event=event,
-    ).ys
+        throw=throw,
+    )

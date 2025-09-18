@@ -832,6 +832,9 @@ class Grid(_Grid):
         jitable=False,
         **kwargs,
     ):
+        assert jnp.atleast_2d(nodes).shape[1] == 3
+        if spacing is not None:
+            assert spacing.shape == nodes.shape
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.

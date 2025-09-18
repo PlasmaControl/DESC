@@ -9,7 +9,6 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-import pdb
 from functools import partial
 
 from jax.scipy.linalg import solve_triangular
@@ -17,12 +16,8 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..diffmat_utils import (  # --no-verify D1_FD_4,
-    fourier_diffmat,
-    legendre_D1,
-    legendre_lobatto_nodes,
-    legendre_lobatto_weights,
-)
+from ..diffmat_utils import fourier_diffmat, legendre_D1  # --no-verify D1_FD_4,
+from ..integrals.quad_utils import leggauss_lob
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -493,7 +488,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         scale = (x0[-1] - x0[0]) / 2
         shift = 1 - x0[0] / scale
 
-        x = legendre_lobatto_nodes(num_zeta - 1)
+        x, w = leggauss_lob(num_zeta)
 
         scale_vector1 = (_eval_1D(dx_f, x, scale, shift)) ** -1 * 1 / scale
 
@@ -504,7 +499,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         D_zeta = jax.lax.stop_gradient(legendre_D1(num_zeta - 1) * scale_x1)
 
         # 2D matrices stacked in rho, alpha and zeta_0 dimensions
-        w = (1 / scale_vector1) * (legendre_lobatto_weights(num_zeta - 1))
+        w = (1 / scale_vector1) * w
         wg = -1 * w * g
 
         # Row scaling D_rho by wg
@@ -787,9 +782,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         n_zeta_max = kwargs.get("n_zeta_max", 4)
         D_zeta0 = fourier_diffmat(n_zeta_max)
 
-    def _eval_1D(f, x):
-        return jax.vmap(lambda x_val: f(x_val))(x)
-
     def _f(x):
         x_0 = 0.4
         m_1 = 3.0
@@ -800,11 +792,11 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         return eps + (1 - eps) * (lower + upper)
 
     # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
-    dx_f = jax.grad(_f)
+    dx_f = jax.vmap(jax.grad(_f))
 
-    x = legendre_lobatto_nodes(n_rho_max - 1)
+    x, w = leggauss_lob(n_rho_max)
 
-    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
+    scale_vector1 = dx_f(x) ** -1
 
     # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
     # --no-verify h = (1-1e-3)/(n_rho_max-1)
@@ -821,7 +813,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     D_theta0 = fourier_diffmat(n_theta_max)
 
-    wrho = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
+    wrho = jnp.diag(1 / scale_vector1 * w)
     wrho = wrho.at[jnp.abs(wrho) < 1e-12].set(0.0)
 
     ### assuming uniform spacing in and θ and ζ
@@ -888,7 +880,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
 
     ####################
-    ####----Q_ρρ----####
+    ####----Q²_ρρ----####
     ####################
     A = A.at[rho_idx, rho_idx].add(
         D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
@@ -898,7 +890,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q_ϑϑ ----####
+    ####----Q²_ϑϑ ----####
     ####################
     # enforcing symmetry exactly
     A = A.at[theta_idx, theta_idx].add(
@@ -934,7 +926,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q_ζζ----####
+    ####----Q²_ζζ----####
     ####################
     A = A.at[theta_idx, theta_idx].add(
         0.5
@@ -969,7 +961,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q_ρϑ----####
+    ####----Q²_ρϑ----####
     ####################
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -1005,7 +997,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ######################
-    ####-----Q_ρζ-----####
+    ####-----Q²_ρζ-----####
     ######################
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -1041,7 +1033,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ##########################
-    #######-----Q_ϑζ-----#####
+    #######-----Q²_ϑζ-----#####
     ##########################
     A = A.at[theta_idx, theta_idx].add(
         -1
@@ -1141,7 +1133,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         - (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
     )
 
-    ## diagonal |J|^2 term
+    ## diagonal |J|² term
     A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
 
     # Mass matrix (must be symmetric positive definite)
@@ -1163,7 +1155,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
-        # To improve performance set gamma = 0
+        # To improve performance set exact to False
         exact = False
         if exact:
             gamma = 5 / 3
@@ -1434,7 +1426,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             # --no-verify L_test = jnp.linalg.cholesky(B)
             ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
 
-            # Concatenate once (N, 3N)
+            # C.shape (N, 3N)
             C = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
 
             d = jnp.diag(D)  # (3N,)
@@ -1601,31 +1593,26 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
         # the toroidal direction
         D_zeta0 = 1j * n_mode * jnp.array([[1]])
         n_zeta_max = 1
-        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
         D_zeta0 = fourier_diffmat(n_zeta_max)
-        x0 = transforms["grid"].nodes[:: n_theta_max * n_zeta_max, 0]
-
-    def _eval_1D(f, x):
-        return jax.vmap(lambda x_val: f(x_val))(x)
 
     def _f(x):
-        x_0 = 0.4
-        m_1 = 3.0
-        m_2 = 3.0
+        x_0 = 0.5
+        m_1 = 1.0
+        m_2 = 1.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 5.0e-3
+        eps = 1.0e-3
         return eps + (1 - eps) * (lower + upper)
 
     # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
 
-    dx_f = jax.grad(_f)
+    dx_f = jax.vmap(jax.grad(_f))
 
-    x = legendre_lobatto_nodes(len(x0) - 1)
+    x, w = leggauss_lob(n_rho_max)
 
-    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
+    scale_vector1 = dx_f(x) ** -1
     # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
     # --no-verify h = (1-1e-3)/(n_rho_max-1)
 
@@ -1640,7 +1627,7 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
 
     D_theta0 = fourier_diffmat(n_theta_max)
 
-    wrho = jnp.diag(1 / scale_vector1 * legendre_lobatto_weights(n_rho_max - 1))
+    wrho = jnp.diag(1 / scale_vector1 * w)
     wrho = wrho.at[jnp.abs(wrho) < 1e-12].set(0.0)
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
@@ -2000,8 +1987,6 @@ def _AGNI_alt(params, transforms, profiles, data, **kwargs):
     keep = jnp.concatenate([keep_1, keep_2])
 
     A3 = A2[jnp.ix_(keep, keep)]
-
-    pdb.set_trace()
 
     L = jnp.linalg.cholesky(B2[jnp.ix_(keep, keep)])
     ALt = solve_triangular(L, A3.T, lower=True).T

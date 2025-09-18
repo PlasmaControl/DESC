@@ -367,7 +367,7 @@ class AbstractParticleInitializer(IOAble, ABC):
 def _compute_modB(x, field, params, **kwargs):
     if isinstance(field, Equilibrium):
         grid = Grid(
-            x.T,
+            x,
             spacing=jnp.zeros_like(x),
             sort=False,
             NFP=field.NFP,
@@ -496,7 +496,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
                 eq = kwargs.pop("eq", None)
                 if isinstance(eq, Equilibrium):
                     grid = Grid(
-                        x.T,
+                        x,
                         spacing=jnp.zeros_like(x),
                         sort=False,
                         NFP=eq.NFP,
@@ -982,6 +982,7 @@ def trace_particles(
     chunk_size=None,
     options=None,
     throw=True,
+    return_aux=False,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1037,6 +1038,10 @@ def trace_particles(
     throw : bool, optional
         Whether to throw an error if the integration fails. If False, will return NaN
         for the points where the integration failed. Defaults to True.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (x, v, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
@@ -1091,6 +1096,7 @@ def trace_particles(
         chunk_size=chunk_size,
         options=options,
         throw=throw,
+        return_aux=return_aux,
     )
 
 
@@ -1111,6 +1117,7 @@ def _trace_particles(
     chunk_size,
     options,
     throw,
+    return_aux,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1154,7 +1161,7 @@ def _trace_particles(
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments
         # Note: vmap with keyword arguments is weird, not using it for now
-        yt = vmap_chunked(
+        out = vmap_chunked(
             _intfun_wrapper, in_axes=(0, 0) + 13 * (None,), chunk_size=chunk_size
         )(
             y0,
@@ -1173,7 +1180,7 @@ def _trace_particles(
             options,
             throw,
         )
-
+    yt = out.ys
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
 
     x = yt[:, :, :3]
@@ -1187,7 +1194,10 @@ def _trace_particles(
         x = x.at[:, :, 0].set(rho)
         x = x.at[:, :, 1].set(theta)
 
-    return x, v
+    if not return_aux:
+        return x, v
+    else:
+        return x, v, (out.stats, out.result)
 
 
 def _intfun_wrapper(
@@ -1226,4 +1236,4 @@ def _intfun_wrapper(
         adjoint=adjoint,
         event=event,
         throw=throw,
-    ).ys
+    )

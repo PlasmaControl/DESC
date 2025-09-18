@@ -10,7 +10,7 @@ from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
-from desc.utils import Timer, errorif, safediv, warnif
+from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -1014,6 +1014,7 @@ class DirectParticleTracing(_Objective):
         "_stepsize_controller",
         "_adjoint",
         "_event",
+        "_particle_chunk_size",
     ]
 
     _coordinates = "rtz"
@@ -1032,7 +1033,8 @@ class DirectParticleTracing(_Objective):
         stepsize_controller=None,
         adjoint=RecursiveCheckpointAdjoint(),
         max_steps=None,
-        min_step_size=1e-10,
+        min_step_size=1e-8,
+        particle_chunk_size=None,
         target=None,
         bounds=None,
         weight=1,
@@ -1049,14 +1051,14 @@ class DirectParticleTracing(_Objective):
         self._saveat = saveat if saveat is not None else SaveAt(ts=ts)
         self._adjoint = adjoint
         if max_steps is None:
-            max_steps = 1000
-            max_steps = int((ts[1] - ts[0]) / min_step_size * max_steps)
+            max_steps = 10
+            max_steps = int((ts[-1] - ts[0]) / min_step_size * max_steps)
         self._max_steps = max_steps
         self._min_step_size = min_step_size
         self._stepsize_controller = (
             stepsize_controller
             if stepsize_controller is not None
-            else PIDController(rtol=1e-8, atol=1e-8, dtmin=min_step_size)
+            else PIDController(rtol=1e-4, atol=1e-4, dtmin=min_step_size)
         )
         self._iota_grid = iota_grid
         assert model.frame == "flux", "can only trace in flux coordinates"
@@ -1064,6 +1066,7 @@ class DirectParticleTracing(_Objective):
         self._particles = particles
         self._solver = solver
         self._has_iota_profile = eq.iota is not None
+        self._particle_chunk_size = particle_chunk_size
         super().__init__(
             things=eq,
             target=target,
@@ -1183,21 +1186,23 @@ class DirectParticleTracing(_Objective):
             adjoint=self._adjoint,
             event=self._event,
             options={"iota": iota_prof},
+            chunk_size=self._particle_chunk_size,
+            throw=False,
+            return_aux=False,
         )
 
         # rpz is shape [N_particles, N_time, 3], take just index rho
         rhos = rpz[:, :, 0]
-        tmax_idx = jnp.where(jnp.isnan(rhos), -1, jnp.arange(0, self._ts.size))
-        # find the index of the last non-NaN time for each particle
-        tmax_idx = jnp.max(tmax_idx, axis=1)
         rho0s = self._x0[:, 0]
-        # deviation from initial rho at the last non-NaN time for each particle
-        rho_dev = rhos[jnp.arange(self._dim_f), tmax_idx] - rho0s
-        tmax = self._ts[tmax_idx]
 
-        # TODO: better metric should penalize rho drift but also
-        # should reward the time spent in the device. Something like:
-        # f = <(rho drift at last non-NaN time)>/sum(time spent in device)
-        # Looking at average drift per toroidal transit could be better, since
-        # a particle can drift outward and come back inward
-        return safediv(rho_dev, tmax, fill=1e10) * self._ts[-1]
+        def fit_line(y):
+            ts = self._ts
+            # replace nans with zeros, since (0,0) is already the initial
+            # point, this will not affect the fit
+            y = jnp.where(jnp.isnan(y), 0.0, y)
+            ts = jnp.where(jnp.isnan(y), 0.0, ts)
+            coeffs = jnp.polyfit(ts, y, 1)
+            return coeffs[0]
+
+        slopes = vmap(fit_line)(rhos - rho0s[:, None])
+        return slopes

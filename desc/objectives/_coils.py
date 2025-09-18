@@ -81,7 +81,7 @@ class _CoilObjective(_Objective):
         self._data_keys = data_keys
         self._normalize = normalize
 
-        coil_tree = coilset_tree(coil)
+        coil_tree = _coilset_flatten(coil)
         indices = jax_tree_broadcast(indices, coil_tree)
         arr0, _ = tree_flatten(tree_map(lambda x: int(x), indices))
         self._mask = jnp.array(arr0)
@@ -2725,17 +2725,17 @@ class SurfaceCurrentRegularization(_Objective):
         return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
 
 
-def coilset_tree(cset):
-    """Utility for decomposing a CoilSet into structured list.
+def _coilset_flatten(x):
+    """Flatten lists of CoilSets into nested list of zeros.
 
     Parameters
     ----------
-    cset : CoilSet
+    x : CoilSet
         CoilSet to be decomposed.
 
     Returns
     -------
-    t: (Potentially nested) lists of zeros
+    list: (Potentially nested) lists of zeros
         E.g. given a MixedCoilSet consisting of [CoilSet, CoilSet, CoilSet]
         with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
 
@@ -2743,16 +2743,13 @@ def coilset_tree(cset):
     ## Local import to avoid circular import
     from desc.coils import CoilSet, _Coil
 
-    t = cset.copy()
-
-    def recurse(t):
+    def flatten(t):
         if isinstance(t, CoilSet):
-            return recurse(t.coils)
-        if isinstance(t, _Coil) and not isinstance(t, CoilSet):
+            return flatten(t.coils)
+        if isinstance(t, _Coil):
             return 0
         if isinstance(t, list):
-            for idx in range(0, len(t)):
-                t[idx] = recurse(t[idx])
+            return [flatten(c) for c in t]
         return t
 
-    return recurse(t)
+    return flatten(x)

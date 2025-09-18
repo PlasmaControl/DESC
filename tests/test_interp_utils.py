@@ -1,10 +1,13 @@
 """Test interpolation utilities."""
 
+import warnings
 from functools import partial
 
 import numpy as np
 import pytest
 from jax import grad
+from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
 from numpy.polynomial.chebyshev import (
     cheb2poly,
     chebinterpolate,
@@ -13,8 +16,13 @@ from numpy.polynomial.chebyshev import (
     chebval,
 )
 from numpy.polynomial.polynomial import polyvander
+from tests.test_plotting import tol_2d
 
-from desc.backend import dct, idct, jnp, rfft, rfft2
+from desc.backend import dct, idct, idctn, jnp, rfft, rfft2
+from desc.compute.utils import get_transforms
+from desc.examples import get
+from desc.grid import LinearGrid
+from desc.integrals import Bounce2D
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -32,7 +40,7 @@ from desc.integrals._interp_utils import (
     rfft_to_trig,
     trig_vander,
 )
-from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.basis import ChebyshevSeries, FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
 from desc.utils import identity
 
@@ -324,8 +332,13 @@ class TestFastInterp:
         # https://github.com/scipy/scipy/issues/15033
         # https://github.com/scipy/scipy/issues/21198
         # https://github.com/google/jax/issues/22466
-        # https://github.com/google/jax/issues/23895.
+        # https://github.com/google/jax/issues/23895
+        # https://github.com/jax-ml/jax/issues/31836
+        # https://github.com/jax-ml/jax/issues/29426
+        # https://github.com/jax-ml/jax/issues/29325
+        # https://github.com/jax-ml/jax/issues/27591
         from scipy.fft import dct as sdct
+        from scipy.fft import dctn as sdctn
         from scipy.fft import idct as sidct
 
         domain = (0, 2 * np.pi)
@@ -348,6 +361,22 @@ class TestFastInterp:
             fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
         np.testing.assert_allclose(fq_2, f(n), atol=1e-14)
+
+        if not lobatto:
+            g = f(m)[:, None] * _f_algebraic(cheb_pts(m * 2))
+            cheb = ChebyshevSeries(g)
+            np.testing.assert_allclose(
+                cheb._c,
+                sdctn(g) / g.size,
+                atol=1e-14,
+                err_msg="Scipy and JAX disagree.",
+            )
+            truth = f(n)[:, None] * _f_algebraic(cheb_pts(8))
+            with pytest.raises(RuntimeError):
+                np.testing.assert_allclose(cheb.evaluate(n.size, 8), truth)
+                np.testing.assert_allclose(
+                    idctn(cheb._c, type=2, s=(n.size, 8)) * (n.size * 8), truth
+                )
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -394,6 +423,126 @@ class TestFastInterp:
         f = func(x, y).reshape(m, n)
         fc = FourierChebyshevSeries(f)
         np.testing.assert_allclose(fc.evaluate(m, n), f)
+
+
+class TestStreams:
+    """Test convergence of inverse stream maps."""
+
+    @staticmethod
+    def θ_chebyshev(eq, X, Y, rho):
+        """Chebyshev spectrum of θ(α, ζ)."""
+        iota = eq._compute_iota_under_jit(rho)
+        iota = jnp.atleast_1d(iota)
+        domain = (0, 2 * np.pi)
+        alpha = cheb_pts(X, domain)
+        zeta = cheb_pts(Y, domain)[::-1]
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
+            λ = get_transforms(
+                "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+            )["L"]
+        assert λ.basis.NFP == eq.NFP
+
+        θ = eq._map_poloidal_coordinates(
+            iota,
+            alpha,
+            zeta,
+            eq.params_dict["L_lmn"],
+            λ,
+            ("rho", "alpha", "zeta"),
+            ("rho", "theta", "zeta"),
+            tol=1e-7,
+        ).squeeze(0)[..., ::-1]
+
+        c = ChebyshevSeries(θ, domain, domain)._c
+        c = cheb_from_dct(cheb_from_dct(c, -1), -2)
+        return np.abs(c)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @staticmethod
+    def test_theta_chebyhsev(name, X=32, Y=32, rho=0.5):
+        """Plot Chebyshev spectrum of θ(α, ζ)."""
+        c = TestStreams.θ_chebyshev(get(name), X, Y, rho)
+
+        fig, ax = plt.subplots()
+        ax.set(
+            ylabel=r"$\alpha$",
+            xlabel=r"$\zeta$",
+            title=r"$\mathcal{F}_{\text{Chebyshev}}$ $\theta(\alpha, \zeta)$",
+        )
+        plt.matshow(c, fignum=0, norm=LogNorm(1e-8, c.max()))
+        plt.colorbar()
+        return fig
+
+    @staticmethod
+    def δ_fourier_chebyshev(eq, X, Y, rho):
+        """Fourier-Chebyshev spectrum of δ(α, ζ)."""
+        δ = Bounce2D.angle(eq, X, Y, rho).squeeze(0)
+        c = FourierChebyshevSeries(δ, (0, 2 * np.pi))._c
+        c = cheb_from_dct(c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2)
+        return np.abs(c)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @staticmethod
+    def test_delta_fourier_chebyshev(name, X=32, Y=32, rho=0.5):
+        """Plot Fourier-Chebyshev spectrum of δ(α, ζ)."""
+        c = TestStreams.δ_fourier_chebyshev(get(name), X, Y, rho)
+
+        fig, ax = plt.subplots()
+        ax.set(
+            ylabel=r"$\alpha$",
+            xlabel=r"$\zeta$",
+            title=r"$\mathcal{F}_{\text{Fourier}} \mathcal{F}_{\text{Chebyshev}}$ "
+            + r"$\delta(\alpha, \zeta)$"
+            + "\n",
+        )
+        plt.matshow(c, fignum=0, norm=LogNorm(1e-8, c.max()))
+        plt.colorbar()
+        return fig
+
+    @staticmethod
+    def δ_fourier(eq, X, Y, rho):
+        """Fourier spectrum of δ(ϑ, ζ)."""
+        δ = Bounce2D.angle(
+            eq, X, Y, rho, omega_is_0=True, listen_to_omega_is_0=True
+        ).squeeze(0)
+        c = Bounce2D.fourier(δ).squeeze(0)
+        c = np.fft.fftshift(c, -2)
+        return np.abs(c)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @staticmethod
+    def test_delta_fourier(name, X=32, Y=32, rho=0.5):
+        """Plot Fourier spectrum of δ(ϑ, ζ)."""
+        if name == "HELIOTRON":
+            Y = 14
+        c = TestStreams.δ_fourier(get(name), X, Y, rho)
+
+        fig, ax = plt.subplots()
+        ax.set(
+            ylabel=r"$\vartheta$",
+            xlabel=r"$\zeta \times \text{NFP}$",
+            title=r"$\mathcal{F}_{\text{Fourier}}$ "
+            + r"$\delta(\vartheta, \zeta \times \text{NFP})$",
+        )
+        ax.set_xticks(
+            np.arange(Y // 2 + 1),
+            np.fft.rfftfreq(Y, 1 / Y).astype(int),
+        )
+        ax.set_yticks(
+            np.arange(X),
+            np.fft.fftshift(np.fft.fftfreq(X, 1 / X)).astype(int),
+        )
+        plt.matshow(c, fignum=0, norm=LogNorm(1e-8, c.max()))
+        plt.colorbar()
+        return fig
 
 
 # TODO(#1388)

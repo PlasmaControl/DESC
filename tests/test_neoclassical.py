@@ -32,7 +32,7 @@ def test_effective_ripple_2D(nufft_eps):
     data = eq.compute(
         "effective ripple 3/2",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
+        angle=Bounce2D.angle(eq, X=32, Y=64, rho=rho),
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,

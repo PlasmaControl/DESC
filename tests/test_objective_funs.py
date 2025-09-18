@@ -2011,15 +2011,15 @@ class TestObjectiveFunction:
         names = ["effective ripple", "Gamma_c"]
         if use_bounce1d:
             names = ["old " + n for n in names]
-            theta = None
+            angle = None
             alpha = np.array([0.0])
             zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
             grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         else:
-            theta = Bounce2D.compute_theta(eq, X, Y, rho)
+            angle = Bounce2D.angle(eq, X, Y, rho)
             grid = obj_grid
 
-        data = eq.compute(names, grid, theta=theta, **opts)
+        data = eq.compute(names, grid, angle=angle, **opts)
         obj = EffectiveRipple(
             eq,
             grid=obj_grid,

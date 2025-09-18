@@ -13,7 +13,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..utils import cross, dot, safediv
+from ..utils import cross, dot, parse_argname_change, safediv
 from ._neoclassical import _bounce_doc, _compute
 from .data_index import register_compute_fun
 
@@ -125,8 +125,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -155,7 +157,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -168,7 +170,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, num_well)
-            v_tau, drift1, drift2 = bounce.integrate(
+            vτ, drift1, drift2 = bounce.integrate(
                 [_v_tau, _drift1, _drift2],
                 pitch_inv,
                 data,
@@ -178,7 +180,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # This is γ_c π/2.
-            gamma_c = jnp.arctan(
+            γ_c = jnp.arctan(
                 safediv(
                     drift1,
                     drift2
@@ -190,7 +192,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return (v_tau * gamma_c**2).sum(-1).mean(-2)
+            return (vτ * γ_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -215,7 +217,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     }
     grid = transforms["grid"]
     data["Gamma_c"] = _compute(
-        Gamma_c, fun_data, data, theta, grid, num_pitch, surf_batch_size
+        Gamma_c, fun_data, data, angle, grid, num_pitch, surf_batch_size
     )
     return data
 
@@ -289,8 +291,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -316,7 +320,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -366,7 +370,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         gamma_c0,
         fun_data,
         data,
-        theta,
+        angle,
         grid,
         num_pitch,
         surf_batch_size,
@@ -433,8 +437,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     transits.
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -463,7 +469,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -475,7 +481,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            v_tau, radial_drift, poloidal_drift = bounce.integrate(
+            vτ, radial_drift, poloidal_drift = bounce.integrate(
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
@@ -485,8 +491,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # This is γ_c π/2.
-            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return (v_tau * gamma_c**2).sum(-1).mean(-2)
+            γ_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return (vτ * γ_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -505,7 +511,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
         data,
-        theta,
+        angle,
         grid,
         num_pitch,
         surf_batch_size,

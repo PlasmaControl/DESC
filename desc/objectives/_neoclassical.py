@@ -2,14 +2,13 @@
 
 import warnings
 
-import numpy as np
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
+from desc.integrals._interp_utils import bijection_from_disc, cheb_pts
 from desc.utils import parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import chebgauss2
@@ -67,7 +66,7 @@ class EffectiveRipple(_Objective):
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
-        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+        Poloidal Chebyshev grid resolution to interpolate the poloidal coordinate.
         Preferably rounded down to power of 2.
     Y : int
         Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
@@ -77,7 +76,7 @@ class EffectiveRipple(_Objective):
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
         to approximate B with cubic splines.
-    alpha : np.ndarray
+    alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
         Default is single field line. To compute a surface average
@@ -162,7 +161,7 @@ class EffectiveRipple(_Objective):
         X=16,
         Y=32,
         Y_B=None,
-        alpha=np.array([0.0]),
+        alpha=jnp.array([0.0]),
         num_transit=20,
         num_well=None,
         num_quad=32,
@@ -194,8 +193,8 @@ class EffectiveRipple(_Objective):
         self._constants = {
             "quad_weights": 1.0,
             "alpha": alpha,
-            "X": fourier_pts(X),
-            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
+            "X": cheb_pts(X, (0, 2 * jnp.pi)),
+            "Y": cheb_pts(Y, (0, 2 * jnp.pi))[::-1],
         }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
@@ -296,7 +295,7 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        theta = eq._map_clebsch_coordinates(
+        theta = eq._map_poloidal_coordinates(
             iota=constants["transforms"]["grid"].compress(data["iota"]),
             alpha=constants["X"],
             zeta=constants["Y"],
@@ -328,8 +327,8 @@ class EffectiveRipple(_Objective):
         num_quad = self._hyperparam.pop("num_quad")
         self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
-        self._constants["Y"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
+        self._constants["Y"] = jnp.linspace(
+            0, 2 * jnp.pi * num_transit, Y_B * num_transit
         )
         self._keys_1dr = [
             "iota",
@@ -373,8 +372,6 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

@@ -4,6 +4,7 @@ from functools import partial
 
 import numpy as np
 from matplotlib import pyplot as plt
+from orthax.chebyshev import chebroots
 
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
 from desc.integrals._interp_utils import (
@@ -12,11 +13,10 @@ from desc.integrals._interp_utils import (
     _subtract_first,
     cheb_from_dct,
     cheb_pts,
-    chebroots_vec,
     dct_from_cheb,
     fourier_pts,
-    idct_non_uniform,
-    irfft_non_uniform,
+    idct_mmt,
+    irfft_mmt,
     rfft_to_trig,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
@@ -26,16 +26,18 @@ from desc.utils import (
     atleast_3d_mid,
     atleast_nd,
     errorif,
-    flatten_matrix,
+    flatten_mat,
     isposint,
     setdefault,
     take_mask,
     warnif,
 )
 
+_chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
+
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _in_epigraph_and(is_intersect, df_dy_sign, /):
+def _in_epigraph_and(is_intersect, df_dy, /):
     """Set and epigraph of function f with the given set of points.
 
     Used to return only intersects where the straight line path between
@@ -45,7 +47,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     ----------
     is_intersect : jnp.ndarray
         Boolean array indicating whether index corresponds to an intersect.
-    df_dy_sign : jnp.ndarray
+    df_dy : jnp.ndarray
         Shape ``is_intersect.shape``.
         Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
 
@@ -61,23 +63,21 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     This is used there to ensure the domains of integration are magnetic wells.
 
     """
-    # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
-    # For the integrals to be over wells, it is required that the first intersect
-    # has a non-positive derivative. Now, by continuity,
-    # ``df_dy_sign[...,k]<=0`` implies ``df_dy_sign[...,k+1]>=0``,
-    # so there can be at most one inversion, and if it exists, the inversion
-    # must be at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under an edge case of a series of
-    # inflection points.
+    # The pairs y1 and y2 are boundaries of an integral only if y1 <= y2. For the
+    # to be over wells, it is required that the first intersect has a non-positive
+    # derivative. Now, by continuity, df_dy[...,k]<=0 implies df_dy[...,k+1]>=0, so
+    # there can be at most one inversion, and if it exists, it must be at the first
+    # pair. To correct the inversion, it suffices to disqualify the first intersect
+    # as a right boundary, except under an edge case of a series of inflection points.
     idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
-        (df_dy_sign[idx[0]] == 0)
-        & (df_dy_sign[idx[1]] < 0)
+        (df_dy[idx[0]] == 0)
+        & (df_dy[idx[1]] < 0)
         & is_intersect[idx[0]]
         & is_intersect[idx[1]]
         # In theory, we need to keep propagating this edge case, e.g.
-        # (df_dy_sign[..., 1] < 0) | (
-        #     (df_dy_sign[..., 1] == 0) & (df_dy_sign[..., 2] < 0)...
+        # (df_dy[..., 1] < 0) | (
+        #     (df_dy[..., 1] == 0) & (df_dy[..., 2] < 0)...
         # ).
         # At each step, the likelihood that an intersection has already been lost
         # due to floating point errors grows, so the real solution is to pick a less
@@ -86,21 +86,9 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
     return is_intersect.at[idx[0]].set(edge_case)
 
 
-def _chebcast(cheb, arr):
-    """Add leftmost axis to ``cheb`` depending on ``arr.ndim``.
-
-    Input ``arr`` should not have rightmost dimension of cheb that iterates
-    coefficients, but may have additional leftmost dimension for batch operation.
-    """
-    errorif(
-        jnp.ndim(arr) > cheb.ndim,
-        NotImplementedError,
-        msg=f"Only one additional axis for batch dimension is allowed. "
-        f"Got {jnp.ndim(arr) - cheb.ndim + 1} additional axes.",
-    )
-    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
-
-
+# TODO: Move interpolation part to interpax. This is the only
+#       existing differentiable FourierChebyshev FFT interpolation
+#       in Python.
 class FourierChebyshevSeries(IOAble):
     """Real-valued Fourier-Chebyshev series.
 
@@ -148,7 +136,7 @@ class FourierChebyshevSeries(IOAble):
     def __init__(self, f, domain=(-1, 1), lobatto=False):
         """Interpolate Fourier-Chebyshev series to ``f``."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
+        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
         self.X = f.shape[-2]
         self.Y = f.shape[-1]
         self.domain = domain
@@ -235,10 +223,7 @@ class FourierChebyshevSeries(IOAble):
         ) * (Y - self.lobatto)
 
     def harmonics(self):
-        """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.
-
-        Transform Fourier interpolant harmonics to Nyquist trigonometric
-        interpolant harmonics so that the coefficients are all real.
+        """Real spectral coefficients aₘₙ of the interpolating polynomial.
 
         The order of the returned coefficient array
         matches the Vandermonde matrix formed by an outer
@@ -267,18 +252,31 @@ class FourierChebyshevSeries(IOAble):
 
         Returns
         -------
-        cheb : PiecewiseChebyshevSeries
+        cheb : jnp.ndarray
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
         # Add axis to broadcast against Chebyshev coefficients.
-        x = jnp.atleast_1d(x)[..., jnp.newaxis]
+        x = jnp.atleast_1d(x)[..., None]
         # Add axis to broadcast against multiple x values.
-        cheb = cheb_from_dct(
-            irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
-        )
+        cheb = cheb_from_dct(irfft_mmt(x, self._c[..., None, :, :], self.X, axis=-2))
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)
-        return PiecewiseChebyshevSeries(cheb, self.domain)
+        return cheb
+
+
+def _add_lead_axis(cheb, arr):
+    """Add leading axis for batching ``cheb`` depending on ``arr.ndim``.
+
+    Input ``arr`` should not have rightmost dimension of cheb that iterates
+    coefficients, but may have one leading axis for batching.
+    """
+    errorif(
+        jnp.ndim(arr) > cheb.ndim,
+        NotImplementedError,
+        msg=f"Only one leading axis for batching is allowed. "
+        f"Got {jnp.ndim(arr) - cheb.ndim + 1} leading axes.",
+    )
+    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[None]
 
 
 class PiecewiseChebyshevSeries(IOAble):
@@ -316,11 +314,11 @@ class PiecewiseChebyshevSeries(IOAble):
     def stitch(self):
         """Enforce continuity of the piecewise series."""
         # evaluate at left boundary
-        f_0 = self.cheb[..., ::2].sum(axis=-1) - self.cheb[..., 1::2].sum(axis=-1)
+        f_0 = self.cheb[..., ::2].sum(-1) - self.cheb[..., 1::2].sum(-1)
         # evaluate at right boundary
-        f_1 = self.cheb.sum(axis=-1)
+        f_1 = self.cheb.sum(-1)
         dfx = f_1[..., :-1] - f_0[..., 1:]  # Δf = f(xᵢ, y₁) - f(xᵢ₊₁, y₀)
-        self.cheb = self.cheb.at[..., 1:, 0].add(dfx.cumsum(axis=-1))
+        self.cheb = self.cheb.at[..., 1:, 0].add(dfx.cumsum(-1))
 
     def evaluate(self, Y):
         """Evaluate Chebyshev series at Y Chebyshev points.
@@ -369,7 +367,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         assert y.ndim >= 2
         z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        return y + z_shift[:, jnp.newaxis]
+        return y + z_shift[:, None]
 
     def _isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
@@ -403,8 +401,8 @@ class PiecewiseChebyshevSeries(IOAble):
             Shape (..., *cheb.shape[:-2], z.shape[-1]).
             Coordinates in [self.domain[0], ∞).
             The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
-            ``z // domain`` yields the index into the proper Chebyshev series
-            along the second to last axis of ``cheb`` and ``z % domain`` is
+            ``z//domain`` yields the index into the proper Chebyshev series
+            along the second to last axis of ``cheb`` and ``z%domain`` is
             the coordinate value on the domain of that Chebyshev series.
         cheb : jnp.ndarray
             Shape (..., X, Y).
@@ -413,20 +411,29 @@ class PiecewiseChebyshevSeries(IOAble):
         Returns
         -------
         f : jnp.ndarray
-            Shape z.shape.
             Chebyshev series evaluated at z.
 
         """
-        cheb = _chebcast(setdefault(cheb, self.cheb), z)
-        Y = cheb.shape[-1]
+        cheb = _add_lead_axis(setdefault(cheb, self.cheb), z)
         x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in cheb with shape (..., num cheb series, Y).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, Y)
-        assert f.shape == z.shape
-        return f
+        # are in cheb array whose shape is (..., num cheb series, spectral resolution).
+        cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
+        return idct_mmt(y, cheb)
+
+    #  The following changes would make root finding here more efficient.
+    #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+    #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
+    #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+    #  Use that once to find extrema of |B| if Y_B > 64.
+    #  2. Then to find roots of bounce points use the closed formula in Boyd's
+    #  spectral methods section 19.6. Can isolate interval to search for root by
+    #  observing whether |B|-1/λ changes sign at extrema. Only need to do
+    #  evaluate Chebyshev series at quadrature points once, and can use that to
+    #  compute the integral for every λ. The integral will converge rapidly
+    #  since a low order polynomial approximates |B| well in between adjacent
+    #  extrema. 2 is a larger improvement than 1.
 
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
@@ -447,14 +454,14 @@ class PiecewiseChebyshevSeries(IOAble):
         mask : jnp.ndarray
             Shape y.shape.
             Boolean array into ``y`` indicating whether element is an intersect.
-        df_dy_sign : jnp.ndarray
+        df_dy : jnp.ndarray
             Shape y.shape.
             Sign of ∂f/∂y (x, yᵢ).
 
         """
-        c = _subtract_first(_chebcast(self.cheb, k), k)
+        c = _subtract_first(_add_lead_axis(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
-        y = chebroots_vec(c)
+        y = _chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.Y - 1)
 
         # Intersects must satisfy y ∈ [-1, 1].
@@ -464,21 +471,22 @@ class PiecewiseChebyshevSeries(IOAble):
         # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
         y = jnp.where(mask, y.real, 0.0)
 
-        # TODO: Multipoint evaluation with FFT.
-        #   See note in integrals/_interp_utils.py.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        df_dy_sign = jnp.sign(
+        # Fast multipoint method would be better. Reduces to FFT. Cost is
+        # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
+        # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
+        df_dy = jnp.sign(
             jnp.linalg.vecdot(
-                n * jnp.sin(n * jnp.arccos(y)[..., jnp.newaxis]),
-                self.cheb[..., jnp.newaxis, :],
+                n * jnp.sin(n * jnp.arccos(y)[..., None]),
+                self.cheb[..., None, :],
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
-        return y, mask, df_dy_sign
+        return y, mask, df_dy
 
-    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples
@@ -501,9 +509,7 @@ class PiecewiseChebyshevSeries(IOAble):
 
             If not specified, then all intersects are returned. If there were fewer
             intersects detected than the size of the last axis of the returned arrays,
-            then that axis is padded with ``pad_value``.
-        pad_value : float
-            Value with which to pad array. Default 0.
+            then that axis is padded with zero.
 
         Returns
         -------
@@ -522,41 +528,42 @@ class PiecewiseChebyshevSeries(IOAble):
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, mask, df_dy_sign = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
+        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., None])
         # Flatten so that last axis enumerates intersects along the piecewise spline.
-        y = flatten_matrix(self._isomorphism_to_C1(y))
-        mask = flatten_matrix(mask)
-        df_dy_sign = flatten_matrix(df_dy_sign)
+        y = flatten_mat(self._isomorphism_to_C1(y))
+        mask = flatten_mat(mask)
+        df_dy = flatten_mat(df_dy)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersection i.e. ``is_z1`` because the subset of
-        # pitch values that generate this edge case has zero measure. By ignoring
-        # this, for those subset of pitch values the integrations will be done in
-        # the hypograph of |B|, which will yield zero. If in future decide to
-        # not ignore this, note the solution is to
+        # polynomials is a left intersection because the subset of pitch values
+        # that generate this edge case has zero measure. By ignoring this, for those
+        # subset of pitch values the integrations will be done in the hypograph of
+        # |B|, which will yield zero. If in future decide to not ignore this, note
+        # the solution is to
         # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
         # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
         #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
         #    are not differentiable.
-        is_z1 = (df_dy_sign <= 0) & mask
-        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(mask, df_dy_sign)
+        z1 = (df_dy <= 0) & mask
+        z2 = (df_dy >= 0) & _in_epigraph_and(mask, df_dy)
 
         sentinel = self.domain[0] - 1.0
-        z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)
-        z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
+        z1 = take_mask(y, z1, size=num_intersect, fill_value=sentinel)
+        z2 = take_mask(y, z2, size=num_intersect, fill_value=sentinel)
 
         mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set outside mask to same value so integration is over set of measure zero.
-        z1 = jnp.where(mask, z1, pad_value)
-        z2 = jnp.where(mask, z2, pad_value)
+        # Set to zero so integration is over set of measure zero
+        # and basis functions are faster to evaluate in downstream routines.
+        z1 = jnp.where(mask, z1, 0.0)
+        z2 = jnp.where(mask, z2, 0.0)
         return z1, z2
 
     def _check_shape(self, z1, z2, k):
         """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
         assert z1.shape == z2.shape
         # Ensure pitch batch dim exists and add back dim to broadcast with wells.
-        k = atleast_nd(self.cheb.ndim - 1, k)[..., jnp.newaxis]
+        k = atleast_nd(self.cheb.ndim - 1, k)[..., None]
         # Same but back dim already exists.
         z1 = atleast_nd(self.cheb.ndim, z1)
         z2 = atleast_nd(self.cheb.ndim, z2)
@@ -572,7 +579,7 @@ class PiecewiseChebyshevSeries(IOAble):
         ----------
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
-            Tuple of length two (z1, z2) of coordinates of intersects.
+            Coordinates of intersects.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of f.
         k : jnp.ndarray
@@ -580,6 +587,8 @@ class PiecewiseChebyshevSeries(IOAble):
             k such that fₓ(yᵢ) = k.
         plot : bool
             Whether to plot the piecewise spline and intersects for the given ``k``.
+            For the plotting labels of ρ(l), α(m), it is assumed that the axis that
+            enumerates the index l preceds the axis that enumerates the index m.
         kwargs : dict
             Keyword arguments into ``self.plot``.
 
@@ -606,7 +615,6 @@ class PiecewiseChebyshevSeries(IOAble):
         if not (plot or jnp.any(err_1 | err_2 | err_3)):
             return plots
 
-        # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
         mask, z1, z2, f_midpoint = map(atleast_3d_mid, (mask, z1, z2, f_midpoint))
         err_1, err_2, err_3 = map(atleast_2d_end, (err_1, err_2, err_3))
@@ -625,7 +633,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z2=_z2,
                         k=k[idx],
                         title=title
-                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
+                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
                         **kwargs,
                     )
                 print("      z1    |    z2")
@@ -646,7 +654,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z2=z2[idx],
                         k=k[idx],
                         title=title
-                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
+                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
                         **kwargs,
                     )
                 )

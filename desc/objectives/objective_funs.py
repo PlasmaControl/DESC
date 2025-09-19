@@ -11,6 +11,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_leaves,
     tree_map,
     tree_unflatten,
     use_jax,
@@ -1119,7 +1120,7 @@ class _Objective(IOAble, ABC):
     ):
         if self._scalar:
             assert self._coordinates == ""
-        assert np.all(np.asarray(weight) > 0)
+        assert np.all(np.asarray(tree_leaves(weight)) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)

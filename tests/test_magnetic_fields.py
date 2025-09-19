@@ -1254,6 +1254,7 @@ class TestMagneticFields:
                 adjoint=adjoint,
                 chunk_size=chunk_size,
                 options=options,
+                return_aux=False,
             )
 
         # check if it is jittable
@@ -1312,6 +1313,7 @@ class TestMagneticFields:
                 adjoint=adjoint,
                 chunk_size=None,
                 options={},
+                return_aux=False,
             )
             return jnp.squeeze(r[-1])
 

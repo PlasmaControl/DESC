@@ -2587,6 +2587,7 @@ def field_line_integrate(
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
     options=None,
+    return_aux=False,
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2629,6 +2630,10 @@ def field_line_integrate(
         Additional arguments to pass to the diffrax diffeqsolve. If user wants to
         provide ``stepsize_controller``, ``saveat``, ``event``, or ``adjoint``, they
         should use ``_field_line_integrate``.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (r, z, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
@@ -2675,6 +2680,7 @@ def field_line_integrate(
         adjoint=RecursiveCheckpointAdjoint(),
         chunk_size=chunk_size,
         options=options,
+        return_aux=return_aux,
     )
 
 
@@ -2694,13 +2700,14 @@ def _field_line_integrate(
     adjoint,
     chunk_size,
     options,
+    return_aux,
 ):
-    """Jit/AD friendly field line integrator.
+    """JIT/AD friendly field line integrator.
 
     This function gives more control over the integration and is also JIT and AD
     friendly. One can use this function inside an objective. All arguments must
     have a value. For description of the full set of arguments, see
-    ``field_line_integrate``. There won't be any cchecks on the arguments here,
+    ``field_line_integrate``. There won't be any checks on the arguments here,
     so make sure they are valid before using this function.
 
     Parameters
@@ -2730,7 +2737,7 @@ def _field_line_integrate(
     # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        x = vmap_chunked(
+        out = vmap_chunked(
             _intfun_wrapper, in_axes=(0,) + 13 * (None,), chunk_size=chunk_size
         )(
             x0,
@@ -2749,11 +2756,15 @@ def _field_line_integrate(
             options,
         )
 
+    x = out.ys
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
-    return r, z
+    if return_aux:
+        return r, z, (out.stats, out.result)
+    else:
+        return r, z
 
 
 def _intfun_wrapper(
@@ -2772,7 +2783,7 @@ def _intfun_wrapper(
     adjoint,
     options,
 ):
-    """Wrapper for intfun."""
+    """Wrapper for field line integration."""
     return diffeqsolve(
         terms=ODETerm(_odefun),
         solver=solver,
@@ -2787,7 +2798,7 @@ def _intfun_wrapper(
         event=event,
         adjoint=adjoint,
         **options,
-    ).ys
+    )
 
 
 @jit

@@ -163,30 +163,15 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were verified to work on the Perlmutter supercomputer at NERSC on July 3, 2025.
-
-            Set up the correct cuda environment for jax installation
-
-            .. code-block:: sh
-
-                module load cudatoolkit/12.4
-                module load cudnn/9.5.0
-                module load conda
-
-            Check that you have loaded these modules
+            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 19, 2025
+            for both CPU and GPU runs.
 
             .. code-block:: sh
 
-                module list
-
-            Create a conda environment for DESC following `these instructions <https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax>`__.
-
-            .. code-block:: sh
-
-                conda create -n desc-env python=3.12
+                CONDA_OVERRIDE_CUDA="12.4" conda create --name desc-env "jax==0.6.0" "jaxlib==0.6.0=cuda12*" -c conda-forge
                 conda activate desc-env
-                pip install --upgrade "jax[cuda12]"
 
+            To see the list of jax versions that can be installed through the conda forge channel, visit `conda-forge <https://anaconda.org/conda-forge/jax/files>`__.
             Clone and install DESC
 
             .. code-block:: sh
@@ -200,8 +185,6 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
-
-            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initialization to work properly.
 
 
         .. dropdown:: Della and Stellar Clusters (Princeton)

@@ -171,7 +171,7 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
                 CONDA_OVERRIDE_CUDA="12.4" conda create --name desc-env "jax==0.6.0" "jaxlib==0.6.0=cuda12*" -c conda-forge
                 conda activate desc-env
 
-            To see the list of jax versions that can be installed throught the conda force channel, visit `conda-forge <https://anaconda.org/conda-forge/jax/files>`__.
+            To see the list of jax versions that can be installed through the conda force channel, visit `conda-forge <https://anaconda.org/conda-forge/jax/files>`__.
             Clone and install DESC
 
             .. code-block:: sh

@@ -877,42 +877,53 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
 
 
-    # Calculate objective function (per surface per pitch angle)
+    # Objective function calculation (per surface per pitch angle) #
+    
+    # Set up resonance and omega arrays
     res_broad = res_arr[None,None,:] # make 3D array with res values on axis=2
     res_broad = jnp.broadcast_to(res_broad, (omega_arr.shape[0], omega_arr.shape[1], res_arr.shape[0]))
     omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],res_arr.shape[0]))
 
+    # Set parameters (it is recommended to change wd if you desire a wider or narrower bump function, NOT w and A)
+    # w, A, wd are able to be configured for different weightings on different resonances if desired
+    w = jnp.ones((jnp.shape(omega_broad))) * 1 # in combination with A, changes width and amplitude of bump function
+    A = jnp.ones((jnp.shape(omega_broad))) * 100 # in combination with w, changes width and amplitude of bump function
+    wd = jnp.ones((jnp.shape(omega_broad))) * 0.5 # sets half-width of bump function
+    a = res_broad + wd
+    b = res_broad - wd
+    # t = -1 # for form option 1
+
+    # Determine which resonances are considered for which frequencies
     y = omega_broad - res_broad
-    condition = jnp.logical_and(abs(y) < 0.5, res_broad!=jnp.pi) # check that corresponding omega value is less than 0.5 away from the resonance and not jnp.pi (unset)
-    # Set weights
-    w = 1
-    t = -1
-    A = jnp.ones((jnp.shape(omega_broad))) * 100 # can set to vary with order of resonance if desired
+    condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
+    
+    # Calculate objective function
     obj_out = jnp.where(
         condition,
-        A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # clip to avoid overflow warning in jnp.exp()
+        # A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # form option 1, clip to avoid overflow warning in jnp.exp()
+        A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
     obj_out = jnp.sum(obj_out,axis=2) # outputs array with size (rho,pitch)
     # obj_out = y[:,0,0]**2 # debugging
 
     # Gaussian method
-    # def true_branch_res(indict):
-    #     res_arr = indict['res_arr']
-    #     gaus_out = indict['obj_out']
-    #     res_arr = res_arr.at[indict['res_arr_set']].set(indict['p']/indict['q'])
+    '''def true_branch_res(indict):
+        res_arr = indict['res_arr']
+        gaus_out = indict['obj_out']
+        res_arr = res_arr.at[indict['res_arr_set']].set(indict['p']/indict['q'])
 
-    #     p_arr = jnp.ones(jnp.shape(indict['A'])) * indict['p']
-    #     q_arr = jnp.ones(jnp.shape(indict['A'])) * indict['q']
+        p_arr = jnp.ones(jnp.shape(indict['A'])) * indict['p']
+        q_arr = jnp.ones(jnp.shape(indict['A'])) * indict['q']
 
-    #     gaus_out += indict['A']*jnp.exp( -( (indict['omega_arr']-(p_arr/q_arr))**2 ) / (2*indict['sigma']**2) ) # Gaussian evaluated at distance from resonance, one element per surface
-    #     return indict['res_arr_set']+1, res_arr, gaus_out
-    # def false_branch_res(indict):
-    #     return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']
+        gaus_out += indict['A']*jnp.exp( -( (indict['omega_arr']-(p_arr/q_arr))**2 ) / (2*indict['sigma']**2) ) # Gaussian evaluated at distance from resonance, one element per surface
+        return indict['res_arr_set']+1, res_arr, gaus_out
+    def false_branch_res(indict):
+        return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']'''
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho)
-    data["f_tr1"] = omega_arr # debugging
+    data["f_tr1"] = obj_out # debugging
     return data
 
     # debugging

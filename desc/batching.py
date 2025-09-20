@@ -41,6 +41,21 @@ if jax.__version_info__ >= (0, 4, 16):
 else:
     from jax import linear_util as lu
 
+if jax.__version_info__ < (0, 6, 2):
+    # older versions dont have sharding.update, it was changed in JAX 0.6.2
+    # in https://github.com/jax-ml/jax/commit/7904b86bbacdb72f7769a14b5e5d07bba05bd9e8
+    def _sharding_update(aval):
+        return aval.sharding.with_spec(
+            PartitionSpec(None, None, *aval.sharding.spec[1:])
+        )
+
+else:
+
+    def _sharding_update(aval):
+        return aval.sharding.update(
+            spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
+        )
+
 
 def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
     """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
@@ -62,9 +77,7 @@ def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
             f" Got {aval.str_short(True, True)}"
         )
 
-    out_s = aval.sharding.update(
-        spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
-    )
+    out_s = _sharding_update(aval)
     out_s = canonicalize_sharding(out_s, "lax.map")
     if out_s is not None and out_s.mesh._any_axis_explicit:
         return auto_axes(f, out_sharding=out_s, axes=out_s.mesh.explicit_axes)(leaf)

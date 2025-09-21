@@ -524,8 +524,7 @@ def angle_on_fieldlines(angle, ι, α, num_transit):
 
     Notes
     -----
-    In our application we want to compute θ(α, ζ). An obstacle is that unbounded
-    quantities such as θ cannot be approximated with a finite sized periodic basis.
+    In our application we want to compute θ(α, ζ) [0].
 
     [1] To accelerate convergence we introduce the stream variable δ such that
         θ = α + ι ζ − δ.
@@ -560,10 +559,9 @@ def angle_on_fieldlines(angle, ι, α, num_transit):
 
     This property was mentioned because in our application the function approximation is
     best parameterized under (α, ζ) to enable use of a separable basis which converges
-    rapidly and to enable fast algorithms which avoid re-interpolation. However, the
-    small discontinuity between branch cuts is undesirable as it induces significant
-    error to the singular integrals whose integration boundary is near a branch cut.
-    This is resolved by [3].
+    rapidly and to enable partial summation. However, the small discontinuity between
+    branch cuts is undesirable as it induces significant error to the singular integrals
+    whose integration boundary is near a branch cut. This is resolved by [3].
 
     [3] The convergence of the interpolation of the stream map δ in (α, ζ) coordinates
         is short-circuited. The DESC angle θ is continuous at the branch cuts in α along
@@ -578,10 +576,16 @@ def angle_on_fieldlines(angle, ι, α, num_transit):
         to compute θ(α,ζ) in [1] using a poor choice such as κ requires additional
         bookkeeping to preserve the discontinuity (continuity) in κ (θ).
 
-    [5] If ω = 0, then [1], [2], and [4] remains relevant. However, the issue in [3]
-        can then be bypassed: Observe δ is (2π, 2π/NFP) periodic in (ϑ, ζ), and the
-        stream angle Δ : α, ζ ↦ δ(ϑ(α, ζ), ζ) offers simple means to compute θ
-        because ϑ(α, ζ) is linear in α and ζ.
+    [0] δ and the more obvious map θ(ϑ, ζ) − ϑ is (2π, 2π/NFP) periodic in (ϑ, ζ) with a
+        more condensed Fourier spectrum there. However, even though ϑ(α, ζ) is linear
+        in α and ζ when ω = 0, partial summation is impossible with interpolation
+        in those coordinates:
+        δ : ϑ(α,ζ), ζ ↦ ∑ₘₙ cₘₙ exp(j [mϑ + nζ])
+                      = ∑ₘₙ cₘₙ exp(j [mα + (m ι + n)ζ])
+        Therefore, as long as the 2D Fourier spectrum is sufficiently larger than
+        the 1D Chebyhsev spectrum of our stream map it will be better to interpolate
+        in Clebsch coordinates. Edit: NUFFTs may make parametrizing the stream map in
+        (ϑ, ϕ) competitive.
 
     """
     # peeling off field lines

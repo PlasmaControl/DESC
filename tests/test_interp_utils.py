@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
 from numpy.polynomial.chebyshev import (
     cheb2poly,
     chebinterpolate,
@@ -17,7 +18,7 @@ from numpy.polynomial.chebyshev import (
 from numpy.polynomial.polynomial import polyvander
 from tests.test_plotting import tol_2d
 
-from desc.backend import dct, idct, idctn, jnp, rfft, rfft2
+from desc.backend import dct, idct, jnp, rfft, rfft2
 from desc.compute.utils import get_transforms
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -336,6 +337,7 @@ class TestFastInterp:
         # https://github.com/jax-ml/jax/issues/29426
         # https://github.com/jax-ml/jax/issues/29325
         # https://github.com/jax-ml/jax/issues/27591
+        # DESC still claims to support JAX versions without these bug fixes...
         from scipy.fft import dct as sdct
         from scipy.fft import dctn as sdctn
         from scipy.fft import idct as sidct
@@ -362,7 +364,7 @@ class TestFastInterp:
         np.testing.assert_allclose(fq_2, f(n), atol=1e-14)
 
         if not lobatto:
-            g = f(m)[:, None] * _f_algebraic(cheb_pts(m * 2))
+            g = f(m)[:, None] * _f_algebraic(cheb_pts(7))
             cheb = ChebyshevSeries(g)
             np.testing.assert_allclose(
                 cheb._c,
@@ -371,11 +373,7 @@ class TestFastInterp:
                 err_msg="Scipy and JAX disagree.",
             )
             truth = f(n)[:, None] * _f_algebraic(cheb_pts(8))
-            with pytest.raises(RuntimeError):
-                np.testing.assert_allclose(cheb.evaluate(n.size, 8), truth)
-                np.testing.assert_allclose(
-                    idctn(cheb._c, type=2, s=(n.size, 8)) * (n.size * 8), truth
-                )
+            np.testing.assert_allclose(cheb.evaluate(n.size, 8), truth)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -424,119 +422,137 @@ class TestFastInterp:
         np.testing.assert_allclose(fc.evaluate(m, n), f)
 
 
-def _θ_chebyshev(name, X, Y, rho):
-    """Chebyshev spectrum of θ."""
-    eq = get(name)
+class TestStreams:
+    """Test convergence of inverse stream maps."""
 
-    iota = eq._compute_iota_under_jit(rho)
-    iota = jnp.atleast_1d(iota)
-    domain = (0, 2 * np.pi)
-    alpha = cheb_pts(X, domain)
-    zeta = cheb_pts(Y, domain)[::-1]
+    tol = 1e-7
+    norm = LogNorm(1e-7, 1e0)
+    X = 32
+    Y = lambda eq: int(32 * np.sqrt(eq.NFP))
+    rho = 0.7
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", "Unequal number of field periods")
-        λ = get_transforms(
-            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
-        )["L"]
-    assert λ.basis.NFP == eq.NFP
+    @staticmethod
+    def theta_chebyshev(eq, X, Y, rho, tol):
+        """Chebyshev spectrum of θ(α, ζ)."""
+        domain = (0, 2 * np.pi)
+        zeta = cheb_pts(Y, domain)[::-1]
 
-    θ = eq._map_poloidal_coordinates(
-        iota,
-        alpha,
-        zeta,
-        eq.params_dict["L_lmn"],
-        λ,
-        ("rho", "alpha", "zeta"),
-        ("rho", "theta", "zeta"),
-        tol=1e-7,
-    )[..., ::-1]
-    θ = θ.squeeze(0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
+            Λ = get_transforms(
+                "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+            )["L"]
+        assert Λ.basis.NFP == eq.NFP
 
-    c = ChebyshevSeries(θ, domain, domain)._c
-    c = cheb_from_dct(cheb_from_dct(c, -1), -2)
-    c = np.abs(c)
-    return c
+        θ = eq._map_poloidal_coordinates(
+            jnp.atleast_1d(eq._compute_iota_under_jit(rho)),
+            cheb_pts(X, domain),
+            zeta,
+            eq.params_dict["L_lmn"],
+            Λ,
+            inbasis=("rho", "alpha", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            tol=tol,
+        ).squeeze(0)[..., ::-1]
 
+        c = ChebyshevSeries(θ, domain, domain)._c
+        c = cheb_from_dct(cheb_from_dct(c, -1), -2)
+        return np.abs(c)
 
-@pytest.mark.unit
-@pytest.mark.parametrize("name", ["NCSX"])
-@pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_2d)
-def test_stream_map_θ_chebyhsev(name, X=32, Y=48, rho=0.5):
-    """Chebyshev spectrum of θ."""
-    fig, ax = plt.subplots()
-    ax.set(
-        ylabel=r"$\alpha$",
-        xlabel=r"$\zeta$",
-        # title=r"Chebyshev transform of $\theta(\alpha, \zeta)$", # noqa: E800
-    )
-    plt.matshow(_θ_chebyshev(name, X, Y, rho), fignum=0, norm="log")
-    plt.colorbar()
-    return fig
+    @staticmethod
+    def plot_theta_chebyhsev(name):
+        """Plot Chebyshev spectrum of θ(α, ζ)."""
+        eq = get(name)
+        X = TestStreams.X
+        Y = TestStreams.Y(eq)
+        rho = TestStreams.rho
+        c = TestStreams.theta_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
 
+        fig, ax = plt.subplots()
+        ax.set(ylabel=r"$\alpha$", xlabel=r"$\zeta$")
+        ax.set_title(
+            r"$\mathcal{F}_{\text{Chebyshev}}$ $\theta(\alpha, \zeta)$ " + name, pad=20
+        )
+        plt.matshow(c, fignum=0, norm=TestStreams.norm)
+        cbar = plt.colorbar(orientation="horizontal")
+        cbar.ax.invert_xaxis()
+        plt.tight_layout()
+        return fig
 
-def _δ_fourier_chebyshev(name, X, Y, rho):
-    """Fourier-Chebyshev spectrum of δ."""
-    eq = get(name)
-    δ = Bounce2D.angle(eq, X, Y, rho).squeeze(0)
-    c = FourierChebyshevSeries(δ, (0, 2 * np.pi))._c
-    c = c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2
-    c = cheb_from_dct(c)
-    c = np.abs(c)
-    return c
+    @staticmethod
+    def delta_fourier_chebyshev(eq, X, Y, rho, tol):
+        """Fourier-Chebyshev spectrum of δ(α, ζ)."""
+        angle = Bounce2D.angle(eq, X, Y, rho, tol=tol, angle="delta").squeeze(0)
+        c = FourierChebyshevSeries(angle, (0, 2 * np.pi))._c
+        c = cheb_from_dct(c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2)
+        return np.abs(c)
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @staticmethod
+    def test_delta_fourier_chebyshev(name):
+        """Plot Fourier-Chebyshev spectrum of δ(α, ζ)."""
+        eq = get(name)
+        X = TestStreams.X
+        Y = TestStreams.Y(eq)
+        rho = TestStreams.rho
+        c = TestStreams.delta_fourier_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
 
-@pytest.mark.unit
-@pytest.mark.parametrize("name", ["NCSX"])
-@pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_2d)
-def test_stream_map_δ_fourier_chebyshev(name, X=32, Y=48, rho=0.5):
-    """Fourier-Chebyshev spectrum of δ."""
-    fig, ax = plt.subplots()
-    ax.set(
-        ylabel=r"$\alpha$",
-        xlabel=r"$\zeta$",
-        # title=r"Fourier-Chebyshev transform of $\delta(\alpha, \zeta)$", # noqa: E800
-    )
-    plt.matshow(_δ_fourier_chebyshev(name, X, Y, rho), fignum=0, norm="log")
-    plt.colorbar()
-    return fig
+        fig, ax = plt.subplots()
+        ax.set(ylabel=r"$\alpha$", xlabel=r"$\zeta$")
+        ax.set_title(
+            r"$\mathcal{F}_{\text{Fourier-Chebyshev}} \delta(\alpha, \zeta)$ " + name,
+            pad=20,
+        )
+        plt.matshow(c, fignum=0, norm=TestStreams.norm)
+        cbar = plt.colorbar(orientation="horizontal")
+        cbar.ax.invert_xaxis()
+        plt.tight_layout()
+        return fig
 
+    @staticmethod
+    def lambda_fourier_vartheta_zeta(eq, X, Y, rho, tol):
+        """Fourier spectrum of Λ(ϑ, ζ × NFP)."""
+        Λ = Bounce2D.angle(
+            eq, X, Y, rho, tol=tol, angle="lambda", ignore_lambda_guard=True
+        ).squeeze(0)
+        c = np.fft.fftshift(Bounce2D.fourier(Λ.T).squeeze(0), -2).T
+        return np.abs(c)
 
-def _δ_fourier(name, X, Y, rho):
-    """Fourier spectrum of δ."""
-    eq = get(name)
-    δ = Bounce2D.angle(
-        eq, X, Y, rho, omega_is_zero=True, listen_to_omega_is_zero=True
-    ).squeeze(0)
-    c = Bounce2D.fourier(δ).squeeze(0)
-    c = np.fft.fftshift(c, -2)
-    c = np.abs(c)
-    return c
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @staticmethod
+    def test_lambda_fourier_vartheta_zeta(name):
+        """Plot Fourier spectrum of Λ(ϑ, ζ × NFP)."""
+        eq = get(name)
+        X = TestStreams.X
+        Y = TestStreams.X - 1
+        rho = TestStreams.rho
+        c = TestStreams.lambda_fourier_vartheta_zeta(eq, X, Y, rho, TestStreams.tol)
 
-
-@pytest.mark.unit
-@pytest.mark.parametrize("name", ["NCSX"])
-@pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_2d)
-def test_stream_map_δ_fourier(name, X=32, Y=48, rho=0.5):
-    """Fourier spectrum of δ."""
-    fig, ax = plt.subplots()
-    t = r"Fourier transform of $\delta(\alpha, \zeta \times \text{NFP})$"  # noqa: F841
-    ax.set(
-        ylabel=r"$\alpha$",
-        xlabel=r"$\zeta \times \text{NFP}$",
-        # title=t, noqa: E800
-    )
-    ax.set_xticks(
-        np.arange(Y // 2 + 1),
-        np.fft.rfftfreq(Y, 1 / Y).astype(int),
-    )
-    ax.set_yticks(
-        np.arange(X),
-        np.fft.fftshift(np.fft.fftfreq(X, 1 / X)).astype(int),
-    )
-    plt.matshow(_δ_fourier(name, X, Y, rho), fignum=0, norm="log")
-    plt.colorbar()
-    return fig
+        fig, ax = plt.subplots()
+        ax.set(ylabel=r"$\vartheta$", xlabel=r"$\zeta \times \text{NFP}$")
+        ax.set_title(
+            r"$\mathcal{F}_{\text{Fourier}}$ "
+            + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$ "
+            + name,
+            pad=20,
+        )
+        ax.set_yticks(
+            np.arange(X // 2 + 1),
+            np.fft.rfftfreq(X, 1 / X).astype(int),
+        )
+        ax.set_xticks(
+            np.arange(Y),
+            np.fft.fftshift(np.fft.fftfreq(Y, 1 / Y).astype(int)),
+        )
+        plt.matshow(c, fignum=0, norm=TestStreams.norm)
+        cbar = plt.colorbar(orientation="horizontal")
+        cbar.ax.invert_xaxis()
+        plt.tight_layout()
+        return fig
 
 
 # TODO(#1388)

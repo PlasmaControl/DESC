@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, dctn, flatnonzero, idct, idctn, irfft, jnp, rfft
+from desc.backend import dct, dctn, flatnonzero, idct, idctn, irfft, jax, jnp, rfft
 from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
@@ -375,12 +375,17 @@ class ChebyshevSeries(IOAble):
             "the grid resolution is less than the Chebyshev resolution.\n"
             f"Got Y = {Y} < {self.Y} = self.Y.",
         )
-        fq = (  # noqa: F841
-            idctn(self._c, type=2 - self.lobatto, s=(X, Y), axes=(-2, -1))
+        BUG = jax.__version_info__ <= (0, 7, 2)
+        errorif(
+            self._c.ndim > 2 and BUG,
+            msg="https://github.com/jax-ml/jax/issues/31836",
+        )
+        axes = None if BUG else (-2, -1)
+        return (
+            idctn(self._c, type=2 - self.lobatto, s=(X, Y), axes=axes)
             * (X - self.lobatto)
             * (Y - self.lobatto)
         )
-        raise RuntimeError("https://github.com/jax-ml/jax/issues/31836")
 
     def compute_cheb(self, x):
         """Evaluate at coordinate ``x`` to get set of 1D Chebyshev series in ``y``.
@@ -434,23 +439,14 @@ class PiecewiseChebyshevSeries(IOAble):
         Chebyshev coefficients aₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y).
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
-    x : jnp.ndarray
-        Shape (..., X)
-        Optional array of x values.
 
     """
 
-    def __init__(self, cheb, domain=(-1, 1), x=None):
+    def __init__(self, cheb, domain=(-1, 1)):
         """Make piecewise series from given Chebyshev coefficients."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.cheb = jnp.atleast_2d(cheb)
         self.domain = domain
-        self.x = x
-
-    @property
-    def ndim(self):
-        """Dimension of ``self.cheb``."""
-        return self.cheb.ndim
 
     @property
     def X(self):

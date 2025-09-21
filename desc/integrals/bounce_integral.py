@@ -6,8 +6,9 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import jnp, rfft2
+from desc.backend import OMEGA_IS_0, jnp, rfft2
 from desc.batching import batch_map
+from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
     _broadcast_for_bounce,
     _check_bounce_points,
@@ -251,37 +252,6 @@ class Bounce2D(Bounce):
 
     """
 
-    # For applications which reduce to computing a nonlinear function of distance
-    # along field lines between bounce points, it is required to identify these
-    # points with field-line-following coordinates. (In the special case of a linear
-    # function summing integrals between bounce points over a flux surface, arbitrary
-    # coordinate systems may be used as that task reduces to a surface integral,
-    # which is invariant to the order of summation).
-    #
-    # The DESC coordinate system maps to field-line-following coordinate
-    # systems with a relation whose solution is best found with Newton iteration.
-    # In contrast, Newton iteration is not a globally convergent algorithm to
-    # find the real roots of r : ζ ↦ B(ζ) − 1/λ where ζ is a field-line-following
-    # coordinate. For this, function approximation of B is necessary.
-    #
-    # Root finding in (α, ζ) coordinates demands particular interpolation
-    # points in that coordinate system because there is no transformation that converts
-    # series coefficients in periodic coordinates, e.g. (ϑ, ϕ), to a low order
-    # polynomial basis in non-periodic coordinates. For example, one can obtain series
-    # coefficients in (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
-    #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
-    #
-    #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
-    # The basis for the latter are trigonometric functions with
-    # irrational frequencies, courtesy of the irrational rotational transform.
-    # The denominator of a close rational could be absorbed into the coordinate ϕ,
-    # but this balloons the frequency, and hence degree of the series.
-    #
-    # Quadrature is chosen over Runge-Kutta methods of the form
-    #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    # A fourth order Runge-Kutta method is equivalent to a quadrature
-    # with Simpson's rule. The quadratures resolve these integrals more efficiently.
-
     required_names = ["B^zeta", "|B|", "iota"]
 
     def __init__(
@@ -439,7 +409,7 @@ class Bounce2D(Bounce):
         profiles=None,
         tol=1e-7,
         maxiter=30,
-        omega_is_0=False,
+        angle="delta",
         **kwargs,
     ):
         """Return the stream angle for mapping boundary to field line coordinates.
@@ -470,8 +440,6 @@ class Bounce2D(Bounce):
             Default is ``1e-7``.
         maxiter : int
             Maximum number of Newton iterations.
-        omega_is_0 : bool
-            Faster algorithm will be used if this boolean is promised to be ``True``.
 
         Returns
         -------
@@ -480,36 +448,58 @@ class Bounce2D(Bounce):
             Stream angle that maps boundary to field line coordinates.
 
         """
-        from desc.equilibrium.coords import _get_lmbda_transform_partial_sum
-
-        omega_is_0 = omega_is_0 and kwargs.pop("listen_to_omega_is_0", False)
+        from desc.compute import get_transforms
 
         params = setdefault(params, eq.params_dict)
-        if iota is None:
-            iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
-        iota = jnp.atleast_1d(iota)
-        angle = fourier_pts(X)
-        if omega_is_0:
-            ζ = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
-        else:
-            ζ = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
 
-        angle = eq._map_poloidal_coordinates(
-            iota,
-            angle,
-            ζ,
+        if angle == "lambda":
+            errorif(
+                not OMEGA_IS_0,
+                NotImplementedError,
+                "This is unlikely to be implemented.\n"
+                "See https://github.com/PlasmaControl/DESC/pull/1919.",
+            )
+            errorif(
+                not kwargs.pop("ignore_lambda_guard", False),
+                NotImplementedError,
+                "Ping unalmis to implement this or review your pull request.\n"
+                "This is useful when omega is 0 and NFP > 1.\n"
+                "See https://github.com/PlasmaControl/DESC/pull/1919.",
+            )
+
+            in_angle = "vartheta"
+            zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
+            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
+            if iota is None:
+                iota = 0.0
+
+        elif angle == "delta":
+            in_angle = "alpha"
+            zeta = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
+            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+            if iota is None:
+                iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
+
+        else:
+            raise ValueError(f"Got invalid angle={angle}.")
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
+            Λ = get_transforms("lambda", eq, grid)["L"]
+        assert Λ.basis.NFP == eq.NFP
+
+        out = eq._map_poloidal_coordinates(
+            jnp.atleast_1d(iota),
+            fourier_pts(X),
+            zeta,
             params["L_lmn"],
-            (
-                kwargs["lmbda"]
-                if "lmbda" in kwargs
-                else _get_lmbda_transform_partial_sum(eq, rho, ζ, omega_is_0)
-            ),
-            ("rho", "vartheta" if omega_is_0 else "alpha", "zeta"),
-            ("rho", "delta", "zeta"),
+            Λ,
+            inbasis=("rho", in_angle, "zeta"),
+            outbasis=("rho", angle, "zeta"),
             tol=tol,
             maxiter=maxiter,
         )
-        return angle if omega_is_0 else angle[..., ::-1]
+        return out if (angle == "lambda") else out[..., ::-1]
 
     @property
     def _num_ζ(self):

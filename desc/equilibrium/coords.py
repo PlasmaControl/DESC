@@ -1,7 +1,6 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
 import functools
-import warnings
 from functools import partial
 
 import numpy as np
@@ -398,30 +397,17 @@ def _map_PEST_coordinates(
     return out
 
 
-def _get_lmbda_transform_partial_sum(eq, rho, zeta, omega_is_0):
-    """The coordinate zeta must be strictly increasing."""
-    if omega_is_0:
-        grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
-        return get_transforms("lambda", eq, grid)["L"]
-    grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", "Unequal number of field periods")
-        λ = get_transforms("lambda", eq, grid)["L"]
-    assert λ.basis.NFP == eq.NFP
-    return λ
-
-
-def _partial_sum(lmbda, L_lmn, ιω):
+def _partial_sum(lmbda, L_lmn, iota_omega):
     """Convert FourierZernikeBasis to set of Fourier series.
 
     TODO(#1243) Do proper partial summation once the DESC
-      basis are improved to store the padded tensor product modes.
-      https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
-      The partial summation implemented here has a totally unnecessary FourierZernike
-      spectral to real transform and unnecessary N^2 FFT's of size N. Still the
-      performance improvement is significant. To avoid the transform and FFTs,
-      I suggest padding the FourierZernike basis modes to make the partial summation
-      trivial. Then this computation will likely take microseconds.
+    basis are improved to store the padded tensor product modes.
+    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+    The partial summation implemented here has a totally unnecessary FourierZernike
+    spectral to real transform and unnecessary N^2 FFT's of size N. Still the
+    performance improvement is significant. To avoid the transform and FFTs,
+    I suggest padding the FourierZernike basis modes to make the partial summation
+    trivial. Then this computation will likely take microseconds.
 
     Parameters
     ----------
@@ -429,12 +415,12 @@ def _partial_sum(lmbda, L_lmn, ιω):
         FourierZernikeBasis
     L_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for λ.
-    ιω : jnp.ndarray
-        Shape (grid.num_nodes, )
+    iota_omega : jnp.ndarray
+        Shape (grid.num_nodes, ).
 
     Returns
     -------
-    delta, modes
+    lmbda_minus_iota_omega, modes
         Spectral coefficients and modes.
         Shape (num rho, num zeta, num modes).
 
@@ -451,14 +437,14 @@ def _partial_sum(lmbda, L_lmn, ιω):
         ResolutionWarning,
         msg="High frequency lambda modes will be truncated in coordinate mapping.",
     )
-    δ = lmbda.transform(L_lmn) - ιω
-    δ = (
-        rfft(grid.meshgrid_reshape(δ, "rzt"), norm="forward")
-        .at[..., (0, -1) if (grid.num_theta % 2 == 0) else 0]
+    lmbda_minus_iota_omega = lmbda.transform(L_lmn) - iota_omega
+    lmbda_minus_iota_omega = (
+        rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
+        .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
         .divide(2)
         * 2
     )
-    return δ, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
+    return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
 @partial(jit, static_argnames=["inbasis", "outbasis", "tol", "maxiter"])
@@ -468,6 +454,7 @@ def _map_poloidal_coordinates(
     zeta,
     L_lmn,
     lmbda,
+    varepsilon=None,
     inbasis=("rho", "alpha", "zeta"),
     outbasis=("rho", "theta", "zeta"),
     guess=None,
@@ -478,18 +465,20 @@ def _map_poloidal_coordinates(
 ):
     """Map poloidal coordinate in the input basis to the output basis.
 
+    If ``varepsilon`` is not given, then the input coordinate grid is constructed as
+    the tensor product of the values ``iota``, ``poloidal``, and ``zeta``.
+
+    If ``varepsilon`` is given, then the input coordinate grid is taken to be the
+    meshgrid of values ε = α − ι ζ stored in that array.
+
     Parameters
     ----------
     iota : jnp.ndarray
-        Shape (num iota, ).
-        Rotational transform ι(ρ).
+        Shape (num ρ, ).
+        Rotational transform ι(ρ) on flux surfaces labeled by ρ.
     poloidal : jnp.ndarray
         Shape (num poloidal, ).
-        If ``poloidal`` has dimension one, then assumes the input coordinates
-        (ρ, poloidal, ζ) construct a tensor-product grid. Otherwise, the poloidal
-        coordinate values may differ across each (ρ, ζ) curve so long as the shape
-        of the ``poloidal`` array broadcasts with shape
-        (num iota, ``poloidal.shape[-2]``, num zeta).
+        Values for coordinate specified by ``inbasis[1]``.
     zeta : jnp.ndarray
         Shape (num zeta, ).
         DESC toroidal angle ζ.
@@ -497,12 +486,17 @@ def _map_poloidal_coordinates(
         Spectral coefficients for λ.
     lmbda : Transform
         Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ.
+    varepsilon : jnp.ndarray
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
+        Optional meshgrid of values ε = α − ι ζ.
+        This meshgrid need not be a tensor-product grid.
+        See the description in the docstring header for more information.
     inbasis : str
         Label for input coordinates, e.g. (ρ, α, ζ) or (ρ, ϑ, ζ).
     outbasis : str
         Label for output coordinates, e.g. (ρ, θ, ζ) or (ρ, δ, ζ).
     guess : jnp.ndarray
-        Shape (num iota, num poloidal, num zeta).
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
         Optional initial guess for the solution.
     tol : float
         Stopping tolerance.
@@ -515,7 +509,7 @@ def _map_poloidal_coordinates(
     Returns
     -------
     out : ndarray
-        Shape (num iota, num poloidal, num zeta).
+        Shape (num ρ, num poloidal, num ζ).
         Returns the output poloidal coordinate evaluated at the input coordinates.
 
     """
@@ -525,52 +519,59 @@ def _map_poloidal_coordinates(
         f"inbasis={inbasis} is not implemented.",
     )
     errorif(
-        outbasis != ("rho", "theta", "zeta") and outbasis != ("rho", "delta", "zeta"),
+        outbasis != ("rho", "theta", "zeta")
+        and outbasis != ("rho", "lambda", "zeta")
+        and outbasis != ("rho", "delta", "zeta"),
         NotImplementedError,
         f"outbasis={outbasis} is not implemented.",
     )
 
-    def rootfun(θ, α_plus_ιζ, δ_m):
-        δ = (jnp.exp(1j * modes * θ) * δ_m).real.sum()
-        return θ + δ - α_plus_ιζ
+    # Root finding for θₖ such that θₖ + (λ−ιω)(ρ,θₖ,ζ) - ε = 0.
+    def rootfun(θ, varepsilon, q_m):
+        q = (jnp.exp(1j * modes * θ) * q_m).real.sum()
+        return θ + q - varepsilon
 
-    def jacfun(θ, α_plus_ιζ, δ_m):
-        dδ_dt = ((1j * jnp.exp(1j * modes * θ) * δ_m).real * modes).sum()
-        return 1 + dδ_dt
+    def jacfun(θ, varepsilon, q_m):
+        dq_dθ = ((1j * jnp.exp(1j * modes * θ) * q_m).real * modes).sum()
+        return 1 + dq_dθ
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
-    def vecroot(guess, α_plus_ιζ, δ_m):
+    def vecroot(guess, varepsilon, q_m):
         return root_scalar(
             rootfun,
             guess,
             jac=jacfun,
-            args=(α_plus_ιζ, δ_m),
+            args=(varepsilon, q_m),
             tol=tol,
             maxiter=maxiter,
             full_output=False,
             **kwargs,
         )
 
-    iota = iota[:, None, None]
     TODO_568 = 0
-    δ_m, modes = _partial_sum(lmbda, L_lmn, TODO_568)
-    δ_m = δ_m[:, None]
+    q_m, modes = _partial_sum(lmbda, L_lmn, iota_omega=TODO_568)
+    q_m = q_m[:, None]
 
-    if poloidal.ndim == 1:
-        poloidal = poloidal[:, None]
-    if inbasis[1] == "alpha":
-        α_plus_ιζ = poloidal + iota * zeta
-    elif inbasis[1] == "vartheta":
-        ιω = iota * TODO_568
-        α_plus_ιζ = poloidal - ιω
+    omega = TODO_568
+    if varepsilon is None:
+        iota = iota[:, None, None]
+        if poloidal.ndim == 1:
+            poloidal = poloidal[:, None]
+        if inbasis[1] == "alpha":
+            varepsilon = poloidal + iota * zeta
+        elif inbasis[1] == "vartheta":
+            varepsilon = poloidal - iota * omega
 
-    # Assume δ = 0 for default initial guess.
-    θ = vecroot(setdefault(guess, α_plus_ιζ), α_plus_ιζ, δ_m)
+    θ = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
 
     if outbasis[1] == "theta":
         return θ
+    if outbasis[1] == "lambda":
+        vartheta = varepsilon + iota * omega
+        return θ - vartheta
     if outbasis[1] == "delta":
-        return α_plus_ιζ - θ
+        alpha = varepsilon - iota * zeta
+        return θ - alpha
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

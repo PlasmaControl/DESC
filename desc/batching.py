@@ -24,7 +24,6 @@ from jax._src.numpy.vectorize import (
 from jax._src.pjit import auto_axes
 from jax._src.sharding_impls import canonicalize_sharding
 from jax._src.util import unzip2, wraps
-from jax.extend import linear_util as lu
 from jax.sharding import PartitionSpec
 from jax.tree_util import (
     tree_flatten,
@@ -36,6 +35,11 @@ from jax.tree_util import (
 
 from desc.backend import jax, jnp, scan, vmap
 from desc.utils import errorif, identity
+
+if jax.__version_info__ >= (0, 4, 16):
+    from jax.extend import linear_util as lu
+else:
+    from jax import linear_util as lu
 
 
 def _scan_leaf(leaf, batch_elems, num_batches, batch_size):

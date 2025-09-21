@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import cheb_pts
+from desc.integrals._interp_utils import cheb_pts, fourier_pts
 from desc.utils import parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import (
@@ -67,7 +67,7 @@ class GammaC(_Objective):
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
-        Poloidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
         Preferably rounded down to power of 2.
     Y : int
         Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
@@ -207,7 +207,7 @@ class GammaC(_Objective):
         self._constants = {
             "quad_weights": 1.0,
             "alpha": alpha,
-            "X": cheb_pts(X, (0, 2 * jnp.pi)),
+            "X": fourier_pts(X),
             "Y": cheb_pts(Y, (0, 2 * jnp.pi))[::-1],
         }
         Y_B = setdefault(Y_B, 2 * Y)

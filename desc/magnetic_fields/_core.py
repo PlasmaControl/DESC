@@ -2617,12 +2617,12 @@ def field_line_integrate(
         defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box. Not used if
-        ``event`` is provided. Defaults to (0, np.inf)
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box. Not used if
-        ``event`` is provided. Defaults to (-np.inf, np.inf)
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (-np.inf, np.inf)
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
@@ -2644,12 +2644,6 @@ def field_line_integrate(
     if options is None:
         options = {}
 
-    assert not {"stepsize_controller", "saveat", "event", "adjoint"} & set(
-        options.keys()
-    ), (
-        "To provide stepsize_controller, saveat, event, or adjoint, use "
-        "`_field_line_integrate`."
-    )
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
 
@@ -2664,6 +2658,12 @@ def field_line_integrate(
         Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
         return jnp.logical_or(R_out, Z_out)
 
+    saveat = options.pop("saveat", SaveAt(ts=phis))
+    event = options.pop("event", Event(default_terminating_event))
+    adjoint = options.pop("adjoint", RecursiveCheckpointAdjoint())
+    stepsize_controller = options.pop(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
     return _field_line_integrate(
         r0=r0,
         z0=z0,
@@ -2674,10 +2674,10 @@ def field_line_integrate(
         solver=solver,
         max_steps=max_steps,
         min_step_size=min_step_size,
-        saveat=SaveAt(ts=phis),
-        stepsize_controller=PIDController(rtol=rtol, atol=atol, dtmin=min_step_size),
-        event=Event(default_terminating_event),
-        adjoint=RecursiveCheckpointAdjoint(),
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        event=event,
+        adjoint=adjoint,
         chunk_size=chunk_size,
         options=options,
         return_aux=return_aux,

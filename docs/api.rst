@@ -137,6 +137,7 @@ Integrals
 
     desc.integrals.Bounce2D
     desc.integrals.Bounce1D
+    desc.integrals.compute_B_plasma
 
 IO
 ***

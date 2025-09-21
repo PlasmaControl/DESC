@@ -28,7 +28,12 @@ following papers and documented at Theory_. Please cite our work if you use DESC
   [`Journal of Plasma Physics <https://doi.org/10.1017/S0022377823000235>`__]
   [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
 
+A list of papers which feature DESC can be found here_.
+
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
+.. _here: https://desc-docs.readthedocs.io/en/latest/pubs_list.html
+
+
 
 Quick Start
 ===========

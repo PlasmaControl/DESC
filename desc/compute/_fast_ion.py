@@ -489,3 +489,121 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         surf_batch_size,
     )
     return data
+
+
+from ..integrals.quad_utils import (
+    automorphism_sin,
+    chebgauss2,
+    get_quadrature,
+    grad_automorphism_sin,
+)
+
+def _adiabatic_J_num(data, B, pitch):
+    """Numerator of the second adiabatic invariant J||."""
+    # v_∥/ (√2E/m)
+    return jnp.sqrt(jnp.abs(1 - pitch * B))
+
+
+@register_compute_fun(
+    name="adiabatic J",
+    label=(  # J_∥ = ∫ dl v_∥/ (√2E/m) )/∫ dl
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl/\\integrate dl/B"
+    ),
+    units="~",
+    units_long="~",
+    description="Normalized second adiabatic invariant of motion.",
+    coordinates="r",
+    dim=1,
+    profiles=[],
+    params=[],
+    transforms={"grid": []},
+    data=["min_tz |B|", "max_tz |B|", "R0"] + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _adiabatic_J(params, transforms, profiles, data, **kwargs):
+    """Second adiabatic invariant of particle motion.
+
+    The normalization requires a length for which we have used the fieldline
+    length ∫ dl.
+    Typically calculated as a function of (rho, alpha, lambda)
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            chebgauss2(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def adiabatic_J0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            #split_by_NFP=False,
+            is_fourier=True,
+            spline=True,
+        )
+
+        def fun(pitch_inv):
+            adiabatic_J = bounce.integrate(
+                [_adiabatic_J_num],
+                pitch_inv,
+                data,
+                [],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            # Jpar sum over wells
+            Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
+            return Jpar_wellsum
+
+        ## We normalize with (2 pi R0)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    grid = transforms["grid"]
+    data["adiabatic J"] = _compute(
+        adiabatic_J0,
+        {},
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    ) / (2 * jnp.pi * num_transit * data["R0"])
+    return data
+
+

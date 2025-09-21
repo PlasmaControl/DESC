@@ -2006,11 +2006,11 @@ def _p_perp(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|","|B|_r"]
 )
 def _p_perp_r(params, transforms, profiles, data, **kwargs):
     data["p_perp_r"] = profiles["pressure"].compute(
-        transforms["grid"], params["p_l"], dr=1, B=data["|B|"]
+        transforms["grid"], params["p_l"], dr=1, B=data["|B|"],B_r=data["|B|_r"]
     )
     return data
 
@@ -2026,11 +2026,11 @@ def _p_perp_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
-    data=["|B|"],
+     data=["|B|","|B|_t"],
 )
 def _p_perp_t(params, transforms, profiles, data, **kwargs):
     data["p_perp_t"] = profiles["pressure"].compute(
-        transforms["grid"], params["p_l"], dt=1, B=data["|B|"]
+        transforms["grid"], params["p_l"], dt=1, B=data["|B|"],B_t=data["|B|_t"]
     )
     return data
 
@@ -2046,11 +2046,11 @@ def _p_perp_t(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|","|B|_z"],
 )
 def _p_perp_z(params, transforms, profiles, data, **kwargs):
     data["p_perp_z"] = profiles["pressure"].compute(
-        transforms["grid"], params["p_l"], dz=1, B=data["|B|"]
+        transforms["grid"], params["p_l"], dz=1, B=data["|B|"],B_z = data["|B|_z"]
     )
     return data
 
@@ -2098,7 +2098,7 @@ def _grad_p_perp(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|"]
 )
 def _p_parallel(params, transforms, profiles, data, **kwargs):
     data["p_parallel"] = profiles["anisotropy"].compute(
@@ -2118,11 +2118,11 @@ def _p_parallel(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|","|B|_r"],
 )
 def _p_parallel_r(params, transforms, profiles, data, **kwargs):
     data["p_parallel_r"] = profiles["anisotropy"].compute(
-        transforms["grid"], params["a_lmn"], dr=1, B=data["|B|"]
+        transforms["grid"], params["a_lmn"], dr=1, B=data["|B|"],B_r= data["|B|_r"]
     )
     return data
 
@@ -2138,11 +2138,11 @@ def _p_parallel_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|","|B|_t"],
 )
 def _p_parallel_t(params, transforms, profiles, data, **kwargs):
     data["p_parallel_t"] = profiles["anisotropy"].compute(
-        transforms["grid"], params["a_lmn"], dt=1, B=data["|B|"]
+        transforms["grid"], params["a_lmn"], dt=1, B=data["|B|"],B_t = data["|B|_t"]
     )
     return data
 
@@ -2158,11 +2158,11 @@ def _p_parallel_t(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=["|B|"],
+    data=["|B|","|B|_z"],
 )
 def _p_parallel_z(params, transforms, profiles, data, **kwargs):
     data["p_parallel_z"] = profiles["anisotropy"].compute(
-        transforms["grid"], params["a_lmn"], dz=1, B=data["|B|"]
+        transforms["grid"], params["a_lmn"], dz=1, B=data["|B|"],B_z= data["|B|_z"]
     )
     return data
 

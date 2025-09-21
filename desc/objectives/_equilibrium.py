@@ -813,7 +813,7 @@ class B_on_Axis(_Objective):
         )
 
         # midplane index
-        mid = int(self.Nz / 2)
+        mid = jnp.int_(self.Nz / 2)
 
         ls = data["|B|"][:mid]
         rs = data["|B|"][mid:]

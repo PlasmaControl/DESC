@@ -822,7 +822,6 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     )
     return data
 
-## these next two tools are for anisotropic F, but need to be tested 
 
 @register_compute_fun(
     name="|F|_a",
@@ -835,11 +834,30 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["F_anisotropic"],
+    data=["F_anisotropic_3D_explicit"],
 )
 def _Fmag_a(params, transforms, profiles, data, **kwargs):
-    data["|F|_a"] = safenorm(data["F_anisotropic"], axis=-1)
+    data["|F|_a"] = safenorm(data["F_anisotropic_3D_explicit"], axis=-1)
     return data
+ 
+@register_compute_fun(
+    name="|F|_a_normalized",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
+      "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Magnitude of anisotropic force balance error normalized by volume averaged "
+     "magnetic pressure gradient",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|F|_a", "<|grad(|B|^2)|/2mu0>_vol"],
+)
+def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
+     data["|F|_a_normalized"] = data["|F|_a"] / data["<|grad(|B|^2)|/2mu0>_vol"]
+     return data
     
 @register_compute_fun(
     name="<|F|>_a_vol",
@@ -861,7 +879,6 @@ def _Fmag_a_vol(params, transforms, profiles, data, **kwargs):
     )
     return data
 
-
 @register_compute_fun(
     name="e^helical",
     label="B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta",
@@ -880,7 +897,6 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T
     return data
-
 
 @register_compute_fun(
     name="e^helical*sqrt(g)",
@@ -985,8 +1001,7 @@ def _F_anisotropic_3D(params, transforms, profiles, data, **kwargs):
     ).T
 
     return data
-
-
+ 
 @register_compute_fun(
     name="F_anisotropic_3D_explicit",
     label="F_{\\text{anisotropic}}",
@@ -1007,8 +1022,49 @@ def _F_anisotropic_3D(params, transforms, profiles, data, **kwargs):
         "grad(p_perp)",
         "grad(p_parallel)",
         "grad(B)",
+        "grad(|B|)",
     ],
 )
+def _F_anisotropic_3D_explicit(params, transforms, profiles, data, **kwargs):
+    B     = data["B"]             
+    Bmag  = data["|B|"]           
+    b     = B / Bmag[:, None]  
+    gradBmag = data["grad(|B|)"]  
+
+    ppar   = data["p_parallel"]
+    pperp  = data["p_perp"]
+    delta_p = ppar - pperp
+ 
+    grad_pperp  = data["grad(p_perp)"]            
+    grad_ppar   = data["grad(p_parallel)"]       
+    grad_delta_p = grad_ppar - grad_pperp     
+
+    #(1): grad(p_perp)
+    first = grad_pperp
+ 
+
+    # (2): (p_perp - p_par) * (b·∇)b 
+    # quotient rule
+    gradB  = data["grad(B)"]
+    term1   = jnp.einsum("ni,nij->nj", b, gradB) / Bmag[:, None]  
+    term2 = b * jnp.einsum("ni,ni->n", b, gradBmag)[:,None]/ Bmag[:, None]  
+    second = delta_p[:, None] * (term1-term2)
+    
+    # (3): (B·∇(Δp/B)) * b  
+    # quotient rule    
+    grad_delta_p_over_B = (grad_delta_p / Bmag[:, None]
+                           - (delta_p / (Bmag**2))[:, None] * gradBmag)   
+    third = (jnp.einsum("ni,ni->n", B, grad_delta_p_over_B)[:, None]) * b
+ 
+    # ∇·Π from (2.9): term (1) + (2) + (3)
+    div_Pi = first + second  + third
+
+    # Force residual
+    F_aniso = jnp.cross(data["J"], data["B"]) - div_Pi
+    data["F_anisotropic_3D_explicit"] = F_aniso
+    return data
+    
+'''
 def _F_anisotropic_3D_explicit(params, transforms, profiles, data, **kwargs):
     B = data["B"]
     Bmag = data["|B|"]
@@ -1034,6 +1090,7 @@ def _F_anisotropic_3D_explicit(params, transforms, profiles, data, **kwargs):
 
     data["F_anisotropic_3D_explicit"] = F_aniso
     return data
+'''
 
 
 @register_compute_fun(

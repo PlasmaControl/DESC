@@ -1797,7 +1797,7 @@ class ChebyshevZernikeBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self._L = L
+        self._L = L 
         self._M = M
         self._N = N
         self._NFP = NFP
@@ -1985,9 +1985,9 @@ class ChebyshevZernikeBasis(_Basis):
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self.L = L
-            self.M = M
-            self.N = N
+            self._L = L
+            self._M = M
+            self._N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing

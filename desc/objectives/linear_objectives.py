@@ -258,6 +258,47 @@ class ShareParameters(_Objective):
     name : str, optional
         Name of the objective function.
 
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import ShareParameters
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+        coilset2 = full_coilset.copy()
+
+        # between the two coilsets...
+        params = [
+                [
+                    {"current": True},  # share the "current" of the 1st TF coil
+                    # share "center" and one component of "normal" for the 2nd TF coil
+                    {"center": True, "normal": np.array([1])},
+                    {"r_n": True},  # share radius of the 3rd TF coil
+                    {},  # share nothing in the 4th TF coil
+                ],
+                {"shift": True, "rotmat": True},  # share "shift" & "rotmat" for all VF coils
+                # share specified indices of "X_n" and "Z_n", but not "Y_n", for other coil
+                {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+            ]
+        obj=ShareParameters([full_coilset, coilset2], params=params )
+
 
     """
 
@@ -336,7 +377,7 @@ class ShareParameters(_Objective):
         Returns
         -------
         f : ndarray
-            Fixed degree of freedom errors.
+            Shared degree of freedom errors.
 
         """
         # basically, just subtract the first things' params

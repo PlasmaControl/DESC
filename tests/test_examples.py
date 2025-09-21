@@ -20,6 +20,7 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
+    initialize_modular_coils,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -2557,6 +2558,75 @@ def test_share_parameters():
     assert not np.allclose(surf1.Phi_mn[1:], surf2.Phi_mn[1:])
     # index 0 Phi_mn should be same bc was shared
     assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0])
+
+
+@pytest.mark.unit
+def test_share_parameters_coilsets():
+    """Test ShareParameters for a 2-surface quadratic flux optimization w/ coils."""
+    ## setup opt problem
+    # use QuadraticFlux as eq's are fixed and want fields to change
+    # use ShareParameters to keep some coil geometries equal
+    # to eachother as they their currents to reduce Bn
+    eq1 = get("ESTELL")
+    with pytest.warns(UserWarning, match="L"):
+        eq1.change_resolution(8, 3, 3, 12, 6, 6)
+    eq2 = eq1.copy()
+    eq2.change_resolution(8, 2, 2, 12, 4, 4)
+
+    coils1 = initialize_modular_coils(eq1, num_coils=3, r_over_a=1.5)
+    coils1 = coils1.to_FourierXYZ(N=2)
+    coils2 = coils1.copy()
+
+    ## setup opt problem
+    coil_grid = LinearGrid(N=10)
+    eval_grid = LinearGrid(M=10, N=10, NFP=eq1.NFP, sym=True)
+    # let surfs and Phi change while keeping their geometry shared
+    obj = ObjectiveFunction(
+        (
+            QuadraticFlux(
+                eq1,
+                coils1,
+                field_grid=coil_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq1",
+            ),
+            QuadraticFlux(
+                eq2,
+                coils2,
+                field_grid=coil_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq2",
+            ),
+        )
+    )
+    constraints = (
+        ShareParameters(
+            [coils1, coils2], params={"X_n": True, "Y_n": True, "Z_n": [0]}
+        ),  # make the 2 coils. have same geometry, except for Z_n just zeroth index
+        FixCoilCurrent(coils1, indices=[True, False, False]),
+        FixCoilCurrent(coils2, indices=[False, True, False]),
+    )  # fix different coils' current for each
+
+    opt = Optimizer("lsq-exact")
+
+    (coils1, coils2), _ = opt.optimize(
+        [coils1, coils2],
+        objective=obj,
+        constraints=constraints,
+        verbose=3,
+        maxiter=10,
+        ftol=1e-8,
+    )
+    for i in range(len(coils1)):
+        np.testing.assert_allclose(coils1[i].X_n, coils2[i].X_n)
+        np.testing.assert_allclose(coils1[i].Y_n, coils2[i].Y_n)
+        np.testing.assert_allclose(coils1[i].Z_n[0], coils2[i].Z_n[0])
+
+    # currents should be different bc not shared and
+    # the 2 target eqs are different
+    assert not np.allclose(coils1.current, coils2.current)
 
 
 @pytest.mark.unit

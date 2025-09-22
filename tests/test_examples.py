@@ -20,7 +20,6 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
-    initialize_modular_coils,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -2563,6 +2562,40 @@ def test_share_parameters():
 @pytest.mark.unit
 def test_share_parameters_coilsets():
     """Test ShareParameters for a 2-surface quadratic flux optimization w/ coils."""
+    # toroidal field coil set with 4 coils
+    tf_coil = FourierPlanarCoil(
+        current=3, center=[1.4, 0, 0], normal=[0, 1, 0], r_n=[0.8]
+    )
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    # vertical field coil set with 3 coils
+    vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    # another single coil
+    xyz_coil = FourierXYZCoil(
+        current=2, X_n=[0, 1.4, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0], modes=[-1, 0, 1]
+    )
+    # full coil set with TF coils, VF coils, and other single coil
+    coils1 = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+    coils2 = coils1.copy()
+
+    # between the two coilsets...
+    params = [
+        [  # share the "current" of the 1st TF coil and 1st component of "center"
+            {"current": True, "center": np.array([0])},
+            # share "center" and  "normal" for the 2nd TF coil
+            {"center": True, "normal": True},
+            {"r_n": True},  # share radius of the 3rd TF coil
+            {},  # share nothing in the 4th TF coil
+        ],
+        # share "shift" & "rotmat" for all VF coils
+        {"shift": True, "rotmat": True},
+        # share specified indices of "X_n" and "Z_n",
+        # but not "Y_n", for other coil
+        {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+    ]
+
     ## setup opt problem
     # use QuadraticFlux as eq's are fixed and want fields to change
     # use ShareParameters to keep some coil geometries equal
@@ -2572,11 +2605,6 @@ def test_share_parameters_coilsets():
         eq1.change_resolution(8, 3, 3, 12, 6, 6)
     eq2 = eq1.copy()
     eq2.change_resolution(8, 2, 2, 12, 4, 4)
-
-    coils1 = initialize_modular_coils(eq1, num_coils=3, r_over_a=1.5)
-    coils1 = coils1.to_FourierXYZ(N=2)
-    coils2 = coils1.copy()
-
     ## setup opt problem
     coil_grid = LinearGrid(N=10)
     eval_grid = LinearGrid(M=10, N=10, NFP=eq1.NFP, sym=True)
@@ -2602,11 +2630,13 @@ def test_share_parameters_coilsets():
         )
     )
     constraints = (
-        ShareParameters(
-            [coils1, coils2], params={"X_n": True, "Y_n": True, "Z_n": [0]}
-        ),  # make the 2 coils. have same geometry, except for Z_n just zeroth index
-        FixCoilCurrent(coils1, indices=[True, False, False]),
-        FixCoilCurrent(coils2, indices=[False, True, False]),
+        ShareParameters([coils1, coils2], params=params),
+        FixCoilCurrent(
+            coils1, indices=[[False] * len(coils1[0]), [True] * len(coils1[1]), False]
+        ),
+        FixCoilCurrent(
+            coils2, indices=[[False] * len(coils1[0]), [False] * len(coils1[1]), True]
+        ),
     )  # fix different coils' current for each
 
     opt = Optimizer("lsq-exact")
@@ -2618,15 +2648,24 @@ def test_share_parameters_coilsets():
         verbose=3,
         maxiter=10,
         ftol=1e-8,
+        gtol=0,
     )
-    for i in range(len(coils1)):
-        np.testing.assert_allclose(coils1[i].X_n, coils2[i].X_n)
-        np.testing.assert_allclose(coils1[i].Y_n, coils2[i].Y_n)
-        np.testing.assert_allclose(coils1[i].Z_n[0], coils2[i].Z_n[0])
+    # check that things which should be same are same
+    np.testing.assert_allclose(coils1.current[0][0], coils2.current[0][0])
+    np.testing.assert_allclose(coils1[0][0].center[0], coils2[0][0].center[0])
+    np.testing.assert_allclose(coils1[0][1].center, coils2[0][1].center)
+    np.testing.assert_allclose(coils1[0][1].normal, coils2[0][1].normal)
+    np.testing.assert_allclose(coils1[0][2].r_n, coils2[0][2].r_n)
+    for i in range(len(coils1[1])):
+        np.testing.assert_allclose(coils1[1][i].shift, coils2[1][i].shift)
+        np.testing.assert_allclose(coils1[1][i].rotmat, coils2[1][i].rotmat)
+    np.testing.assert_allclose(coils1[2].X_n[1], coils2[2].X_n[1])
+    np.testing.assert_allclose(coils1[2].X_n[2], coils2[2].X_n[2])
+    np.testing.assert_allclose(coils1[2].Z_n[0], coils2[2].Z_n[0])
 
-    # currents should be different bc not shared and
-    # the 2 target eqs are different
-    assert not np.allclose(coils1.current, coils2.current)
+    # did not share these
+    assert not np.isclose(coils1.current[-1], coils2.current[-1])
+    assert not np.allclose(coils1[0][0].center[1:], coils2[0][0].center[1:])
 
 
 @pytest.mark.unit

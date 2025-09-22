@@ -1132,6 +1132,7 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     coils2 = coils1.copy()
 
     subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": [2]})
+    subobj.build()
     obj = ObjectiveFunction(subobj)
     obj.build()
 

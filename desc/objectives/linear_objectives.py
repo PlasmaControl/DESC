@@ -286,15 +286,17 @@ class ShareParameters(_Objective):
 
         # between the two coilsets...
         params = [
-                [
-                    {"current": True},  # share the "current" of the 1st TF coil
-                    # share "center" and one component of "normal" for the 2nd TF coil
-                    {"center": True, "normal": np.array([1])},
+                [ # share the "current" of the 1st TF coil and 1st center component
+                    {"current": True, "center":np.array([0])},
+                    # share "center" and  "normal" for the 2nd TF coil
+                    {"center": True, "normal": True},
                     {"r_n": True},  # share radius of the 3rd TF coil
                     {},  # share nothing in the 4th TF coil
                 ],
-                {"shift": True, "rotmat": True},  # share "shift" & "rotmat" for all VF coils
-                # share specified indices of "X_n" and "Z_n", but not "Y_n", for other coil
+                # share "shift" & "rotmat" for all VF coils
+                {"shift": True, "rotmat": True},
+                # share specified indices of "X_n" and "Z_n",
+                # but not "Y_n", for other coil
                 {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
             ]
         obj=ShareParameters([full_coilset, coilset2], params=params )

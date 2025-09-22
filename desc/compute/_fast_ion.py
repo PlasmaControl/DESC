@@ -170,7 +170,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, num_well)
-            vτ, drift1, drift2 = bounce.integrate(
+            v_tau, drift1, drift2 = bounce.integrate(
                 [_v_tau, _drift1, _drift2],
                 pitch_inv,
                 data,
@@ -180,7 +180,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # This is γ_c π/2.
-            γ_c = jnp.arctan(
+            gamma_c = jnp.arctan(
                 safediv(
                     drift1,
                     drift2
@@ -192,7 +192,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return (vτ * γ_c**2).sum(-1).mean(-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -481,7 +481,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            vτ, radial_drift, poloidal_drift = bounce.integrate(
+            v_tau, radial_drift, poloidal_drift = bounce.integrate(
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
@@ -491,8 +491,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # This is γ_c π/2.
-            γ_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return (vτ * γ_c**2).sum(-1).mean(-2)
+            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

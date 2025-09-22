@@ -166,7 +166,7 @@ class Bounce2D(Bounce):
     If the map G is multivalued at a physical location, then it is still
     permissible if separable into periodic and secular parts.
     In that case, supply the periodic part, which will be interpolated
-    with FFTs, and use the provided coordinate θ,ζ ∈ ℝ to compose G.
+    with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
 
     Examples
     --------
@@ -182,8 +182,8 @@ class Bounce2D(Bounce):
         The function approximation done here requires FourierZernike series on a
         smaller fixed grid and uses FFTs to compute the map between coordinate systems.
         2D interpolation enables tracing the field line for more toroidal transits.
-
-        Performance will improve significantly by resolving GitHub issue ``1303``.
+        Performance will improve significantly by resolving GitHub issue ``1303``:
+        Patch for differentiable code with dynamic shapes.
 
     Parameters
     ----------
@@ -412,7 +412,7 @@ class Bounce2D(Bounce):
         eq : Equilibrium
             Equilibrium to use defining the coordinate mapping.
         X : int
-            Poloidal grid resolution to interpolate the stream angle.
+            Poloidal Fourier grid resolution to interpolate the stream angle.
             Preferably rounded down to power of 2.
         Y : int
             Toroidal grid resolution to interpolate the stream angle.
@@ -568,7 +568,8 @@ class Bounce2D(Bounce):
         )
 
     def _polish_points(self, points, pitch_inv):
-        # TODO: One application of Newton on Fourier series |B|-1/λ.
+        # TODO after (#1243): One application of Newton on Fourier series |B|-1/λ.
+        #  Need Fourier coefficients of lambda, but that is already known.
         #  Then can use less resolution for the global root finding algorithm
         #  and rely on the local one once good neighbourhood is found.
         #  For now, we integrate with √|1−λB| as justified in doi.org/10.1063/5.0160282.
@@ -862,7 +863,6 @@ class Bounce2D(Bounce):
             Shape (num ρ, ).
 
         """
-        vander = setdefault(vander, {})
         if quad is None:
             # Integrating an analytic oscillatory map so a high order quadrature
             # is ideal. Difficult to pick the right frequency for Filon quadrature
@@ -876,23 +876,24 @@ class Bounce2D(Bounce):
             )
             quad = leggauss(deg // 2)
         x, w = quad
-        ζ = bijection_from_disc(x, 0, 2 * jnp.pi)
-        θ = idct_mmt(
-            x, self._theta.cheb[..., None, :], vander=vander.get("dct cfl", None)
-        )
-        B_sup_ζ = irfft_mmt(
-            θ,
-            self._partial_sum_cfl(ζ, vander.get("dft cfl", None)),
+        vander = setdefault(vander, {})
+
+        B_sup_z = irfft_mmt(
+            idct_mmt(
+                x, self._theta.cheb[..., None, :], vander=vander.get("dct cfl", None)
+            ),
+            self._partial_sum_cfl(x, vander.get("dft cfl", None)),
             self._num_θ,
             _modes=self._modes_θ,
         )
+
         # B⋅∇ζ never vanishes, so it has the same sign over a surface.
         # Simple mean over α because when ζ extends beyond one transit we need
         # to weight all field lines uniformly regardless of their area wrt α.
-        dζ_dx = jnp.pi
-        return jnp.abs(jnp.reciprocal(B_sup_ζ).dot(w).sum(-1).mean(-1)) * dζ_dx
+        dz_dx = jnp.pi
+        return jnp.abs(jnp.reciprocal(B_sup_z).dot(w).sum(-1).mean(-1)) * dz_dx
 
-    def _partial_sum_cfl(self, ζ, vander):
+    def _partial_sum_cfl(self, x, vander):
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
         # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit and |𝛇| = x.size.
@@ -900,7 +901,7 @@ class Bounce2D(Bounce):
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
         return ifft_mmt(
-            ζ[:, None] if vander is None else None,
+            bijection_from_disc(x, 0, 2 * jnp.pi)[:, None] if vander is None else None,
             self._c["B^zeta"],
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
@@ -993,7 +994,7 @@ class Bounce2D(Bounce):
             theta = PiecewiseChebyshevSeries(theta.cheb[m], theta.domain)
         kwargs.setdefault(
             "title",
-            rf"$\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
+            rf"Poloidal angle $\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
         )
         kwargs.setdefault("vlabel", r"$\theta$")
         return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
@@ -1104,10 +1105,10 @@ class Bounce1D(Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        self._ζ = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
-                x=self._ζ,
+                x=self._zeta,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
@@ -1178,7 +1179,7 @@ class Bounce1D(Bounce):
         """
         return bounce_points(
             _broadcast_for_bounce(pitch_inv),
-            self._ζ,
+            self._zeta,
             self._B,
             polyder_vec(self._B),
             num_well,
@@ -1212,7 +1213,7 @@ class Bounce1D(Bounce):
 
         """
         return _check_bounce_points(
-            *points, pitch_inv, self._ζ, self._B, plot=plot, **kwargs
+            *points, pitch_inv, self._zeta, self._B, plot=plot, **kwargs
         )
 
     def integrate(
@@ -1334,20 +1335,20 @@ class Bounce1D(Bounce):
 
         ζ = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 2 + batch)
 
-        b_sup_ζ = interp1d_Hermite_vec(
+        b_sup_z = interp1d_Hermite_vec(
             ζ,
-            self._ζ,
+            self._zeta,
             self._data["|b^zeta|"],
             self._data["|b^zeta|_z|r,a"],
         ).reshape(shape)
         B = interp1d_Hermite_vec(
             ζ,
-            self._ζ,
+            self._zeta,
             self._data["|B|"],
             self._data["|B|_z|r,a"],
         ).reshape(shape)
         data = {
-            k: interp1d_vec(ζ, self._ζ, v, method=method).reshape(shape)
+            k: interp1d_vec(ζ, self._zeta, v, method=method).reshape(shape)
             for k, v in data.items()
         }
 
@@ -1356,12 +1357,12 @@ class Bounce1D(Bounce):
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         cov = grad_bijection_from_disc(z1, z2)
-        result = [(f(data, B, pitch) / b_sup_ζ).dot(w) * cov for f in integrand]
+        result = [(f(data, B, pitch) / b_sup_z).dot(w) * cov for f in integrand]
 
         if check:
             _check_interp(
                 ζ.reshape(shape),
-                b_sup_ζ,
+                b_sup_z,
                 B,
                 data.values(),
                 result,
@@ -1398,8 +1399,12 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        ext, g_ext = get_extrema(self._ζ, self._B, polyder_vec(self._B), sentinel=0.0)
-        return argmin(*points, interp1d_vec(ext, self._ζ, f, method=method), ext, g_ext)
+        ext, g_ext = get_extrema(
+            self._zeta, self._B, polyder_vec(self._B), sentinel=0.0
+        )
+        return argmin(
+            *points, interp1d_vec(ext, self._zeta, f, method=method), ext, g_ext
+        )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.
@@ -1432,11 +1437,11 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            z1, z2 = bounce_points(pitch_inv, self._ζ, B, polyder_vec(B))
+            z1, z2 = bounce_points(pitch_inv, self._zeta, B, polyder_vec(B))
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
-            PPoly(B.T, self._ζ), **_set_default_plot_kwargs(kwargs, l, m)
+            PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs, l, m)
         )
         return fig, ax

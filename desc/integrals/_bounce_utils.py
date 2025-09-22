@@ -213,11 +213,11 @@ def _check_interp(z, b_sup_z, B, f, result, plot=True):
     z : jnp.ndarray
         Quadrature points in ζ coordinates.
     b_sup_z : jnp.ndarray
-        Contravariant toroidal component of magnetic field, interpolated to ζ.
+        Contravariant toroidal component of magnetic field.
     B : jnp.ndarray
-        Norm of magnetic field, interpolated to ζ.
+        Norm of magnetic field.
     f : list[jnp.ndarray]
-        Arguments to the integrand, interpolated to ζ.
+        Arguments to the integrand.
     result : list[jnp.ndarray]
         Computed integrals.
     plot : bool
@@ -250,22 +250,22 @@ def _check_interp(z, b_sup_z, B, f, result, plot=True):
         actual = jnp.sum(marked & jnp.isfinite(res))
         assert goal == actual, (
             f"Lost {goal - actual} integrals from NaN generation in the integrand."
-            " This is caused by floating point error due to a poor quadrature choice."
+            f" This is caused by floating point error due to a poor quadrature choice."
         )
 
 
-def _plot_check_interp(z, V, name=""):
+def _plot_check_interp(zeta, V, name=""):
     """Plot V[..., λ, (ζ₁, ζ₂)](ζ)."""
-    if z.shape[-2] == 1:
+    if zeta.shape[-2] == 1:
         # Just one well along the field line, so plot
         # interpolations for every pitch simultaneously.
-        z = z.squeeze(-2)
+        zeta = zeta.squeeze(-2)
         V = V.squeeze(-2)
-        shape = z.shape[:2]
+        shape = zeta.shape[:2]
     else:
-        shape = z.shape[:3]
+        shape = zeta.shape[:3]
     for idx in np.ndindex(shape):
-        marked = jnp.nonzero(jnp.any(z[idx] != 0.0, axis=-1))[0]
+        marked = jnp.nonzero(jnp.any(zeta[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
             continue
         fig, ax = plt.subplots()
@@ -276,7 +276,7 @@ def _plot_check_interp(z, V, name=""):
             + rf" on field line $\rho(l={idx[0]})$, $\alpha(m={idx[1]})$"
         )
         for i in marked:
-            ax.plot(z[(*idx, i)], V[(*idx, i)], marker="o")
+            ax.plot(zeta[(*idx, i)], V[(*idx, i)], marker="o")
         fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
         plt.tight_layout()
         plt.show()
@@ -514,11 +514,11 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
 
     Returns
     -------
-    θ : PiecewiseChebyshevSeries
+    theta : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit. ``θ.cheb`` broadcasts with
+        θ over one toroidal transit. ``theta.cheb`` broadcasts with
         shape (num ρ, num α, num transit, Y).
 
     Notes
@@ -564,13 +564,7 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     f(α=α₀, ζ) will sample the approximation to F(α=α₀, ζ) for ζ ∈ [0, 2π) even with
     incomplete convergence. However, if f is defined with basis functions in (ϑ, ζ)
     coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to F(α=α₀ ± ε, ζ)
-    with ε → 0 as f converges to F. This reflects the fact that evaluating
-    f(ϑ(α=α₀, ζ), ζ) requires reducing a 2D set of spectral coefficients whereas
-    f(α₀, ζ) requires reducing a 1D set of coefficients. (Visually, the small
-    discontinuity in f(α, ζ) at the branch cuts will not be visible in f(ϑ, ζ) because
-    when tracing field line data with f(ϑ, ζ) the data is continuously oscillating
-    around the field line, whereas f(α, ζ) has to "decide" what the new data is at the
-    branch cut).
+    with ε → 0 as f converges to F.
 
     This property was mentioned because parameterizing the stream map in (α, ζ) enables
     partial summation. However, the small discontinuity due to discretization error
@@ -583,24 +577,21 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
         simultaneously transforms δ into θ. Although this is a more expensive than
         α + δ, it removes discretization error that the singularities would otherwise
         amplify. This also enables computing maps which are not periodic in θ.
-        However, since the θ we compute is no longer bounded, and this slows down
-        the kernels that evaluate the basis for the MMTs and NUFFTs as they must
+        However, since the θ we compute is no longer bounded, slows down
+        evaluating the basis for the MMTs and NUFFTs is slower as they must
         work to mod the argument within 2π from 0.
 
         # TODO: Check if [4] is still useful now that convergence is improved.
         #  If not remove in later PR so that it is merged to master in different commit.
 
-    [0] The more obvious stream Λ = ϑ - θ is (2π, 2π/NFP) periodic in (ϑ, ζ) with a
-        more condensed Fourier spectrum there. However, even though ϑ(α, ζ) is linear
-        in α and ζ when ω = 0, partial summation is impossible with interpolation
-        in those coordinates:
+    [0] The stream Λ = ϑ - θ is (2π, 2π/NFP) periodic in (ϑ, ζ).
+        Partial summation is impossible in these coordinates:
         Λ : ϑ(α,ζ), ζ ↦ ∑ₘₙ cₘₙ exp(j [mϑ + nζ])
                       = ∑ₘₙ cₘₙ exp(j [mα + (m ι + n)ζ])
-        Therefore, as long as the 2D Fourier spectrum is sufficiently larger than
-        the 1D Chebyshev spectrum of our stream map it will be better to interpolate
-        in Clebsch coordinates. Although the NUFFTs make parametrizing Λ competitive due
-        to limitations in JAX. Still we retain δ for the strategy presented in
-        https://github.com/PlasmaControl/DESC/issues/1922.
+        If the 2D Fourier spectrum of Λ is larger than the 1D Chebyshev spectrum
+        of δ, it will be better to use δ. Although the NUFFTs make parametrizing Λ
+        competitive due to limitations in JAX.
+        https://github.com/PlasmaControl/DESC/issues/1922
 
     """
     # peeling off field lines
@@ -608,8 +599,8 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     if angle.ndim == 2:
         alphas = alphas.squeeze(1)
 
+    # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     domain = (0, 2 * jnp.pi)
-    # Reduce to a set of 1D Chebyshev series. This is a partial summation technique.
     delta = FourierChebyshevSeries(angle, domain).compute_cheb(alphas).swapaxes(0, -3)
     delta = PiecewiseChebyshevSeries(delta, domain)
     delta.stitch()
@@ -626,8 +617,8 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
-        θ over one toroidal transit. ``θ.cheb`` should broadcast with
-        shape (num ρ, num α, num transit, θ.Y).
+        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        shape (num ρ, num α, num transit, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -660,18 +651,16 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
     # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit and |𝛇| = Y.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
-    ζ = cheb_pts(Y, theta.domain)
-    θ = theta.evaluate(Y)
 
     f = ifft_mmt(
-        ζ[:, None] if vander is None else None,
+        cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
         f,
         (0, 2 * jnp.pi / NFP),
         axis=-2,
         modes=modes_ζ,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt(θ, f, num_θ, _modes=modes_θ)
+    f = irfft_mmt(theta.evaluate(Y), f, num_θ, _modes=modes_θ)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
     assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
@@ -700,8 +689,8 @@ def fast_cubic_spline(
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
-        θ over one toroidal transit. ``θ.cheb`` should broadcast with
-        shape (num ρ, num α, num transit, θ.Y).
+        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        shape (num ρ, num α, num transit, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -740,7 +729,7 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert theta.ndim >= 3
+    assert theta.cheb.ndim >= 3
     lines = theta.cheb.shape[:-2]
 
     num_ζ = (Y + NFP - 1) // NFP

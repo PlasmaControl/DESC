@@ -107,6 +107,7 @@ class FourierChebyshevSeries(IOAble):
     -----
     Performance may improve if ``X`` and ``Y`` are powers of two.
 
+
     Parameters
     ----------
     f : jnp.ndarray

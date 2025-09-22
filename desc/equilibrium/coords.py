@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -397,7 +397,7 @@ def _map_PEST_coordinates(
     return out
 
 
-def _partial_sum(lmbda, L_lmn, iota_omega):
+def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
     TODO(#1243) Do proper partial summation once the DESC
@@ -415,8 +415,12 @@ def _partial_sum(lmbda, L_lmn, iota_omega):
         FourierZernikeBasis
     L_lmn : jnp.ndarray
         FourierZernikeBasis basis coefficients for λ.
-    iota_omega : jnp.ndarray
-        Shape (grid.num_nodes, ).
+    omega : Transform
+        FourierZernikeBasis
+    W_lmn : jnp.ndarray
+        FourierZernikeBasis basis coefficients for ω.
+    iota : jnp.ndarray
+        Shape (lmbda.grid.num_rho, )
 
     Returns
     -------
@@ -437,7 +441,7 @@ def _partial_sum(lmbda, L_lmn, iota_omega):
         ResolutionWarning,
         msg="High frequency lambda modes will be truncated in coordinate mapping.",
     )
-    lmbda_minus_iota_omega = lmbda.transform(L_lmn) - iota_omega
+    lmbda_minus_iota_omega = lmbda.transform(L_lmn)
     lmbda_minus_iota_omega = (
         rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
         .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
@@ -548,11 +552,12 @@ def _map_poloidal_coordinates(
             **kwargs,
         )
 
-    TODO_568 = 0
-    q_m, modes = _partial_sum(lmbda, L_lmn, iota_omega=TODO_568)
+    q_m, modes = _partial_sum(lmbda, L_lmn, None, None, None)
     q_m = q_m[:, None]
 
-    omega = TODO_568
+    errorif(not OMEGA_IS_0, msg="TODO: 568")
+    omega = 0
+
     if varepsilon is None:
         iota = iota[:, None, None]
         poloidal = poloidal[:, None]

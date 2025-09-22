@@ -309,12 +309,13 @@ class GammaC(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        theta = eq._map_poloidal_coordinates(
+        delta = eq._map_poloidal_coordinates(
             iota=constants["transforms"]["grid"].compress(data["iota"]),
             alpha=constants["X"],
             zeta=constants["Y"],
             L_lmn=params["L_lmn"],
             lmbda=constants["lambda"],
+            outbasis=("rho", "delta", "zeta"),
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
         )[..., ::-1]
@@ -326,7 +327,7 @@ class GammaC(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            theta=theta,
+            angle=delta,
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],

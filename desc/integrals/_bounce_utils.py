@@ -536,7 +536,7 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
         A Fourier series efficiently interpolates δ(α, ζ) at fixed ζ.
         Likewise, a Chebyshev series interpolates δ(α, ζ) at fixed α.
 
-    [3] The angle θ ∈ ℝ must be continuous at the branch cuts.
+    [3] The angle θ must be continuous at the branch cuts.
         θ = αᵢ + δ(α=αᵢ, ζ=2π) = αᵢ₊₁ + δ(α=αᵢ₊₁, ζ=0)
         Hence, branch cuts in ζ where αᵢ, αᵢ₊₁ ∈ [0, 2π) introduce discontinuities of
         αᵢ - αᵢ₊₁ = -ι 2π in δ. This is consistent with our interpolation of δ on the
@@ -807,6 +807,10 @@ def _move(f, out=True):
 
 def _mmt_for_bounce(v, c):
     """Matrix multiplication transform.
+
+    Warnings
+    --------
+    https://github.com/jax-ml/jax/issues/30627
 
     Parameters
     ----------

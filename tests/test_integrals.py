@@ -1600,7 +1600,7 @@ class TestBounce2D:
         print("(ρ, α):", rho[l], alpha[m])
 
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
-        _, _ = bounce.plot_angle(l, m, show=False)
+        _, _ = bounce.plot_theta(l, m, show=False)
 
         self._not_part_of_tutorial_test(
             bounce, pitch_inv, points, num, data, grid, angle, alpha

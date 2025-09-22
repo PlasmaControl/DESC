@@ -555,8 +555,7 @@ def _map_poloidal_coordinates(
     omega = TODO_568
     if varepsilon is None:
         iota = iota[:, None, None]
-        if poloidal.ndim == 1:
-            poloidal = poloidal[:, None]
+        poloidal = poloidal[:, None]
         if inbasis[1] == "alpha":
             varepsilon = poloidal + iota * zeta
         elif inbasis[1] == "vartheta":

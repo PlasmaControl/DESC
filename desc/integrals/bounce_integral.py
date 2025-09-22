@@ -16,14 +16,13 @@ from desc.integrals._bounce_utils import (
     _mmt_for_bounce,
     _move,
     _set_default_plot_kwargs,
-    angle_on_fieldlines,
     argmin,
     bounce_points,
     fast_chebyshev,
     fast_cubic_spline,
     get_extrema,
     plot_ppoly,
-    α_plus_ιζ,
+    theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
     _irfft2_mmt,
@@ -155,19 +154,19 @@ class Bounce2D(Bounce):
 
     Notes
     -----
-    Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
-      α : ρ, θ, ζ ↦ θ + Λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
+    Magnetic field line, defined by B = ∇ψ × ∇α, is found in flux coordinates (ρ,θ,ζ).
+      θ : ρ, α, ζ ↦ α + δ(ρ,α,ζ)
     Compute bounce points.
       λ B(ζₖ) = 1
     Interpolate smooth periodic parts of integrand with FFTs.
       G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
-    Perform Gaussian quadrature with NUFFTs after removing singularities.
+    Perform quadrature with NUFFTs after removing singularities.
       Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
     permissible if separable into periodic and secular parts.
     In that case, supply the periodic part, which will be interpolated
-    with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
+    with FFTs, and use the provided coordinate θ,ζ ∈ ℝ to compose G.
 
     Examples
     --------
@@ -183,8 +182,8 @@ class Bounce2D(Bounce):
         The function approximation done here requires FourierZernike series on a
         smaller fixed grid and uses FFTs to compute the map between coordinate systems.
         2D interpolation enables tracing the field line for more toroidal transits.
-        Performance will improve significantly by resolving GitHub issue ``1303``:
-        Patch for differentiable code with dynamic shapes.
+
+        Performance will improve significantly by resolving GitHub issue ``1303``.
 
     Parameters
     ----------
@@ -287,16 +286,7 @@ class Bounce2D(Bounce):
             grid.num_zeta, grid.num_theta, (0, 2 * jnp.pi / grid.NFP)
         )
 
-        angle = parse_argname_change(angle, kwargs, "theta", "angle")
-        self._ι, self._α_start = jnp.atleast_1d(
-            data["iota"] if is_reshaped else grid.compress(data["iota"]),
-            alpha,
-        )
-        self._δ = angle_on_fieldlines(angle, self._ι, self._α_start, num_transit)
-        self._c = {
-            "|B|": data["|B|"] / Bref,
-            "B^zeta": data["B^zeta"] * Lref / Bref,
-        }
+        self._c = {"|B|": data["|B|"] / Bref, "B^zeta": data["B^zeta"] * Lref / Bref}
         if not is_reshaped:
             self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
@@ -304,11 +294,15 @@ class Bounce2D(Bounce):
             self._c["|B|"] = Bounce2D.fourier(self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.fourier(self._c["B^zeta"])
 
+        angle = parse_argname_change(angle, kwargs, "theta", "angle")
+        iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
+        iota, alpha = jnp.atleast_1d(iota, alpha)
+        self._theta = theta_on_fieldlines(angle, iota, alpha, num_transit)
+
         Y_B = setdefault(Y_B, angle.shape[-1] * 2)
         if spline:
-            self._c["B(ζ)"], self._c["knots"] = fast_cubic_spline(
-                self._δ,
-                self._ι,
+            self._c["B(z)"], self._c["knots"] = fast_cubic_spline(
+                self._theta,
                 self._c["|B|"],
                 Y_B,
                 self._num_θ,
@@ -320,9 +314,8 @@ class Bounce2D(Bounce):
                 check=check,
             )
         else:
-            self._c["B(ζ)"] = fast_chebyshev(
-                self._δ,
-                self._ι,
+            self._c["B(z)"] = fast_chebyshev(
+                self._theta,
                 self._c["|B|"],
                 Y_B,
                 self._num_θ,
@@ -516,10 +509,10 @@ class Bounce2D(Bounce):
         Returns
         -------
         pitch_inv : jnp.ndarray
-            Shape broadcasts with (num pitch, *self._δ.cheb.shape[:-2])
+            Shape broadcasts with (num pitch, *self._theta.cheb.shape[:-2])
 
         """
-        return atleast_nd(self._δ.cheb.ndim - 1, pitch_inv).swapaxes(0, -1)
+        return atleast_nd(self._theta.cheb.ndim - 1, pitch_inv).swapaxes(0, -1)
 
     def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
@@ -560,8 +553,8 @@ class Bounce2D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        if isinstance(self._c["B(ζ)"], PiecewiseChebyshevSeries):
-            z1, z2 = self._c["B(ζ)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            z1, z2 = self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
             z1 = _move(z1)
             z2 = _move(z2)
             return z1, z2
@@ -569,8 +562,8 @@ class Bounce2D(Bounce):
         return bounce_points(
             _broadcast_for_bounce(pitch_inv),
             self._c["knots"],
-            self._c["B(ζ)"],
-            polyder_vec(self._c["B(ζ)"]),
+            self._c["B(z)"],
+            polyder_vec(self._c["B(z)"]),
             num_well,
         )
 
@@ -611,9 +604,9 @@ class Bounce2D(Bounce):
 
         """
         kwargs = _set_default_plot_kwargs(kwargs)
-        if isinstance(self._c["B(ζ)"], PiecewiseChebyshevSeries):
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             z1, z2 = points
-            return self._c["B(ζ)"].check_intersect1d(
+            return self._c["B(z)"].check_intersect1d(
                 _move(z1, False),
                 _move(z2, False),
                 self._swap_pitch(pitch_inv),
@@ -624,7 +617,7 @@ class Bounce2D(Bounce):
             *points,
             pitch_inv,
             self._c["knots"],
-            self._c["B(ζ)"],
+            self._c["B(z)"],
             plot=plot,
             **kwargs,
         )
@@ -726,9 +719,7 @@ class Bounce2D(Bounce):
             pitch = pitch[:, None, :, None, None]
 
         ζ = bijection_from_disc(x, z1[..., None], z2[..., None])
-        θ = α_plus_ιζ(
-            self._α_start[:, None, None], self._ι, ζ, ζ.ndim
-        ) - self._δ.eval1d(flatten_mat(ζ, 3)).reshape(ζ.shape)
+        θ = self._theta.eval1d(flatten_mat(ζ, 3)).reshape(ζ.shape)
 
         if nufft_eps < 1e-14:
             data = self._nummt(ζ, θ, data)
@@ -812,7 +803,7 @@ class Bounce2D(Bounce):
 
         """
         errorif(
-            isinstance(self._c["B(ζ)"], PiecewiseChebyshevSeries),
+            isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
             NotImplementedError,
             "Must choose Bounce2D(spline=True) for this feature.",
         )
@@ -821,12 +812,11 @@ class Bounce2D(Bounce):
 
         ext, B_ext = get_extrema(
             self._c["knots"],
-            self._c["B(ζ)"],
-            polyder_vec(self._c["B(ζ)"]),
+            self._c["B(z)"],
+            polyder_vec(self._c["B(z)"]),
             sentinel=0.0,
         )
-        θ = α_plus_ιζ(self._α_start, self._ι, ext, ext.ndim) - self._δ.eval1d(ext)
-        assert θ.ndim == ext.ndim
+        θ = self._theta.eval1d(ext)
 
         if nufft_eps < 1e-14:
             f = _irfft2_mmt(
@@ -880,17 +870,15 @@ class Bounce2D(Bounce):
             # superior to Clenshaw-Curtis for smooth oscillatory maps. Prolate
             # spheroidal wave function quadrature would be an improvement.
             deg = (
-                self._c["B(ζ)"].Y
-                if isinstance(self._c["B(ζ)"], PiecewiseChebyshevSeries)
-                else (self._c["knots"].size // self._δ.X)
+                self._c["B(z)"].Y
+                if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
+                else (self._c["knots"].size // self._theta.X)
             )
             quad = leggauss(deg // 2)
         x, w = quad
         ζ = bijection_from_disc(x, 0, 2 * jnp.pi)
-        θ = α_plus_ιζ(self._δ.x, self._ι, ζ, self._δ.ndim) - idct_mmt(
-            x,
-            self._δ.cheb[..., None, :],
-            vander=vander.get("dct cfl", None),
+        θ = idct_mmt(
+            x, self._theta.cheb[..., None, :], vander=vander.get("dct cfl", None)
         )
         B_sup_ζ = irfft_mmt(
             θ,
@@ -950,18 +938,9 @@ class Bounce2D(Bounce):
             pitch_inv is not None and jnp.ndim(pitch_inv) > 1,
             msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
         )
-        α = self._α_start[m]
-        kwargs.setdefault(
-            "title",
-            (
-                rf"Intersects $\zeta$ in epigraph$(\vert B \vert)$ "
-                rf"s.t. $\vert B \vert(\zeta) = 1/\lambda$ "
-                rf"on field line $\rho(l={l})$, $\alpha = {α}$"
-            ),
-        )
         kwargs = _set_default_plot_kwargs(kwargs, l, m)
 
-        B = self._c["B(ζ)"]
+        B = self._c["B(z)"]
         if isinstance(B, PiecewiseChebyshevSeries):
             if B.cheb.ndim == 4:
                 B = PiecewiseChebyshevSeries(B.cheb[l, m], B.domain)
@@ -985,8 +964,8 @@ class Bounce2D(Bounce):
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
-    def plot_angle(self, l, m, **kwargs):
-        """Plot angle on the specified field line.
+    def plot_theta(self, l, m, **kwargs):
+        """Plot θ on the specified field line.
 
         Parameters
         ----------
@@ -1007,18 +986,17 @@ class Bounce2D(Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        δ = self._δ
-        if δ.cheb.ndim == 4:
-            δ = PiecewiseChebyshevSeries(δ.cheb[l, m], δ.domain)
-        elif δ.cheb.ndim == 3:
-            δ = PiecewiseChebyshevSeries(δ.cheb[m], δ.domain)
-        α = self._α_start[m]
+        theta = self._theta
+        if theta.cheb.ndim == 4:
+            theta = PiecewiseChebyshevSeries(theta.cheb[l, m], theta.domain)
+        elif theta.cheb.ndim == 3:
+            theta = PiecewiseChebyshevSeries(theta.cheb[m], theta.domain)
         kwargs.setdefault(
             "title",
-            rf"Poloidal angle $\delta$ on field line $\rho(l={l})$, $\alpha={α}$",
+            rf"$\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
         )
-        kwargs.setdefault("vlabel", r"$\delta$")
-        return δ.plot1d(δ.cheb, **_set_default_plot_kwargs(kwargs, l, m))
+        kwargs.setdefault("vlabel", r"$\theta$")
+        return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
 
 
 class Bounce1D(Bounce):

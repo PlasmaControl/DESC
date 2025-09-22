@@ -444,7 +444,7 @@ class TestStreams:
             )["L"]
         assert Λ.basis.NFP == eq.NFP
 
-        θ = eq._map_poloidal_coordinates(
+        theta = eq._map_poloidal_coordinates(
             jnp.atleast_1d(eq._compute_iota_under_jit(rho)),
             cheb_pts(X, domain),
             zeta,
@@ -455,12 +455,12 @@ class TestStreams:
             tol=tol,
         ).squeeze(0)[..., ::-1]
 
-        c = ChebyshevSeries(θ, domain, domain)._c
+        c = ChebyshevSeries(theta, domain, domain)._c
         c = cheb_from_dct(cheb_from_dct(c, -1), -2)
         return np.abs(c)
 
     @staticmethod
-    def plot_theta_chebyhsev(name):
+    def plot_theta_chebyshev(name):
         """Plot Chebyshev spectrum of θ(α, ζ)."""
         eq = get(name)
         X = TestStreams.X
@@ -517,7 +517,7 @@ class TestStreams:
         Λ = Bounce2D.angle(
             eq, X, Y, rho, tol=tol, angle="lambda", ignore_lambda_guard=True
         ).squeeze(0)
-        c = np.fft.fftshift(Bounce2D.fourier(Λ.T).squeeze(0), -2).T
+        c = Bounce2D.fourier(Λ.T).squeeze(0).T
         return np.abs(c)
 
     @pytest.mark.unit
@@ -531,6 +531,7 @@ class TestStreams:
         Y = TestStreams.X - 1
         rho = TestStreams.rho
         c = TestStreams.lambda_fourier_vartheta_zeta(eq, X, Y, rho, TestStreams.tol)
+        c = np.fft.fftshift(c, -1)
 
         fig, ax = plt.subplots()
         ax.set(ylabel=r"$\vartheta$", xlabel=r"$\zeta \times \text{NFP}$")
@@ -539,10 +540,6 @@ class TestStreams:
             + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$ "
             + name,
             pad=20,
-        )
-        ax.set_yticks(
-            np.arange(X // 2 + 1),
-            np.fft.rfftfreq(X, 1 / X).astype(int),
         )
         ax.set_xticks(
             np.arange(Y),

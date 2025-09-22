@@ -2712,16 +2712,13 @@ def _field_line_integrate(
 
     Parameters
     ----------
-    stepsize_controller : diffrax.StepsizeController, optional
-        Stepsize controller to use for the integration. Defaults to PIDController
-        with rtol and atol set to the provided values.
-    saveat : diffrax.SaveAt, optional
-        SaveAt object to specify at which points to save the results of the
-        integration. Defaults to saving at all phis.
-    event : diffrax.Event, optional
-        Event object to specify when to stop the integration. Defaults to stopping
-        when the trajectory leaves the bounds_R and bounds_Z bounding box.
-    adjoint : diffrax.AbstractAdjoint, optional
+    stepsize_controller : diffrax.StepsizeController
+        Stepsize controller to use for the integration.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify when to save the solution.
+    event : diffrax.Event
+        Event object to specify when to stop the integration.
+    adjoint : diffrax.AbstractAdjoint
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.

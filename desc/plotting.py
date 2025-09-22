@@ -1977,7 +1977,7 @@ def poincare_plot(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -2018,6 +2018,10 @@ def poincare_plot(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", colorblind_colors[0])
@@ -2050,7 +2054,6 @@ def poincare_plot(
         phis=phis,
         field=field,
         source_grid=grid,
-        options={"throw": False},
         return_aux=True,
         **fli_kwargs,
     )
@@ -3908,7 +3911,7 @@ def plot_field_lines(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -3945,6 +3948,10 @@ def plot_field_lines(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -3979,7 +3986,6 @@ def plot_field_lines(
         z0=Z0,
         phis=phis,
         field=field,
-        options={"throw": False},
         return_aux=True,
         **fli_kwargs,
     )

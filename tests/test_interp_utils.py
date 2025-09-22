@@ -429,7 +429,7 @@ class TestStreams:
     norm = LogNorm(1e-7, 1e0)
     X = 32
     Y = lambda eq: int(32 * np.sqrt(eq.NFP))
-    rho = 0.7
+    rho = 0.6
 
     @staticmethod
     def theta_chebyshev(eq, X, Y, rho, tol):

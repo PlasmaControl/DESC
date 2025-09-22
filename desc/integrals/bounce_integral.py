@@ -1056,7 +1056,7 @@ class Bounce2D(Bounce):
             title = kwargs.get(
                 "title",
                 r"$\mathcal{F}_{\text{Fourier}}$ "
-                + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$ ",
+                + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$",
             )
             ax.set_xticks(
                 jnp.arange(Y),

@@ -453,18 +453,14 @@ class Bounce2D(Bounce):
             errorif(
                 not OMEGA_IS_0,
                 NotImplementedError,
-                "Omega must be 0 for angle to be lambda.",
+                "Omega must be 0 for angle to be lambda.\n",
             )
             errorif(
                 not kwargs.pop("ignore_lambda_guard", False),
                 NotImplementedError,
                 "Ping unalmis to implement this or review your pull request.\n"
                 "This may be useful when omega is 0 and NFP > 1.\n"
-                "Note that high NFP implies the wells are narrow, so the quadrature\n"
-                "resolution for the bounce integrals can be reduced which offsets\n"
-                "having a wide Chebyshev spectrum in δ\n."
-                "So δ will usually still work fine.\n"
-                "See https://github.com/PlasmaControl/DESC/pull/1919.",
+                "See https://github.com/PlasmaControl/DESC/pull/1919.\n",
             )
 
             in_angle = "vartheta"

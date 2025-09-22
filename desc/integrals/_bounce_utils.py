@@ -205,19 +205,19 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     return plots
 
 
-def _check_interp(z, b_sup_z, B, f, result, plot=True):
+def _check_interp(zeta, b_sup_z, B, f, result, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
     ----------
-    z : jnp.ndarray
+    zeta : jnp.ndarray
         Quadrature points in ζ coordinates.
     b_sup_z : jnp.ndarray
-        Contravariant toroidal component of magnetic field.
+        Contravariant toroidal component of magnetic field, interpolated to ``zeta``.
     B : jnp.ndarray
-        Norm of magnetic field.
+        Norm of magnetic field, interpolated to ``zeta``.
     f : list[jnp.ndarray]
-        Arguments to the integrand.
+        Arguments to the integrand, interpolated to ``zeta``.
     result : list[jnp.ndarray]
         Computed integrals.
     plot : bool
@@ -225,13 +225,13 @@ def _check_interp(z, b_sup_z, B, f, result, plot=True):
 
     """
     assert isinstance(result, list)
-    assert jnp.isfinite(z).all(), "NaN interpolation point."
+    assert jnp.isfinite(zeta).all(), "NaN interpolation point."
     assert not (
         jnp.isclose(B, 0).any() or jnp.isclose(b_sup_z, 0).any()
     ), "|B| has vanished, violating the hairy ball theorem."
 
     # Integrals that we should be computing.
-    marked = jnp.any(z != 0.0, axis=-1)
+    marked = jnp.any(zeta != 0.0, axis=-1)
     goal = marked.sum()
 
     assert goal == jnp.sum(marked & jnp.isfinite(b_sup_z).all(axis=-1))
@@ -240,10 +240,12 @@ def _check_interp(z, b_sup_z, B, f, result, plot=True):
         assert goal == jnp.sum(marked & jnp.isfinite(f_i).all(axis=-1))
 
     if plot:
-        _plot_check_interp(z, B, name=r"$\vert B \vert$")
-        _plot_check_interp(z, b_sup_z, name=r"$B / \vert B \vert \cdot \nabla \zeta$")
+        _plot_check_interp(zeta, B, name=r"$\vert B \vert$")
+        _plot_check_interp(
+            zeta, b_sup_z, name=r"$B / \vert B \vert \cdot \nabla \zeta$"
+        )
         for i, f_i in enumerate(f):
-            _plot_check_interp(z, f_i, name=f"f_{i}")
+            _plot_check_interp(zeta, f_i, name=f"f_{i}")
 
     for res in result:
         # Number of those integrals that were computed.
@@ -495,7 +497,7 @@ def get_alphas(alpha, iota, num_transit):
     return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
 
 
-def theta_on_fieldlines(angle, iota, α, num_transit):
+def theta_on_fieldlines(angle, iota, alpha, num_transit):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -506,7 +508,7 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
-    α : jnp.ndarray
+    alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
@@ -524,11 +526,12 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     Notes
     -----
     To accelerate convergence, we introduce the stream variable δ such that
-    [1] θ = α + δ.
-        This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ. Hence, it may be
-        interpolated directly from discrete solutions θ* to the nonlinear system
-        θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
-        This feature avoids expensive off-grid re-interpolation in optimization.
+    θ = α + δ. This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ. Hence, it may be
+    interpolated directly from discrete solutions θ* to the nonlinear system
+
+    [1] θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
+
+    This feature avoids expensive off-grid re-interpolation in optimization.
 
     [2] δ is (2π, ∞) periodic in (α, ζ).
         A Fourier series efficiently interpolates δ(α, ζ) at fixed ζ.
@@ -539,8 +542,8 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
         Hence, branch cuts in ζ where αᵢ, αᵢ₊₁ ∈ [0, 2π) introduce discontinuities of
         αᵢ - αᵢ₊₁ = -ι 2π in δ. This is consistent with our interpolation of δ on the
         branch (α, ζ) ∈ [0, 2π)². It is necessary to consider branch cuts in α where
-        αᵢ₊₁ ∉ [0, 2π) ∋ αᵢ as well. Observe the solutions θ* in [1] are invariant
-        modulo 2π against rotations in α by integer multiples of 2π. The periodicity
+        αᵢ₊₁ ∉ [0, 2π) ∋ αᵢ as well. Observe the solutions θ* modulo 2π in [1] are
+        invariant against rotations in α by integer multiples of 2π. The periodicity
         of δ in α ensures the θ = α + δ we compute may be discontinuous at branch cuts
         by integer multiplies of 2π only. We intend to evaluate maps which are 2π
         periodic in θ. Hence, θ mod 2π is simple to recover from the interpolation of
@@ -588,17 +591,23 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
         competitive due to limitations in JAX.
 
     """
+    num_alpha = alpha.size
     # peeling off field lines
-    alphas = get_alphas(α, iota, num_transit)
+    alpha = get_alphas(alpha, iota, num_transit)
     if angle.ndim == 2:
-        alphas = alphas.squeeze(1)
+        alpha = alpha.squeeze(1)
+
+    # Computing exp(inθ) implicitly mods argument within 2π from 0. This is
+    # advertised by FINUFFT to reduce speed. We mod explicitly here so
+    # that XLA or FINUFFT does less modding on many more points later.
+    alpha %= 2 * jnp.pi
 
     # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     domain = (0, 2 * jnp.pi)
-    delta = FourierChebyshevSeries(angle, domain).compute_cheb(alphas).swapaxes(0, -3)
-    alphas = alphas.swapaxes(0, -2)
-    delta = delta.at[..., 0].add(alphas)
-    assert delta.shape == (*angle.shape[:-2], α.size, num_transit, angle.shape[-1])
+    delta = FourierChebyshevSeries(angle, domain).compute_cheb(alpha).swapaxes(0, -3)
+    alpha = alpha.swapaxes(0, -2)
+    delta = delta.at[..., 0].add(alpha)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit, angle.shape[-1])
     return PiecewiseChebyshevSeries(delta, domain)
 
 

@@ -1559,7 +1559,7 @@ class TestBounce2D:
             alpha=alpha,
             num_transit=2,
             check=True,
-            spline=False,
+            spline=False,  # not recommended in general
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),

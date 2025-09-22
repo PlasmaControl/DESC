@@ -21,6 +21,7 @@ from jax._src.numpy.vectorize import (
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
+from jax._src.util import wraps
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -40,7 +41,7 @@ else:
 try:  # noqa : C901
     from jax._src.pjit import auto_axes
     from jax._src.sharding_impls import canonicalize_sharding
-    from jax._src.util import unzip2, wraps
+    from jax._src.util import unzip2
     from jax.sharding import PartitionSpec
 
     def _scan_leaf(leaf, batch_elems, num_batches, batch_size):

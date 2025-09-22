@@ -523,10 +523,8 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
 
     Notes
     -----
-    In our application we want to compute θ(α, ζ) [0].
-
-    [1] To accelerate convergence, we introduce the stream variable δ such that
-        θ = α + δ.
+    To accelerate convergence, we introduce the stream variable δ such that
+    [1] θ = α + δ.
         This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ. Hence, it may be
         interpolated directly from discrete solutions θ* to the nonlinear system
         θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
@@ -568,31 +566,26 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
 
     This property was mentioned because parameterizing the stream map in (α, ζ) enables
     partial summation. However, the small discontinuity due to discretization error
-    between branch cuts is undesirable as it induces significant error to the singular
+    between branch cuts is undesirable as it can give significant error to the singular
     integrals whose integration boundary is near a branch cut. This is resolved by [4].
 
     [4] To make bounce integrals more robust against discretization error in the
         convergence of the Fourier series to δ(α, ζ=0), we short-circuit the convergence
         by explicitly enforcing continuity of δ along field lines. This operation
-        simultaneously transforms δ into θ. Although this is more expensive than simply
-        adding α, it removes discretization error that the singularities would otherwise
-        amplify. This also enables computing maps which are not periodic in θ.
-        However, now the θ we compute is no longer bounded which is undesirable because
-        computing MMTs and NUFFTs requires modding θ to within 2π from 0 which is
-        advertised by FINUFFT to reduce speed (and introduce floating point error).
+        simultaneously transforms δ into θ - α₀. It also enables computing maps which
+        are secular in θ by removing integer multiple of 2π discontinuities.
 
-        # TODO: Check if [4] is still useful now that convergence is improved.
-        #  If not remove in later PR so that it is merged to master in different commit.
+        Update: No longer implementing [4] with ``PiecewiseChebyshevSeries.stitch``
+        after GitHub pull request #1919 because the convergence is rapid.
 
     [0] The stream Λ = ϑ - θ is (2π, 2π/NFP) periodic in (ϑ, ζ).
         Partial summation is impossible in these coordinates:
-        Λ : ϑ(α,ζ), ζ ↦ ∑ₘₙ cₘₙ exp(j [mϑ + nζ])
-                      = ∑ₘₙ cₘₙ exp(j [mα + (m ι + n)ζ])
+
+        Λ : ϑ, ζ ↦ ∑ₘₙ cₘₙ exp(j [mϑ + nζ]) = ∑ₘₙ cₘₙ exp(j [mα + (m ι + n)ζ])
+
         If the 2D Fourier spectrum of Λ is larger than the 1D Chebyshev spectrum
         of δ, it will be better to use δ. Although the NUFFTs make parametrizing Λ
         competitive due to limitations in JAX.
-        https://github.com/PlasmaControl/DESC/pull/1919
-        https://github.com/PlasmaControl/DESC/issues/1922
 
     """
     # peeling off field lines
@@ -603,10 +596,10 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     domain = (0, 2 * jnp.pi)
     delta = FourierChebyshevSeries(angle, domain).compute_cheb(alphas).swapaxes(0, -3)
-    delta = PiecewiseChebyshevSeries(delta, domain)
-    delta.stitch()
-    assert delta.cheb.shape == (*angle.shape[:-2], α.size, num_transit, angle.shape[-1])
-    return delta
+    alphas = alphas.swapaxes(0, -2)
+    delta = delta.at[..., 0].add(alphas)
+    assert delta.shape == (*angle.shape[:-2], α.size, num_transit, angle.shape[-1])
+    return PiecewiseChebyshevSeries(delta, domain)
 
 
 def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=None):

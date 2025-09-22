@@ -104,6 +104,8 @@ class EffectiveRipple(_Objective):
         This is the most important parameter to specify for performance.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
+        When the number of field periods is high, the width of most wells
+        are reduced, so the number of quadrature points may be reduced as well.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 51.
     pitch_batch_size : int
@@ -296,11 +298,11 @@ class EffectiveRipple(_Objective):
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
         delta = eq._map_poloidal_coordinates(
-            iota=constants["transforms"]["grid"].compress(data["iota"]),
-            alpha=constants["X"],
-            zeta=constants["Y"],
-            L_lmn=params["L_lmn"],
-            lmbda=constants["lambda"],
+            constants["transforms"]["grid"].compress(data["iota"]),
+            constants["X"],
+            constants["Y"],
+            params["L_lmn"],
+            constants["lambda"],
             outbasis=("rho", "delta", "zeta"),
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,

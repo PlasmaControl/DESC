@@ -166,7 +166,7 @@ class Bounce2D(Bounce):
     If the map G is multivalued at a physical location, then it is still
     permissible if separable into periodic and secular parts.
     In that case, supply the periodic part, which will be interpolated
-    with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
+    with FFTs, and use the provided coordinate ζ ∈ ℝ to compose G.
 
     Examples
     --------
@@ -218,6 +218,8 @@ class Bounce2D(Bounce):
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+        When the number of field periods is high, the width of most wells
+        are reduced, so the number of quadrature points may be reduced as well.
     automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines
@@ -451,14 +453,17 @@ class Bounce2D(Bounce):
             errorif(
                 not OMEGA_IS_0,
                 NotImplementedError,
-                "This is unlikely to be implemented.\n"
-                "See https://github.com/PlasmaControl/DESC/pull/1919.",
+                "Omega must be 0 for angle to be lambda.",
             )
             errorif(
                 not kwargs.pop("ignore_lambda_guard", False),
                 NotImplementedError,
                 "Ping unalmis to implement this or review your pull request.\n"
-                "This is useful when omega is 0 and NFP > 1.\n"
+                "This may be useful when omega is 0 and NFP > 1.\n"
+                "Note that high NFP implies the wells are narrow, so the quadrature\n"
+                "resolution for the bounce integrals can be reduced which offsets\n"
+                "having a wide Chebyshev spectrum in δ\n."
+                "So δ will usually still work fine.\n"
                 "See https://github.com/PlasmaControl/DESC/pull/1919.",
             )
 
@@ -730,7 +735,6 @@ class Bounce2D(Bounce):
             data = self._nufft(ζ, θ, data, nufft_eps)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = ζ
-        data["theta"] = θ
 
         # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require

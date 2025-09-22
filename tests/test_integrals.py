@@ -1623,7 +1623,7 @@ class TestBounce2D:
                 352.15451128,
                 440.10036239,
             ],
-            rtol=1e-2,
+            rtol=5e-3,
         )
 
         # check for consistency with different options

@@ -329,15 +329,15 @@ class TestFastInterp:
 
         """
         # Need to test interpolation due to issues like
-        # https://github.com/scipy/scipy/issues/15033
-        # https://github.com/scipy/scipy/issues/21198
+        # Resolved in unpublished version of JAX:
         # https://github.com/google/jax/issues/22466
+        # https://github.com/jax-ml/jax/issues/23827
         # https://github.com/google/jax/issues/23895
         # https://github.com/jax-ml/jax/issues/31836
+        # Unresolved:
         # https://github.com/jax-ml/jax/issues/29426
         # https://github.com/jax-ml/jax/issues/29325
-        # https://github.com/jax-ml/jax/issues/27591
-        # DESC still claims to support JAX versions without these bug fixes...
+        # DESC claims to support JAX versions without the bug fixes...
         from scipy.fft import dct as sdct
         from scipy.fft import dctn as sdctn
         from scipy.fft import idct as sidct
@@ -459,8 +459,11 @@ class TestStreams:
         c = cheb_from_dct(cheb_from_dct(c, -1), -2)
         return np.abs(c)
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize("name", ["W7-X"])
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     @staticmethod
-    def plot_theta_chebyshev(name):
+    def test_theta_chebyshev(name):
         """Plot Chebyshev spectrum of θ(α, ζ)."""
         eq = get(name)
         X = TestStreams.X

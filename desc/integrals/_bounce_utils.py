@@ -558,7 +558,7 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     magnetic field line.
 
     This does not imply a parameterization without branch cuts is superior for
-    approximation as convergence is determined by the properties of the basis and the
+    approximation; convergence is determined by the properties of the basis and the
     domain size moreso than whether the parameters have branch cuts on the domain.
     For example, if f is defined with basis functions in (α, ζ) coordinates, then
     f(α=α₀, ζ) will sample the approximation to F(α=α₀, ζ) for ζ ∈ [0, 2π) even with
@@ -574,12 +574,12 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
     [4] To make bounce integrals more robust against discretization error in the
         convergence of the Fourier series to δ(α, ζ=0), we short-circuit the convergence
         by explicitly enforcing continuity of δ along field lines. This operation
-        simultaneously transforms δ into θ. Although this is a more expensive than
-        α + δ, it removes discretization error that the singularities would otherwise
+        simultaneously transforms δ into θ. Although this is more expensive than simply
+        adding α, it removes discretization error that the singularities would otherwise
         amplify. This also enables computing maps which are not periodic in θ.
-        However, since the θ we compute is no longer bounded, slows down
-        evaluating the basis for the MMTs and NUFFTs is slower as they must
-        work to mod the argument within 2π from 0.
+        However, now the θ we compute is no longer bounded which is undesirable because
+        computing MMTs and NUFFTs requires modding θ to within 2π from 0 which is
+        advertised by FINUFFT to reduce speed (and introduce floating point error).
 
         # TODO: Check if [4] is still useful now that convergence is improved.
         #  If not remove in later PR so that it is merged to master in different commit.
@@ -591,6 +591,7 @@ def theta_on_fieldlines(angle, iota, α, num_transit):
         If the 2D Fourier spectrum of Λ is larger than the 1D Chebyshev spectrum
         of δ, it will be better to use δ. Although the NUFFTs make parametrizing Λ
         competitive due to limitations in JAX.
+        https://github.com/PlasmaControl/DESC/pull/1919
         https://github.com/PlasmaControl/DESC/issues/1922
 
     """

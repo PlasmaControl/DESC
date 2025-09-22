@@ -433,6 +433,8 @@ class Bounce2D(Bounce):
             Default is ``1e-7``.
         maxiter : int
             Maximum number of Newton iterations.
+        angle : str
+            Stream angle of ``"delta"`` or ``"lambda"``. Default is ``"delta"``.
 
         Returns
         -------
@@ -441,7 +443,7 @@ class Bounce2D(Bounce):
             Stream angle that maps boundary to field line coordinates.
 
         """
-        from desc.compute import get_transforms
+        from desc.compute.utils import get_transforms
 
         params = setdefault(params, eq.params_dict)
 

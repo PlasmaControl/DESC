@@ -5,11 +5,13 @@ New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- New method to plot Fourier spectrum of stream map in field line coordinates in ``Bounce2D``.
 
 Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- Improves convergence of stream map in ``Bounce2D``.
 
 Backend
 

@@ -476,19 +476,11 @@ class TestStreams:
         ax.set_title(
             r"$\mathcal{F}_{\text{Chebyshev}}$ $\theta(\alpha, \zeta)$ " + name, pad=20
         )
-        plt.matshow(c, fignum=0, norm=TestStreams.norm)
+        plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")
         cbar = plt.colorbar(orientation="horizontal")
         cbar.ax.invert_xaxis()
         plt.tight_layout()
         return fig
-
-    @staticmethod
-    def delta_fourier_chebyshev(eq, X, Y, rho, tol):
-        """Fourier-Chebyshev spectrum of δ(α, ζ)."""
-        angle = Bounce2D.angle(eq, X, Y, rho, tol=tol, angle="delta").squeeze(0)
-        c = FourierChebyshevSeries(angle, (0, 2 * np.pi))._c
-        c = cheb_from_dct(c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2)
-        return np.abs(c)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
@@ -499,29 +491,8 @@ class TestStreams:
         eq = get(name)
         X = TestStreams.X
         Y = TestStreams.Y(eq)
-        rho = TestStreams.rho
-        c = TestStreams.delta_fourier_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
-
-        fig, ax = plt.subplots()
-        ax.set(ylabel=r"$\alpha$", xlabel=r"$\zeta$")
-        ax.set_title(
-            r"$\mathcal{F}_{\text{Fourier-Chebyshev}} \delta(\alpha, \zeta)$ " + name,
-            pad=20,
-        )
-        plt.matshow(c, fignum=0, norm=TestStreams.norm)
-        cbar = plt.colorbar(orientation="horizontal")
-        cbar.ax.invert_xaxis()
-        plt.tight_layout()
-        return fig
-
-    @staticmethod
-    def lambda_fourier_vartheta_zeta(eq, X, Y, rho, tol):
-        """Fourier spectrum of Λ(ϑ, ζ × NFP)."""
-        Λ = Bounce2D.angle(
-            eq, X, Y, rho, tol=tol, angle="lambda", ignore_lambda_guard=True
-        ).squeeze(0)
-        c = Bounce2D.fourier(Λ.T).squeeze(0).T
-        return np.abs(c)
+        angle = Bounce2D.angle(eq, X, Y, TestStreams.rho, tol=TestStreams.tol)
+        return Bounce2D.plot_angle_spectrum(angle, 0, norm=TestStreams.norm)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
@@ -532,27 +503,18 @@ class TestStreams:
         eq = get(name)
         X = TestStreams.X
         Y = TestStreams.X - 1
-        rho = TestStreams.rho
-        c = TestStreams.lambda_fourier_vartheta_zeta(eq, X, Y, rho, TestStreams.tol)
-        c = np.fft.fftshift(c, -1)
-
-        fig, ax = plt.subplots()
-        ax.set(ylabel=r"$\vartheta$", xlabel=r"$\zeta \times \text{NFP}$")
-        ax.set_title(
-            r"$\mathcal{F}_{\text{Fourier}}$ "
-            + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$ "
-            + name,
-            pad=20,
+        angle = Bounce2D.angle(
+            eq,
+            X,
+            Y,
+            TestStreams.rho,
+            tol=TestStreams.tol,
+            name="lambda",
+            ignore_lambda_guard=True,
         )
-        ax.set_xticks(
-            np.arange(Y),
-            np.fft.fftshift(np.fft.fftfreq(Y, 1 / Y).astype(int)),
+        return Bounce2D.plot_angle_spectrum(
+            angle, 0, name="lambda", norm=TestStreams.norm
         )
-        plt.matshow(c, fignum=0, norm=TestStreams.norm)
-        cbar = plt.colorbar(orientation="horizontal")
-        cbar.ax.invert_xaxis()
-        plt.tight_layout()
-        return fig
 
 
 # TODO(#1388)

@@ -4,6 +4,8 @@ import warnings
 from abc import ABC, abstractmethod
 
 from interpax import CubicHermiteSpline, PPoly
+from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
 from orthax.legendre import leggauss
 
 from desc.backend import OMEGA_IS_0, jnp, rfft2
@@ -26,6 +28,7 @@ from desc.integrals._bounce_utils import (
 )
 from desc.integrals._interp_utils import (
     _irfft2_mmt,
+    cheb_from_dct,
     cheb_pts,
     fourier_pts,
     idct_mmt,
@@ -38,7 +41,7 @@ from desc.integrals._interp_utils import (
     rfft2_modes,
     rfft2_vander,
 )
-from desc.integrals.basis import PiecewiseChebyshevSeries
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -404,7 +407,8 @@ class Bounce2D(Bounce):
         profiles=None,
         tol=1e-7,
         maxiter=30,
-        angle="delta",
+        *,
+        name="delta",
         **kwargs,
     ):
         """Return the stream angle for mapping boundary to field line coordinates.
@@ -435,8 +439,9 @@ class Bounce2D(Bounce):
             Default is ``1e-7``.
         maxiter : int
             Maximum number of Newton iterations.
-        angle : str
-            Stream angle of ``"delta"`` or ``"lambda"``. Default is ``"delta"``.
+        name : str
+            Name of stream angle. Must be either ``"delta"`` or ``"lambda"``.
+            Default is ``"delta"``.
 
         Returns
         -------
@@ -449,7 +454,7 @@ class Bounce2D(Bounce):
 
         params = setdefault(params, eq.params_dict)
 
-        if angle == "lambda":
+        if name == "lambda":
             errorif(
                 not OMEGA_IS_0,
                 NotImplementedError,
@@ -463,39 +468,39 @@ class Bounce2D(Bounce):
                 "See https://github.com/PlasmaControl/DESC/pull/1919.\n",
             )
 
-            in_angle = "vartheta"
+            in_name = "vartheta"
             zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
             grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
             if iota is None:
                 iota = 0.0
 
-        elif angle == "delta":
-            in_angle = "alpha"
+        elif name == "delta":
+            in_name = "alpha"
             zeta = cheb_pts(Y, (0, 2 * jnp.pi))[::-1]
             grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
 
         else:
-            raise ValueError(f"Got invalid angle={angle}.")
+            raise ValueError(f"Got invalid angle name = {name}.")
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", "Unequal number of field periods")
             Λ = get_transforms("lambda", eq, grid)["L"]
         assert Λ.basis.NFP == eq.NFP
 
-        out = eq._map_poloidal_coordinates(
+        angle = eq._map_poloidal_coordinates(
             jnp.atleast_1d(iota),
             fourier_pts(X),
             zeta,
             params["L_lmn"],
             Λ,
-            inbasis=("rho", in_angle, "zeta"),
-            outbasis=("rho", angle, "zeta"),
+            inbasis=("rho", in_name, "zeta"),
+            outbasis=("rho", name, "zeta"),
             tol=tol,
             maxiter=maxiter,
         )
-        return out if (angle == "lambda") else out[..., ::-1]
+        return angle if (name == "lambda") else angle[..., ::-1]
 
     @property
     def _num_ζ(self):
@@ -1000,6 +1005,76 @@ class Bounce2D(Bounce):
         )
         kwargs.setdefault("vlabel", r"$\theta$")
         return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
+
+    @staticmethod
+    def plot_angle_spectrum(angle, l, *, name="delta", **kwargs):
+        """Plot frequency spectrum of the given stream map.
+
+        Parameters
+        ----------
+        angle : jnp.ndarray
+            Shape (num ρ, X, Y).
+            Angle returned by ``Bounce2D.angle``.
+        l : int
+            Index into first axis of ``angle``.
+        name : str
+            Name of stream angle. Must be either ``"delta"`` or ``"lambda"``.
+            Default is ``"delta"``.
+        kwargs
+            Keyword arguments into ``matplotlib.pyplot.imshow``.
+
+        Returns
+        -------
+        fig, ax
+            Matplotlib (fig, ax) tuple.
+
+        """
+        kwargs = kwargs.copy()
+        kwargs.setdefault("fignum", 0)
+        kwargs.setdefault("norm", LogNorm(1e-7))
+        kwargs.setdefault("cmap", "turbo")
+        fig, ax = plt.subplots()
+
+        angle = angle[l]
+        X, Y = angle.shape
+        if name == "delta":
+            xlabel = kwargs.get("xlabel", r"$\zeta$")
+            ylabel = kwargs.get("ylabel", r"$\alpha$")
+            title = kwargs.get(
+                "title",
+                r"$\mathcal{F}_{\text{Fourier-Chebyshev}}$ $\delta(\alpha, \zeta)$",
+            )
+
+            c = FourierChebyshevSeries(angle, (0, 2 * jnp.pi))._c
+            c = cheb_from_dct(
+                c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2
+            )
+
+        elif name == "lambda":
+            xlabel = r"$\zeta \times \text{NFP}$"
+            ylabel = r"$\vartheta$"
+            title = kwargs.get(
+                "title",
+                r"$\mathcal{F}_{\text{Fourier}}$ "
+                + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$ ",
+            )
+            ax.set_xticks(
+                jnp.arange(Y),
+                jnp.fft.fftshift(jnp.fft.fftfreq(Y, 1 / Y).astype(int)),
+            )
+
+            c = Bounce2D.fourier(angle.T).squeeze(0).T
+            c = jnp.fft.fftshift(c, -1)
+
+        c = jnp.abs(c)
+
+        ax.set(xlabel=xlabel, ylabel=ylabel)
+        ax.set_title(title, pad=kwargs.get("pad", 20))
+        plt.matshow(c, **kwargs)
+        cbar = plt.colorbar(orientation="horizontal")
+        cbar.ax.invert_xaxis()
+        plt.tight_layout()
+        return fig
 
 
 class Bounce1D(Bounce):

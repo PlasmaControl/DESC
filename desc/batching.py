@@ -29,16 +29,20 @@ from jax.tree_util import (
     tree_structure,
     tree_transpose,
 )
+from packaging.version import Version
 
 from desc.backend import jax, jnp, scan, vmap
 from desc.utils import errorif
 
-if jax.__version_info__ >= (0, 4, 16):
+if Version(jax.__version__) > Version("0.4.16"):
     from jax.extend import linear_util as lu
 else:
     from jax import linear_util as lu
 
-try:  # noqa : C901
+# below functions either cause import errors or some of the classes have newly added
+# methods in newer versions of JAX. So we use different implementations depending
+# on the JAX version.
+if Version(jax.__version__) > Version("0.5.3"):
     from jax._src.pjit import auto_axes
     from jax._src.sharding_impls import canonicalize_sharding
     from jax._src.util import unzip2
@@ -133,7 +137,7 @@ try:  # noqa : C901
             )
             return treedef.unflatten(scan_leaves), None
 
-except ImportError:
+else:
     # The old version of JAX doesn't have the required functions and will throw
     # an ImportError. We use a simpler version of _batch_and_remainder from an older JAX
     # version.

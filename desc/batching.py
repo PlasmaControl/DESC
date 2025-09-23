@@ -42,7 +42,7 @@ else:
 # below functions either cause import errors or some of the classes have newly added
 # methods in newer versions of JAX. So we use different implementations depending
 # on the JAX version.
-if Version(jax.__version__) > Version("0.5.3"):
+if Version(jax.__version__) > Version("0.6.1"):
     from jax._src.pjit import auto_axes
     from jax._src.sharding_impls import canonicalize_sharding
     from jax._src.util import unzip2

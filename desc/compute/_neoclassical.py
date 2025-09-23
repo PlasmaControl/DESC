@@ -51,8 +51,6 @@ _bounce_doc = {
     "num_quad": """int :
         Resolution for quadrature of bounce integrals.
         Default is 32. This parameter is ignored if given ``quad``.
-        When the number of field periods is high, the width of most wells
-        are reduced, so the number of quadrature points may be reduced as well.
         """,
     "num_pitch": """int :
         Resolution for quadrature over velocity coordinate.

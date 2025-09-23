@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.ticker import MaxNLocator
 from orthax.legendre import leggauss
 
 from desc.backend import OMEGA_IS_0, jnp, rfft2
@@ -221,8 +222,6 @@ class Bounce2D(Bounce):
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-        When the number of field periods is high, the width of most wells
-        are reduced, so the number of quadrature points may be reduced as well.
     automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines
@@ -1007,7 +1006,9 @@ class Bounce2D(Bounce):
         return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
 
     @staticmethod
-    def plot_angle_spectrum(angle, l, *, name="delta", **kwargs):
+    def plot_angle_spectrum(
+        angle, l, *, name="delta", norm=LogNorm(1e-7), y_tick_count=None, **kwargs
+    ):
         """Plot frequency spectrum of the given stream map.
 
         Parameters
@@ -1020,6 +1021,12 @@ class Bounce2D(Bounce):
         name : str
             Name of stream angle. Must be either ``"delta"`` or ``"lambda"``.
             Default is ``"delta"``.
+        norm : str
+            The normalization method used for the color scale.
+            See https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.imshow.html.
+            Default is logarithmic scale with cutoff at ``1e-7``.
+        y_tick_count : int
+            If given, labels at most ``y_tick_count`` marks on the vertical axis.
         kwargs
             Keyword arguments into ``matplotlib.pyplot.imshow``.
 
@@ -1031,7 +1038,6 @@ class Bounce2D(Bounce):
         """
         kwargs = kwargs.copy()
         kwargs.setdefault("fignum", 0)
-        kwargs.setdefault("norm", LogNorm(1e-7))
         kwargs.setdefault("cmap", "turbo")
         fig, ax = plt.subplots()
 
@@ -1042,7 +1048,8 @@ class Bounce2D(Bounce):
             ylabel = kwargs.get("ylabel", r"$\alpha$")
             title = kwargs.get(
                 "title",
-                r"$\mathcal{F}_{\text{Fourier-Chebyshev}}$ $\delta(\alpha, \zeta)$",
+                r"$\mathcal{F}_{\text{Fourier-Chebyshev}}$ "
+                rf"$\delta(\rho(l={l}), \alpha, \zeta)$",
             )
 
             c = FourierChebyshevSeries(angle, (0, 2 * jnp.pi))._c
@@ -1051,12 +1058,12 @@ class Bounce2D(Bounce):
             )
 
         elif name == "lambda":
-            xlabel = r"$\zeta \times \text{NFP}$"
-            ylabel = r"$\vartheta$"
+            xlabel = kwargs.get("xlabel", r"$\zeta \times \text{NFP}$")
+            ylabel = kwargs.get("xlabel", r"$\vartheta$")
             title = kwargs.get(
                 "title",
                 r"$\mathcal{F}_{\text{Fourier}}$ "
-                + r"$\Lambda(\vartheta, \zeta \times \text{NFP})$",
+                rf"$\Lambda(\rho(l={l}), \vartheta, \zeta \times \text{{NFP}})$",
             )
             ax.set_xticks(
                 jnp.arange(Y),
@@ -1070,9 +1077,13 @@ class Bounce2D(Bounce):
 
         ax.set(xlabel=xlabel, ylabel=ylabel)
         ax.set_title(title, pad=kwargs.get("pad", 20))
-        plt.matshow(c, **kwargs)
+        plt.matshow(c, norm=norm, **kwargs)
         cbar = plt.colorbar(orientation="horizontal")
         cbar.ax.invert_xaxis()
+
+        if y_tick_count is not None:
+            ax.yaxis.set_major_locator(MaxNLocator(y_tick_count, integer=True))
+
         plt.tight_layout()
         return fig
 

@@ -11,7 +11,7 @@ Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
-- Improves convergence of stream map in ``Bounce2D``.
+- [Improves convergence of stream map in ``Bounce2D``](https://github.com/PlasmaControl/DESC/pull/1919).
 
 Backend
 

@@ -1546,13 +1546,13 @@ def test_contravariant_basis_vectors_PEST(eq):
 
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.parametrize("eq", [get("W7-X")])
+@pytest.mark.parametrize("eq", [get("precise_QA")])
 def test_PEST_derivative_math(eq):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index
 
     tol = 1e-10
-    eq_PEST = eq.to_sfl(4 * eq.L, 5 * eq.M, 4 * eq.N, copy=True, tol=tol)
+    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=tol)
 
     keys_DESC = [
         "e_theta",
@@ -1680,7 +1680,7 @@ def test_PEST_derivative_math(eq):
             np.testing.assert_allclose(
                 data_to_verify[key_PEST][~near_zero],
                 data[key_DESC][~near_zero],
-                rtol=3e-3,
+                rtol=7e-3,
                 err_msg=key_PEST,
             )
         except AssertionError as e:

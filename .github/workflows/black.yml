@@ -13,9 +13,9 @@ jobs:
         python-version: ['3.10']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -51,7 +51,7 @@ jobs:
           black desc/ tests/
 
       - name: Annotate diff changes using reviewdog
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@v1.24
         with:
           tool_name: blackfmt
 

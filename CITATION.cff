@@ -9,34 +9,44 @@ type: software
 authors:
   - given-names: Daniel
     family-names: Dudt
-    email: ddudt@princeton.edu
-    affiliation: Princeton University
+    email: daniel@thea.energy
+    affiliation: Thea Energy
     orcid: 'https://orcid.org/0000-0002-4557-3529'
   - given-names: Rory
     family-names: Conlin
-    email: wconlin@princeton.edu
-    affiliation: Princeton University
+    email: roryconlin@gmail.com
+    affiliation: University of Maryland, College Park
     orcid: 'https://orcid.org/0000-0001-8366-2111'
   - given-names: Dario
     family-names: Panici
+    email: dpanici@princeton.edu
     affiliation: Princeton University
     orcid: 'https://orcid.org/0000-0003-0736-4360'
-    email: dpanici@princeton.edu
-  - given-names: Egemen
-    family-names: Kolemen
-    email: ekolemen@princeton.edu
-    affiliation: Princeton University
-    orcid: 'https://orcid.org/0000-0003-4212-3247'
   - given-names: Kaya
     family-names: Unalmis
     email: kunalmis@princeton.edu
     affiliation: Princeton University
     orcid: 'https://orcid.org/0000-0002-1755-6764'
+  - given-names: Yigit Gunsur
+    family-names: Elmacioglu
+    email: yigit.elma@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0009-0002-7747-2834'
+  - given-names: Rahul
+    family-names: Gaur
+    email: rgaur@terpmail.umd.edu
+    affiliation: University of Wisconsin-Madison
+    orcid: 'https://orcid.org/0000-0003-4367-9052'
   - given-names: Patrick
     family-names: Kim
     email: sungha.p.kim@gmail.com
-    affiliation: University of Maryland, College Park
+    affiliation: Princeton University
     orcid: 'https://orcid.org/0000-0003-3201-1831'
+  - given-names: Egemen
+    family-names: Kolemen
+    email: ekolemen@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0003-4212-3247'
 identifiers:
   - type: doi
     value: 10.5281/zenodo.4876504

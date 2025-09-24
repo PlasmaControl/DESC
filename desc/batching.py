@@ -142,6 +142,10 @@ else:
     # an ImportError. We use a simpler version of _batch_and_remainder from an older JAX
     # version.
     def _batch_and_remainder(x, batch_size: int):
+        """Taken from JAX 0.5.0.
+
+        Function is the same down to JAX 0.4.31.
+        """
         leaves, treedef = tree_flatten(x)
 
         scan_leaves = []

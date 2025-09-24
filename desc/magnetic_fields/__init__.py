@@ -21,4 +21,4 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
-from ._quadcoil_thing import QuadcoilThing
+from ._quadcoil_field import QuadcoilField

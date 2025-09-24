@@ -97,4 +97,6 @@ from .linear_objectives import (
     FixThetaSFL,
 )
 from ._quadcoil import QuadcoilProxy
+from ._quadcoil_objective import QuadcoilObjective
+from ._quadcoil_constraint import QuadcoilConstraint
 from .objective_funs import ObjectiveFunction

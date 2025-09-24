@@ -1,8 +1,10 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.magnetic_fields import QuadcoilThing
 from desc.backend import jnp
 
-class QuadcoilObjective(_Objective):
+class QuadcoilConstraint(_Objective):
+    """
+    Dummy
+    """
     # Most of the documentation is shared among all objectives, so we just inherit
     # the docstring from the base class and add a few details specific to this objective.
     # See the documentation of `collect_docs` for more details.
@@ -15,7 +17,7 @@ class QuadcoilObjective(_Objective):
     _print_value_fmt = "QUADCOIL constraint: "  
     def __init__(
         self,
-        qt:QuadcoilThing,
+        qf,
         target=0,
         bounds=None,
         weight=1.,
@@ -27,19 +29,19 @@ class QuadcoilObjective(_Objective):
         if normalize is not None or normalize_target is not None:
             raise AttributeError(
                 'QUADCOIL performs its own normalization. '
-                '(See the API for QuadcoilThing) Any non-default values '
+                '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
 
-        self.g_quadcoil = qt.g_quadcoil
-        self.h_quadcoil = qt.h_quadcoil
+        self._g_quadcoil = qf._g_quadcoil
+        self._h_quadcoil = qf._h_quadcoil
         self._static_attrs = [
-            'g_quadcoil',
-            'h_quadcoil',
+            '_g_quadcoil',
+            '_h_quadcoil',
         ]
-        
+
         # ----- Superclass -----
         super().__init__(
-            things=[qt.eq, qt], # things is a list of things that will be optimized, in this case just the equilibrium
+            things=[qf.eq, qf], # things is a list of things that will be optimized, in this case just the equilibrium
             target=target,
             bounds=bounds,
             weight=weight,
@@ -49,11 +51,11 @@ class QuadcoilObjective(_Objective):
             jac_chunk_size=jac_chunk_size
         )
     
-    def compute(self, params_eq, params_qt):
-        qt = self.things[1]
-        qp = qt.params_to_qp(params_eq, params_qt)
-        dofs = qt.params_to_dofs(params_qt)
+    def compute(self, params_eq, params_qf):
+        qf = self.things[1]
+        qp = qf.params_to_qp(params_eq, params_qf)
+        dofs = qf.params_to_dofs(params_qf)
         return jnp.concatenate([
-            self.g_quadcoil(qp, dofs),
-            self.h_quadcoil(qp, dofs)
+            self._g_quadcoil(qp, dofs),
+            self._h_quadcoil(qp, dofs)
         ])

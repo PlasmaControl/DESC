@@ -10,7 +10,7 @@ from desc.grid import LinearGrid
 from jax import jit, flatten_util
 
 
-class QuadcoilThing(FourierCurrentPotentialField):
+class QuadcoilField(FourierCurrentPotentialField):
     """
     
     Attributes:
@@ -281,9 +281,9 @@ class QuadcoilThing(FourierCurrentPotentialField):
         self.unravel_aux_dofs = unravel_aux_dofs
         self._aux_dofs_flat = aux_dofs_flat
 
-        self.f_quadcoil = lambda qp, x, f_obj=f_obj: f_obj(qp, x)
-        self.g_quadcoil = lambda qp, x, g_list=g_list: merge_callables(g_list)(qp, x)
-        self.h_quadcoil = lambda qp, x, h_list=h_list: merge_callables(h_list)(qp, x)
+        self._f_quadcoil = lambda qp, x, f_obj=f_obj: f_obj(qp, x)
+        self._g_quadcoil = lambda qp, x, g_list=g_list: merge_callables(g_list)(qp, x)
+        self._h_quadcoil = lambda qp, x, h_list=h_list: merge_callables(h_list)(qp, x)
         n_g = len(g_list)
         n_h = len(h_list)
 
@@ -336,9 +336,9 @@ class QuadcoilThing(FourierCurrentPotentialField):
     # These includes conversion from DESC params into quadcoil objects 
     # and parsing objective and constraint functions.
 
-    def params_to_dofs(self, params_qt):
+    def params_to_dofs(self, params_qf):
         """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil dofs dictionary """
-        Phi_s_raw, Phi_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Phi_A, self._ptolemy_Phi_c_indices, self._ptolemy_Phi_s_indices, params_qt['Phi_mn'])
+        Phi_s_raw, Phi_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Phi_A, self._ptolemy_Phi_c_indices, self._ptolemy_Phi_s_indices, params_qf['Phi_mn'])
         # Stellsym SurfaceRZFourier's dofs consists of 
         # [rc, zs]
         # Non-stellsym SurfaceRZFourier's dofs consists of 
@@ -353,7 +353,7 @@ class QuadcoilThing(FourierCurrentPotentialField):
         else:
             phi_quadcoil = jnp.concatenate([Phi_c, Phi_s])
         # Converting the flattened aux dofs dictionary back into a dict.
-        return {'phi': phi_quadcoil} | self.unravel_aux_dofs(params_qt['aux_dofs_flat'])
+        return {'phi': phi_quadcoil} | self.unravel_aux_dofs(params_qf['aux_dofs_flat'])
     
     def params_to_plasma_surface_quadcoil(self, params_eq):
         """ Reads plasma surface info from params and creates a quadcoil.SurfaceRZFourierJAX object """
@@ -383,7 +383,7 @@ class QuadcoilThing(FourierCurrentPotentialField):
             dofs=plasma_dofs
         )
 
-    def params_to_winding_surface_quadcoil(self, params_eq, params_qt):
+    def params_to_winding_surface_quadcoil(self, params_eq, params_qf):
         """ Reads winding surface surface info from params and creates a quadcoil.SurfaceRZFourierJAX object """
         # One mode generates the winding surface automatically from the 
         # plasma surface
@@ -400,8 +400,8 @@ class QuadcoilThing(FourierCurrentPotentialField):
         # Another mode keeps the winding surface as an optimizable
         # (It will also appear in QuadcoilObjective.things)
         else:
-            r_s_raw, r_c_raw = ptolemy_identity_rev_compute(self._ptolemy_R_winding_A, self._ptolemy_R_winding_c_indices, self._ptolemy_R_winding_s_indices, params_qt['R_lmn'])
-            z_s_raw, z_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Z_winding_A, self._ptolemy_Z_winding_c_indices, self._ptolemy_Z_winding_s_indices, params_qt['Z_lmn'])
+            r_s_raw, r_c_raw = ptolemy_identity_rev_compute(self._ptolemy_R_winding_A, self._ptolemy_R_winding_c_indices, self._ptolemy_R_winding_s_indices, params_qf['R_lmn'])
+            z_s_raw, z_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Z_winding_A, self._ptolemy_Z_winding_c_indices, self._ptolemy_Z_winding_s_indices, params_qf['Z_lmn'])
                 # Stellsym SurfaceRZFourier's dofs consists of 
             # [rc, zs]
             # Non-stellsym SurfaceRZFourier's dofs consists of 
@@ -426,15 +426,15 @@ class QuadcoilThing(FourierCurrentPotentialField):
             dofs=winding_dofs
         )
 
-    def params_to_qp(self, params_eq, params_qt):
+    def params_to_qp(self, params_eq, params_qf):
         """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil.QuadcoilParams object"""
         plasma_surface = self.params_to_plasma_surface_quadcoil(params_eq)
-        winding_surface = self.params_to_winding_surface_quadcoil(params_eq, params_qt)
+        winding_surface = self.params_to_winding_surface_quadcoil(params_eq, params_qf)
         qp_out = QuadcoilParams(
             plasma_surface=plasma_surface, 
             winding_surface=winding_surface, 
-            net_poloidal_current_amperes=params_qt['G'], 
-            net_toroidal_current_amperes=params_qt['I'],
+            net_poloidal_current_amperes=params_qf['G'], 
+            net_toroidal_current_amperes=params_qf['I'],
             # TODO: for free boundary optimization, support for 
             # Bnormal plasma and other coils are not available yet.
             Bnormal_plasma=None, 

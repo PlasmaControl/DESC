@@ -1552,7 +1552,7 @@ def test_PEST_derivative_math(eq):
     from desc.compute import data_index
 
     tol = 1e-10
-    #TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
+    # TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
     eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=tol)
 
     keys_DESC = [

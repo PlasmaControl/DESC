@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import jax # for printing
 import warnings
 import numpy as np
-from quadcoil import QUADCOIL_STATIC_ARGNAMES, get_objective
+from quadcoil import QUADCOIL_STATIC_ARGNAMES, get_quantity
 from quadcoil.io import gen_quadcoil_for_diff, generate_desc_scaling
 
 # ----- A QUADCOIL wrapper -----
@@ -550,7 +550,7 @@ class QuadcoilProxy(_Objective):
             f_val_eff = metric_dict[f_name]
             # MEY NOT BE LOWERABLE?
             if self._normalize or self._normalize_target:
-                f_unit = get_objective(f_name + '_desc_unit')(self.scales)
+                f_unit = get_quantity(f_name + '_desc_unit')(self.scales)
             if self._normalize:
                 f_val_eff = f_val_eff / f_unit
             if self._normalize_target:

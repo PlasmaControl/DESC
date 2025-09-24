@@ -55,6 +55,45 @@ class QuadcoilField(FourierCurrentPotentialField):
     _ptolemy_Z_winding_s_indices
     """
 
+    _io_attrs_ = (
+        FourierCurrentPotentialField._io_attrs_
+        + []
+    )
+
+    _static_attrs = (
+        FourierCurrentPotentialField._static_attrs
+        + [
+            '_plasma_quadpoints_phi_native',
+            '_plasma_quadpoints_theta_native',
+            '_plasma_quadpoints_phi',
+            '_plasma_quadpoints_theta',
+            '_ptolemy_R_winding_A',
+            '_ptolemy_R_winding_c_indices',
+            '_ptolemy_R_winding_s_indices',
+            '_ptolemy_Z_winding_A',
+            '_ptolemy_Z_winding_c_indices',
+            '_ptolemy_Z_winding_s_indices',
+            '_winding_quadpoints_phi',
+            '_winding_quadpoints_theta',
+            '_quadpoints_phi',
+            '_quadpoints_theta',
+            '_ptolemy_Phi_A',
+            '_ptolemy_Phi_c_indices',
+            '_ptolemy_Phi_s_indices',
+            '_ptolemy_R_plasma_A',
+            '_ptolemy_R_plasma_c_indices',
+            '_ptolemy_R_plasma_s_indices',
+            '_ptolemy_Z_plasma_A',
+            '_ptolemy_Z_plasma_c_indices',
+            '_ptolemy_Z_plasma_s_indices',
+            'unravel_aux_dofs',
+            '_aux_dofs_flat',
+            '_f_quadcoil',
+            '_g_quadcoil',
+            '_h_quadcoil',
+        ]
+    )
+
     def __init__(
         self,
         eq,
@@ -284,8 +323,8 @@ class QuadcoilField(FourierCurrentPotentialField):
         self._f_quadcoil = lambda qp, x, f_obj=f_obj: f_obj(qp, x)
         self._g_quadcoil = lambda qp, x, g_list=g_list: merge_callables(g_list)(qp, x)
         self._h_quadcoil = lambda qp, x, h_list=h_list: merge_callables(h_list)(qp, x)
-        n_g = len(g_list)
-        n_h = len(h_list)
+        # n_g = len(g_list)
+        # n_h = len(h_list)
 
     # @property
     # def params_dict(self):

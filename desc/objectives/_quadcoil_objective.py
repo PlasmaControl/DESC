@@ -31,10 +31,10 @@ class QuadcoilObjective(_Objective):
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
 
-        self._f_quadcoil = qf._f_quadcoil
-        self._static_attrs = [
-            'f_quadcoil',
-        ]
+        # self._f_quadcoil = qf._f_quadcoil
+        # self._static_attrs = [
+        #     'f_quadcoil',
+        # ]
         
         # ----- Superclass -----
         super().__init__(
@@ -52,10 +52,14 @@ class QuadcoilObjective(_Objective):
         # Nothing needed here.
         # All of the logics are packaged into 
         # QuadcoilField.
+
+        # dim_f = size of the output vector returned by self.compute.
+        # This is a scalar objective.
+        self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
     
     def compute(self, params_eq, params_qf):
         qf = self.things[1]
         qp = qf.params_to_qp(params_eq, params_qf)
         dofs = qf.params_to_dofs(params_qf)
-        return self._f_quadcoil(qp, dofs)
+        return qf._f_quadcoil(qp, dofs)

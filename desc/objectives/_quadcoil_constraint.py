@@ -1,5 +1,6 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.backend import jnp
+from jax import eval_shape
 
 class QuadcoilConstraint(_Objective):
     """
@@ -50,6 +51,28 @@ class QuadcoilConstraint(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size
         )
+    
+    def build(self, use_jit=True, verbose=1):
+        # Nothing needed here.
+        # All of the logics are packaged into 
+        # QuadcoilField.
+        eq = self.things[0]
+        qf = self.things[1]
+        # dim_f = size of the output vector returned by self.compute.
+        # We now count the total number of scalar constraints in the 
+        # problem.
+        dim_g = eval_shape(
+            qf._g_quadcoil, 
+            qf.params_to_qp(eq.params_dict, qf.params_dict),
+            qf.params_to_dofs(qf.params_dict)
+        ).size
+        dim_h = eval_shape(
+            qf._h_quadcoil, 
+            qf.params_to_qp(eq.params_dict, qf.params_dict),
+            qf.params_to_dofs(qf.params_dict)
+        ).size
+        self._dim_f = dim_g + dim_h
+        super().build(use_jit=use_jit, verbose=verbose)
     
     def compute(self, params_eq, params_qf):
         qf = self.things[1]

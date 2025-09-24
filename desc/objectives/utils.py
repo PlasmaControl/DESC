@@ -27,6 +27,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         If set to ``'auto'``, the scale is determined from the initial state vector.
+        This can be passed through optimizer options as
+        solve_options["linear_constraint_options"]["x_scale"].
 
     Returns
     -------
@@ -78,6 +80,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
     if isinstance(objective, ProximalProjection):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # see desc.optimize._constraint_wrappers.ProximalProjection._set_eq_state_vector
         c = 0
         cols = np.array([], dtype=int)
         for t in objective.things:
@@ -119,6 +122,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
     # compute x_scale if not provided
     # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
+    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
     if x_scale == "auto":
         x_scale = objective.x(*objective.things)
     errorif(
@@ -241,7 +245,7 @@ class _Recover(IOAble):
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 
-def softmax(arr, alpha):
+def softmax(arr, alpha, axis=None):
     """JAX softmax implementation.
 
     Parameters
@@ -252,6 +256,9 @@ def softmax(arr, alpha):
         The parameter smoothly transitioning the function to a hardmax.
         as alpha increases, the value returned will come closer and closer to
         max(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -259,12 +266,16 @@ def softmax(arr, alpha):
         The soft-maximum of the array.
 
     """
-    arr = arr.flatten()
-    arr_times_alpha = alpha * arr
-    return softargmax(arr_times_alpha).dot(arr)
+    if axis is None:
+        arr = arr.flatten()
+        arr_times_alpha = alpha * arr
+        return softargmax(arr_times_alpha).dot(arr)
+    else:
+        arr_times_alpha = alpha * arr
+        return jnp.sum(arr * softargmax(arr_times_alpha, axis=axis), axis=axis)
 
 
-def softmin(arr, alpha):
+def softmin(arr, alpha, axis=None):
     """JAX softmin implementation, by taking negative of softmax(-arr).
 
     Parameters
@@ -275,6 +286,9 @@ def softmin(arr, alpha):
         The parameter smoothly transitioning the function to a hardmin.
         as alpha increases, the value returned will come closer and closer to
         min(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -282,7 +296,7 @@ def softmin(arr, alpha):
         The soft-minimum of the array.
 
     """
-    return -softmax(-arr, alpha)
+    return -softmax(-arr, alpha, axis)
 
 
 def combine_args(*objectives):

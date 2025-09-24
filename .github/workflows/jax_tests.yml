@@ -2,28 +2,28 @@ name: Dependency test JAX
 
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
   workflow_dispatch:
 
 jobs:
   jax_tests:
-    if: ${{ github.event.label.name == 'test_jax' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'test_jax') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         jax-version: [0.4.24, 0.4.25, 0.4.26, 0.4.27, 0.4.28, 0.4.29,
                       0.4.30, 0.4.31, 0.4.33, 0.4.34, 0.4.35, 0.4.37,
-                      0.4.38, 0.5.0]
+                      0.4.38, 0.5.0, 0.5.1, 0.5.2, 0.5.3, 0.6.0]
                       # 0.4.32 is not available on PyPI
                       # earlier jax versions are not compatible with other
                       # dependencies as of 2024-10-04
                       # 0.4.36 has a bug that causes tests to fail
         group: [1, 2]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Upgrade pip

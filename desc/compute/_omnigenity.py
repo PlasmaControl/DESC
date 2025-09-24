@@ -33,7 +33,7 @@ from .data_index import register_compute_fun
     coordinates="rtz",
     data=["B_theta"],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -64,7 +64,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B_phi|r,t"],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
@@ -94,7 +94,7 @@ def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["B_theta_mn", "B_phi_mn"],
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -138,7 +138,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -166,7 +166,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -196,7 +196,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -251,7 +251,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
         "Boozer transform modes norm",
     ],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -417,7 +417,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     data=[
         "sqrt(g)_Boozer",
         "sqrt(g)_Boozer_DESC",
@@ -481,7 +481,7 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
         "Boozer transform modes norm",
     ],
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     aliases=["|B|_mn"],
@@ -530,7 +530,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     data=[
         "R",
         "sqrt(g)_Boozer_DESC",
@@ -586,7 +586,7 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     resolution_requirement="tz",
-    grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True, "sym": False},
     data=[
         "Z",
         "sqrt(g)_Boozer_DESC",

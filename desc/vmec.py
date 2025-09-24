@@ -85,7 +85,7 @@ class VMECIO:
 
         """
         assert profile in ["iota", "current"]
-        file = Dataset(path, mode="r")
+        file = Dataset(os.path.expanduser(path), mode="r")
         inputs = {}
 
         version = file.variables["version_"][0]
@@ -95,6 +95,11 @@ class VMECIO:
                 + " while DESC is only designed for compatibility with VMEC version"
                 + " 9. Some data may not be loaded correctly."
             )
+
+        assert float(file.variables["lrfp__logical__"][0]) == 0, (
+            "DESC currently does not support poloidal flux label, "
+            "and so cannot load this VMEC wout, which has LRFP=T"
+        )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])
@@ -256,7 +261,9 @@ class VMECIO:
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
             see lines 300+ for full list of included variables
         """
-        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+        file = Dataset(
+            os.path.expanduser(path), mode="w", format="NETCDF3_64BIT_OFFSET"
+        )
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -1506,10 +1513,13 @@ class VMECIO:
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
         f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
-        if eq.pressure is not None:
+        if eq.pressure is not None and isinstance(
+            eq.pressure, (PowerSeriesProfile, SplineProfile)
+        ):
             pressure = eq.pressure
         else:
-            # if kinetic profiles, fit pressure to power series
+            # if kinetic profiles or non-power series or spline,
+            #  fit pressure to power series
             grid = LinearGrid(L=eq.L_grid, axis=True)
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])
@@ -1578,7 +1588,7 @@ class VMECIO:
                         " {:+14.8E}".format(
                             0
                             if np.abs(r) < np.finfo(r.dtype).eps
-                            else float(current(r, dr=1) / (2 * r))
+                            else float(current(r, dr=1)[0] / (2 * r))
                         )
                     )
                 f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")

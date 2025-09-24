@@ -22,7 +22,7 @@ _bounce_doc = {
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``.
+        A reference value is 100. Default is double ``Y``.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -83,7 +83,15 @@ _bounce_doc = {
 
 
 def _compute(
-    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False
+    fun,
+    fun_data,
+    data,
+    theta,
+    grid,
+    num_pitch,
+    surf_batch_size=1,
+    simp=False,
+    expand_out=True,
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -110,6 +118,10 @@ def _compute(
         Default is ``1``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
+    expand_out : bool
+        Whether to expand output to full grid so that the first dimension
+        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
+        Default is True.
 
     """
     for name in Bounce2D.required_names:
@@ -126,8 +138,10 @@ def _compute(
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-    assert out.ndim == 1
-    return grid.expand(out)
+    if expand_out:
+        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
+        return grid.expand(out)
+    return out
 
 
 def _dH_ripple(data, B, pitch):
@@ -212,7 +226,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H**2 / I).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce2D(
             grid,
@@ -235,7 +249,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
+            return safediv(H**2, I).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

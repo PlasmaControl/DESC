@@ -178,7 +178,9 @@ def lsqtr(  # noqa: C901
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args).block_until_ready()  # FIXME: block is needed for jaxify util
+    # block is needed for jaxify util which uses jax functions inside
+    # jax.pure_callback and gets stuck due to async dispatch
+    J = jac(x, *args).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -200,7 +202,14 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    J_h = J * d
+    # TODO: place this function under JIT to use in-place operation (#1669)
+    J *= d
+
+    # we don't need unscaled J anymore, so we overwrite
+    # it with J_h = J * d to avoid carrying so many J-sized matrices
+    # in memory, which can be large
+    J_h = J
+    del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -260,7 +269,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = None  # "Levenberg-Marquardt" parameter
+    alpha = 0.0  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
@@ -281,6 +290,10 @@ def lsqtr(  # noqa: C901
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
+            # We don't need the Q and R matrices anymore
+            # Trust region solver will solve the augmented system
+            # with a new Q and R
+            del Q, R
 
         actual_reduction = -1
 
@@ -388,7 +401,12 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J_h = J * d
+            J *= d
+            # we don't need unscaled J anymore this iteration, so we overwrite
+            # it with J_h = J * d to avoid carrying so many J-sized matrices
+            # in memory, which can be large
+            J_h = J
+            del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
             )
@@ -423,7 +441,7 @@ def lsqtr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J,
+        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

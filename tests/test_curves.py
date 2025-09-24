@@ -7,6 +7,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
@@ -340,6 +341,14 @@ class TestFourierRZCurve:
         assert c.sym is False
         assert c.R_basis.sym is False
         assert c.Z_basis.sym is False
+
+    @pytest.mark.unit
+    def test_from_values_np(self):
+        """Test that from_values works when numpy array passed."""
+        phis = np.linspace(0, 2 * np.pi, 4)
+        coords = np.vstack([np.cos(phis), phis, np.zeros_like(phis)]).T
+        c = FourierRZCurve.from_values(coords, N=1)
+        np.testing.assert_allclose(c.R_n[c.R_basis.get_idx(N=1)], 1.0)
 
 
 class TestFourierXYZCurve:
@@ -683,6 +692,333 @@ class TestFourierPlanarCurve:
             c.normal = [4]
         with pytest.raises(AssertionError):
             _ = FourierPlanarCurve(r_n=[1], modes=[1, 2])
+
+    @pytest.mark.unit
+    def test_to_FourierPlanarCurve(self):
+        """Test converting SplineXYZCurve to FourierPlanarCurve object."""
+        npts = 1000
+        N = 5
+
+        # Create a SplineXYZCurve of a planar circle
+        s = np.linspace(0, 2 * np.pi, npts)
+        X = 2 * np.cos(s)
+        Y = np.ones(npts)
+        Z = 2 * np.sin(s)
+        c = SplineXYZCurve(X=X, Y=Y, Z=Z)
+
+        # Create a backwards SplineXYZCurve by flipping the coordinates
+        c_backwards = SplineXYZCurve(X=np.flip(X), Y=np.flip(Y), Z=np.flip(Z))
+
+        # Convert to FourierPlanarCurve
+        c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+        c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+
+        grid = LinearGrid(N=20, endpoint=True)
+
+        coords_spline = c.compute("x", grid=grid)["x"]
+        coords_planar = c_planar.compute("x", grid=grid)["x"]
+        coords_backwards_spline = c_backwards.compute("x", grid=grid)["x"]
+        coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
+
+        # Assertions for point positions
+        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_backwards_spline,
+            coords_backwards_planar,
+            atol=1e-10,
+        )
+        # backwards coordinate order is important for Biot-Savart current
+        np.testing.assert_allclose(
+            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+        )
+
+
+class TestFourierXYCurve:
+    """Tests for FourierXYCurve class."""
+
+    @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        c = FourierXYCurve(center=[5, 4, 3], X_n=[0.5, 2], Y_n=[1, 0], basis="xyz")
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [5, 4, 3]
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [-6, 5, 4]
+        )
+        c = FourierXYCurve(center=[5, 1, -2], X_n=[0.5, 2], Y_n=[1, 0], basis="rpz")
+        np.testing.assert_allclose(
+            c.compute("center", basis="rpz")["center"][0, :], [5, 1, -2]
+        )
+
+    @pytest.mark.unit
+    def test_rotation(self):
+        """Test rotation of planar curve."""
+        cx = FourierXYCurve(center=[0, 0, 0], normal=[1, 0, 0], X_n=[0, 1], Y_n=[1, 0])
+        cy = FourierXYCurve(center=[0, 0, 0], normal=[0, 1, 0], X_n=[0, 1], Y_n=[1, 0])
+        cz = FourierXYCurve(center=[0, 0, 0], normal=[0, 0, 1], X_n=[0, 1], Y_n=[1, 0])
+        datax = cx.compute("x", grid=20, basis="xyz")
+        datay = cy.compute("x", grid=20, basis="xyz")
+        dataz = cz.compute("x", grid=20, basis="xyz")
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+
+    @pytest.mark.unit
+    def test_length(self):
+        """Test length of circular curve."""
+        c = FourierXYCurve(modes=[-1, 1])
+        np.testing.assert_allclose(
+            c.compute("length", grid=20)["length"], 2 * 2 * np.pi
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("length", grid=20)["length"], 2 * 2 * np.pi
+        )
+
+    @pytest.mark.unit
+    def test_curvature(self):
+        """Test curvature of circular curve."""
+        c = FourierXYCurve()
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+
+    @pytest.mark.unit
+    def test_torsion(self):
+        """Test torsion of circular curve."""
+        c = FourierXYCurve()
+        np.testing.assert_allclose(
+            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+        )
+
+    @pytest.mark.unit
+    def test_frenet(self):
+        """Test frenet-serret frame of circular curve."""
+        c = FourierXYCurve()
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_coords(self):
+        """Test lab frame coordinates of circular curve."""
+        c = FourierXYCurve()
+        r, p, z = c.compute("x", grid=0, basis="rpz")["x"].T
+        np.testing.assert_allclose(r, 12)
+        np.testing.assert_allclose(p, 0)
+        np.testing.assert_allclose(z, 0)
+        dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
+        np.testing.assert_allclose(dr, 0, atol=1e-14)
+        np.testing.assert_allclose(dp, 0, atol=1e-14)
+        np.testing.assert_allclose(dz, 2)
+        c.rotate(angle=np.pi / 2)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
+        np.testing.assert_allclose(x, 1)
+        np.testing.assert_allclose(y, -11)
+        np.testing.assert_allclose(z, 1)
+
+    @pytest.mark.unit
+    def test_basis(self):
+        """Test xyz vs rpz basis."""
+        cxyz = FourierXYCurve(center=[1, 1, 0], normal=[-1, 1, 0], basis="xyz")
+        crpz = FourierXYCurve(
+            center=[np.sqrt(2), np.pi / 4, 0], normal=[0, 1, 0], basis="rpz"
+        )
+
+        x_xyz = cxyz.compute("x")["x"]
+        x_rpz = crpz.compute("x")["x"]
+        np.testing.assert_allclose(x_xyz, x_rpz)
+
+        xs_xyz = cxyz.compute("x_s")["x_s"]
+        xs_rpz = crpz.compute("x_s")["x_s"]
+        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=2e-15)
+
+        xss_xyz = cxyz.compute("x_ss")["x_ss"]
+        xss_rpz = crpz.compute("x_ss")["x_ss"]
+        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=2e-15)
+
+        xsss_xyz = cxyz.compute("x_sss")["x_sss"]
+        xsss_rpz = crpz.compute("x_sss")["x_sss"]
+        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+
+    @pytest.mark.unit
+    def test_misc(self):
+        """Test getting/setting misc attributes of FourierXYCurve."""
+        c = FourierXYCurve()
+
+        X, Y = c.get_coeffs(1)
+        np.testing.assert_allclose(X, 2)
+        np.testing.assert_allclose(Y, 0)
+        c.set_coeffs(1, 3, -2)
+        np.testing.assert_allclose(c.X_n, [0, 3])
+        np.testing.assert_allclose(c.Y_n, [2, -2])
+
+        c.normal = [1, 2, 3]
+        c.center = [3, 2, 1]
+        np.testing.assert_allclose(np.linalg.norm(c.normal), 1)
+        np.testing.assert_allclose(c.normal * np.linalg.norm(c.center), c.center[::-1])
+
+        s = c.copy()
+        assert s.equiv(c)
+
+        c.change_resolution(5)
+        with pytest.raises(ValueError):
+            c.X_n = s.X_n
+
+    @pytest.mark.unit
+    def test_asserts(self):
+        """Test error checking when creating FourierXYCurve."""
+        c = FourierXYCurve()
+        with pytest.raises(ValueError):
+            c.center = [4]
+        with pytest.raises(ValueError):
+            c.normal = [4]
+        with pytest.raises(AssertionError):
+            _ = FourierXYCurve(X_n=[1], modes=[1, 2])
+
+        with pytest.warns(UserWarning, match="Ignoring n=0 mode"):
+            c0 = FourierXYCurve(X_n=[0, 1, 2], Y_n=[2, -1, 0])
+        # check that curve is the same as default after n=0 mode is removed
+        x = c.compute("x", grid=0)["x"]
+        x0 = c0.compute("x", grid=0)["x"]
+        np.testing.assert_allclose(x, x0)
+
+    @pytest.mark.unit
+    def test_to_FourierXYCurve_orientation(self):
+        """Test converting SplineXYZCurve to FourierXYCurve object."""
+        # specifically checking that orientation is preserved
+        npts = 1000
+        N = 5
+
+        # Create a SplineXYZCurve of a planar circle
+        s = np.linspace(0, 2 * np.pi, npts)
+        X = 2 * np.cos(s)
+        Y = np.ones(npts)
+        Z = 2 * np.sin(s)
+        c = SplineXYZCurve(X=X, Y=Y, Z=Z)
+
+        # Create a backwards SplineXYZCurve by flipping the coordinates
+        c_backwards = SplineXYZCurve(X=np.flip(X), Y=np.flip(Y), Z=np.flip(Z))
+
+        # Convert to FourierXYCurve
+        c_planar = c.to_FourierXY(N=N, grid=npts, basis="xyz")
+        c_backwards_planar = c_backwards.to_FourierXY(N=N, grid=npts, basis="xyz")
+
+        grid = LinearGrid(N=20, endpoint=True)
+
+        coords_spline = c.compute("x", grid=grid)["x"]
+        coords_planar = c_planar.compute("x", grid=grid)["x"]
+        coords_backwards_spline = c_backwards.compute("x", grid=grid)["x"]
+        coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
+
+        # Assertions for point positions
+        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_backwards_spline,
+            coords_backwards_planar,
+            atol=1e-10,
+        )
+        # backwards coordinate order is important for Biot-Savart current
+        np.testing.assert_allclose(
+            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+        )
+
+    @pytest.mark.unit
+    def test_to_FourierXYCurve(self):
+        """Test converting FourierRZCurve to FourierXYCurve."""
+        # test different options for passing in s
+        rz = FourierRZCurve(R_n=[0, 10, 0], Z_n=[-1, 0, 0])
+        grid = LinearGrid(N=20, endpoint=False)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+        # same thing but pass in a closed grid
+        grid = LinearGrid(N=20, endpoint=True)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+
+        # same thing but with arclength angle
+        grid = LinearGrid(N=20, endpoint=False)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s="arclength")
+
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+            rtol=1e-5,
+        )
+
+        # pass in non-monotonic s
+        grid = LinearGrid(N=20, endpoint=False)
+        s = grid.nodes[:, 2]
+        s[-2] = s[-1]
+        with pytest.raises(ValueError):
+            xyz = rz.to_FourierXY(N=2, grid=grid, s=s)
 
 
 class TestSplineXYZCurve:

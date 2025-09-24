@@ -1069,6 +1069,13 @@ class TestBootstrapCompute:
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
+        grid2 = LinearGrid(rho=0.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid3 = LinearGrid(rho=1.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        with pytest.warns(UserWarning, match="rho=0"):
+            eq.compute("<J*B> Redl", grid=grid2, helicity=helicity)
+        with pytest.warns(UserWarning, match="vanish"):
+            eq.compute("<J*B> Redl", grid=grid3, helicity=helicity)
+
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)

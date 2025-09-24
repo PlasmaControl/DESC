@@ -239,7 +239,16 @@ def fmintr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    # TODO: place this function under JIT (#1669)
+    # doing operation H = d * H * d[:, None]
+    H *= d[:, None]
+    H *= d
+    H_h = H
+    del H
+
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -413,7 +422,15 @@ def fmintr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            H_h = d * H * d[:, None]
+
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
+            # matrices in memory, which can be large
+            # doing operation H = d * H * d[:, None]
+            H *= d[:, None]
+            H *= d
+            H_h = H
+            del H
 
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -449,7 +466,7 @@ def fmintr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        hess=H,
+        hess=H_h / d[:, None] / d,  # unscale the hessian
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

@@ -163,29 +163,33 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 19, 2025
+            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 24, 2025
             for both CPU and GPU runs.
 
             .. code-block:: sh
 
-                CONDA_OVERRIDE_CUDA="12.4" conda create --name desc-env "jax==0.6.0" "jaxlib==0.6.0=cuda12*" -c conda-forge
+                module load conda
+
+            .. code-block:: sh
+
+                conda create --name desc-env python=3.12
                 conda activate desc-env
 
-            To see the list of jax versions that can be installed through the conda forge channel, visit `conda-forge <https://anaconda.org/conda-forge/jax/files>`__.
-            Clone and install DESC
+            Now clone the DESC repository and enter the DESC directory
 
             .. code-block:: sh
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                pip install --editable .
 
-            You may optionally install developer requirements if you want to run tests.
+                pip install --no-cache-dir -r devtools/dev-requirements.txt
+                pip install --no-cache-dir --editable .
+                pip install --no-cache-dir "jax[cuda12]"
 
-            .. code-block:: sh
+        The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
 
-                pip install -r devtools/dev-requirements.txt
-
+        Before running a DESC script, you MUST also execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
+        or in your SLURM script (for submitted jobs).
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
 

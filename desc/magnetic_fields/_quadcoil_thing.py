@@ -9,7 +9,8 @@ from desc.vmec_utils import ptolemy_linear_transform
 from desc.grid import LinearGrid
 from jax import jit, flatten_util
 
-class QuadcoilObject(FourierCurrentPotentialField):
+
+class QuadcoilThing(FourierCurrentPotentialField):
     """
     
     Attributes:
@@ -57,6 +58,10 @@ class QuadcoilObject(FourierCurrentPotentialField):
     def __init__(
         self,
         eq,
+        # By default, the plasma surface has quadpoints
+        # number based on DESC quadrature points.
+        plasma_quadpoints_phi_interp:int=1, 
+        plasma_quadpoints_theta_interp:int=1, 
         quadpoints_phi=None,
         quadpoints_theta=None,
         # Winding surface optimization mode 
@@ -110,8 +115,18 @@ class QuadcoilObject(FourierCurrentPotentialField):
             N=eq.surface.N,
             rho=1.0
         )
-        self._plasma_quadpoints_phi = plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2]/jnp.pi/2
-        self._plasma_quadpoints_theta = plasma_grid.nodes[plasma_grid.unique_theta_idx, 1]/jnp.pi/2
+        self._plasma_quadpoints_phi_native = plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2]/jnp.pi/2
+        self._plasma_quadpoints_theta_native = plasma_grid.nodes[plasma_grid.unique_theta_idx, 1]/jnp.pi/2
+        self._plasma_quadpoints_phi = interpolate_array(
+            self._plasma_quadpoints_phi_native, 
+            plasma_quadpoints_phi_interp, 
+            1/eq.surface.NFP
+        )
+        self._plasma_quadpoints_theta = interpolate_array(
+            self._plasma_quadpoints_theta_native, 
+            plasma_quadpoints_theta_interp, 
+            1.
+        )
         # ----- Treating the winding surface -----
         # In the default behavior of FourierCurrentPotential,
         # the winding surface is part of params and can be optimized.
@@ -272,6 +287,23 @@ class QuadcoilObject(FourierCurrentPotentialField):
         n_g = len(g_list)
         n_h = len(h_list)
 
+    # @property
+    # def params_dict(self):
+    #     """dict: dictionary of arrays of optimizable parameters."""
+    #     return {
+    #         key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
+    #         for key in self.optimizable_params
+    #     }
+
+    # @params_dict.setter
+    # def params_dict(self, d):
+    #     for key, val in d.items():
+    #         if jnp.asarray(val).size:
+    #             setattr(self, key, val)
+    #     if self._auto_surface:
+    #         params_auto_surface = self._generate_auto_surface_coeffs()
+    #         setattr(self, "R_lmn", params_auto_surface["R_lmn"])
+    #         setattr(self, "Z_lmn", params_auto_surface["Z_lmn"])
 
     @optimizable_parameter
     @property
@@ -289,8 +321,6 @@ class QuadcoilObject(FourierCurrentPotentialField):
     
     def winding_surface_quadcoil(self):
         return self.params_to_winding_surface_quadcoil(self.eq.params_dict, self.params_dict)
-    
-
       
     @property
     def plasma_coil_distance(self):
@@ -306,9 +336,9 @@ class QuadcoilObject(FourierCurrentPotentialField):
     # These includes conversion from DESC params into quadcoil objects 
     # and parsing objective and constraint functions.
 
-    def params_to_dofs(self, params):
+    def params_to_dofs(self, params_qt):
         """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil dofs dictionary """
-        Phi_s_raw, Phi_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Phi_A, self._ptolemy_Phi_c_indices, self._ptolemy_Phi_s_indices, params['Phi_mn'])
+        Phi_s_raw, Phi_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Phi_A, self._ptolemy_Phi_c_indices, self._ptolemy_Phi_s_indices, params_qt['Phi_mn'])
         # Stellsym SurfaceRZFourier's dofs consists of 
         # [rc, zs]
         # Non-stellsym SurfaceRZFourier's dofs consists of 
@@ -323,7 +353,7 @@ class QuadcoilObject(FourierCurrentPotentialField):
         else:
             phi_quadcoil = jnp.concatenate([Phi_c, Phi_s])
         # Converting the flattened aux dofs dictionary back into a dict.
-        return {'phi': phi_quadcoil} | self.unravel_aux_dofs(params['aux_dofs_flat'])
+        return {'phi': phi_quadcoil} | self.unravel_aux_dofs(params_qt['aux_dofs_flat'])
     
     def params_to_plasma_surface_quadcoil(self, params_eq):
         """ Reads plasma surface info from params and creates a quadcoil.SurfaceRZFourierJAX object """
@@ -353,7 +383,7 @@ class QuadcoilObject(FourierCurrentPotentialField):
             dofs=plasma_dofs
         )
 
-    def params_to_winding_surface_quadcoil(self, params_eq, params_qo):
+    def params_to_winding_surface_quadcoil(self, params_eq, params_qt):
         """ Reads winding surface surface info from params and creates a quadcoil.SurfaceRZFourierJAX object """
         # One mode generates the winding surface automatically from the 
         # plasma surface
@@ -361,7 +391,7 @@ class QuadcoilObject(FourierCurrentPotentialField):
             plasma_surface = self.params_to_plasma_surface_quadcoil(params_eq)
             winding_dofs = self._winding_surface_generator(
                 plasma_gamma=plasma_surface.gamma(), 
-                d_expand=self.plasma_coil_distance, 
+                d_expand=-self.plasma_coil_distance, # This is DESC's sign convention 
                 nfp=self.NFP, 
                 stellsym=self.sym,
                 mpol=self.M,
@@ -370,8 +400,8 @@ class QuadcoilObject(FourierCurrentPotentialField):
         # Another mode keeps the winding surface as an optimizable
         # (It will also appear in QuadcoilObjective.things)
         else:
-            r_s_raw, r_c_raw = ptolemy_identity_rev_compute(self._ptolemy_R_winding_A, self._ptolemy_R_winding_c_indices, self._ptolemy_R_winding_s_indices, params_qo['R_lmn'])
-            z_s_raw, z_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Z_winding_A, self._ptolemy_Z_winding_c_indices, self._ptolemy_Z_winding_s_indices, params_qo['Z_lmn'])
+            r_s_raw, r_c_raw = ptolemy_identity_rev_compute(self._ptolemy_R_winding_A, self._ptolemy_R_winding_c_indices, self._ptolemy_R_winding_s_indices, params_qt['R_lmn'])
+            z_s_raw, z_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Z_winding_A, self._ptolemy_Z_winding_c_indices, self._ptolemy_Z_winding_s_indices, params_qt['Z_lmn'])
                 # Stellsym SurfaceRZFourier's dofs consists of 
             # [rc, zs]
             # Non-stellsym SurfaceRZFourier's dofs consists of 
@@ -396,27 +426,26 @@ class QuadcoilObject(FourierCurrentPotentialField):
             dofs=winding_dofs
         )
 
-    def params_to_qp(self, params_eq, params_qo):
+    def params_to_qp(self, params_eq, params_qt):
         """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil.QuadcoilParams object"""
         plasma_surface = self.params_to_plasma_surface_quadcoil(params_eq)
-        winding_surface = self.params_to_winding_surface_quadcoil(params_eq, params_qo)
+        winding_surface = self.params_to_winding_surface_quadcoil(params_eq, params_qt)
         qp_out = QuadcoilParams(
             plasma_surface=plasma_surface, 
             winding_surface=winding_surface, 
-            net_poloidal_current_amperes=params_qo['G'], 
-            net_toroidal_current_amperes=params_qo['I'],
+            net_poloidal_current_amperes=params_qt['G'], 
+            net_toroidal_current_amperes=params_qt['I'],
             # TODO: for free boundary optimization, support for 
             # Bnormal plasma and other coils are not available yet.
             Bnormal_plasma=None, 
             mpol=self.M, 
             ntor=self.N, 
-            quadpoints_phi=self.quadpoints_phi,
-            quadpoints_theta=self.quadpoints_theta, 
+            quadpoints_phi=self._quadpoints_phi,
+            quadpoints_theta=self._quadpoints_theta, 
             stellsym=self.sym_Phi
         )
         return(qp_out)
         
-
 # ----- Helper functions -----
 def ptolemy_identity_rev_precompute(m_1, n_1):
     """
@@ -518,3 +547,15 @@ def ptolemy_identity_rev_compute(A, c_indices, s_indices, x):
         c = jnp.zeros_like(s)
     assert len(s.T) == len(c.T)
     return s, c
+
+# For interpolating quadpoints_theta and quadpoints_phi
+def interpolate_array(x, k:int, period):
+    x_roll = jnp.append(x, period+x[0])
+    # differences between adjacent values
+    dx = jnp.diff(x_roll)
+    # interpolation weights: 0, 1/k, 2/k, ..., (k-1)/k
+    w = jnp.linspace(0, 1, k, endpoint=False)
+    # broadcast and add
+    blocks = x[:, None] + dx[:, None] * w[None, :]
+    # flatten and append the last element
+    return blocks.ravel()

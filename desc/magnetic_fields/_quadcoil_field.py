@@ -222,6 +222,12 @@ class QuadcoilField(FourierCurrentPotentialField):
             )
             self._winding_quadpoints_theta = winding_grid.nodes[winding_grid.unique_theta_idx, 1]/jnp.pi/2
         else:
+            self._ptolemy_R_winding_A = None
+            self._ptolemy_R_winding_c_indices = None
+            self._ptolemy_R_winding_s_indices = None
+            self._ptolemy_Z_winding_A = None
+            self._ptolemy_Z_winding_c_indices = None
+            self._ptolemy_Z_winding_s_indices = None
             NFP = eq.surface.NFP
             sym = eq.surface.sym
             if winding_quadpoints_phi is None:

@@ -42,6 +42,7 @@ from . import (
     _profiles,
     _stability,
     _surface,
+    _umbiliccurve,
 )
 from .data_index import all_kwargs, allowed_kwargs, data_index
 from .utils import (

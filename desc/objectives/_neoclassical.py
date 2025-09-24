@@ -293,6 +293,7 @@ class EffectiveRipple(_Objective):
             quad=constants["quad"],
             **self._hyperparam,
         )
+
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_spline(self, use_jit=True, verbose=1):

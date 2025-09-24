@@ -679,6 +679,14 @@ class DeflationOperator(_Objective):
     and guarantees that old solutions are not found (as the objective increases
     without bound as an already-found solution is approached)
 
+    The deflation operator is defined as:
+
+    M(x;xₖ)=(||x−xₖ||₂)⁻ᵖ + σ
+
+    where x is the state and xₖ the passed-in known state.
+    Multiple states are handled by computing M for each xₖ and
+    multiplying them all together
+
     Parameters
     ----------
     thing : Optimizable
@@ -690,6 +698,14 @@ class DeflationOperator(_Objective):
         Which params to use in the deflation operator to define which part of the
         state to deflate, defaults to list(thing.params_dict.keys()) (e.g. entire
         state)
+        #TODO make this instead a nested list of dicts like FixParameters
+    params_to_deflate_with : nested list of dicts
+        Dict keys are the names of parameters to fix (str), and dict values are the
+        indices to fix for each corresponding parameter (int array).
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as thing.params_dict.
+        The default is to fix all indices of all parameters.
     sigma: float, optional
         sigma term in deflation operator
     power: float, optional

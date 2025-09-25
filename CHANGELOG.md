@@ -2,12 +2,13 @@ Changelog
 =========
 
 New Features
-------------
+
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 
 Bug Fixes
----------
+
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
 
@@ -16,7 +17,6 @@ Backend
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - Minimum JAX version bumped up to ``0.4.29``
-
 
 v0.15.0
 -------

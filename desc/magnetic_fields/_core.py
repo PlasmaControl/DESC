@@ -2586,6 +2586,7 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    bs_chunk_size=None,
     options=None,
     return_aux=False,
 ):
@@ -2626,6 +2627,9 @@ def field_line_integrate(
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
+    bs_chunk_size: int or None
+        Chunk size to use when evaluating the magnetic field. If None, evaluates
+        all at once. Defaults to None.
     options : dict, optional
         Additional arguments to pass to the diffrax diffeqsolve. If user wants to
         provide ``stepsize_controller``, ``saveat``, ``event``, or ``adjoint``, they
@@ -2679,6 +2683,7 @@ def field_line_integrate(
         event=event,
         adjoint=adjoint,
         chunk_size=chunk_size,
+        bs_chunk_size=bs_chunk_size,
         options=options,
         return_aux=return_aux,
     )
@@ -2699,6 +2704,7 @@ def _field_line_integrate(
     event,
     adjoint,
     chunk_size,
+    bs_chunk_size,
     options,
     return_aux,
 ):
@@ -2735,7 +2741,7 @@ def _field_line_integrate(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         out = vmap_chunked(
-            _intfun_wrapper, in_axes=(0,) + 13 * (None,), chunk_size=chunk_size
+            _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
         )(
             x0,
             field,
@@ -2750,6 +2756,7 @@ def _field_line_integrate(
             stepsize_controller,
             event,
             adjoint,
+            bs_chunk_size,
             options,
         )
 
@@ -2778,6 +2785,7 @@ def _intfun_wrapper(
     stepsize_controller,
     event,
     adjoint,
+    bs_chunk_size,
     options,
 ):
     """Wrapper for field line integration."""
@@ -2791,7 +2799,7 @@ def _intfun_wrapper(
         max_steps=max_steps,
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
-        args=[field, params, scale, source_grid],
+        args=[field, params, scale, source_grid, bs_chunk_size],
         event=event,
         adjoint=adjoint,
         **options,
@@ -2800,15 +2808,12 @@ def _intfun_wrapper(
 
 @jit
 def _odefun(s, rpz, args):
-    field, params, scale, source_grid = args
+    field, params, scale, source_grid, bs_chunk_size = args
     r = rpz[0]
     br, bp, bz = (
         scale
         * field.compute_magnetic_field(
-            rpz,
-            params,
-            basis="rpz",
-            source_grid=source_grid,
+            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=bs_chunk_size
         ).squeeze()
     )
     return jnp.array(

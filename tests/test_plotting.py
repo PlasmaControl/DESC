@@ -1118,6 +1118,7 @@ def test_plot_field_lines():
         nphi_per_transit=100,
         ntransit=2,
         endpoint=True,
+        bs_chunk_size=10,
     )
 
 

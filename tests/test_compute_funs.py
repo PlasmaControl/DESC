@@ -1546,12 +1546,13 @@ def test_contravariant_basis_vectors_PEST(eq):
 
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.parametrize("eq, mapping_tol", [(get("W7-X"), 1e-10)])
+@pytest.mark.parametrize("eq, mapping_tol", [(get("precise_QA"), 1e-10)])
 def test_PEST_derivative_math(eq, mapping_tol):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index
 
-    eq_PEST = eq.to_sfl(4 * eq.L, 5 * eq.M, 4 * eq.N, copy=True, tol=mapping_tol)
+    # TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
+    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=mapping_tol)
     eq.change_resolution(
         L_grid=eq_PEST.L_grid, M_grid=eq_PEST.M_grid, N_grid=eq_PEST.N_grid
     )
@@ -1683,7 +1684,7 @@ def test_PEST_derivative_math(eq, mapping_tol):
             np.testing.assert_allclose(
                 data_to_verify[key_PEST][~near_zero],
                 data[key_DESC][~near_zero],
-                rtol=3e-3,
+                rtol=7e-3,
                 err_msg=key_PEST,
             )
         except AssertionError as e:

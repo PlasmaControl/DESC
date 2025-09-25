@@ -240,7 +240,7 @@ def _add_pressure(
                 ii,
                 None,
                 eqi,
-                0,
+                _get_ratio(eqi.surface, eq.surface),
                 pres_ratio,
                 1,
                 pert_order,
@@ -373,7 +373,7 @@ def _add_shaping(
                 None,
                 eqi,
                 bdry_ratio,
-                1,
+                _get_ratio(eqi.pressure, eq.pressure),
                 1,
                 pert_order,
                 objective_i,
@@ -464,7 +464,7 @@ def solve_continuation_automatic(  # noqa: C901
     verbose=1,
     checkpoint_path=None,
     jac_chunk_size="auto",
-    shaping_first=True,
+    shaping_first=False,
     **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
@@ -472,7 +472,12 @@ def solve_continuation_automatic(  # noqa: C901
     By default, the method first solves for a no pressure tokamak, then a finite beta
     tokamak, then a finite beta stellarator. Steps in resolution, pressure, and 3D
     shaping are determined adaptively, and the method may backtrack to use smaller steps
-    if the initial steps are too large.
+    if the initial steps are too large. Additionally, if steps completely fail, the
+    solver will restart from the no-pressure tokamak and add shaping first, then
+    pressure, which is the most robust approach. One can pass ``shaping_first=True``
+    to use this approach first, which is most robust but misses the opportunity
+    for a potentially more efficient continuation if the pressure first would
+    have worked.
 
     Parameters
     ----------
@@ -500,6 +505,8 @@ def solve_continuation_automatic(  # noqa: C901
         whether to force applying the shaping perturbations first before
         pressure and current. This is the most robust option for finite
         beta equilibria, especially at higher beta, but may be less efficient.
+        If False, this approach is only attempted if the pressure-first method
+        fails.
     **kwargs : dict, optional
         * ``mres_step``: int, default 6. The amount to increase Mpol by at each
           continuation step
@@ -549,16 +556,58 @@ def solve_continuation_automatic(  # noqa: C901
         checkpoint_path,
         jac_chunk_size=jac_chunk_size,
     )
+    eqfam_axisym = eqfam.copy()
 
     # for zero current we want to do shaping before pressure to avoid having a
     # tokamak with zero current but finite pressure (non-physical)
     # this is the most robust path to take, but not the most efficient for
     # stellarators.
-    if (
-        eq.current is not None
-        and np.all(eq.current(np.linspace(0, 1, 20)) == 0)
-        or shaping_first
-    ):
+    eq_has_no_current = eq.current is not None and np.all(
+        eq.current(np.linspace(0, 1, 20)) == 0
+    )
+    if not (eq_has_no_current or shaping_first):
+        # for other cases such as fixed iota or nonzero current we do pressure first
+        # since its cheaper to do it without the 3d modes
+        try:
+            eqfam = _add_pressure(
+                eq,
+                eqfam,
+                pres_step,
+                objective,
+                optimizer,
+                pert_order,
+                ftol,
+                xtol,
+                gtol,
+                maxiter,
+                verbose,
+                checkpoint_path,
+                jac_chunk_size=jac_chunk_size,
+            )
+
+            eqfam = _add_shaping(
+                eq,
+                eqfam,
+                bdry_step,
+                objective,
+                optimizer,
+                pert_order,
+                ftol,
+                xtol,
+                gtol,
+                maxiter,
+                verbose,
+                checkpoint_path,
+                jac_chunk_size=jac_chunk_size,
+            )
+        except RuntimeError:  # if the pressure-then-shaping path fails,
+            warnings.warn(  # we turn to the most robust of shaping first
+                "WARNING: Automatic continuation failed with "
+                + "pressure-then-shaping, retrying with shaping steps first",
+            )
+            shaping_first = True
+            eqfam = eqfam_axisym  # reset to before it tried steps
+    if eq_has_no_current or shaping_first:
         eqfam = _add_shaping(
             eq,
             eqfam,
@@ -591,40 +640,6 @@ def solve_continuation_automatic(  # noqa: C901
             jac_chunk_size=jac_chunk_size,
         )
 
-    # for other cases such as fixed iota or nonzero current we do pressure first
-    # since its cheaper to do it without the 3d modes
-    else:
-        eqfam = _add_pressure(
-            eq,
-            eqfam,
-            pres_step,
-            objective,
-            optimizer,
-            pert_order,
-            ftol,
-            xtol,
-            gtol,
-            maxiter,
-            verbose,
-            checkpoint_path,
-            jac_chunk_size=jac_chunk_size,
-        )
-
-        eqfam = _add_shaping(
-            eq,
-            eqfam,
-            bdry_step,
-            objective,
-            optimizer,
-            pert_order,
-            ftol,
-            xtol,
-            gtol,
-            maxiter,
-            verbose,
-            checkpoint_path,
-            jac_chunk_size=jac_chunk_size,
-        )
     eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
     timer.stop("Total time")

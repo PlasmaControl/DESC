@@ -1,17 +1,4 @@
-"""Batched vectorized operations.
-
-References
-----------
-The ``_batch_and_remainder``, ``_evaluate_in_chunks``, ``jacrev_chunked``,
-and ``jacfwd_chunked`` functions are adapted from JAX.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2139.
-https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2209.
-https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
-
-The original copyright notice is as follows
-Copyright 2018 The JAX Authors.
-Licensed under the Apache License, Version 2.0 (the "License");
-"""
+"""Batched operations."""
 
 from functools import partial
 
@@ -42,32 +29,45 @@ from jax.tree_util import (
     tree_transpose,
 )
 
-from desc.backend import jax, jnp, scan
+from desc.backend import jax, jnp, scan, vmap
 from desc.utils import errorif
 
-if jax.__version_info__ >= (0, 4, 16):
+try:
     from jax.extend import linear_util as lu
-else:
+except ImportError:
     from jax import linear_util as lu
 
 
-def _batch_and_remainder(x, batch_size: int):
-    leaves, treedef = tree_flatten(x)
+try:
+    from jax._src.lax.control_flow.loops import _batch_and_remainder
 
-    scan_leaves = []
-    remainder_leaves = []
+except ImportError:
+    # The old version of JAX doesn't have the required functions and will throw
+    # an ImportError. We use a simpler version of _batch_and_remainder from an older JAX
+    # version.
+    def _batch_and_remainder(x, batch_size: int):
+        """Taken from JAX 0.5.0.
 
-    for leaf in leaves:
-        num_batches = leaf.shape[0] // batch_size
-        total_batch_elems = num_batches * batch_size
-        scan_leaves.append(
-            leaf[:total_batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
-        )
-        remainder_leaves.append(leaf[total_batch_elems:])
+        Function is the same down to JAX 0.4.31.
+        """
+        leaves, treedef = tree_flatten(x)
 
-    scan_tree = treedef.unflatten(scan_leaves)
-    remainder_tree = treedef.unflatten(remainder_leaves)
-    return scan_tree, remainder_tree
+        scan_leaves = []
+        remainder_leaves = []
+
+        for leaf in leaves:
+            num_batches = leaf.shape[0] // batch_size
+            total_batch_elems = num_batches * batch_size
+            scan_leaves.append(
+                leaf[:total_batch_elems].reshape(
+                    num_batches, batch_size, *leaf.shape[1:]
+                )
+            )
+            remainder_leaves.append(leaf[total_batch_elems:])
+
+        scan_tree = treedef.unflatten(scan_leaves)
+        remainder_tree = treedef.unflatten(remainder_leaves)
+        return scan_tree, remainder_tree
 
 
 def _identity(y):
@@ -86,7 +86,7 @@ def _scan_append(f, x, reduction=None, carry_init_fun=None):
     def body(carry, x):
         return (), f(x)
 
-    _, result = scan(body, (), x, unroll=1)
+    _, result = scan(body, (), x)
     return result
 
 
@@ -102,13 +102,15 @@ def _scan_reduce(
         return reduction(carry, f(x)), None
 
     carry_init = carry_init_fun(jax.eval_shape(f, _get_first_chunk(x)))
-    result, _ = scan(body, carry_init, x, unroll=1)
+    result, _ = scan(body, carry_init, x)
     return result
 
 
 def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
     """A helper function to wrap f with a scan_fun.
 
+    Refrences
+    ---------
     Adapted from the NetKet project.
     https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py.
 
@@ -153,6 +155,7 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
+    # Note that num_batches in _batch_and_remainder is always positive.
     scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
         *scan_x, **kwargs
     )
@@ -191,7 +194,7 @@ def vmap_chunked(
     reduction=None,
     chunk_reduction=_identity,
 ):
-    """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
+    """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
     Parameters
     ----------
@@ -220,36 +223,24 @@ def vmap_chunked(
     if isinstance(argnums, int):
         argnums = (argnums,)
 
-    f = jax.vmap(f, in_axes=in_axes)
+    f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
-        _evaluate_in_chunks,
-        f,
-        chunk_size,
-        argnums,
-        reduction,
-        chunk_reduction,
+        _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
     )
 
 
 def batch_map(
-    fun,
-    fun_input,
-    /,
-    batch_size=None,
-    *,
-    reduction=None,
-    chunk_reduction=_identity,
+    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=_identity
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
-    This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
-    ``fun`` is assumed to be vectorized natively. No JAX vectorization such as ``vmap``
-    is applied to the supplied function. This makes compilation faster and avoids the
-    weaknesses of applying JAX vectorization, such as executing all branches of code
-    conditioned on dynamic values. For example, this function would be useful for
-    GitHub issue #1303.
+    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
+    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
+    supplied function. This makes compilation faster and avoids the weaknesses of
+    applying JAX vectorization, such as executing all branches of code conditioned on
+    dynamic values. For example, this function would be useful for GitHub issue #1303
 
     Parameters
     ----------
@@ -265,7 +256,8 @@ def batch_map(
         Should take two arguments and return one output, e.g. ``jnp.add``.
     chunk_reduction : callable
         Chunk-wise reduction operation.
-        Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+        Should typically apply ``reduction`` along the mapped axis,
+        e.g. ``jnp.add.reduce``.
 
     Returns
     -------
@@ -277,12 +269,7 @@ def batch_map(
         chunk_reduction(fun(fun_input))
         if batch_size is None
         else _evaluate_in_chunks(
-            fun,
-            batch_size,
-            (0,),
-            reduction,
-            chunk_reduction,
-            fun_input,
+            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
         )
     )
 
@@ -290,6 +277,15 @@ def batch_map(
 def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):
     """Define a vectorized function with broadcasting and batching.
 
+    Refrences
+    ---------
+    The original copyright notice is as follows
+    Copyright 2018 The JAX Authors.
+    Licensed under the Apache License, Version 2.0 (the "License");
+    https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
+
+    Notes
+    -----
     :func:`vectorize` is a convenience wrapper for defining vectorized
     functions with broadcasting, in the style of NumPy's
     `generalized universal functions
@@ -424,6 +420,13 @@ def jacfwd_chunked(
 ):
     """Jacobian of ``fun`` evaluated column-by-column using forward-mode AD.
 
+    Refrences
+    ---------
+    The original copyright notice is as follows
+    Copyright 2018 The JAX Authors.
+    Licensed under the Apache License, Version 2.0 (the "License");
+    https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
+
     Parameters
     ----------
     fun: callable
@@ -500,6 +503,13 @@ def jacrev_chunked(
     chunk_size=None,
 ):
     """Jacobian of ``fun`` evaluated row-by-row using reverse-mode AD.
+
+    Refrences
+    ---------
+    The original copyright notice is as follows
+    Copyright 2018 The JAX Authors.
+    Licensed under the Apache License, Version 2.0 (the "License");
+    https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 
     Parameters
     ----------

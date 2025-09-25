@@ -1,15 +1,16 @@
 """Objectives for fast ion confinement."""
 
+import warnings
+
 import numpy as np
 from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.integrals._interp_utils import cheb_pts, fourier_pts
 from desc.utils import setdefault
 
-from ..integrals import Bounce2D
-from ..integrals.basis import FourierChebyshevSeries
 from ..integrals.quad_utils import (
     automorphism_sin,
     get_quadrature,
@@ -145,8 +146,6 @@ class GammaC(_Objective):
         "_key",
         "_keys_1dr",
         "_spline",
-        "_X",
-        "_Y",
     ]
 
     _coordinates = "r"
@@ -186,9 +185,12 @@ class GammaC(_Objective):
 
         self._spline = spline
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
-        self._X = X
-        self._Y = Y
+        self._constants = {
+            "quad_weights": 1.0,
+            "alpha": alpha,
+            "X": fourier_pts(X),
+            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
+        }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
             "Y_B": Y_B,
@@ -232,23 +234,30 @@ class GammaC(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X,
-            self._Y,
-            self._grid.compress(self._grid.nodes[:, 0]),
-            domain=(0, 2 * np.pi),
-        )
+
+        rho = self._grid.compress(self._grid.nodes[:, 0])
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
+        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
+        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
+            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
+            self._constants["lambda"] = get_transforms(
+                "lambda",
+                eq,
+                grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=self._constants["Y"]),
+            )["L"]
+        assert self._constants["lambda"].basis.NFP == eq.NFP
+
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+            self._target, self._bounds, rho
         )
-        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
-        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -275,20 +284,20 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO (#1034): Use old theta values as initial guess.
-        theta = Bounce2D.compute_theta(
-            eq,
-            self._X,
-            self._Y,
+        theta = eq._map_clebsch_coordinates(
             iota=constants["transforms"]["grid"].compress(data["iota"]),
-            clebsch=constants["clebsch"],
-            # Pass in params so that root finding is done with the new
-            # perturbed λ coefficients and not the original equilibrium's.
-            params=params,
-        )
+            alpha=constants["X"],
+            zeta=constants["Y"],
+            L_lmn=params["L_lmn"],
+            lmbda=constants["lambda"],
+            # TODO (#1034): Use old theta values as initial guess.
+            tol=1e-7,
+        )[..., ::-1]
+
         data = compute_fun(
             eq,
             self._key,
@@ -305,32 +314,36 @@ class GammaC(_Objective):
         return constants["transforms"]["grid"].compress(data[self._key])
 
     def _build_spline(self, use_jit=True, verbose=1):
+        Y_B = self._hyperparam.pop("Y_B")
+        num_transit = self._hyperparam.pop("num_transit")
+        num_quad = self._hyperparam.pop("num_quad")
+        del self._constants["X"]
+        self._constants["Y"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
+        )
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "old " + self._key
-        num_transit = self._hyperparam.pop("num_transit")
-        Y_B = self._hyperparam.pop("Y_B")
 
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
+
+        rho = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["rho"] = rho
         self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparam.pop("num_quad")),
-            (automorphism_sin, grad_automorphism_sin),
+            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
         )
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + [self._key], eq, self._grid
         )
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + [self._key], eq, self._grid
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, rho
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -338,6 +351,7 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -345,10 +359,12 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
+        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
+        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["zeta"],
+            constants["Y"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,

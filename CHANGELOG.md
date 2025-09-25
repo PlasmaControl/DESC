@@ -2,6 +2,26 @@ Changelog
 =========
 
 New Features
+------------
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+
+Bug Fixes
+---------
+- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
+- ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+
+Backend
+-------
+
+- When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
+- Minimum JAX version bumped up to ``0.4.29``
+
+
+v0.15.0
+-------
+
+New Features
 
 - Multiple plotting related changes:
     - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
@@ -16,6 +36,8 @@ New Features
 - Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+
 
 Bug Fixes
 
@@ -25,6 +47,7 @@ Bug Fixes
 - Fixes bug in ``desc.geometry.curve.FourierRZCurve.from_values`` when numpy array is passed in for the ``coords`` argument.
 
 Backend
+
 - Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
 - No longer closes over the field in ``desc.magnetic_fields._core.field_line_integrate``, which can dramatically reduce compile times when the field being traced has large size attributes (for example, when using a ``desc.magnetic_fields._core.SplineMagneticField`` object).
 

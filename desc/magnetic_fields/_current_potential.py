@@ -10,7 +10,6 @@ from scipy.constants import mu_0
 
 from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -23,9 +22,12 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._core import (
@@ -90,6 +92,12 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + [
             "_params",
         ]
+    )
+
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + ["_potential", "_potential_dtheta", "_potential_dzeta"]
     )
 
     def __init__(
@@ -464,6 +472,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
         + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
+    )
+
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + [
+            "_M_Phi",
+            "_N_Phi",
+            "_sym_Phi",
+            "_Phi_basis",
+        ]
     )
 
     def __init__(

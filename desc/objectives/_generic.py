@@ -72,13 +72,17 @@ class ExternalObjective(_Objective):
         myobj = ExternalObjective(
             eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,
         )
-    )
 
     """
 
     _units = "(Unknown)"
     _print_value_fmt = "External objective value: "
-    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
+    _static_attrs = _Objective._static_attrs + [
+        "_fun",
+        "_fun_kwargs",
+        "_fun_wrapped",
+        "_vectorized",
+    ]
 
     def __init__(
         self,
@@ -188,6 +192,26 @@ class ExternalObjective(_Objective):
 class GenericObjective(_Objective):
     """A generic objective that can compute any quantity from the `data_index`.
 
+    Note that the grid passed-in should be the grid that is required to compute
+    the quantity. For example, "mirror ratio" is a flux-surface quantity which
+    depends on the max and min field strength on the flux surface. This requires
+    knowledge of the magnetic field magnitude on the whole flux surface, so the
+    passed-in grid must have poloidal and toroidal resolution, in addition to
+    whatever radial surfaces are desired. The same thing applies for quantities
+    needing flux surface averages, such as anything depending on iota
+    for a current-constrained equilibrium.
+
+    Also note that if a quantity is only a function of flux surface rho
+    (like "mirror ratio"), ``GenericObjective`` will detect this and only return
+    the unique values, one per flux surface, instead of the values corresponding to
+    every node of the passed-in grid (which may be 3-D as explained above).
+
+    Finally, this objective is intended for quantities computed in native DESC flux
+    coordinates (rho, theta, zeta). For quantities which require more complicated
+    transformations and calculations in other coordinate systems
+    (such as "Gamma_c"), this objective cannot be used and it is recommended to use
+    the dedicated objectives for those quantities.
+
     Parameters
     ----------
     f : str
@@ -205,9 +229,17 @@ class GenericObjective(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    __doc__ += """
+    Examples
+    --------
+
+    For examples, see the Advanced QS Optimization notebook in the documentation, or
+    the documentation page for adding new objective functions.
+
+    """
 
     _print_value_fmt = "Generic objective value: "
-    _static_attrs = ["_compute_kwargs"]
+    _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "f", "_p"]
 
     def __init__(
         self,
@@ -221,7 +253,7 @@ class GenericObjective(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="generic",
+        name="Generic",
         jac_chunk_size=None,
         compute_kwargs=None,
         **kwargs,
@@ -249,6 +281,7 @@ class GenericObjective(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
         )
+        self._print_value_fmt = f"{name} objective value: "
         self._p = _parse_parameterization(thing)
         self._scalar = not bool(data_index[self._p][self.f]["dim"])
         self._coordinates = data_index[self._p][self.f]["coordinates"]
@@ -347,6 +380,17 @@ class LinearObjectiveFromUser(_FixedObjective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    __doc__ += """
+    Examples
+    --------
+
+    For example use, see the Omnigenity Optimization notebook,
+    the Advanced QS Optimization notebook, or
+    the documentation page for adding new objective functions.
+
+    """
+
+    _static_attrs = _Objective._static_attrs + ["_fun"]
 
     _scalar = False
     _linear = True
@@ -486,7 +530,12 @@ class ObjectiveFromUser(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "Custom objective value: "
-    _static_attrs = ["_compute_kwargs"]
+    _static_attrs = _Objective._static_attrs + [
+        "_compute_kwargs",
+        "_fun",
+        "_fun_wrapped",
+        "_p",
+    ]
 
     def __init__(
         self,
@@ -500,7 +549,7 @@ class ObjectiveFromUser(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="custom",
+        name="Custom",
         jac_chunk_size=None,
         compute_kwargs=None,
         **kwargs,
@@ -515,6 +564,8 @@ class ObjectiveFromUser(_Objective):
             target = 0
         self._fun = fun
         self._grid = grid
+        self._print_value_fmt = f"{name} objective value: "
+
         self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,

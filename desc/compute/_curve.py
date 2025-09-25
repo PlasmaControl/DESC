@@ -2,9 +2,18 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign
 
-from ..utils import cross, dot, safenormalize
+from ..utils import (
+    cross,
+    dot,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safearccos,
+    safenormalize,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from .data_index import register_compute_fun
-from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 
 @register_compute_fun(
@@ -183,9 +192,11 @@ def _center_PlanarCurve(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
-    description="Position vector along curve",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={"r": [[0, 0, 0]]},
@@ -212,8 +223,13 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -252,8 +268,13 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -297,8 +318,13 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -349,8 +375,13 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -362,9 +393,11 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
-    description="Position vector along curve",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X_n", "Y_n", "center", "normal", "rotmat", "shift"],
     transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]]},
@@ -390,8 +423,13 @@ def _x_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -428,8 +466,13 @@ def _x_s_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -466,8 +509,13 @@ def _x_ss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -504,8 +552,13 @@ def _x_sss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    dotprod = dot(Zaxis, safenormalize(normal))
+    angle = safearccos(dotprod)
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
+        jnp.allclose(dotprod, -1.0),
+        jnp.diag(jnp.array([1.0, -1.0, -1.0])),
+        rotation_matrix(axis, angle),
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -546,9 +599,11 @@ def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
-    description="Position vector along curve",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["R_n", "Z_n", "rotmat", "shift"],
     transforms={"R": [[0, 0, 0]], "Z": [[0, 0, 0]], "grid": []},
@@ -696,9 +751,11 @@ def _center_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
-    description="Position vector along curve",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]], "Z": [[0, 0, 0]]},
@@ -823,9 +880,11 @@ def _center_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
-    description="Position vector along curve",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
     dim=3,
     params=["X", "Y", "Z", "rotmat", "shift"],
     transforms={"knots": []},

@@ -20,8 +20,7 @@ from desc.coils import (
     initialize_modular_coils,
     initialize_saddle_coils,
 )
-from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -29,7 +28,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
-from desc.utils import dot
+from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 
 class TestCoil:
@@ -359,7 +358,7 @@ class TestCoil:
             )
 
             # FourierPlanarCoil
-            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, 1], r_n=R)
             test(
                 coil,
                 grid_xyz,
@@ -378,8 +377,8 @@ class TestCoil:
                 coil,
                 grid_xyz,
                 grid_rpz,
-                A_true_rpz,
-                correct_flux,
+                -A_true_rpz,
+                -correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
             )
@@ -1593,3 +1592,26 @@ def test_planar_coil_from_values_orientation():
     B_planar2 = coil_planar2.compute_magnetic_field(coords, source_grid=grid)
     np.testing.assert_allclose(B_XYZ, B_planar1, rtol=1e-3)
     np.testing.assert_allclose(B_XYZ, B_planar2, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_planar_coil_opposing_normals_fields():
+    """Test that planar coils with opposing normals have opposing fields."""
+    coil_r = FourierPlanarCoil(current=1e6, center=[0, 0, 0], normal=[0, 0, 1], r_n=[2])
+    coil_xy = FourierXYCoil(
+        current=1e6, center=[0, 0, 0], normal=[0, 0, 1], X_n=[0, 2], Y_n=[2, 0]
+    )
+
+    def test(coil1):
+        coil2 = coil1.copy()
+        coil2.normal = -coil1.normal
+        grid = LinearGrid(N=20)
+        field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        # because the normals are opposite directions, the "positive" current direction
+        # for each coil is opposite the other, so their fields should be exactly
+        # opposite in direction but equal in magnitude (as the geometry is the same)
+        np.testing.assert_allclose(field1, -field2)
+
+    test(coil_r)
+    test(coil_xy)

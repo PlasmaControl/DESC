@@ -19,8 +19,10 @@ Bug Fixes
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 
 Backend
+-------
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
+- Minimum JAX version bumped up to ``0.4.29``
 
 
 v0.15.0

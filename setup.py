@@ -31,7 +31,10 @@ setup(
     long_description=long_description,
     long_description_content_type="text/x-rst",
     url="https://github.com/PlasmaControl/DESC/",
-    author="Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen",
+    author=(
+        "Daniel Dudt, Rory Conlin, Dario Panici, Kaya Unalmis, "
+        "Yigit Gunsur Elmacioglu, Rahul Gaur, Patrick Kim, Egemen Kolemen"
+    ),
     author_email="PlasmaControl@princeton.edu",
     license="MIT",
     classifiers=[

@@ -39,6 +39,7 @@ from . import (
     _neoclassical,
     _old,
     _omnigenity,
+    _particle,
     _profiles,
     _stability,
     _surface,

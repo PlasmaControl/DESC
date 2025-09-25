@@ -183,7 +183,6 @@ def test_tracing_vacuum_tokamak():
     R0 = rmajor + rminor / 2
 
     # Create a vacuum tokamak equilibrium with a FourierRZToroidalSurface
-    # TODO: replace with one of the existing vacuum tokamak
     surf = FourierRZToroidalSurface(
         R_lmn=np.array([rmajor, rminor]),
         modes_R=np.array([[0, 0], [1, 0]]),
@@ -193,7 +192,7 @@ def test_tracing_vacuum_tokamak():
     eq = Equilibrium(surface=surf, L=8, M=8, N=0, Psi=3)
     eq.solve(verbose=1)
 
-    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e6)
     model = VacuumGuidingCenterTrajectory(frame="flux")
 
     # Particle tracing compute the field on individual points as grid which

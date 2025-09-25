@@ -14,7 +14,7 @@ Bug Fixes
 Backend
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
-- ``desc.continuation.solve_continuation_automatic`` now defaults to performing shape perturbations first and then pressure for non-axisymmetric configurations, which is the most robust method for arriving at the final equilibrium. To recover the old behavior of applying pressure then shaping, which may be more efficient in some cases but typically less robust, pass the flag ``shaping_first=False``.
+- ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure for if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
 
 
 v0.15.0

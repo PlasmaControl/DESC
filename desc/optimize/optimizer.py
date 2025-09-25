@@ -122,15 +122,26 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array_like or ``'auto'`` or ``'ess'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. If passing a custom array, it must have size equal to the total
+            number of optimization parameters across all objects in ``things`` (i.e.,
+            sum of ``t.dim_x`` for each ``t`` in ``things``). For Equilibrium objects,
+            the ordering must match ``eq.x_idx`` parameter indices. The array should
+            be ordered by concatenating parameters from each object in ``things`` in
+            the same order. If set to ``'auto'``, the scale is iteratively updated
+            using the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``.
+            ``ess_alpha`` is the decay rate of the scaling, and ``ess_type`` is the type
+            of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+            Default is ``'Linf'`` and ``ess_alpha`` is 1.2. ``ess_min_value`` is the
+            minimum allowed scale value. Default is 1e-7.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -147,6 +158,14 @@ class Optimizer(IOAble):
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``solve_options``.
+
+            - ``"ess_alpha"`` : float, optional
+              Decay rate of the scaling. Default is 1.2.
+            - ``"ess_type"`` : str, optional
+              Type of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+              Default is ``'Linf'``.
+            - ``"ess_min_value"`` : float, optional
+              Minimum allowed scale value. Default is 1e-7.
 
             See the documentation page [Optimizers
             Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
@@ -211,6 +230,24 @@ class Optimizer(IOAble):
             # save these for later
             eq_params_init = eq.params_dict.copy()
 
+            if isinstance(x_scale, str) and x_scale == "ess":
+                options = {} if options is None else options
+                ess_alpha = options.pop("ess_alpha", 1.2)
+                ess_type = options.pop("ess_type", "Linf")
+                ess_min_value = options.pop("ess_min_value", 1e-7)
+                x_scales = []
+                for t in things:
+                    if isinstance(t, Equilibrium):
+                        t_scale = _create_exponential_spectral_scale(
+                            eq=t,
+                            alpha=ess_alpha,
+                            scale_type=ess_type,
+                            min_value=ess_min_value,
+                        )
+                    else:
+                        t_scale = np.ones(t.dim_x)
+                    x_scales.append(t_scale)
+                x_scale = np.concatenate(x_scales)
         options = {} if options is None else options
         timer = Timer()
         options = {} if options is None else options
@@ -478,7 +515,7 @@ def _maybe_wrap_nonlinear_constraints(
     return objective, nonlinear_constraints
 
 
-def get_combined_constraint_objectives(
+def get_combined_constraint_objectives(  # noqa: C901
     eq,
     constraints,
     objective,
@@ -547,6 +584,22 @@ def get_combined_constraint_objectives(
             )
             nonlinear_constraint.build(verbose=verbose)
 
+    if is_prox and not isinstance(x_scale, str):
+        # If we have ProximalProjection, get original dimension from equilibrium
+        # and project x_scale through both stages: (eq.dim_x) ->
+        # (dim size post proximal projection)
+        original_dim = objective._objective._eq.dim_x
+        x_scale = np.broadcast_to(x_scale, original_dim)
+
+        # Project from (eq.dim_x) -> (dim size post proximal projection)
+        # (remove excluded parameters from ProximalProjection)
+        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        included_idx = []
+        for arg in objective._objective._eq.optimizable_params:
+            if arg not in excluded_params:
+                included_idx.extend(objective._objective._eq.x_idx[arg])
+        x_scale = x_scale[included_idx]
+
     if linear_constraint is not None and not isinstance(x_scale, str):
         # need to project x_scale down to correct size
         Z = objective._Z
@@ -612,6 +665,59 @@ def _get_default_tols(
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
 
     return stoptol
+
+
+##TODO: Add Diagnostics for x_scale to track what modes are being scaled
+def _create_exponential_spectral_scale(
+    eq, alpha=1.2, scale_type="Linf", min_value=1e-7
+):
+    """Create x_scale using exponential spectral scaling.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium object to create scaling for
+    alpha : float, optional
+        Decay rate of the scaling. Default is 1.2
+    scale_type : str, optional
+        Type of scaling to use. Options are:
+        - 'L1': Diamond pattern using |m| + |n|
+        - 'L2': Circular pattern using sqrt(m² + n²)
+        - 'Linf': Square pattern using max(|m|,|n|)
+        Default is 'Linf'
+    min_value : float, optional
+        Minimum allowed scale value. Default is 1e-7
+
+    Returns
+    -------
+    ndarray
+        Array of scale values for each parameter
+    """
+    # Initialize x_scale array
+    x_scale = np.ones(eq.dim_x)
+
+    # Get R and Z modes (m,n pairs)
+    R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
+    Z_modes = np.abs(eq.surface.Z_basis.modes[:, 1:])
+
+    # Calculate mode scales based on scale_type
+    def get_mode_scales(modes):
+        if scale_type == "L1":
+            mode_level = np.sum(modes, axis=1)  # |m| + |n|
+        elif scale_type == "L2":
+            mode_level = np.sqrt(np.sum(modes**2, axis=1))  # sqrt(m² + n²)
+        elif scale_type == "Linf":
+            mode_level = np.max(modes, axis=1)  # max(|m|,|n|)
+        return np.maximum(np.exp(-alpha * mode_level) / np.exp(-alpha), min_value)
+
+    R_scales = get_mode_scales(R_modes)
+    Z_scales = get_mode_scales(Z_modes)
+
+    # Apply scaling to R and Z boundary coefficients
+    x_scale[eq.x_idx["Rb_lmn"]] = R_scales
+    x_scale[eq.x_idx["Zb_lmn"]] = Z_scales
+
+    return x_scale
 
 
 optimizers = {}

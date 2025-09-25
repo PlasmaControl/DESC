@@ -2322,7 +2322,7 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array_like or ``'auto'`` or ``'ess'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -2331,6 +2331,12 @@ class Equilibrium(IOAble, Optimizable):
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``.
+            ``ess_alpha`` is the decay rate of the scaling, and ``ess_type`` is the type
+            of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+            Default is ``'Linf'`` and ``ess_alpha`` is 1.2. ``ess_min_value`` is the
+            minimum allowed scale value. Default is 1e-7.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

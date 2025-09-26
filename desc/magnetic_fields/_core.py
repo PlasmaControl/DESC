@@ -2703,10 +2703,10 @@ def _field_line_integrate(
     stepsize_controller,
     event,
     adjoint,
-    chunk_size,
-    bs_chunk_size,
     options,
-    return_aux,
+    chunk_size=None,
+    bs_chunk_size=None,
+    return_aux=False,
 ):
     """JIT/AD friendly field line integrator.
 

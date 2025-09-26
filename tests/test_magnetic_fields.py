@@ -1253,6 +1253,7 @@ class TestMagneticFields:
                 event=event,
                 adjoint=adjoint,
                 chunk_size=chunk_size,
+                bs_chunk_size=None,
                 options=options,
                 return_aux=False,
             )
@@ -1312,6 +1313,7 @@ class TestMagneticFields:
                 event=event,
                 adjoint=adjoint,
                 chunk_size=None,
+                bs_chunk_size=None,
                 options={},
                 return_aux=False,
             )

@@ -2,7 +2,6 @@
 
 from functools import partial
 
-from jax._src import core
 from jax._src.api import (
     _check_input_dtype_jacfwd,
     _check_input_dtype_jacrev,
@@ -21,10 +20,7 @@ from jax._src.numpy.vectorize import (
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
-from jax._src.pjit import auto_axes
-from jax._src.sharding_impls import canonicalize_sharding
-from jax._src.util import unzip2, wraps
-from jax.sharding import PartitionSpec
+from jax._src.util import wraps
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -36,95 +32,42 @@ from jax.tree_util import (
 from desc.backend import jax, jnp, scan, vmap
 from desc.utils import errorif
 
-if jax.__version_info__ >= (0, 4, 16):
+try:
     from jax.extend import linear_util as lu
-else:
+except ImportError:
     from jax import linear_util as lu
 
 
-def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
+try:
+    from jax._src.lax.control_flow.loops import _batch_and_remainder
 
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
+except ImportError:
+    # The old version of JAX doesn't have the required functions and will throw
+    # an ImportError. We use a simpler version of _batch_and_remainder from an older JAX
+    # version.
+    def _batch_and_remainder(x, batch_size: int):
+        """Taken from JAX 0.5.0.
 
-    def f(l):
-        return l[:batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+        Function is the same down to JAX 0.4.31.
+        """
+        leaves, treedef = tree_flatten(x)
 
-    aval = core.typeof(leaf)
-    if aval.sharding.spec[0] is not None:
-        raise ValueError(
-            "0th dimension of leaf passed to `jax.lax.map` should be replicated."
-            f" Got {aval.str_short(True, True)}"
-        )
+        scan_leaves = []
+        remainder_leaves = []
 
-    out_s = aval.sharding.update(
-        spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
-    )
-    out_s = canonicalize_sharding(out_s, "lax.map")
-    if out_s is not None and out_s.mesh._any_axis_explicit:
-        return auto_axes(f, out_sharding=out_s, axes=out_s.mesh.explicit_axes)(leaf)
-    return f(leaf)
-
-
-def _remainder_leaf(leaf, batch_elems):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
-
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
-
-    def f(l):
-        return l[batch_elems:]
-
-    sharding = canonicalize_sharding(core.typeof(leaf).sharding, "lax.map")
-    if sharding is not None and sharding.mesh._any_axis_explicit:
-        return auto_axes(f, out_sharding=sharding, axes=sharding.mesh.explicit_axes)(
-            leaf
-        )
-    return f(leaf)
-
-
-def _batch_and_remainder(x, batch_size: int):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
-
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
-    leaves, treedef = tree_flatten(x)
-    if not leaves:
-        return x, None
-    num_batches, remainder = divmod(leaves[0].shape[0], batch_size)
-    batch_elems = num_batches * batch_size
-    if num_batches == 0:
-        remainder_leaves = [_remainder_leaf(leaf, batch_elems) for leaf in leaves]
-        return None, treedef.unflatten(remainder_leaves)
-    elif remainder:
-        scan_leaves, remainder_leaves = unzip2(
-            [
-                (
-                    _scan_leaf(leaf, batch_elems, num_batches, batch_size),
-                    _remainder_leaf(leaf, batch_elems),
+        for leaf in leaves:
+            num_batches = leaf.shape[0] // batch_size
+            total_batch_elems = num_batches * batch_size
+            scan_leaves.append(
+                leaf[:total_batch_elems].reshape(
+                    num_batches, batch_size, *leaf.shape[1:]
                 )
-                for leaf in leaves
-            ]
-        )
-        return treedef.unflatten(scan_leaves), treedef.unflatten(remainder_leaves)
-    else:
-        scan_leaves = tuple(
-            _scan_leaf(leaf, batch_elems, num_batches, batch_size) for leaf in leaves
-        )
-        return treedef.unflatten(scan_leaves), None
+            )
+            remainder_leaves.append(leaf[total_batch_elems:])
+
+        scan_tree = treedef.unflatten(scan_leaves)
+        remainder_tree = treedef.unflatten(remainder_leaves)
+        return scan_tree, remainder_tree
 
 
 def _identity(y):

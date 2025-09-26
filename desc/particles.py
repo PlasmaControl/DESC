@@ -651,7 +651,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a curve.
 
     Sampling will done on the nodes of the grid based on the curve length represented by
-    "|x_s|*ds" at each node. Higher the length, more likely a node will be
+    |x_s|*ds at each node. Higher the length, more likely a node will be
     chosen to spawn a particle. Multiple particles can be initialized at the same node.
 
     Parameters
@@ -812,7 +812,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a surface.
 
     Sampling will done on the nodes of the grid based on the surface area represented by
-    "|e_theta x e_zeta|" at each node. Higher the area, more likely a node will be
+    |e_theta x e_zeta| at each node. Higher the area, more likely a node will be
     chosen to spawn a particle. Multiple particles can be initialized at the same node.
 
     Parameters

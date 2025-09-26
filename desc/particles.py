@@ -651,8 +651,8 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a curve.
 
     Sampling will done on the nodes of the grid based on the curve length represented by
-    |x_s|*ds at each node. Higher the length, more likely a node will be
-    chosen to spawn a particle. Multiple particles can be initialized at the same node.
+    `|x_s|*ds` at each node. Higher the length, more likely a node will be chosen to
+    spawn a particle. Multiple particles can be initialized at the same node.
 
     Parameters
     ----------
@@ -670,7 +670,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : Grid
-        Grid used to discretize curve. Default is LinearGrid(N=curve.N)
+        Grid used to discretize curve. Default is ``LinearGrid(N=curve.N)``
     seed : int
         Seed for rng.
     is_curve_magnetic_axis : bool
@@ -812,7 +812,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a surface.
 
     Sampling will done on the nodes of the grid based on the surface area represented by
-    |e_theta x e_zeta| at each node. Higher the area, more likely a node will be
+    `|e_theta x e_zeta|` at each node. Higher the area, more likely a node will be
     chosen to spawn a particle. Multiple particles can be initialized at the same node.
 
     Parameters
@@ -831,7 +831,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : Grid
-        Grid used to discretize curve. Default is LinearGrid(M=surface.M, N=surface.N)
+        Grid used to discretize curve. Default is `LinearGrid(M=surface.M, N=surface.N)`
     seed : int
         Seed for rng.
     is_surface_from_eq : bool

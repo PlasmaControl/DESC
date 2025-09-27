@@ -142,9 +142,6 @@ On Your Local Machine
 On Most Linux Computing Clusters
 ********************************
 
-On computing clusters you must call ``module load anaconda`` to use conda (in some clusters, you must specify the version of anaconda you need).
-
-
 .. tab-set::
 
     .. tab-item:: CPU
@@ -157,13 +154,17 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
         .. dropdown:: GitHub
 
+            On computing clusters one typically types ``module load anaconda`` to use conda.
+            Some clusters require specifying the version of anaconda too.
+
+            .. code-block:: sh
+
+                module load anaconda
+
             .. code-block:: sh
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                # below command may vary depending on cluster
-                module load anaconda
-
                 conda create --name desc-env 'python>=3.10, <=3.13'
                 conda activate desc-env
                 pip install --editable .
@@ -178,14 +179,14 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
         For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         We will show instructions that work for the clusters we have tested.
-        Most of these clusters below are `x86_64` architectures.
+        Most of these clusters are ``x86_64`` architectures.
         You may try the instructions for the cluster most resembling your own, or see if your cluster has
-        JAX GPU installation instructions, as that is the main cause for installation differences among clusters.
+        JAX GPU installation instructions, as that is the main cause for installation differences.
 
         .. attention::
 
-            DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet).
-            Older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
+            DESC does not always guarantee support for the latest version of JAX (which does not have a stable 1.0 release yet).
+            Older versions of ``jax`` may need to be installed, which may in turn require lower versions of ``jaxlib``, as well as CUDA and CuDNN.
 
         .. dropdown:: Perlmutter (NERSC)
 
@@ -233,7 +234,8 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
         .. dropdown:: Della and Stellar Clusters (Princeton)
 
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
-            If the following instructions do not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
+            If this does not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
+
             These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
 
             .. code-block:: sh
@@ -266,6 +268,7 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
         .. dropdown:: RAVEN (IPP, Germany)
 
             These instructions were verified to work on the RAVEN cluster at IPP on Aug 18, 2024.
+            They do not install FINUFFT with GPU support.
 
             .. code-block:: sh
 

@@ -100,7 +100,7 @@ class FourierChebyshevSeries(IOAble):
     --------
     Let the magnetic field be B = ∇ρ × ∇x. This basis will then parameterize
     maps in Clebsch coordinates. Passing in a sequence of x values tracking
-    the field line (see ``get_fieldline``) to the ``compute_cheb`` method will
+    the field line (see ``get_alphas``) to the ``compute_cheb`` method will
     generate a 1D parameterization of f along the field line.
 
     Notes

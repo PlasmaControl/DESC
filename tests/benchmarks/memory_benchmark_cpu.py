@@ -85,7 +85,7 @@ if __name__ == "__main__":
         "test_proximal_freeb_jac_blocked",
         "test_proximal_freeb_jac_batched",
         "test_proximal_jac_ripple",
-        "test_proximal_jac_ripple_spline",
+        "test_proximal_jac_ripple_bounce1d",
         "test_eq_solve",
     ]
 

@@ -191,6 +191,7 @@ On Most Linux Computing Clusters
         .. dropdown:: Perlmutter (NERSC)
 
             These instructions were verified to work on the Perlmutter supercomputer at NERSC on July 3, 2025.
+            They do not install FINUFFT with GPU support.
 
             Set up the correct cuda environment for jax installation
 

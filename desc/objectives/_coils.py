@@ -179,7 +179,7 @@ class _CoilObjective(_Objective):
         if self._bounds:
             self._bounds = (
                 broadcast_input(self._bounds[0]),
-                broadcast_input(self._bounds[0]),
+                broadcast_input(self._bounds[1]),
             )
         elif self._target:
             self._target = broadcast_input(self._target)
@@ -1364,7 +1364,7 @@ class CoilArclengthVariance(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m^2)"
     _print_value_fmt = "Coil Arclength Variance: "
-    _broadcast_input = "Node"
+    _broadcast_input = "Coil"
 
     def __init__(
         self,

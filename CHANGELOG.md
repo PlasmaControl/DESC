@@ -5,6 +5,9 @@ New Features
 ------------
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Adds support for optimization targeting individual coils in a coilset.
+  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+  - Optional argument `indices` consists of a nested list of bools, allowing certain coils to be excluded from optimization under the particular objective.
 
 Bug Fixes
 ---------

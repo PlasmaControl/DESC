@@ -162,6 +162,11 @@ class _CoilObjective(_Objective):
         )
 
         def broadcast_input(arr):
+            # No need to broadcast if input is only a scalar
+            arr_flat = tree_leaves(arr)
+            if len(arr_flat) == 1:
+                return arr_flat[0]
+
             arr, _ = tree_flatten(jax_tree_broadcast(arr, self._coil_tree))
             if self._broadcast_input == "Node":
                 arr = [

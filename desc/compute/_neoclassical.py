@@ -804,7 +804,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     KE = KE_frac * 5.6076*10**(-13) # J, 3.5 MeV if KE_frac=1
     v2 = 2*KE/m_alpha # m/s
 
-    iotas = data['iota'] # ????? need to align to surfaces better
+    iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
     tau_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch inv
     omega_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch invs
 
@@ -846,8 +846,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     def tb_btfilter(iotas,points,N,nfp,alpha_drift_out): # Perform barely trapped filter
         points_0 = points[0][:][:][:][:]
         points_1 = points[1][:][:][:][:]
-        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas[0] - N*nfp)) # zeta->chi assuming delta(alpha)=0
-        # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
+        iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
+        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
         return jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0) # set barely-trapped particles to 0
     def fb_btfilter(iotas,points,N,nfp,alpha_drift_out): # Do nothing
         return alpha_drift_out
@@ -905,9 +905,9 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     tau_arr = jnpmean_nz(vtau_out,axis=0) / jnp.sqrt(v2) # vtau->tau
 
     # Calculate omega (per surface per pitch angle) accounting for energies
-    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas[0]))) * (m_alpha/(Z*e)) * alpha_drift_avg # shape [rho,pitch]
+    iotas_omega = jnp.broadcast_to(iotas[...,None],(iotas.shape[0],num_pitch))
+    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_avg # shape [rho,pitch]
     omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],len(KE_frac))) * v2 # shape [rho,pitch,energy]
-    # ????? NEED WAY TO SET IOTA TO CORRECT SURFACE IN LINE ABOVE
 
     # Objective function calculation (per surface per pitch angle) #
     
@@ -956,7 +956,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = iotas # debugging
+    # data["f_tr1"] = iotas_omega # debugging
     return data
 
     # debugging

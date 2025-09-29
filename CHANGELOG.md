@@ -10,6 +10,7 @@ Bug Fixes
 ---------
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 
 Backend
 -------

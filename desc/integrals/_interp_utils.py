@@ -979,6 +979,11 @@ def _test_gpu_jax_finufft():
     from tests.test_interp_utils import TestFastInterp, _test_inputs_1D
 
     try:
+        from jax_finufft import nufft2  # noqa: F401
+    except ImportError:
+        return
+
+    try:
         TestFastInterp.test_non_uniform_real_FFT(*_test_inputs_1D[0])
     except NotImplementedError:
         warnings.warn(

@@ -231,7 +231,13 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         profiles = {"current": eq.current, "iota": eq.iota}
         if iota is not None:
             profiles["iota"] = iota
-        data = compute_fun(eq, data_keys, params, transforms, profiles)
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            data_keys,
+            params,
+            transforms,
+            profiles,
+        )
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar * data["b"] + (

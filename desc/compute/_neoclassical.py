@@ -675,6 +675,11 @@ def _poloidal_drift(data, B, pitch):
         data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
+def _radial_drift(data, B, pitch):
+    return safediv(
+        data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+    )
+
 _bounce1D_doc = {
     "num_well": _bounce_doc["num_well"],
     "num_quad": _bounce_doc["num_quad"],
@@ -699,8 +704,8 @@ _bounce1D_doc = {
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    # data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
-    data=["min_tz |B|", "max_tz |B|", "gbdrift", "fieldline length"]
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
+    # data=["min_tz |B|", "max_tz |B|", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     public=False,
@@ -752,6 +757,19 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 
         return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
 
+    def psi_drift(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, _psi_drift = bounce.integrate(
+            [_v_tau, _radial_drift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0"],
+            num_well=num_well,
+        )
+        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+
+        return _psi_drift, points, v_tau, data["pitch_inv"]
 
     grid = transforms["grid"].source_grid
     alpha_drift_out, points, vtau_out, count_nz, pitch_inv = (
@@ -763,10 +781,21 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
             num_pitch,
             surf_batch_size,
         )
-    ) # [rho][alpha][pitch][wells]
-    # count_nz will be 3D [rho][alpha][pitch]
+    ) # [rho,alpha,pitch,wells]
+    # count_nz will be 3D [rho,alpha,pitch]
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
+
+    psi_drift_out, points, vtau_out, pitch_inv = (
+        _compute(
+            psi_drift, 
+            {"cvdrift0": data["cvdrift0"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+        )
+    ) # [rho,alpha,pitch,wells]
 
     # specify energy
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -844,9 +873,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     alpha_drift_out = jnp.reshape(alpha_drift_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2])) # flatten array to average simultaneously over wells and field lines
     
     # Average and standard deviation per-surface and pitch inverse
-    # alpha_drift_out = jnp.transpose(alpha_drift_out, (1,3,0,2)) # rearrange for flattening
-    # alpha_drift_out = jnp.reshape(alpha_drift_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2])) # flatten array to average simultaneously over wells and field lines
-    alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=0) # does not include zero wells in averaging, should be size [rho][pitch] / size [rho][pitch]
+    alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=0) # does not include zero wells in averaging, should be size [rho,pitch] / size [rho,pitch]
     alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=0)
     
     # resize alpha_drift_avg and alpha_drift_std to make computation possible
@@ -866,6 +893,12 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Average per-surface and pitch inverse
     alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=0) # average simultaneously over wells and field lines
 
+    # Calculate radial drift averages
+    psi_drift_out = jnp.transpose(psi_drift_out, (1,3,0,2)) # rearrange for flattening
+    psi_drift_out = jnp.reshape(psi_drift_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2])) # flatten array to average simultaneously over wells and field lines
+    psi_drift_avg = jnpmean_nz((m_alpha/(Z*e)) * psi_drift_out,axis=0) # does not include zero wells in averaging, should be size [rho,pitch] / size [rho,pitch]
+    psi_drift_avg = jnp.broadcast_to(psi_drift_avg[...,None],(psi_drift_avg.shape[0],psi_drift_avg.shape[1],len(KE_frac))) * v2 # account for energy in radial drift averages, shape [rho,pitch,energy] 
+
     # Calculate tau
     vtau_out = jnp.transpose(vtau_out, (1,3,0,2))
     vtau_out = jnp.reshape(vtau_out,(num_wells*num_fieldlines,ado_shape[0],ado_shape[2]))
@@ -878,10 +911,11 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 
     # Objective function calculation (per surface per pitch angle) #
     
-    # Set up resonance and omega arrays
+    # Set up resonance, omega, and psi_drift_avg arrays
     res_broad = res_arr[None,None,None,:] # make 4D array with res values on axis=3
     res_broad = jnp.broadcast_to(res_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], res_arr.shape[0]))
     omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],res_arr.shape[0]))
+    psi_da_broad = jnp.broadcast_to(psi_drift_avg[...,None], (psi_drift_avg.shape[0],psi_drift_avg.shape[1],psi_drift_avg.shape[2],res_arr.shape[0]))
 
     # Set parameters (it is recommended to change wd if you desire a wider or narrower bump function, NOT w and A)
     # w, A, wd are able to be configured for different weightings on different resonances if desired
@@ -900,7 +934,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     obj_out = jnp.where(
         condition,
         # A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # form option 1, clip to avoid overflow warning in jnp.exp()
-        A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
+        A * (psi_da_broad**2) * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
     obj_out = jnp.sum(obj_out,axis=3) # outputs array with size (rho,pitch,energy)
@@ -921,8 +955,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']'''
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
-    # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = pitch_inv # debugging
+    data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
+    data["f_tr1"] = iotas # debugging
     return data
 
     # debugging

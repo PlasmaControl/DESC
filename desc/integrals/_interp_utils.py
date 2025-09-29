@@ -24,7 +24,6 @@ except ImportError:
         "computations that involve bounce integrals.\n"
     )
 
-
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv

@@ -476,6 +476,7 @@ class TrappedResonance(_Objective):
         deriv_mode="auto",
         rho=np.linspace(0.1, 0.9, 3),
         alpha=np.linspace(0,2*np.pi,1),
+        KE_frac=np.array([0.00000001]),
         *,
         num_transit=2,
         knots_per_transit=100,
@@ -500,13 +501,14 @@ class TrappedResonance(_Objective):
             "alpha": alpha,
             "zeta": np.linspace(
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            ),
+            )
         }
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
             "num_well": num_well,
+            "KE_frac": KE_frac
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr1"

@@ -2769,7 +2769,7 @@ def _coilset_flatten(x):
         with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
 
     """
-    ## Local import to avoid circular import
+    # Local import to avoid circular import
     from desc.coils import CoilSet, _Coil
 
     def flatten(t):

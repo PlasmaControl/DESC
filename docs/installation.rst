@@ -184,12 +184,12 @@ On computing clusters you must call ``module load anaconda`` to use conda (in so
 
                 pip install --no-cache-dir -r devtools/dev-requirements.txt
                 pip install --no-cache-dir --editable .
-                pip install --no-cache-dir "jax[cuda12]"
+                pip install --no-cache-dir "jax[cuda12]==0.6.2"
 
-        The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
+            The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
 
-        Before running a DESC script, you MUST also execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
-        or in your SLURM script (for submitted jobs).
+            Before running a DESC script, you may also need to execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
+            or in your SLURM script (for submitted jobs).
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
 

@@ -3971,8 +3971,6 @@ def plot_field_lines(
 
         fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
     """
-    from diffrax import diffeqsolve
-
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:

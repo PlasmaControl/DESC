@@ -2062,6 +2062,7 @@ def poincare_plot(
     if any(result._value > 0):
         err0_idx = np.where(result._value > 0)[0][0]
         # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
         err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
             result._value
         )[err0_idx]
@@ -3994,6 +3995,7 @@ def plot_field_lines(
     if any(result._value > 0):
         err0_idx = np.where(result._value > 0)[0][0]
         # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
         err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
             result._value
         )[err0_idx]

@@ -2631,9 +2631,7 @@ def field_line_integrate(
         Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
         evaluates all the source grid points at once. Defaults to None.
     options : dict, optional
-        Additional arguments to pass to the diffrax diffeqsolve. If user wants to
-        provide ``stepsize_controller``, ``saveat``, ``event``, or ``adjoint``, they
-        should use ``_field_line_integrate``.
+        Additional arguments to pass to the diffrax diffeqsolve.
     return_aux : bool, optional
         Whether to return auxiliary information from the integrator. If True, will
         return a tuple (r, z, aux) where aux consists ``stats`` and ``result`` from

@@ -985,7 +985,7 @@ def trace_particles(
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
-    solver=Tsit5(),
+    solver=Tsit5(scan_kind="bounded"),
     adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
     options=None,
@@ -1028,8 +1028,8 @@ def trace_particles(
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
         ``event`` is provided.
     solver: diffrax.AbstractSolver, optional
-        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
-        explicit solver.
+        diffrax Solver object to use in integration. Defaults to
+        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
     adjoint : diffrax.AbstractAdjoint, optional
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD

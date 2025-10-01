@@ -179,7 +179,7 @@ def test_tracing_vacuum_tokamak():
     """Test particle tracing in a vacuum tokamak."""
     rmajor = 4.0
     rminor = 1.0
-    ts = np.linspace(0, 1e-7, 100)
+    ts = np.linspace(0, 1e-6, 100)
     R0 = rmajor + rminor / 2
 
     # Create a vacuum tokamak equilibrium with a FourierRZToroidalSurface

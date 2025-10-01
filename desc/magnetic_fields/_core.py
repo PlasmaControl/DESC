@@ -2628,8 +2628,8 @@ def field_line_integrate(
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
     bs_chunk_size: int or None
-        Chunk size to use when evaluating the magnetic field. If None, evaluates
-        all at once. Defaults to None.
+        Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
+        evaluates all the source grid points at once. Defaults to None.
     options : dict, optional
         Additional arguments to pass to the diffrax diffeqsolve. If user wants to
         provide ``stepsize_controller``, ``saveat``, ``event``, or ``adjoint``, they

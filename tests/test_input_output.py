@@ -41,7 +41,7 @@ def test_vmec_input(tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("input.DSHAPE")
     shutil.copyfile(input_path, tmp_path)
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning, match="inputs"):
         ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
     # ir makes a VMEC file automatically
@@ -253,13 +253,13 @@ def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
         eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
 
     # make sure the loaded eqs are equivalent
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
     np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
     np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
     np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
     np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
-    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
-    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
     np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
     assert eq.pressure.equiv(eq_VMEC.pressure)
     assert eq.iota.equiv(eq_VMEC.iota)
@@ -289,13 +289,14 @@ def test_from_input_file_equilibrium_desc_vmec():
     with pytest.warns(UserWarning):
         eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
 
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
     np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
     np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
     np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
     np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
-    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
-    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
+
     np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
     assert eq.pressure.equiv(eq_VMEC.pressure)
     assert eq.current.equiv(eq_VMEC.current)
@@ -311,8 +312,9 @@ def test_from_input_file_equilibrium_desc_vmec():
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
-    with pytest.warns(UserWarning, match="Detected multiple inputs"):
+    with pytest.warns(UserWarning, match="multiple"):
         surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
+    with pytest.warns(UserWarning, match="multiple"):
         surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5

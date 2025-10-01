@@ -24,7 +24,8 @@ The following is a simple example of a custom function that is not JAX transform
 It was adapted from the test ``test_external_vs_generic_objectives`` in
 ``tests/test_examples.py``.
 
-The function must take a single positional argument, which can be either a single
+The argument ``fun`` of ``ExternalObjective`` is a function that can wrap external code.
+This function must take a single positional argument, which can be either a single
 Equilibrium or a list of Equilibria. Additional inputs must be passed as keyword
 arguments. In this example, the function returns the three scalar quatities
 :math:`\langle\beta\rangle_{vol}`, :math:`\langle\beta\rangle_{pol}`, and
@@ -234,9 +235,10 @@ or takes too long to run, a large unstable growth rate is returned.
 
 Finally, the ``TERPSICHORE`` objective function simply inherits from
 ``ExternalObjective`` and passes ``fun=terpsichore`` as the external function.
-``dim_f=1`` because TERPSICHORE returns a scalar growth rate, and ``vectorized=True``
-because the function ``terpsichore`` expects a list of Equilibria as its only positional
-argument. (Parts of the full class definition have been omitted here for simplicity.)
+``dim_f=1`` because the TERPSICHORE objective returns a single, scalar growth rate.
+``vectorized=True`` because the function ``terpsichore`` expects a list of Equilibria as
+its only positional argument. (Parts of the full class definition have been omitted here
+for simplicity.)
 
 ::
 

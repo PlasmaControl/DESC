@@ -1985,6 +1985,7 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+        Will include iota if ``iota=True`` was passed in.
 
     Examples
     --------
@@ -2041,8 +2042,8 @@ def poincare_plot(
     phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi / NFP).flatten()
 
     R0, Z0 = np.atleast_1d(R0, Z0)
-
-    fieldR, fieldZ = field_line_integrate(
+    compute_iota = fli_kwargs.get("iota", False)
+    out = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
@@ -2050,6 +2051,8 @@ def poincare_plot(
         source_grid=grid,
         **fli_kwargs,
     )
+    fieldR = out[0]
+    fieldZ = out[1]
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -2058,6 +2061,8 @@ def poincare_plot(
         "R": rs,
         "Z": zs,
     }
+    if compute_iota:
+        data["iota"] = out[2]
 
     rows = np.floor(np.sqrt(nplanes)).astype(int)
     cols = np.ceil(nplanes / rows).astype(int)

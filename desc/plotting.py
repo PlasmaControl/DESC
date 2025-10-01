@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+from diffrax import RESULTS
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
@@ -30,6 +31,7 @@ from desc.utils import (
     only1,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -1975,7 +1977,7 @@ def poincare_plot(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -2016,6 +2018,10 @@ def poincare_plot(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", colorblind_colors[0])
@@ -2042,14 +2048,30 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
         source_grid=grid,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -3890,7 +3912,7 @@ def plot_field_lines(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -3927,6 +3949,10 @@ def plot_field_lines(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -3956,13 +3982,29 @@ def plot_field_lines(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))

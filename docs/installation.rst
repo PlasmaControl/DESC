@@ -190,47 +190,34 @@ On Most Linux Computing Clusters
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were verified to work on the Perlmutter supercomputer at NERSC on July 3, 2025.
+            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 24, 2025
+            for both CPU and GPU runs.
             They do not install FINUFFT with GPU support.
 
-            Set up the correct cuda environment for jax installation
-
             .. code-block:: sh
 
-                module load cudatoolkit/12.4
-                module load cudnn/9.5.0
                 module load conda
 
-            Check that you have loaded these modules
-
             .. code-block:: sh
 
-                module list
-
-            Create a conda environment for DESC following `these instructions <https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax>`__.
-
-            .. code-block:: sh
-
-                conda create -n desc-env python=3.12
+                conda create --name desc-env python=3.12
                 conda activate desc-env
-                pip install --upgrade "jax[cuda12]"
 
-            Clone and install DESC
+            Now clone the DESC repository and enter the DESC directory
 
             .. code-block:: sh
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                pip install --editable .
 
-            You may optionally install developer requirements if you want to run tests.
+                pip install --no-cache-dir -r devtools/dev-requirements.txt
+                pip install --no-cache-dir --editable .
+                pip install --no-cache-dir "jax[cuda12]==0.6.2"
 
-            .. code-block:: sh
+            The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
 
-                pip install -r devtools/dev-requirements.txt
-
-            Note that you may also need to execute `unset LD_LIBRARY_PATH` before starting a python process (e.g. execute this as part of your slurm script, before calling python to run DESC) for the JAX/CUDA initialization to work properly.
-
+            Before running a DESC script, you may also need to execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
+            or in your SLURM script (for submitted jobs).
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
 

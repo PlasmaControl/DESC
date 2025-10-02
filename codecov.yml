@@ -10,11 +10,9 @@ coverage:
     patch:
       default:
         informational: false
-        if_not_found: success # for 'only-docs-comments' labeled PRs
     project:
       default:
         informational: false
         threshold: 2.0
-        if_not_found: success # for 'only-docs-comments' labeled PRs
 github_checks:
   annotations: true

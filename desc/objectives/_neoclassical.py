@@ -162,11 +162,12 @@ class EffectiveRipple(_Objective):
         pitch_batch_size=None,
         surf_batch_size=1,
         spline=False,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0.0
 
-        self._spline = spline
+        self._spline = kwargs.get("use_bounce1d", spline)
         self._grid = grid
         self._constants = {
             "quad_weights": 1.0,

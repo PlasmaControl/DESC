@@ -1836,20 +1836,18 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
-        vnodes, info = map_coordinates(
-            eq,
-            t_grid.nodes,
-            # TODO: once generalized toroidal angle is used, change
-            # inbasis to ["rho", "theta_PEST", "phi"],
-            inbasis=["rho", "theta_PEST", "zeta"],
-            outbasis=["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=t_grid.nodes,
-            full_output=True,
-            maxiter=60,
-        )
         v_grid = Grid(
-            vnodes,
+            map_coordinates(
+                eq,
+                t_grid.nodes,
+                # TODO: once generalized toroidal angle is used, change
+                # inbasis to ["rho", "theta_PEST", "phi"],
+                inbasis=["rho", "theta_PEST", "zeta"],
+                outbasis=["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=t_grid.nodes,
+                maxiter=30,
+            ),
             sort=False,
         )
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1925,7 +1923,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
     if return_data:
-        return fig, ax, plot_data, info
+        return fig, ax, plot_data
 
     return fig, ax
 

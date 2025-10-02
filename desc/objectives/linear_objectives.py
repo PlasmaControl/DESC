@@ -17,7 +17,7 @@ from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 
 
 # TODO (#1391): get rid of this class and inherit from FixParameters instead?
@@ -236,6 +236,193 @@ class FixParameters(_Objective):
             self._unjit()
 
 
+class ShareParameters(_Objective):
+    """Fix specific degrees of freedom to be the same between Optimizable things.
+
+    Parameters
+    ----------
+    things : list of Optimizable
+        List of objects whose degrees of freedom are being fixed to
+        each other's values.
+        Must be at least length 2, but may be of arbitrary length.
+        Every object must be of the same type, and have the same size array for the
+        desired parameter to be fixed (e.g. same geometric resolution if fixing
+         ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
+    params : dict
+        Dict keys are the names of parameters to fix (str), and dict values are the
+        indices to fix for each corresponding parameter (int array).
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as things[0].params_dict.
+        The default is to fix all indices of all parameters.
+    name : str, optional
+        Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import ShareParameters
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+        coilset2 = full_coilset.copy()
+
+        # between the two coilsets...
+        params = [
+                [ # share the "current" of the 1st TF coil and 1st center component
+                    {"current": True, "center":np.array([0])},
+                    # share "center" and  "normal" for the 2nd TF coil
+                    {"center": True, "normal": True},
+                    {"r_n": True},  # share radius of the 3rd TF coil
+                    {},  # share nothing in the 4th TF coil
+                ],
+                # share "shift" & "rotmat" for all VF coils
+                {"shift": True, "rotmat": True},
+                # share specified indices of "X_n" and "Z_n",
+                # but not "Y_n", for other coil
+                {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+            ]
+        obj=ShareParameters([full_coilset, coilset2], params=params )
+
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(~)"
+    _print_value_fmt = "Shared parameters error: "
+
+    def __init__(
+        self,
+        things,
+        params=None,
+        name="shared parameters",
+    ):
+        self._params = params
+        assert len(things) > 1, "only makes sense for >1 thing"
+        assert np.all(
+            [isinstance(things[0], type(t)) for t in things[1:]]
+        ), f"expected same type for all things, got types {[type(t) for t in things]}"
+
+        # ensure things are the same resolution
+        # TODO: might be too strict? could we only try to ensure
+        #  that the desired params passed are same res?
+        for t in things[1:]:
+            assert np.all([things[0].dimensions == t.dimensions]), (
+                f"expected same dimensions for all things, but {t} has different "
+                + f"dimensions than {things[0]}.  Make sure that each thing is at "
+                + "the same resolution."
+            )
+
+        super().__init__(
+            things=things,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params = setdefault(self._params, default_params)
+        self._params = broadcast_tree(self._params, default_params)
+        self._indices = tree_leaves(self._params)
+        assert tree_structure(self._params) == tree_structure(default_params)
+
+        self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *params, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params : dict
+            2 or more dictionaries of params to fix parameters between.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants.
+
+        Returns
+        -------
+        f : ndarray
+            Shared degree of freedom errors.
+
+        """
+        # basically, just subtract the first things' params
+        # and every subsequent thing (adding on rows to dim_f if
+        # more than 2 total things) so that the Jacobian of this
+        # ends up being just rows with 1 in the first object's params
+        # indices and -1 in the second objects params indices,
+        # repeated vertically for each additional object
+        # i.e. for a size-1 param being shared among 4 objects, the
+        # Jacobian looks like
+        #  [ 1 -1  0  0]
+        #  [ 1 0  -1  0]
+        #  [ 1 0   0 -1]
+        params_1 = params[0]
+        return jnp.concatenate(
+            [
+                jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(params_1), self._indices)
+                    ]
+                )
+                - jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(this_params), self._indices)
+                    ]
+                )
+                for this_params in params[1:]
+            ]
+        )
+
+
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self-consistent.
 
@@ -253,6 +440,15 @@ class BoundaryRSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -352,6 +548,15 @@ class BoundaryZSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -451,6 +656,15 @@ class AxisRSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -539,6 +753,15 @@ class AxisZSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum

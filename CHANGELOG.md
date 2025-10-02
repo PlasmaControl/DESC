@@ -5,6 +5,7 @@ New Features
 
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- New method to plot Fourier spectrum of stream map in field line coordinates in ``Bounce2D``.
 - Changes related to ``field_line_integrate``:
     - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
     - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
@@ -16,6 +17,7 @@ Bug Fixes
 
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- [Improves convergence of stream map in ``Bounce2D``](https://github.com/PlasmaControl/DESC/pull/1919).
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 
 Backend

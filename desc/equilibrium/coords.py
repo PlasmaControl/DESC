@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -431,8 +431,6 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """
     grid = lmbda.grid
     errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
-    # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
-    # TODO: (#568)
     warnif(
         grid.M > lmbda.basis.M,
         ResolutionWarning,
@@ -453,43 +451,57 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
-@partial(jit, static_argnames=["tol", "maxiter"])
-def _map_clebsch_coordinates(
+@partial(jit, static_argnames=["inbasis", "outbasis", "tol", "maxiter"])
+def _map_poloidal_coordinates(
     iota,
-    alpha,
+    poloidal,
     zeta,
     L_lmn,
     lmbda,
+    varepsilon=None,
+    inbasis=("rho", "alpha", "zeta"),
+    outbasis=("rho", "theta", "zeta"),
     guess=None,
     *,
     tol=1e-6,
     maxiter=30,
     **kwargs,
 ):
-    """Find θ for given Clebsch field line poloidal label α.
+    """Map poloidal coordinate in the input basis to the output basis.
 
-    # TODO: input (rho, alpha, zeta) coordinates may be an arbitrary point cloud
-    #       and the partial summation will work without modification.
-    #       Clean up input parameter API to support this.
+    If ``varepsilon`` is not given, then the input coordinate grid is constructed as
+    the tensor product of the values ``iota``, ``poloidal``, and ``zeta``.
+
+    If ``varepsilon`` is given, then the input coordinate grid is taken to be the
+    meshgrid of values ε = α − ι ζ stored in that array.
 
     Parameters
     ----------
-    iota : ndarray
-        Shape (num iota, ).
-        Rotational transform.
-    alpha : ndarray
-        Shape (num alpha, ).
-        Field line labels.
-    zeta : ndarray
+    iota : jnp.ndarray
+        Shape (num ρ, ).
+        Rotational transform ι(ρ) on flux surfaces labeled by ρ.
+    poloidal : jnp.ndarray
+        Shape (num poloidal, ).
+        Values for coordinate specified by ``inbasis[1]``.
+    zeta : jnp.ndarray
         Shape (num zeta, ).
-        DESC toroidal angle.
+        DESC toroidal angle ζ.
     L_lmn : jnp.ndarray
         Spectral coefficients for λ.
     lmbda : Transform
-        Transform for λ built on DESC coordinates [ρ, θ, ζ].
+        Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ.
+    varepsilon : jnp.ndarray
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
+        Optional meshgrid of values ε = α − ι ζ.
+        This meshgrid need not be a tensor-product grid.
+        See the description in the docstring header for more information.
+    inbasis : str
+        Label for input coordinates, e.g. (ρ, α, ζ) or (ρ, ϑ, ζ).
+    outbasis : str
+        Label for output coordinates, e.g. (ρ, θ, ζ) or (ρ, δ, ζ).
     guess : jnp.ndarray
-        Shape (num iota, num alpha, num zeta).
-        Optional initial guess for the DESC computational coordinate θ solution.
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
+        Optional initial guess for the solution.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -500,40 +512,70 @@ def _map_clebsch_coordinates(
 
     Returns
     -------
-    theta : ndarray
-        Shape (num iota, num alpha, num zeta).
-        DESC computational coordinates θ at given input meshgrid.
+    out : ndarray
+        Shape (num ρ, num poloidal, num ζ).
+        Returns the output poloidal coordinate evaluated at the input coordinates.
 
     """
-    # noqa: D202
+    errorif(
+        inbasis != ("rho", "alpha", "zeta") and inbasis != ("rho", "vartheta", "zeta"),
+        NotImplementedError,
+        f"inbasis={inbasis} is not implemented.",
+    )
+    errorif(
+        outbasis != ("rho", "theta", "zeta")
+        and outbasis != ("rho", "lambda", "zeta")
+        and outbasis != ("rho", "delta", "zeta"),
+        NotImplementedError,
+        f"outbasis={outbasis} is not implemented.",
+    )
 
-    def rootfun(theta, target, c_m):
-        c = (jnp.exp(1j * modes * theta) * c_m).real.sum()
-        target_k = theta + c
-        return target_k - target
+    # Root finding for θₖ such that θₖ + (λ−ιω)(ρ,θₖ,ζ) - ε = 0.
+    def rootfun(θ, varepsilon, q_m):
+        q = (jnp.exp(1j * modes * θ) * q_m).real.sum()
+        return θ + q - varepsilon
 
-    def jacfun(theta, target, c_m):
-        dc_dt = ((1j * jnp.exp(1j * modes * theta) * c_m).real * modes).sum()
-        return 1 + dc_dt
+    def jacfun(θ, varepsilon, q_m):
+        dq_dθ = ((1j * jnp.exp(1j * modes * θ) * q_m).real * modes).sum()
+        return 1 + dq_dθ
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
-    def vecroot(guess, target, c_m):
+    def vecroot(guess, varepsilon, q_m):
         return root_scalar(
             rootfun,
             guess,
             jac=jacfun,
-            args=(target, c_m),
+            args=(varepsilon, q_m),
             tol=tol,
             maxiter=maxiter,
             full_output=False,
             **kwargs,
         )
 
-    c_m, modes = _partial_sum(lmbda, L_lmn, None, None, iota)
-    c_m = c_m[:, jnp.newaxis]
-    target = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
-    # Assume λ − ι ω = 0 for default initial guess.
-    return vecroot(setdefault(guess, target), target, c_m)
+    q_m, modes = _partial_sum(lmbda, L_lmn, None, None, None)
+    q_m = q_m[:, None]
+
+    errorif(not OMEGA_IS_0, msg="TODO: 568")
+    omega = 0
+
+    if varepsilon is None:
+        iota = iota[:, None, None]
+        poloidal = poloidal[:, None]
+        if inbasis[1] == "alpha":
+            varepsilon = poloidal + iota * zeta
+        elif inbasis[1] == "vartheta":
+            varepsilon = poloidal - iota * omega
+
+    θ = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
+
+    if outbasis[1] == "theta":
+        return θ
+    if outbasis[1] == "lambda":
+        vartheta = varepsilon + iota * omega
+        return θ - vartheta
+    if outbasis[1] == "delta":
+        alpha = varepsilon - iota * zeta
+        return θ - alpha
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -612,6 +654,7 @@ def to_sfl(
     rcond=None,
     copy=False,
     tol=1e-9,
+    maxiter=30,
 ):
     """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -651,6 +694,8 @@ def to_sfl(
     tol : float
         Tolerance for coordinate mapping.
         Default is ``1e-9``.
+    maxiter : int
+        Maximum number of Newton iterations.
 
     Returns
     -------
@@ -670,14 +715,22 @@ def to_sfl(
     data = eq.compute(
         ["R", "Z", "lambda"],
         Grid(
-            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+            eq.map_coordinates(
+                grid_PEST.nodes,
+                ("rho", "theta_PEST", "zeta"),
+                tol=tol,
+                maxiter=maxiter,
+            )
         ),
     )
     data_bdry = eq.compute(
         ["R", "Z", "lambda"],
         Grid(
             eq.map_coordinates(
-                grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+                grid_PEST_bdry.nodes,
+                ("rho", "theta_PEST", "zeta"),
+                tol=tol,
+                maxiter=maxiter,
             )
         ),
     )

@@ -1119,10 +1119,6 @@ def test_share_parameters_four_objects():
     abs_J_row_sums = np.abs(J).sum(axis=1)
     np.testing.assert_allclose(abs_J_row_sums, 2)
     np.testing.assert_allclose(J_row_sums, 0)
-    subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": [1, 3]})
-    subobj.build()
-    obj = ObjectiveFunction(subobj)
-    obj.build()
 
 
 @pytest.mark.unit

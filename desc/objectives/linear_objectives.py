@@ -17,7 +17,7 @@ from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 
 
 # TODO (#1391): get rid of this class and inherit from FixParameters instead?
@@ -248,12 +248,12 @@ class ShareParameters(_Objective):
         Every object must be of the same type, and have the same size array for the
         desired parameter to be fixed (e.g. same geometric resolution if fixing
          ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
-    params : nested list of dicts
+    params : dict
         Dict keys are the names of parameters to fix (str), and dict values are the
         indices to fix for each corresponding parameter (int array).
         Use True (False) instead of an int array to fix all (none) of the indices
         for that parameter.
-        Must have the same pytree structure as thing.params_dict.
+        Must have the same pytree structure as things[0].params_dict.
         The default is to fix all indices of all parameters.
     name : str, optional
         Name of the objective function.
@@ -304,6 +304,15 @@ class ShareParameters(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False
@@ -314,30 +323,31 @@ class ShareParameters(_Objective):
         self,
         things,
         params=None,
-        target=0,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
         name="shared parameters",
     ):
         self._params = params
         assert len(things) > 1, "only makes sense for >1 thing"
-        assert np.all([isinstance(things[0], type(t)) for t in things[1:]])
+        assert np.all(
+            [isinstance(things[0], type(t)) for t in things[1:]]
+        ), f"expected same type for all things, got types {[type(t) for t in things]}"
 
         # ensure things are the same resolution
         # TODO: might be too strict? could we only try to ensure
         #  that the desired params passed are same res?
         for t in things[1:]:
-            assert np.all([things[0].dimensions == t.dimensions])
+            assert np.all([things[0].dimensions == t.dimensions]), (
+                f"expected same dimensions for all things, but {t} has different "
+                + f"dimensions than {things[0]}.  Make sure that each thing is at "
+                + "the same resolution."
+            )
 
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
             name=name,
         )
 
@@ -388,7 +398,7 @@ class ShareParameters(_Objective):
         # ends up being just rows with 1 in the first object's params
         # indices and -1 in the second objects params indices,
         # repeated vertically for each additional object
-        # i.e. for a a size-1 param being shared among 4 objects, the
+        # i.e. for a size-1 param being shared among 4 objects, the
         # Jacobian looks like
         #  [ 1 -1  0  0]
         #  [ 1 0  -1  0]
@@ -430,6 +440,15 @@ class BoundaryRSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -529,6 +548,15 @@ class BoundaryZSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -628,6 +656,15 @@ class AxisRSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
@@ -716,6 +753,15 @@ class AxisZSelfConsistency(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum

@@ -17,11 +17,13 @@ def compute_scaling_factors(thing):
     def get_lowest_mode(basis, coeffs):
         """Return average (over n) of M=+/1 modes."""
         # lowest order modes: [0, +1, -1, +2, -2, ...]
-        inds_m_1_or_neg1 = np.where(abs(basis.modes[:, 1]) == 1)[0]
-        val = np.max(np.abs(coeffs[inds_m_1_or_neg1]))
+        inds_not_00 = np.where(
+            np.logical_and(abs(basis.modes[:, 1]) != 0, abs(basis.modes[:, 2]) != 0)
+        )[0]
+        val = np.max(np.abs(coeffs[inds_not_00]))
         if not np.isclose(val, 0):
             return val
-        raise ValueError("No m=+/1 found, geometry is unphysical.")
+        raise ValueError("No modes found, geometry is unphysical.")
 
     if isinstance(thing, Equilibrium):
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]

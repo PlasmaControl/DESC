@@ -14,11 +14,22 @@ def compute_scaling_factors(thing):
 
     scales = {}
 
+    def get_lowest_mode(basis, coeffs):
+        """Return average (over n) of M=+/1 modes."""
+        # lowest order modes: [0, +1, -1, +2, -2, ...]
+        inds_m_1_or_neg1 = np.where(abs(basis.modes[:, 1]) == 1)[0]
+        val = np.max(np.abs(coeffs[inds_m_1_or_neg1]))
+        if not np.isclose(val, 0):
+            return val
+        raise ValueError("No m=+/1 found, geometry is unphysical.")
+
     if isinstance(thing, Equilibrium):
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
+        R10 = get_lowest_mode(thing.surface.R_basis, thing.Rb_lmn)
+        Z10 = get_lowest_mode(thing.surface.Z_basis, thing.Zb_lmn)
 
         scales["R0"] = R00
-        scales["a"] = thing.compute(["a"])["a"].squeeze()
+        scales["a"] = np.sqrt(np.abs(R10 * Z10))
         scales["Psi"] = abs(thing.Psi)
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
@@ -48,9 +59,11 @@ def compute_scaling_factors(thing):
 
     elif isinstance(thing, FourierRZToroidalSurface):
         R00 = thing.R_lmn[thing.R_basis.get_idx(M=0, N=0)]
+        R10 = get_lowest_mode(thing.R_basis, thing.R_lmn)
+        Z10 = get_lowest_mode(thing.Z_basis, thing.Z_lmn)
 
         scales["R0"] = R00
-        scales["a"] = thing.compute(["a"])["a"].squeeze()
+        scales["a"] = np.sqrt(np.abs(R10 * Z10))
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
 

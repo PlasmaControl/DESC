@@ -15,20 +15,19 @@ def compute_scaling_factors(thing):
     scales = {}
 
     def get_lowest_mode(basis, coeffs):
-        """Return lowest order coefficient (excluding m=0 modes)."""
+        """Return average (over n) of M=+/1 modes."""
         # lowest order modes: [0, +1, -1, +2, -2, ...]
-        m_modes = np.arange(1, thing.M + 1)
-        m_modes = np.vstack((m_modes, -m_modes)).flatten(order="F")
-        n_modes = np.arange(thing.N + 1)
-        n_modes = np.vstack((n_modes, -n_modes)).flatten(order="F")
-        for n in n_modes:
-            for m in m_modes:
-                try:
-                    x = coeffs[basis.get_idx(M=m, N=n)]
-                    if not np.isclose(x, 0):  # mode exists and coefficient is non-zero
-                        return x
-                except ValueError:
-                    pass
+        if basis.N > 0:
+            inds_not_00 = np.where(
+                np.logical_and(abs(basis.modes[:, 1]) != 0, abs(basis.modes[:, 2]) != 0)
+            )[0]
+        else:
+            inds_not_00 = np.where(np.abs(basis.modes[:, 1]) != 0)[0]
+        print(coeffs[inds_not_00])
+        print(inds_not_00)
+        val = np.max(np.abs(coeffs[inds_not_00]))
+        if not np.isclose(val, 0):
+            return val
         raise ValueError("No modes found, geometry is unphysical.")
 
     if isinstance(thing, Equilibrium):

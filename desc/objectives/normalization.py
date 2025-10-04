@@ -17,9 +17,14 @@ def compute_scaling_factors(thing):
     def get_lowest_mode(basis, coeffs):
         """Return average (over n) of M=+/1 modes."""
         # lowest order modes: [0, +1, -1, +2, -2, ...]
-        inds_not_00 = np.where(
-            np.logical_and(abs(basis.modes[:, 1]) != 0, abs(basis.modes[:, 2]) != 0)
-        )[0]
+        if basis.N > 0:
+            inds_not_00 = np.where(
+                np.logical_and(abs(basis.modes[:, 1]) != 0, abs(basis.modes[:, 2]) != 0)
+            )[0]
+        else:
+            inds_not_00 = np.where(np.abs(basis.modes[:, 1]) != 0)[0]
+        print(coeffs[inds_not_00])
+        print(inds_not_00)
         val = np.max(np.abs(coeffs[inds_not_00]))
         if not np.isclose(val, 0):
             return val

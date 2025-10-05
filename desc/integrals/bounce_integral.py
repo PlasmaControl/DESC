@@ -727,12 +727,11 @@ class Bounce2D(Bounce):
             pitch = pitch[:, None, :, None, None]
 
         ζ = bijection_from_disc(x, z1[..., None], z2[..., None])
-        θ = self._theta.eval1d(flatten_mat(ζ, 3)).reshape(ζ.shape)
 
         if nufft_eps < 1e-14:
-            data = self._nummt(ζ, θ, data)
+            data = self._nummt(ζ, data)
         else:
-            data = self._nufft(ζ, θ, data, nufft_eps)
+            data = self._nufft(ζ, data, nufft_eps)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = ζ
 
@@ -758,11 +757,14 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, ζ, θ, data, eps):
+    def _nufft(self, ζ, data, eps):
         shape = ζ.shape
+        ζ = flatten_mat(ζ, 3)
+        θ = flatten_mat(self._theta.eval1d(ζ))
+        ζ = flatten_mat(ζ)
         c = nufft2d2r(
-            flatten_mat(ζ, 4),
-            flatten_mat(θ, 4),
+            ζ,
+            θ,
             jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
             (0, 2 * jnp.pi / self._NFP),
             vec=True,
@@ -771,7 +773,8 @@ class Bounce2D(Bounce):
         c = c.swapaxes(0, -2).reshape(len(data) + 2, *shape)
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
-    def _nummt(self, ζ, θ, data):
+    def _nummt(self, ζ, data):
+        θ = self._theta.eval1d(flatten_mat(ζ, 3)).reshape(ζ.shape)
         v = rfft2_vander(ζ, θ, self._modes_ζ, self._modes_θ)
         data = {name: _mmt_for_bounce(v, c) for name, c in data.items()}
         data["B^zeta"] = _mmt_for_bounce(v, self._c["B^zeta"])

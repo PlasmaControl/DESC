@@ -437,6 +437,7 @@ def argmin(z1, z2, f, ext, g_ext):
         ``z1`` (``z2``) stores left (right) boundaries.
     f : jnp.ndarray
         Function interpolated to ``ext``.
+        Shape (..., num extrema).
 
     Returns
     -------
@@ -452,9 +453,6 @@ def argmin(z1, z2, f, ext, g_ext):
     # physics objective changes wrt equilibrium perturbations not wrt which of the
     # extrema get interpolated to.
     where = jnp.argmin(
-        # With the new axes, the shapes are:
-        #     z1, z2 (..., num pitch, num well, 1)
-        # ext, g_ext (...,         1,        1, num extrema)
         jnp.where(
             (z1[..., None] < ext[..., None, None, :])
             & (ext[..., None, None, :] < z2[..., None]),

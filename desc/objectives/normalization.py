@@ -40,7 +40,7 @@ def compute_scaling_factors(thing):
         scales["Psi"] = abs(thing.Psi)
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
-        scales["B"] = scales["Psi"] / scales["A"] * 1.25
+        scales["B"] = scales["Psi"] / scales["A"]
         B_pressure = scales["B"] ** 2 / (2 * mu_0)
         scales["I"] = scales["B"] * scales["a"] * 2 * np.pi / mu_0
         scales["W"] = B_pressure * scales["V"]

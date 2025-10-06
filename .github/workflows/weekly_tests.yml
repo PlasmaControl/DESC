@@ -17,9 +17,9 @@ jobs:
                  {group: 4, python_version: '3.13'}]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.combos.python_version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.combos.python_version }}
       - name: Install dependencies
@@ -30,7 +30,7 @@ jobs:
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 10
+          swap-size-gb: 4
       - name: Test with pytest
         run: |
           pwd

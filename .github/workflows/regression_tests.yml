@@ -26,7 +26,7 @@ jobs:
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Filter changes
         id: changes
@@ -46,7 +46,7 @@ jobs:
         run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -79,7 +79,7 @@ jobs:
         if: env.has_changes == 'true'
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 10
+          swap-size-gb: 4
 
       - name: Action Details
         if: env.has_changes == 'true'

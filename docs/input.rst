@@ -300,7 +300,7 @@ DESC will detect if it is a VMEC input format and automatically generate an equi
 The generated DESC input file will be stored at the same file path as the VMEC input file, but its name will have ``_desc`` appended to it.
 The resulting input file will not contain any of the options that are specific to DESC, and therefore will depend on many default values.
 This is a convenient tool for converting the profiles and boundary inputs to the DESC format, but the generated input file may not converge well with the default options for all equilibria.
-It is recommended that the automatically generated DESC input file be manually edited to improve performance.
+It is recommended that the automatically generated DESC input file be manually edited to improve performance, and also checked visually to ensure the conversion went as expected (see the notes on DESC assumptions when loading VMEC input files below).
 As an example, see the simple VMEC input file below titled ``input.HELIOTRON``:
 
 .. code-block:: text
@@ -397,7 +397,19 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
 You can see that the main elements of the input file are present here.
 See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
 
+.. attention::
+            DESC assumes some things about the VMEC input file, including but not limited to:
+            - if ``NCURR=1``, indicating a current profile is being used in the VMEC input file, DESC assumes the current profile provided is the default for VMEC, which is the current *derivative* profile, ``I'(s)``. DESC does not currently check if the profile provided is ``I(s)`` as is not the default in VMEC.
+            - DESC can only correctly handle the power series profile types in VMEC, it currently does not support reading in any of the other types such as splines or two-power profiles. If these are needed, it is recommended to convert them manually using DESC's own profile functions.
+            - DESC assumes the input file is for a fixed-boundary equilibrium solve. DESC free-boundary cannot be run from an input file.
+            - DESC does not handle non-standard ways of providing the boundary coefficients, such as ``RBC(0:4,2)= x,x,x,x``
+            - DESC enforces a right-handed coordinate system with a positive jacobian ``sqrt(g)>0``, which corresponds to a right-handed boundary where the poloidal angle increases in the CW direction along the boundary when the cross-section is viewed in the positive toroidal angle direction. If the VMEC file has a left-handed boundary, this will be converted to a right-handed boundary.
+
+
+
+
 Some general considerations
+***************************
 
 The continuation parameters ``pres_ratio`` and ``bdry_ratio`` are important for complex equilibria.
 Setting these in arrays such as shown in the above section, such that first a vacuum tokamak is solved, then finite beta tokamak, and finally the non-axisymmetric modes are added, is recommended for best results for highly shaped stellarator equilibria.

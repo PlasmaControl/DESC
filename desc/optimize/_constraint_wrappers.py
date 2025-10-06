@@ -51,6 +51,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         If set to ``'auto'``, the scale is determined from the initial state vector.
+        This can be passed through optimizer options as
+        solve_options["linear_constraint_options"]["x_scale"].
     name : str
         Name of the objective function.
 
@@ -154,8 +156,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
 
-        # TODO (1721):: Z is already scaled by D, so we don't need to scale it again.
-        # Update the weights of the coil tests
+        # df/dx_reduced = df/dx_full_unscaled @ dx_full_unscaled/dx_reduced # noqa: E800
+        # x_full_unscaled = D(xp + Z @ x_reduced)                           # noqa: E800
+        # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
+        # Since the fixed parameters stay constant, we add 0 rows by below operation
         self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
@@ -236,19 +240,21 @@ class LinearConstraintProjection(ObjectiveFunction):
         # does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        x_scale = self._objective.x(*self._objective.things)
-        self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+        # if user specified x_scale, don't dynamically change it
+        if self._x_scale == "auto":
+            x_scale = self._objective.x(*self._objective.things)
+            self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
 
-        # since D has changed, we need to update the ADinv
-        # as mentioned above A does not change, so we can use the same Ainv
-        # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
-        self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
-        # we also need to update the nullspace Z of AD in a similar way
-        # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
-        # where ZA is the nullspace of A, and Z is the nullspace of AD
-        self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
-        # we also normalize Z to make each column have unit norm
-        self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
+            # since D has changed, we need to update the ADinv
+            # as mentioned above A does not change, so we can use the same Ainv
+            # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
+            self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
+            # we also need to update the nullspace Z of AD in a similar way
+            # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
+            # where ZA is the nullspace of A, and Z is the nullspace of AD
+            self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
+            # we also normalize Z to make each column have unit norm
+            self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
 
         xp = put(xp, unfixed_idx, self._ADinv @ b)
         xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
@@ -617,6 +623,9 @@ class ProximalProjection(ObjectiveFunction):
         self._objective = objective
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options
+        self._solve_during_proximal_build = solve_options.pop(
+            "solve_during_proximal_build", True
+        )  # If user does not want the solve during build, mainly for debug purposes
         perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
@@ -812,8 +821,12 @@ class ProximalProjection(ObjectiveFunction):
         self._feasible_tangents = jnp.split(
             self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
-        # TODO (1721): eq_Z is already scaled by eq_D, so we don't need to scale
-        # it again. Update the weights of the coil tests
+        # dg/dxeq_reduced = dg/dx_eq_unscaled @ dx_eq_unscaled/dxeq_reduced # noqa: E800
+        # x_eq_unscaled = Deq(xp_eq + Zeq @ xeq_reduced)                    # noqa: E800
+        # So, the feasible tangents (aka. dx_eq_unscaled/dx_reduced) is Deq@Zeq
+        # Since here we are setting the feasible direction for eq parameters only,
+        # we need to add 0 rows for eq fixed parameters and non-eq parameters which we
+        # handle by below operation
         self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
@@ -821,7 +834,17 @@ class ProximalProjection(ObjectiveFunction):
             [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )
 
-        # history and caching
+        ## history and caching
+        # first, ensure equilibrium is solved to the
+        # specified tolerances, necessary as we assume
+        # eq is solved when taking the derivatives later
+        if self._solve_during_proximal_build:
+            self._eq.solve(
+                objective=self._eq_solve_objective,
+                constraints=None,
+                **self._solve_options,
+            )
+        # then store the now-solved eq state as the initial state
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]
         self._allxopt = [self._objective.x(*self.things)]
@@ -891,7 +914,11 @@ class ProximalProjection(ObjectiveFunction):
         return params
 
     def x(self, *things):
-        """Return the full state vector from the Optimizable objects things."""
+        """Return the full state vector from the Optimizable objects things.
+
+        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
+        params.
+        """
         # TODO (#1392): also check resolution etc?
         things = things or self.things
         assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
@@ -910,7 +937,11 @@ class ProximalProjection(ObjectiveFunction):
 
     @property
     def dim_x(self):
-        """int: Dimension of the state vector."""
+        """int: Dimension of the state vector.
+
+        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
+        params.
+        """
         s = 0
         for t in self.things:
             if t is self._eq:

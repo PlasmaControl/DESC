@@ -378,7 +378,7 @@ def perturb(  # noqa: C901
             s,
             vt.T,
             tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -727,7 +727,7 @@ def optimal_perturb(  # noqa: C901
             sg,
             vtg.T,
             tr_ratio[0] * c_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -742,7 +742,7 @@ def optimal_perturb(  # noqa: C901
             sf,
             vtf.T,
             tr_ratio[0] * x_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -777,7 +777,7 @@ def optimal_perturb(  # noqa: C901
             sg,
             vtg.T,
             tr_ratio[1] * jnp.linalg.norm(dc1h_opt),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -792,7 +792,7 @@ def optimal_perturb(  # noqa: C901
             sf,
             vtf.T,
             tr_ratio[1] * jnp.linalg.norm(dx1h_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )

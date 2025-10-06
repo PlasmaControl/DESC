@@ -255,8 +255,7 @@ class FourierChebyshevSeries(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
-        return a_mn
+        return rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
 
     def compute_cheb(self, x):
         """Evaluate Fourier series at ``x`` to obtain set of 1D Chebyshev coefficients.
@@ -445,7 +444,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y : jnp.ndarray
             Shape (..., *cheb.shape[:-1], Y - 1).
             Solutions yᵢ of f(x, yᵢ) = k(x), in ascending order.
-        is_intersect : jnp.ndarray
+        mask : jnp.ndarray
             Shape y.shape.
             Boolean array into ``y`` indicating whether element is an intersect.
         df_dy_sign : jnp.ndarray
@@ -461,9 +460,9 @@ class PiecewiseChebyshevSeries(IOAble):
         # Intersects must satisfy y ∈ [-1, 1].
         # Pick sentinel such that only distinct roots are considered intersects.
         y = _filter_distinct(y, sentinel=-2.0, eps=eps)
-        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) < 1.0)
+        mask = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) < 1.0)
         # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
-        y = jnp.where(is_intersect, y.real, 0.0)
+        y = jnp.where(mask, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
         #   See note in integrals/_interp_utils.py.
@@ -477,7 +476,7 @@ class PiecewiseChebyshevSeries(IOAble):
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
-        return y, is_intersect, df_dy_sign
+        return y, mask, df_dy_sign
 
     def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
@@ -523,12 +522,10 @@ class PiecewiseChebyshevSeries(IOAble):
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, is_intersect, df_dy_sign = self.intersect2d(
-            jnp.atleast_1d(k)[..., jnp.newaxis]
-        )
+        y, mask, df_dy_sign = self.intersect2d(jnp.atleast_1d(k)[..., jnp.newaxis])
         # Flatten so that last axis enumerates intersects along the piecewise spline.
         y = flatten_matrix(self._isomorphism_to_C1(y))
-        is_intersect = flatten_matrix(is_intersect)
+        mask = flatten_matrix(mask)
         df_dy_sign = flatten_matrix(df_dy_sign)
 
         # Note for bounce point applications:
@@ -542,8 +539,8 @@ class PiecewiseChebyshevSeries(IOAble):
         # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
         #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
         #    are not differentiable.
-        is_z1 = (df_dy_sign <= 0) & is_intersect
-        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
+        is_z1 = (df_dy_sign <= 0) & mask
+        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(mask, df_dy_sign)
 
         sentinel = self.domain[0] - 1.0
         z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)

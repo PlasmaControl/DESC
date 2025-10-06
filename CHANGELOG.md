@@ -3,6 +3,66 @@ Changelog
 
 New Features
 
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Changes related to ``field_line_integrate``:
+    - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
+    - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
+    - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
+    - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
+    - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+
+Bug Fixes
+
+- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
+- ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
+
+Backend
+-------
+
+- When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
+- Minimum JAX version bumped up to ``0.4.29``
+
+
+v0.15.0
+-------
+
+New Features
+
+- Multiple plotting related changes:
+    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
+    - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
+    - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
+- Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
+- Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
+- Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
+- Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
+- `desc.magnetic_fields.field_line_integrate` now integrates the field line always in the given `phis` direction, and `phis` will always correspond to the physical toroidal angle (instead of time like coordinate previously). Previous implementation might have caused confusion about the output positions, especially when the magnetic field has negative toroidal component.
+- Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
+- Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
+- Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
+- Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+
+
+Bug Fixes
+
+- Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.
+- Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
+- Fixes bugs in ideal ballooning stability and Newcomb ballooning metrics where the computation mixed data between field lines.
+- Fixes bug in ``desc.geometry.curve.FourierRZCurve.from_values`` when numpy array is passed in for the ``coords`` argument.
+
+Backend
+
+- Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
+- No longer closes over the field in ``desc.magnetic_fields._core.field_line_integrate``, which can dramatically reduce compile times when the field being traced has large size attributes (for example, when using a ``desc.magnetic_fields._core.SplineMagneticField`` object).
+
+v0.14.2
+-------
+
+New Features
+
 - Updates ``Equilibrium`` initial guess to use geometric center as the axis. This will allow non-convex cross-sections to be initialized without having to solve to achieve nested surfaces.
 - Adds new regularization options to ``desc.objectives.SurfaceCurrentRegularization``.
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
@@ -10,24 +70,24 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
 - `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
 - Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
-- Allows Redl compute quantities to use SplineProfile
-- Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
+- Allows Redl compute quantities to use SplineProfile and updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` attributes to the ``Equilibrium`` class. If either `FixSectionR`, `FixSectionZ` or `FixSectionLambda` is added as constraint, they will become optimizable parameters. Since both fixing cross-section and the LCFS shape is not supported yet, once Poincare variables are added to the Equilibrium, boundary parameters `Rb_lmn` and `Zb_lmn` will not be optimizable anymore. With this change of optimizable parameters, if a user wants to solve LCFS and Poincare problems consecutively, they have to call `eq.xsection = eq.get_surface_at(zeta=0)` and `eq.surface = eq.get_surface_at(rho=1)` to update the variables after any type of optimization or solve.
 - Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ``and optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
 - Adds ``L_lmn`` and ``L_basis`` attributes to the ``ZernikeRZToroidalSection`` class.
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
-- Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
+- Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 
 Performance Improvements
 
+- [Integrate on boundary to compute length scale quantities](https://github.com/PlasmaControl/DESC/pull/1094#issue-2387036357).
 - `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the matrix products. This reduces the jacobian time on CPU.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 
 Bug Fixes
 
+- Some quantities require a grid that samples the full flux surface for correct computation. Attempts to compute these quantities on grids which lack sufficient coverage of the surface will now error.
 - Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
-- Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 - Fixes bug where `ProximalProjection` was using wrong `jac_chunk_size` internally and using more memory than one would expect given the `jac_chunk_size`. This fix gives separate `blocked` and `batched` methods to `ProximalProjection`.
 - Fixes issue in ``desc.geometry.curve.FourierPlanarCurve.from_values`` where the orientation of the fitted curve can be the reverse of the original curve, which can be problematic for coils (the current is not negated, so the resulting fitted coil would have field opposite of the initial).
 

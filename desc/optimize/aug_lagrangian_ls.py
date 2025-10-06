@@ -335,7 +335,7 @@ def lsq_auglag(  # noqa: C901
     step_norm = jnp.inf
     actual_reduction = jnp.inf
     Lactual_reduction = jnp.inf
-    alpha = None  # "Levenberg-Marquardt" parameter
+    alpha = 0.0  # "Levenberg-Marquardt" parameter
 
     allx = [z]
     alltr = [trust_radius]

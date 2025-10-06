@@ -665,7 +665,7 @@ class ProximalProjection(ObjectiveFunction):
                 "Zb_lmn",
             ]
         # the eq optimizable variables for proximal are the Rb, Zb and profile
-        # coefficients (or Poincare). Once these are chosen, we will solve the equilibrium 
+        # coefficients (or Poincare). Once these are chosen, we will solve the eq
         # to find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
         # from the list of optimizable variables. This is accompanied by not including
         # self-consistency constraints (see get_combined_constraint_objectives in
@@ -673,7 +673,8 @@ class ProximalProjection(ObjectiveFunction):
         # variables from the constraint matrix A in
         # desc.objectives.utils.factorize_linear_constraints.
         for arg in args2remove:
-            self._args.remove(arg)
+            if arg in self._args:
+                self._args.remove(arg)
 
         (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,

@@ -205,9 +205,6 @@ def test_tracing_vacuum_tokamak():
     # Initialize particles
     x0, args = particles.init_particles(model=model, field=eq)
     m, q, _ = args[0, :]
-    # Ensure particles stay within the surface by bounds_R (not actually
-    # needed here since the tracing time is chosen accordingly, but this
-    # is the intended use case).
     rtz, vpar = trace_particles(
         field=eq,
         initializer=particles,

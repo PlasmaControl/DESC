@@ -705,19 +705,21 @@ class ProximalProjection(ObjectiveFunction):
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
             if arg == "Rp_lmn":
-                c = get_instance(self._linear_constraints, SectionRSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, SectionRSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["R_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdRp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRp)
             if arg == "Zp_lmn":
-                c = get_instance(self._linear_constraints, SectionZSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, SectionZSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["Z_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdZp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZp)
             if arg == "Lp_lmn":
-                c = get_instance(self._linear_constraints, SectionLambdaSelfConsistency)
+                c = get_instance(
+                    self._eq_linear_constraints, SectionLambdaSelfConsistency
+                )
                 A = c.jac_unscaled(xz)[0]["L_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdLp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["L_lmn"]] @ Ainv

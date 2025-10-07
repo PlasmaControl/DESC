@@ -920,16 +920,18 @@ class FixBoundaryR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
+        remove_optimizables=True,
         name="fixed LCFS R",
     ):
         if "Rb_lmn" not in eq.params_dict:
             make_optimizable("Rb_lmn", eq)
-        if "Rp_lmn" in eq.params_dict:
-            make_nonoptimizable("Rp_lmn", eq)
-        if "Zp_lmn" in eq.params_dict:
-            make_nonoptimizable("Zp_lmn", eq)
-        if "Lp_lmn" in eq.params_dict:
-            make_nonoptimizable("Lp_lmn", eq)
+        if remove_optimizables:
+            if "Rp_lmn" in eq.params_dict:
+                make_nonoptimizable("Rp_lmn", eq)
+            if "Zp_lmn" in eq.params_dict:
+                make_nonoptimizable("Zp_lmn", eq)
+            if "Lp_lmn" in eq.params_dict:
+                make_nonoptimizable("Lp_lmn", eq)
 
         if isinstance(modes, bool):
             indices = modes
@@ -1010,16 +1012,18 @@ class FixBoundaryZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
+        remove_optimizables=True,
         name="fixed LCFS Z",
     ):
         if "Zb_lmn" not in eq.params_dict:
             make_optimizable("Zb_lmn", eq)
-        if "Rp_lmn" in eq.params_dict:
-            make_nonoptimizable("Rp_lmn", eq)
-        if "Zp_lmn" in eq.params_dict:
-            make_nonoptimizable("Zp_lmn", eq)
-        if "Lp_lmn" in eq.params_dict:
-            make_nonoptimizable("Lp_lmn", eq)
+        if remove_optimizables:
+            if "Rp_lmn" in eq.params_dict:
+                make_nonoptimizable("Rp_lmn", eq)
+            if "Zp_lmn" in eq.params_dict:
+                make_nonoptimizable("Zp_lmn", eq)
+            if "Lp_lmn" in eq.params_dict:
+                make_nonoptimizable("Lp_lmn", eq)
 
         if isinstance(modes, bool):
             indices = modes
@@ -1100,6 +1104,7 @@ class FixSectionR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
+        remove_optimizables=True,
         name="fixed cross-section R",
     ):
         if "Rp_lmn" not in eq.params_dict:
@@ -1108,10 +1113,11 @@ class FixSectionR(FixParameters):
             make_optimizable("Zp_lmn", eq)
         if "Lp_lmn" not in eq.params_dict:
             make_optimizable("Lp_lmn", eq)
-        if "Rb_lmn" in eq.params_dict:
-            make_nonoptimizable("Rb_lmn", eq)
-        if "Zb_lmn" in eq.params_dict:
-            make_nonoptimizable("Zb_lmn", eq)
+        if remove_optimizables:
+            if "Rb_lmn" in eq.params_dict:
+                make_nonoptimizable("Rb_lmn", eq)
+            if "Zb_lmn" in eq.params_dict:
+                make_nonoptimizable("Zb_lmn", eq)
 
         if isinstance(modes, bool):
             indices = modes
@@ -1192,6 +1198,7 @@ class FixSectionZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
+        remove_optimizables=True,
         name="fixed cross-section Z",
     ):
         if "Rp_lmn" not in eq.params_dict:
@@ -1200,10 +1207,11 @@ class FixSectionZ(FixParameters):
             make_optimizable("Zp_lmn", eq)
         if "Lp_lmn" not in eq.params_dict:
             make_optimizable("Lp_lmn", eq)
-        if "Rb_lmn" in eq.params_dict:
-            make_nonoptimizable("Rb_lmn", eq)
-        if "Zb_lmn" in eq.params_dict:
-            make_nonoptimizable("Zb_lmn", eq)
+        if remove_optimizables:
+            if "Rb_lmn" in eq.params_dict:
+                make_nonoptimizable("Rb_lmn", eq)
+            if "Zb_lmn" in eq.params_dict:
+                make_nonoptimizable("Zb_lmn", eq)
 
         if isinstance(modes, bool):
             indices = modes
@@ -1284,18 +1292,20 @@ class FixSectionLambda(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
+        remove_optimizables=True,
         name="fixed cross-section λ",
     ):
         if "Rp_lmn" not in eq.params_dict:
             make_optimizable("Rp_lmn", eq)
         if "Zp_lmn" not in eq.params_dict:
             make_optimizable("Zp_lmn", eq)
-        if "Lp_lmn" not in eq.params_dict:
-            make_optimizable("Lp_lmn", eq)
-        if "Rb_lmn" in eq.params_dict:
-            make_nonoptimizable("Rb_lmn", eq)
-        if "Zb_lmn" in eq.params_dict:
-            make_nonoptimizable("Zb_lmn", eq)
+        if remove_optimizables:
+            if "Lp_lmn" not in eq.params_dict:
+                make_optimizable("Lp_lmn", eq)
+            if "Rb_lmn" in eq.params_dict:
+                make_nonoptimizable("Rb_lmn", eq)
+            if "Zb_lmn" in eq.params_dict:
+                make_nonoptimizable("Zb_lmn", eq)
 
         if isinstance(modes, bool):
             indices = modes

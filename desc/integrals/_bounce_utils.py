@@ -857,13 +857,14 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
     # manually setting pitch_inv for testing JOHN LABBATE SET
     # pitch_inv = jnp.array([1.05]) # DESC_pyQSC_NAE_precise QH+well.h5, 
     # pitch_inv = jnp.array([1.0]) # DESC_pyQSC_NAE_2022 QH nfp2.h5, DESC_pyQSC_NAE_2022 QH nfp3.h5, DESC_pyQSC_NAE_precise QA.h5
-    pitch_inv = jnp.array([5.8,5.9]) # wout_new_QH_aScaling.nc, wout_aten_rescaled.nc
+    # pitch_inv = jnp.array([5.8,5.9]) # wout_new_QH_aScaling.nc, wout_aten_rescaled.nc
     # pitch_inv = jnp.array([5.2]) # wout_ITERModel_reference.nc
     # pitch_inv = jnp.array([5.9]) # wout_aten_rescaled.nc, wout_QI_nfp3_rescaled.nc
     # pitch_inv = jnp.array([5.7]) # wout_beta2.5_QA.nc
     # pitch_inv = jnp.array([0.92]) # DESC_pyQSC_NAE_2022 QH nfp7.h5
     # pitch_inv = jnp.array([1.3]) # wout_nfp2_beta_2.00.nc
     # pitch_inv = jnp.array([2.0]) # qs_initial_guess.h5
+    pitch_inv = jnp.array([5.0,5.1,5.2])
 
     
     return pitch_inv, weight

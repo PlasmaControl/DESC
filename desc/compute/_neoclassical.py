@@ -195,7 +195,7 @@ def _compute(
     return out
 '''
 
-def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False):
+def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False, pitch_invs=None, num_rho=None):
     """Compute Bounce1D integral quantity with ``fun``.
 
     Parameters
@@ -225,8 +225,10 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
-        simp=simp,
+        simp=simp
     )
+    if pitch_invs is not None:
+        fun_data["pitch_inv"] = jnp.broadcast_to(pitch_invs, (grid.num_rho,len(pitch_invs) )) # needs to be shape (rho,pitch)
     out = batch_map(fun, fun_data, surf_batch_size)
     # assert out.ndim == 1
     # return grid.expand(out)
@@ -718,17 +720,17 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
-    # N = kwargs.get("N",-1) # ?????
-    N=1
+    N = kwargs.get("N",0)
     nfp = kwargs.get("nfp",jnp.nan)
     KE_frac = kwargs.get("KE_frac",0.00000001)
-    p_max = kwargs.get("p_max",2)
-    q_max = kwargs.get("q_max",2)
-    res_range_min = kwargs.get("res_range_min",0)
-    res_range_max = kwargs.get("res_range_max",4)
+    p_max = kwargs.get("p_max",3)
+    q_max = kwargs.get("q_max",3)
+    res_range_min = kwargs.get("res_range_min",-3)
+    res_range_max = kwargs.get("res_range_max",3)
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
     include_zero_res = kwargs.get("include_zero_res",True)
+    pitch_invs = kwargs.get("pitch_invs",None)
 
     # noqa: unused dependency
     surf_batch_size = kwargs.get("surf_batch_size", 1)
@@ -780,6 +782,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
+            pitch_invs=pitch_invs
         )
     ) # [rho,alpha,pitch,wells]
     # count_nz will be 3D [rho,alpha,pitch]
@@ -794,6 +797,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
+            pitch_invs=pitch_invs
         )
     ) # [rho,alpha,pitch,wells]
 
@@ -935,6 +939,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         condition,
         # A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # form option 1, clip to avoid overflow warning in jnp.exp()
         A * (psi_da_broad**2) * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
+        # A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
     obj_out = jnp.sum(obj_out,axis=3) # outputs array with size (rho,pitch,energy)
@@ -955,8 +960,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']'''
 
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
-    data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    # data["f_tr1"] = iotas_omega # debugging
+    # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
+    data["f_tr1"] = obj_out # not flattening for plotting, need to flatten for optimization
     return data
 
     # debugging

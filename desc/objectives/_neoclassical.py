@@ -475,18 +475,20 @@ class TrappedResonance(_Objective):
         loss_function=None,
         deriv_mode="auto",
         rho=np.linspace(0.1, 0.9, 3),
-        alpha=np.linspace(0,2*np.pi,1),
+        alpha=np.linspace(0,2*np.pi,10),
         KE_frac=np.array([0.00000001]),
         *,
         num_transit=2,
         knots_per_transit=100,
         num_quad=32,
-        num_pitch=2,
+        num_pitch=1,
         batch=True,
         num_well=None,
         Nemov=True,
         name="TrappedResonance",
         jac_chunk_size=None,
+        pitch_invs=None,
+        N=0
     ):
         # assign attributes and store inputs. No expensive calculations
                 # we don't have to do much here, mostly just call ``super().__init__()``
@@ -503,12 +505,16 @@ class TrappedResonance(_Objective):
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
             )
         }
+        if pitch_invs is not None:
+            num_pitch = len(pitch_invs)
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
             "num_well": num_well,
-            "KE_frac": KE_frac
+            "KE_frac": KE_frac,
+            "pitch_invs": pitch_invs,
+            "N": N
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr1"
@@ -630,7 +636,6 @@ class TrappedResonance(_Objective):
             constants["profiles"],
             data=data,
             quad=constants["quad"],
-            N=-1,
             nfp=eq.NFP,
             bt_filter_flag=True,
             rt_filter_flag=True,

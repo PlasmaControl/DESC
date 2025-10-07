@@ -31,15 +31,18 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
         Equilibrium to initialize
     args :
         either:
-          - No arguments, in which case eq.surface will be scaled for the guess.
-          - Another Surface object, which will be scaled to generate the guess.
-            Optionally a Curve object may also be supplied for the magnetic axis.
-          - Another Equilibrium, whose flux surfaces will be used.
+          - No arguments, in which case eq.surface will be scaled down to eq.axis
+          as the initial guess, and eq.L_lmn will be set to zero.
+          - Another Surface object, which will be scaled down to an axis to generate
+            the guess. Optionally a Curve object may also be supplied for the magnetic
+            axis, if not supplied then the Surface object's `get_axis` method will be
+            used to find the axis from the surface, and eq.L_lmn will be set to zero.
+          - Another Equilibrium, whose flux surfaces and lambda will be used.
           - File path to a VMEC or DESC equilibrium, which will be loaded and used.
           - Grid and 2-3 ndarrays, specifying the flux surface locations (R, Z, and
             optionally lambda) at fixed flux coordinates. All arrays should have the
             same length. Optionally, an ndarray of shape(k,3) may be passed instead
-            of a grid.
+            of a grid. If lambda is not passed, it will be set to zero.
     ensure_nested : bool
         If True, and the default initial guess does not produce nested surfaces,
         run a small optimization problem to attempt to refine initial guess to improve
@@ -128,6 +131,7 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
                 eq.Lp_lmn,
                 eq.xsection.L_basis,
             )
+            eq.L_lmn = np.zeros_like(eq.L_lmn)
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "
@@ -165,6 +169,7 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
                 axisZ,
                 coord=coord,
             )
+            eq.L_lmn = np.zeros_like(eq.L_lmn)
         elif type(args[0]) is type(eq):
             eq1 = args[0]
             if nargs > 1:

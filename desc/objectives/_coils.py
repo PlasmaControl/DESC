@@ -57,6 +57,10 @@ class _CoilObjective(_Objective):
         should be optimized according to the objective. Default
         is to optimize all coils. If a list, must have the same structure
         as coil.
+
+    Subclasses must define a static attribute "_broadcast_input." Equals
+    "Coil" if the objective returns a single scalar per coil, and "Node"
+    if it returns a scalar at every grid point.
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
@@ -81,7 +85,7 @@ class _CoilObjective(_Objective):
         self._data_keys = data_keys
         self._normalize = normalize
 
-        self._coil_tree = _coilset_flatten(coil)
+        self._coil_tree = self.coilset_expand(coil)
         indices = tree_map(lambda x: int(x), indices)
         self._mask = indices
 
@@ -162,12 +166,16 @@ class _CoilObjective(_Objective):
         )
 
         def broadcast_input(arr):
-            # No need to broadcast if input is only a scalar
+            """Expand an array in accordance with the attribute _broadcast_input."""
+            # No need to broadcast if input is a scalar
             arr_flat = tree_leaves(arr)
             if len(arr_flat) == 1:
                 return arr_flat[0]
 
+            # Map array to match the structure of self._coil_tree
             arr, _ = tree_flatten(jax_tree_broadcast(arr, self._coil_tree))
+
+            # Further map to individual grid points if appropriate
             if self._broadcast_input == "Node":
                 arr = [
                     [arr[i] for k in range(0, grid[i].num_nodes)]
@@ -244,6 +252,36 @@ class _CoilObjective(_Objective):
             grid=self._grid,
         )
         return data
+
+    @staticmethod
+    def coilset_expand(x):
+        """Expands CoilSets into nested lists showing the constituent Coils.
+
+        Parameters
+        ----------
+        x : CoilSet
+            CoilSet to be expanded.
+
+        Returns
+        -------
+        list: (Potentially nested) lists of zeros
+            E.g. given a MixedCoilSet consisting of [CoilSet, CoilSet, CoilSet]
+            with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
+
+        """
+        # Local import to avoid circular import
+        from desc.coils import CoilSet, _Coil
+
+        def expand(t):
+            if isinstance(t, CoilSet):
+                return expand(t.coils)
+            if isinstance(t, _Coil):
+                return 0
+            if isinstance(t, list):
+                return [expand(c) for c in t]
+            return t
+
+        return expand(x)
 
 
 class CoilLength(_CoilObjective):
@@ -2752,33 +2790,3 @@ class SurfaceCurrentRegularization(_Objective):
         elif self._regularization == "sqrt(Phi)":
             K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
         return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
-
-
-def _coilset_flatten(x):
-    """Flatten lists of CoilSets into nested list of zeros.
-
-    Parameters
-    ----------
-    x : CoilSet
-        CoilSet to be decomposed.
-
-    Returns
-    -------
-    list: (Potentially nested) lists of zeros
-        E.g. given a MixedCoilSet consisting of [CoilSet, CoilSet, CoilSet]
-        with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
-
-    """
-    # Local import to avoid circular import
-    from desc.coils import CoilSet, _Coil
-
-    def flatten(t):
-        if isinstance(t, CoilSet):
-            return flatten(t.coils)
-        if isinstance(t, _Coil):
-            return 0
-        if isinstance(t, list):
-            return [flatten(c) for c in t]
-        return t
-
-    return flatten(x)

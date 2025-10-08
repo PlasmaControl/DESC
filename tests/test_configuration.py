@@ -470,8 +470,8 @@ class TestGetSurfaces:
         # check for non-symmetric section
         eq1 = desc.examples.get("HELIOTRON")
         zeta = 0.3 * np.pi / eq1.NFP
-        surf = eq1.get_surface_at(zeta=zeta)
-        eq_from_section = Equilibrium(xsection=surf)
+        xsection = eq1.get_surface_at(zeta=zeta)
+        eq_from_section = Equilibrium(xsection=xsection)
         grid = LinearGrid(zeta=zeta, rho=1, M=10, NFP=eq1.NFP)
         data1 = eq_from_section.compute(["R", "Z", "lambda"], grid=grid)
         data2 = eq1.compute(["R", "Z", "lambda"], grid=grid)

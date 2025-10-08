@@ -115,6 +115,7 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
                 axisZ,
                 coord,
             )
+            eq.L_lmn = np.zeros_like(eq.L_lmn)
         elif hasattr(eq, "_xsection") and not lcfs_surface:
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
@@ -131,7 +132,6 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
                 eq.Lp_lmn,
                 eq.xsection.L_basis,
             )
-            eq.L_lmn = np.zeros_like(eq.L_lmn)
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "

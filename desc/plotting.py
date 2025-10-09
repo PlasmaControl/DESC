@@ -1328,7 +1328,8 @@ def plot_fsa(  # noqa: C901
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        # sym=False to ensure the FSA is correct
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 

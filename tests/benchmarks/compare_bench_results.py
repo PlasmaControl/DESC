@@ -119,9 +119,9 @@ for i, (dt, dpct, sdt, sdpct) in enumerate(
     commit_msg_lines.append(line)
 
 commit_msg_lines.append("```")
-commit_msg_lines += (
+commit_msg_lines.append(
     "\n\nGithub CI performance can be noisy. When evaluating the "
-    "benchmarks, developers should take this into account.\n"
+    + "benchmarks, developers should take this into account.\n"
 )
 commit_msg_lines = [line + "\n" for line in commit_msg_lines]
 print("".join(commit_msg_lines))

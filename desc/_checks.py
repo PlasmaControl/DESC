@@ -36,15 +36,17 @@ def check_jax_finufft(func=_c_1d, g_func=_true_g_c_1d):
         "This applies to effective ripple, Gamma_c, and any other\n"
         "computations that involve bounce integrals.\n"
     )
+    # https://github.com/unalmis/jax-finufft/blob/main/tests/interpolation_test.py#L13
+    RTOL = 2e-6
 
     try:
-        np.testing.assert_allclose(nufft1d2r(xq, f), func(xq))
+        np.testing.assert_allclose(nufft1d2r(xq, f), func(xq), rtol=RTOL)
 
         @grad
         def g(xq):
             return nufft1d2r(xq, f, eps=1e-7).sum()
 
-        np.testing.assert_allclose(g(xq), g_func(xq))
+        np.testing.assert_allclose(g(xq), g_func(xq), rtol=RTOL)
     except NameError:
         warnings.warn("\njax-finufft is not installed.\n" + msg)
     except NotImplementedError:

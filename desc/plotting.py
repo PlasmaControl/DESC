@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+from diffrax import RESULTS
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
@@ -30,6 +31,7 @@ from desc.utils import (
     only1,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -2076,7 +2078,7 @@ def poincare_plot(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -2117,6 +2119,10 @@ def poincare_plot(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", colorblind_colors[0])
@@ -2143,14 +2149,30 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
         source_grid=grid,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -3991,7 +4013,7 @@ def plot_field_lines(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -4028,6 +4050,10 @@ def plot_field_lines(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -4057,13 +4083,29 @@ def plot_field_lines(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))
@@ -4396,10 +4438,10 @@ def plot_gammac(
         Default: 0.5
     alphas : array_like, optional
         Fieldline label values (toroidal angle).
-        Default: np.linspace(0, 2π, 32, endpoint=True)
+        Default: np.linspace(0, 2π, 25, endpoint=True)
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
-        Default: 16
+        Default: 28
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -4437,24 +4479,22 @@ def plot_gammac(
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rho is None:
-        rho = np.array([0.5], dtype=float)
-    else:
-        rho = np.asarray(rho, dtype=float).ravel()
-        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
-
+    rho = (
+        np.array([0.5], dtype=float)
+        if rho is None
+        else np.asarray(rho, dtype=float).ravel()
+    )
+    errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
-
-    if num_pitch is None:
-        num_pitch = 16
+    num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
-    X = kwargs.pop("X", 16)
-    Y = kwargs.pop("Y", 32)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 64)
     Y_B = kwargs.pop("Y_B", Y * 2)
-    num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_quad = kwargs.pop("num_quad", 32)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
@@ -4484,7 +4524,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch = np.linspace(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

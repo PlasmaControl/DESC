@@ -261,7 +261,6 @@ class ShareParameters(_Objective):
     Examples
     --------
     .. code-block:: python
-
         import numpy as np
         from desc.coils import (
             CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
@@ -300,7 +299,6 @@ class ShareParameters(_Objective):
                 {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
             ]
         obj=ShareParameters([full_coilset, coilset2], params=params )
-
 
     """
 

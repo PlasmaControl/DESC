@@ -312,6 +312,33 @@ class TestSurfaceIntegral:
         test(cg_sym)
 
     @pytest.mark.unit
+    def test_surface_averages_identity_op(self):
+        """Test flux surface averages of surface functions are identity operations."""
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
+        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
+        data = eq.compute(["p", "sqrt(g)"], grid=grid)
+        pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
+        np.testing.assert_allclose(data["p"], pressure_average)
+
+    @pytest.mark.unit
+    def test_surface_averages_homomorphism(self):
+        """Test flux surface averages of surface functions are additive homomorphisms.
+
+        Meaning average(a + b) = average(a) + average(b).
+        """
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
+        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
+        data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
+        a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
+        b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
+        a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
+        np.testing.assert_allclose(a_plus_b, a + b)
+
+    @pytest.mark.unit
     def test_surface_integrals_against_shortcut(self):
         """Test integration against less general methods."""
         grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)

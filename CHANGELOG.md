@@ -2,7 +2,12 @@ Changelog
 =========
 
 New Features
-
+------------
+- Automatically-differentiable, non-singular Laplace BIE solver.
+- Improved performance and accuracy of FFT interpolation in singular integrals
+  ([1](https://github.com/f0uriest/interpax/pull/116), [2](https://github.com/f0uriest/interpax/pull/117)).
+  This is useful for free surface optimization.
+- [Plumbing for new magnetic field API](https://github.com/PlasmaControl/DESC/issues/1807).
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Changes related to ``field_line_integrate``:
@@ -24,6 +29,7 @@ Backend
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - Minimum JAX version bumped up to ``0.4.29``
+- New fixed point iteration methods.
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
 
 

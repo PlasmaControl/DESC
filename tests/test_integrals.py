@@ -1658,6 +1658,7 @@ class TestBounce:
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
         grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+
         eq = get("HELIOTRON")
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid

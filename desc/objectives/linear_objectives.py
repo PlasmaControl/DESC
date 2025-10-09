@@ -261,6 +261,7 @@ class ShareParameters(_Objective):
     Examples
     --------
     .. code-block:: python
+
         import numpy as np
         from desc.coils import (
             CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet

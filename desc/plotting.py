@@ -4567,10 +4567,10 @@ def plot_gammac(
         Default: 0.5
     alphas : array_like, optional
         Fieldline label values (toroidal angle).
-        Default: np.linspace(0, 2π, 32, endpoint=True)
+        Default: np.linspace(0, 2π, 25, endpoint=True)
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
-        Default: 16
+        Default: 28
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -4608,24 +4608,22 @@ def plot_gammac(
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rho is None:
-        rho = np.array([0.5], dtype=float)
-    else:
-        rho = np.asarray(rho, dtype=float).ravel()
-        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
-
+    rho = (
+        np.array([0.5], dtype=float)
+        if rho is None
+        else np.asarray(rho, dtype=float).ravel()
+    )
+    errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
-
-    if num_pitch is None:
-        num_pitch = 16
+    num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
-    X = kwargs.pop("X", 16)
-    Y = kwargs.pop("Y", 32)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 64)
     Y_B = kwargs.pop("Y_B", Y * 2)
-    num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_quad = kwargs.pop("num_quad", 32)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
@@ -4655,7 +4653,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch = np.linspace(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

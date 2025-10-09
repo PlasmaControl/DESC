@@ -28,6 +28,12 @@ Backend
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
 
 
+Performance Improvements
+
+- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
+- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
+
+
 v0.15.0
 -------
 

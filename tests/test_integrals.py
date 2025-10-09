@@ -12,7 +12,7 @@ from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipk, ellipkm1
-from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyquist_freq
+from tests.test_interp_utils import _c_1d, _c_1d_nyquist_freq, _c_2d, _c_2d_nyquist_freq
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
@@ -39,11 +39,11 @@ from desc.integrals import (
 )
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
-    _get_extrema,
     bounce_points,
+    get_extrema,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     _best_params,
     _best_ratio,
@@ -576,7 +576,7 @@ class TestSingularities:
         product(
             [FFTInterpolator, DFTInterpolator],
             [
-                (_f_2d, *_f_2d_nyquist_freq(), 1),
+                (_c_2d, *_c_2d_nyquist_freq(), 1),
                 (lambda x, y: np.cos(6 * x) ** 2 + np.sin(90 * y) + 1, 12, 3, 30),
             ],
         ),
@@ -1387,7 +1387,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         dB_dz = B.derivative()
-        ext, B_ext = _get_extrema(k, B.c.T, dB_dz.c.T)
+        ext, B_ext = get_extrema(k, B.c.T, dB_dz.c.T)
         mask = ~np.isnan(ext)
         ext, B_ext = ext[mask], B_ext[mask]
         idx = np.argsort(ext)
@@ -1405,17 +1405,18 @@ class TestBouncePoints:
         def f(z):
             return -2 * np.cos(1 / (0.1 + z**2)) + 2
 
-        M, N = 1, 10
-        alpha, zeta = FourierChebyshevSeries.nodes(M, N).T
-        cheb = FourierChebyshevSeries(f(zeta).reshape(M, N)).compute_cheb(
-            fourier_pts(M)
+        X, Y = 1, 10
+        alpha, zeta = FourierChebyshevSeries.nodes(X, Y).T
+        cheb = FourierChebyshevSeries(f(zeta).reshape(X, Y)).compute_cheb(
+            fourier_pts(X)
         )
+        cheb = PiecewiseChebyshevSeries(cheb)
         pitch_inv = 3
         z1, z2 = cheb.intersect1d(pitch_inv)
         cheb.check_intersect1d(z1, z2, pitch_inv)
         z1, z2 = TestBouncePoints.filter(z1, z2)
 
-        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
+        r = self._cheb_intersect(chebinterpolate(f, Y - 1), pitch_inv)
         np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
         np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
@@ -1626,43 +1627,31 @@ class TestBounce:
         # coordinates. This is defined as
         # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces, field lines, and how far to follow the field
-        #    line in Clebsch coordinates ρ, α, ζ.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
         grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-        # 3. Compute input data.
         eq = get("HELIOTRON")
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 4. Make the bounce integration operator.
         bounce = Bounce1D(grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 5. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 6. Optionally check for correctness of bounce points.
+
+        # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
-        # 7. Integrate.
-        num = bounce.integrate(
-            integrand=TestBounce._example_numerator,
-            pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape(grid, data["g_zz"])},
+
+        num, den = bounce.integrate(
+            [TestBounce._example_numerator, TestBounce._example_denominator],
+            pitch_inv,
+            {"g_zz": Bounce1D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
-        )
-        den = bounce.integrate(
-            integrand=TestBounce._example_denominator,
-            pitch_inv=pitch_inv,
-            points=points,
-            check=True,
-            batch=False,
         )
         avg = safediv(num, den)
         errorif(not np.isfinite(avg).all())
@@ -1673,10 +1662,10 @@ class TestBounce:
             "to see if this is expected.",
         )
 
-        # 8. Example manipulation of the output
-        # Sum all bounce averages on a particular field line, for every field line.
+        # Example manipulation of the output:
+        # sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
-        # The result stored at
+        # the result stored at
         l, m, p = 1, 0, 3
         print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
@@ -1685,9 +1674,22 @@ class TestBounce:
         nodes = bounce.reshape(grid, grid.nodes[:, :2])
         print("(ρ, α):", nodes[l, m, 0])
 
-        # 10. Plotting
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
+
+        self._not_part_of_tutorial_test(bounce, pitch_inv, points, den)
+
         return fig
+
+    @staticmethod
+    def _not_part_of_tutorial_test(bounce, pitch_inv, points, den):
+        den_no_batch = bounce.integrate(
+            TestBounce._example_denominator,
+            pitch_inv,
+            points=points,
+            check=True,
+            batch=False,
+        )
+        np.testing.assert_allclose(den_no_batch, den)
 
     @pytest.mark.unit
     def test_interp_to_argmin(self):
@@ -1777,7 +1779,7 @@ class TestBounce:
             by some scale factors for this unit test. These should be fed to the bounce
             integration as input.
         pitch_inv : jnp.ndarray
-            Shape (P, ).
+            Shape (num pitch, ).
             1/λ values used.
 
         """
@@ -1899,20 +1901,14 @@ class TestBounce:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {
+        data = {
             "cvdrift": Bounce1D.reshape(things["grid"].source_grid, cvdrift),
             "gbdrift": Bounce1D.reshape(things["grid"].source_grid, gbdrift),
         }
-        drift_numerical_num = bounce.integrate(
-            integrand=TestBounce.drift_num_integrand,
-            pitch_inv=pitch_inv,
-            data=interp_data,
-            points=points,
-            check=True,
-        )
-        drift_numerical_den = bounce.integrate(
-            integrand=TestBounce.drift_den_integrand,
-            pitch_inv=pitch_inv,
+        drift_numerical_num, drift_numerical_den = bounce.integrate(
+            [TestBounce.drift_num_integrand, TestBounce.drift_den_integrand],
+            pitch_inv,
+            data,
             points=points,
             check=True,
         )
@@ -1920,13 +1916,12 @@ class TestBounce:
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+
         np.testing.assert_allclose(
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce, TestBounce.drift_num_integrand, interp_data
-        )
+        TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, data)
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)
@@ -1934,7 +1929,7 @@ class TestBounce:
         return fig
 
     @staticmethod
-    def _test_bounce_autodiff(bounce, integrand, data):
+    def _test_bounce_autodiff(bounce, integrand, data, nufft_eps=0):
         """Make sure reverse mode AD works correctly on this algorithm.
 
         Non-differentiable operations (e.g. ``take_mask``) are used in computation.
@@ -1945,8 +1940,8 @@ class TestBounce:
         If the AD tool works properly, then these operations should be assigned
         zero gradients while the gradients wrt parameters of our physics computations
         accumulate correctly. Less mature AD tools may have subtle bugs that cause
-        the gradients to not accumulate correctly. (There's a few
-        GitHub issues that JAX has fixed related to this in the past.)
+        the gradients to not accumulate correctly. (This is important to catch bugs
+        like https://github.com/flatironinstitute/jax-finufft/issues/158).
 
         This test first confirms the gradients computed by reverse mode AD matches
         the analytic approximation of the true gradient. Then we confirm that the
@@ -1983,19 +1978,26 @@ class TestBounce:
 
         def fun1(pitch):
             return bounce.integrate(
-                integrand=integrand, pitch_inv=1 / pitch, data=data, check=False
+                integrand=integrand,
+                pitch_inv=1 / pitch,
+                data=data,
+                nufft_eps=nufft_eps,
+                check=False,
             ).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                integrand=integrand_grad, pitch_inv=1 / pitch, data=data, check=True
+                integrand=integrand_grad,
+                pitch_inv=1 / pitch,
+                data=data,
+                nufft_eps=nufft_eps,
+                check=True,
             ).sum()
 
         pitch = 1.0
-        # can obtain from math or just extrapolate from analytic expression plot
-        analytic_approximation_of_gradient = 650
+        analytic_approximation_of_gradient = 651.8
         np.testing.assert_allclose(
-            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=5e-3
+            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=2.5e-3
         )
         # It is expected that this is much larger because the integrand is singular
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
@@ -2007,32 +2009,35 @@ class TestBounce2D:
     """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
-    def test_interp_to_argmin(self):
+    @pytest.mark.parametrize("nufft_eps", [0, 1e-6])
+    def test_interp_to_argmin(self, nufft_eps):
         """Test interpolation of h to argmin of g."""  # noqa: D202
 
         def g(z):
             return np.cos(z) ** 2 + np.sin(7 * z) - np.sin(z)
 
         argmin_g = np.pi / 2
-        h = _f_1d
-        nyquist = 2 * max(_f_1d_nyquist_freq(), 7) + 1
+        h = _c_1d
+        nyquist = 2 * max(_c_1d_nyquist_freq(), 7) + 1
         grid = LinearGrid(theta=1, zeta=nyquist, sym=False)
         bounce = Bounce2D(
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
-            # dummy value; h depends on ζ alone,so doesn't matter what θ(α, ζ) is
+            # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,
+            nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
-            bounce.interp_to_argmin(bounce.reshape(grid, h(grid.nodes[:, 2])), points),
+            bounce.interp_to_argmin(
+                bounce.reshape(grid, h(grid.nodes[:, 2])), points, nufft_eps=nufft_eps
+            ),
             h(argmin_g),
             rtol=1e-6,
         )
 
-    @pytest.mark.slow
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce2d_checks(self):
@@ -2044,20 +2049,14 @@ class TestBounce2D:
         # coordinates. This is defined as
         # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         eq = get("HELIOTRON")
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        # 3. Compute input data.
         data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz", "1"],
-            grid=grid,
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
-        # 5. Make the bounce integration operator.
         bounce = Bounce2D(
             grid,
             data,
@@ -2072,22 +2071,17 @@ class TestBounce2D:
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
         )
-        # 6. Compute bounce points.
         points = bounce.points(pitch_inv)
-        # 7. Optionally check for correctness of bounce points.
+
+        # optionally check for correctness of bounce points
         bounce.check_points(points, pitch_inv, plot=False)
-        # 8. Integrate.
-        num = bounce.integrate(
-            integrand=TestBounce._example_numerator,
-            pitch_inv=pitch_inv,
-            data={"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
+
+        num, den = bounce.integrate(
+            [TestBounce._example_numerator, TestBounce._example_denominator],
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
-            check=True,
-        )
-        den = bounce.integrate(
-            integrand=TestBounce._example_denominator,
-            pitch_inv=pitch_inv,
-            points=points,
+            nufft_eps=0,
             check=True,
         )
         avg = safediv(num, den)
@@ -2099,10 +2093,10 @@ class TestBounce2D:
             "to see if this is expected.",
         )
 
-        # 9. Example manipulation of the output
-        # Sum all bounce averages on a particular field line, for every field line.
+        # Example manipulation of the output:
+        # sum all bounce averages on a particular field line, for every field line
         result = avg.sum(axis=-1)
-        # The result stored at
+        # the result stored at
         l, m, p = 1, 0, 3
         print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
@@ -2110,6 +2104,19 @@ class TestBounce2D:
         # for the Clebsch field line coordinates
         print("(ρ, α):", rho[l], alpha[m])
 
+        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
+        _, _ = bounce.plot_theta(l, m, show=False)
+
+        self._not_part_of_tutorial_test(
+            bounce, pitch_inv, points, num, data, grid, theta, alpha
+        )
+
+        return fig
+
+    @staticmethod
+    def _not_part_of_tutorial_test(
+        bounce, pitch_inv, points, num, data, grid, theta, alpha
+    ):
         np.testing.assert_allclose(
             bounce.compute_fieldline_length(),
             # Crossref w/ "fieldline length" in data index with 1000 points.
@@ -2124,18 +2131,32 @@ class TestBounce2D:
             rtol=1e-2,
         )
 
-        # 10. Plotting
-        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
-        _, _ = bounce.plot_theta(l, m, show=False)
+        # check for consistency with different options
+        num_nufft = bounce.integrate(
+            TestBounce._example_numerator,
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
+            points=points,
+            # ~1% of the integrals differ significantly at lower epsilon.
+            nufft_eps=1e-12,
+            check=True,
+        )
+        near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
+        near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
+        np.testing.assert_array_equal(near_zero_nufft, near_zero)
+        np.testing.assert_allclose(
+            num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
+        )
+        np.testing.assert_allclose(
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2.5e-4
+        )
 
-        # make sure tests pass when spline=True
-        b = Bounce2D(
+        bounce = Bounce2D(
             grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
         )
-        b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
-        _, _ = b.plot(l, m, pitch_inv[l], show=False)
-
-        return fig
+        bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
+        l, m = 1, 0
+        _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):
@@ -2151,7 +2172,11 @@ class TestBounce2D:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_binormal_drift_bounce2d(self):
+    @pytest.mark.parametrize(
+        "nufft_eps, spline, Y_B",
+        [(0, False, 16), (0, True, 64), (1e-6, False, 16), (1e-8, True, 64)],
+    )
+    def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytic_data()
         drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
@@ -2169,39 +2194,38 @@ class TestBounce2D:
             grid,
             grid_data,
             Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
-            alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
+            Y_B,
+            data["alpha"] - 2.5 * np.pi * data["iota"],
             num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],
+            nufft_eps=nufft_eps,
+            spline=spline,
             check=True,
-            spline=False,
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
-        drift_numerical_num = bounce.integrate(
-            integrand=TestBounce2D.drift_num_integrand,
-            pitch_inv=pitch_inv,
-            data=interp_data,
+
+        data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
+        drift_numerical_num, drift_numerical_den = bounce.integrate(
+            [TestBounce2D.drift_num_integrand, TestBounce.drift_den_integrand],
+            pitch_inv,
+            data,
             points=points,
-            check=True,
-        )
-        drift_numerical_den = bounce.integrate(
-            integrand=TestBounce.drift_den_integrand,
-            pitch_inv=pitch_inv,
-            points=points,
+            nufft_eps=nufft_eps,
             check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+
         np.testing.assert_allclose(
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(
-            bounce, TestBounce2D.drift_num_integrand, interp_data
+            bounce, TestBounce2D.drift_num_integrand, data, nufft_eps
         )
 
         fig, ax = plt.subplots()

@@ -749,9 +749,22 @@ def take_mask(a, mask, /, *, size=None, fill_value=None):
     )
 
 
-def flatten_matrix(y):
-    """Flatten matrix to vector."""
-    return y.reshape(*y.shape[:-2], -1)
+def flatten_mat(y, axes=2):
+    """Flatten matrix to vector.
+
+    Parameters
+    ----------
+    axes : int
+        Number of trailing axes to flatten into last dimension.
+        Default is two.
+
+    Returns
+    -------
+    y : jnp.ndarray
+        Shape (*y.shape[:-axes], -1).
+
+    """
+    return y.reshape(*y.shape[:-axes], -1)
 
 
 # TODO: Eventually remove and use numpy's stuff.

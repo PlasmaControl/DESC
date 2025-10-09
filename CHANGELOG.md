@@ -10,11 +10,18 @@ New Features
 - [Plumbing for new magnetic field API](https://github.com/PlasmaControl/DESC/issues/1807).
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Changes related to ``field_line_integrate``:
+    - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
+    - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
+    - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
+    - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
+    - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
 
 Bug Fixes
----------
+
 - [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 
 Backend
 -------
@@ -22,6 +29,13 @@ Backend
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - Minimum JAX version bumped up to ``0.4.29``
 - New fixed point iteration methods.
+- ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
+
+
+Performance Improvements
+
+- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
+- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
 
 
 v0.15.0

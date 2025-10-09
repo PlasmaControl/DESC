@@ -21,6 +21,7 @@ from jax._src.numpy.vectorize import (
     _parse_input_dimensions,
 )
 from jax._src.util import wraps
+from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -30,7 +31,7 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan, vmap
-from desc.utils import errorif, identity
+from desc.utils import Index, errorif, identity
 
 try:
     from jax.extend import linear_util as lu
@@ -131,15 +132,85 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     return f_
 
 
+def make_shardable(f, axis=0, num_devices=None):
+    """Return sharded and remainder portions of ``f``.
+
+    Notes
+    -----
+    https://github.com/PlasmaControl/DESC/pull/1773#issue-3138019038
+    https://github.com/PlasmaControl/DESC/pull/1773#issuecomment-2981490799
+
+    Parameters
+    ----------
+    f : Pytree
+    axis : int
+        Axis across which ``f`` should be sharded.
+    num_devices : int
+        Number of devices to shard on.
+        If not given, then determined according to ``jax_device_count()``.
+
+    Return
+    ------
+    sf : Pytree
+        Sharded portion of ``f``.
+    rf : Pytree
+        Remainder portion of ``f``.
+
+    """
+    if num_devices is None:
+        num_devices = jax.device_count()
+
+    mesh = jax.make_mesh((num_devices,), ("x"))
+    P = PartitionSpec("x")
+    leaves, treedef = tree_flatten(f)
+    out = [_shard(leaf, axis, num_devices, mesh, P) for leaf in leaves]
+    sf = treedef.unflatten(f[0] for f in out)
+    rf = treedef.unflatten(f[1] for f in out)
+    return sf, rf
+
+
+def _shard(f, axis, num_devices, mesh, P):
+    shardable_size = f.shape[axis] - (f.shape[axis] % num_devices)
+    sf = f[Index.get(slice(0, shardable_size), axis, f.ndim)]
+    rf = f[Index.get(slice(shardable_size, f.shape[axis]), axis, f.ndim)]
+    sf = jax.device_put(sf, NamedSharding(mesh, P))
+    return sf, rf
+
+
 def _evaluate_in_chunks(
     vmapped_fun,
     chunk_size,
     argnums,
     reduction=None,
     chunk_reduction=identity,
+    shard_input_data=False,
     *args,
     **kwargs,
 ):
+    if shard_input_data:
+        args_shardable, args_remainder = make_shardable(args)
+        out_shardable = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            False,
+            args_shardable,
+            **kwargs,
+        )
+        out_remainder = _evaluate_in_chunks(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            False,
+            args_remainder,
+            **kwargs,
+        )
+        return _concat(out_shardable, out_remainder)
+
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
@@ -188,6 +259,7 @@ def vmap_chunked(
     chunk_size=None,
     reduction=None,
     chunk_reduction=identity,
+    shard_input_data=False,
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
@@ -215,19 +287,29 @@ def vmap_chunked(
 
     """
     in_axes, argnums = _parse_in_axes(in_axes)
-    if isinstance(argnums, int):
-        argnums = (argnums,)
-
     f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
-        _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
+        _evaluate_in_chunks,
+        f,
+        chunk_size,
+        argnums,
+        reduction,
+        chunk_reduction,
+        shard_input_data,
     )
 
 
 def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=identity
+    fun,
+    fun_input,
+    /,
+    batch_size=None,
+    *,
+    reduction=None,
+    chunk_reduction=identity,
+    shard_input_data=False,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
@@ -264,7 +346,13 @@ def batch_map(
         chunk_reduction(fun(fun_input))
         if batch_size is None
         else _evaluate_in_chunks(
-            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
+            fun,
+            batch_size,
+            (0,),
+            reduction,
+            chunk_reduction,
+            shard_input_data,
+            fun_input,
         )
     )
 

@@ -100,6 +100,7 @@ def _drift2(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -135,7 +136,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
@@ -147,6 +147,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -157,8 +160,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -169,6 +174,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -177,7 +183,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     drift1,
                     drift2
                     * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
+                        data["|grad(rho)|*|e_alpha|r,p|"],
+                        points,
+                        nufft_eps=nufft_eps,
+                        is_fourier=True,
                     ),
                 )
             )
@@ -188,7 +197,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -266,6 +275,7 @@ def _poloidal_drift(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -298,7 +308,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
     spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -309,8 +321,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -321,6 +335,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             return (2 / jnp.pi) * jnp.arctan(
@@ -330,6 +345,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                     * bounce.interp_to_argmin(
                         data["|grad(rho)|*|e_alpha|r,p|"],
                         points,
+                        nufft_eps=nufft_eps,
                         is_fourier=True,
                     ),
                 )
@@ -397,6 +413,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -427,7 +444,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
@@ -439,6 +455,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -449,8 +468,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -459,7 +480,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -471,7 +493,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
 

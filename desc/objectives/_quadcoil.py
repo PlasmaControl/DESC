@@ -272,6 +272,7 @@ class QuadcoilProxy(_Objective):
         
         # ----- Setting and registering keyword arguments -----
         self._static_attrs = [
+            '_static_attrs', # A bug as of Oct 10 2025
             '_verbose',
             '_Bnormal_plasma_chunk_size',
             'enable_Bnormal_plasma',

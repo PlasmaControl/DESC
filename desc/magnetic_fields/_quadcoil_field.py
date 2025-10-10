@@ -63,6 +63,7 @@ class QuadcoilField(FourierCurrentPotentialField):
     _static_attrs = (
         FourierCurrentPotentialField._static_attrs
         + [
+            '_winding_surface_generator',
             '_plasma_quadpoints_phi_native',
             '_plasma_quadpoints_theta_native',
             '_plasma_quadpoints_phi',
@@ -91,6 +92,7 @@ class QuadcoilField(FourierCurrentPotentialField):
             '_f_quadcoil',
             '_g_quadcoil',
             '_h_quadcoil',
+            
         ]
     )
 
@@ -173,7 +175,6 @@ class QuadcoilField(FourierCurrentPotentialField):
         # use an automatically generated winding surface instead.
         # So, before initializing the superclass, we must
         # handle the winding surface first.
-        print('Phi_mn',Phi_mn)
         self._plasma_coil_distance = plasma_coil_distance
         if plasma_coil_distance is None:
             if winding_surface is None:
@@ -252,8 +253,6 @@ class QuadcoilField(FourierCurrentPotentialField):
 
         if sym_Phi == "auto":
             sym_Phi = "sin" if sym else False
-        print('modes_R', type(modes_R), 'modes_Z', type(modes_Z))
-        print('modes_R', modes_R, 'modes_Z', modes_Z)
         super().__init__(
             Phi_mn=Phi_mn,
             modes_Phi=modes_Phi,
@@ -275,6 +274,11 @@ class QuadcoilField(FourierCurrentPotentialField):
             name=name,
             check_orientation=check_orientation,
         )
+        # the following part of __init__ uses params_dict, 
+        # which loops over all optimizable parameters. 
+        # for it to work properly, we must first give a dummy 
+        # value to self._aux_dofs_flat.
+        self._aux_dofs_flat=jnp.array([])
 
         # ----- Building the operators for converting plasma Fourier coefficients -----
         (
@@ -318,37 +322,66 @@ class QuadcoilField(FourierCurrentPotentialField):
         # Merging constraints and aux dofs from different sources
         g_list = g_obj_list + g_cons_list
         h_list = h_obj_list + h_cons_list
-        # Auxiliary dofs (or slack variables)
-        # For compatibility with params parsing in DESC, we must store aux_dof as a
-        # jax numpy array aux_dofs_flat.
-        aux_dofs_dict = aux_dofs_obj | aux_dofs_cons
-        aux_dofs_flat, unravel_aux_dofs = flatten_util.ravel_pytree(aux_dofs_dict)
-        self.unravel_aux_dofs = unravel_aux_dofs
-        self._aux_dofs_flat = aux_dofs_flat
-
         self._f_quadcoil = lambda qp, x, f_obj=f_obj: f_obj(qp, x)
         self._g_quadcoil = lambda qp, x, g_list=g_list: merge_callables(g_list)(qp, x)
         self._h_quadcoil = lambda qp, x, h_list=h_list: merge_callables(h_list)(qp, x)
-        # n_g = len(g_list)
-        # n_h = len(h_list)
 
-    # @property
-    # def params_dict(self):
-    #     """dict: dictionary of arrays of optimizable parameters."""
-    #     return {
-    #         key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
-    #         for key in self.optimizable_params
-    #     }
 
-    # @params_dict.setter
-    # def params_dict(self, d):
-    #     for key, val in d.items():
-    #         if jnp.asarray(val).size:
-    #             setattr(self, key, val)
-    #     if self._auto_surface:
-    #         params_auto_surface = self._generate_auto_surface_coeffs()
-    #         setattr(self, "R_lmn", params_auto_surface["R_lmn"])
-    #         setattr(self, "Z_lmn", params_auto_surface["Z_lmn"])
+        # ----- Initializing auxiliary dofs (slack variables) -----
+        # aux_dofs_init is a list of callables that 
+        # calculates initial guesses for the slack 
+        # variables based on phi and plasma properties
+        aux_dofs_init = aux_dofs_obj | aux_dofs_cons
+        aux_dofs_vals = {}
+        phi_init = self.params_to_phi(self.params_dict)
+        qp_init = self.quadcoil_params
+        # Obtaining the initial values of the slack variables
+        for key in aux_dofs_init.keys():
+            if callable(aux_dofs_init[key]): 
+                # Callable(qp: QuadcoilParams, dofs: dict, f_unit: float)
+                aux_dofs_vals[key] = aux_dofs_init[key](qp_init, {'phi': phi_init})
+            else:
+                try:
+                    aux_dofs_vals[key] = jnp.array(aux_dofs_init[key])
+                except:
+                    raise TypeError(
+                        f'The auxiliary variable {key} is not a callable, '\
+                        'and cannot be converted to an array. Its value is: '\
+                        f'{str(aux_dofs_init[key])}. This is dur to improper '\
+                        'implementation of the physical quantity. Please contact the developers.')
+        print(aux_dofs_init)
+        # For compatibility with params parsing in DESC, we must store aux_dof as a
+        # jax numpy array aux_dofs_flat.
+        aux_dofs_flat, unravel_aux_dofs = flatten_util.ravel_pytree(aux_dofs_vals)
+        self.unravel_aux_dofs = unravel_aux_dofs
+        self._aux_dofs_flat = aux_dofs_flat
+
+    @property
+    def params_dict(self):
+        """dict: dictionary of arrays of optimizable parameters."""
+        return {
+            key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
+            for key in self.optimizable_params
+        }
+    
+    # The surface coeffs in FourierCurrentPotentialField
+    # are treated as dofs, but in QUADCOIL the winding surface
+    # can also be generated from the plasma surface.
+    # This method updates the surface parameter with auto-generated
+    # values whenever the user requests them.
+    @params_dict.setter
+    def params_dict(self, d):
+        for key, val in d.items():
+            if jnp.asarray(val).size:
+                setattr(self, key, val)
+        # If winding surface is auto-generated, then 
+        # override the winding surface coeffs with the 
+        # auto-generated values
+        if self.plasma_coil_distance is not None:
+            winding_surface = self.winding_surface_quadcoil
+            winding_surface_desc = winding_surface.to_desc()
+            setattr(self, "R_lmn", winding_surface_desc.R_lmn)
+            setattr(self, "Z_lmn", winding_surface_desc.Z_lmn)
 
     @optimizable_parameter
     @property
@@ -361,11 +394,21 @@ class QuadcoilField(FourierCurrentPotentialField):
         """ Flattened slack variables for QUADCOIL """
         self._aux_dofs_flat = new
     
+    @property
     def plasma_surface_quadcoil(self):
         return self.params_to_plasma_surface_quadcoil(self.eq.params_dict)
     
+    @property
     def winding_surface_quadcoil(self):
         return self.params_to_winding_surface_quadcoil(self.eq.params_dict, self.params_dict)
+    
+    @property
+    def dofs_quadcoil(self):
+        return self.params_to_dofs(self.params_dict)
+    
+    @property
+    def quadcoil_params(self):
+        return self.params_to_qp(self.eq.params_dict, self.params_dict)
       
     @property
     def plasma_coil_distance(self):
@@ -380,9 +423,7 @@ class QuadcoilField(FourierCurrentPotentialField):
     # Objective.build() and Objective.compute() into this Optimizable instead.
     # These includes conversion from DESC params into quadcoil objects 
     # and parsing objective and constraint functions.
-
-    def params_to_dofs(self, params_qf):
-        """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil dofs dictionary """
+    def params_to_phi(self, params_qf):
         Phi_s_raw, Phi_c_raw = ptolemy_identity_rev_compute(self._ptolemy_Phi_A, self._ptolemy_Phi_c_indices, self._ptolemy_Phi_s_indices, params_qf['Phi_mn'])
         # Stellsym SurfaceRZFourier's dofs consists of 
         # [rc, zs]
@@ -394,9 +435,13 @@ class QuadcoilField(FourierCurrentPotentialField):
         Phi_c = Phi_c_raw.flatten()
         Phi_s = Phi_s_raw.flatten()[1:]
         if self.sym_Phi:
-            phi_quadcoil = Phi_c
+            return Phi_c
         else:
-            phi_quadcoil = jnp.concatenate([Phi_c, Phi_s])
+            return jnp.concatenate([Phi_c, Phi_s])
+
+    def params_to_dofs(self, params_qf):
+        """ Converts params (input to QuadcoilObjective.compute()) into a quadcoil dofs dictionary """
+        phi_quadcoil = self.params_to_phi(params_qf)
         # Converting the flattened aux dofs dictionary back into a dict.
         return {'phi': phi_quadcoil} | self.unravel_aux_dofs(params_qf['aux_dofs_flat'])
     
@@ -483,8 +528,8 @@ class QuadcoilField(FourierCurrentPotentialField):
             # TODO: for free boundary optimization, support for 
             # Bnormal plasma and other coils are not available yet.
             Bnormal_plasma=None, 
-            mpol=self.M, 
-            ntor=self.N, 
+            mpol=self._M_Phi, 
+            ntor=self._N_Phi, 
             quadpoints_phi=self._quadpoints_phi,
             quadpoints_theta=self._quadpoints_theta, 
             stellsym=self.sym_Phi

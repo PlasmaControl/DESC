@@ -1,6 +1,7 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.backend import jnp
 from jax import eval_shape
+import jax
 
 class QuadcoilConstraint(_Objective):
     """
@@ -32,13 +33,13 @@ class QuadcoilConstraint(_Objective):
                 'QUADCOIL performs its own normalization. '
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
-
-        self._g_quadcoil = qf._g_quadcoil
-        self._h_quadcoil = qf._h_quadcoil
-        self._static_attrs = [
-            '_g_quadcoil',
-            '_h_quadcoil',
-        ]
+        
+        # self._g_quadcoil = qf._g_quadcoil
+        # self._h_quadcoil = qf._h_quadcoil
+        # self._static_attrs = [
+        #     '_g_quadcoil',
+        #     '_h_quadcoil',
+        # ]
 
         # ----- Superclass -----
         super().__init__(
@@ -74,11 +75,10 @@ class QuadcoilConstraint(_Objective):
         self._dim_f = dim_g + dim_h
         super().build(use_jit=use_jit, verbose=verbose)
     
-    def compute(self, params_eq, params_qf):
+    def compute(self, params_eq, params_qf, constants=None):
         qf = self.things[1]
         qp = qf.params_to_qp(params_eq, params_qf)
         dofs = qf.params_to_dofs(params_qf)
-        return jnp.concatenate([
-            self._g_quadcoil(qp, dofs),
-            self._h_quadcoil(qp, dofs)
-        ])
+        g_vals = qf._g_quadcoil(qp, dofs)
+        h_vals = qf._h_quadcoil(qp, dofs)
+        return jnp.concatenate([g_vals,h_vals])

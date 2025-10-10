@@ -1,4 +1,5 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
+import jax
 
 class QuadcoilObjective(_Objective):
     """
@@ -30,11 +31,6 @@ class QuadcoilObjective(_Objective):
                 'QUADCOIL performs its own normalization. '
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
-
-        # self._f_quadcoil = qf._f_quadcoil
-        # self._static_attrs = [
-        #     'f_quadcoil',
-        # ]
         
         # ----- Superclass -----
         super().__init__(
@@ -58,7 +54,7 @@ class QuadcoilObjective(_Objective):
         self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
     
-    def compute(self, params_eq, params_qf):
+    def compute(self, params_eq, params_qf, constants=None):
         qf = self.things[1]
         qp = qf.params_to_qp(params_eq, params_qf)
         dofs = qf.params_to_dofs(params_qf)

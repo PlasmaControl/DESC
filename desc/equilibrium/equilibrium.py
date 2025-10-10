@@ -215,11 +215,11 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         errorif(
-            not isinstance(Psi, numbers.Real),
+            not isinstance(float(Psi), numbers.Real),
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(float(Psi))
 
         errorif(
             spectral_indexing
@@ -1545,7 +1545,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(float(np.squeeze(Psi)))
 
     @property
     def NFP(self):

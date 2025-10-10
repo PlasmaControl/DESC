@@ -5,6 +5,7 @@ New Features
 
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Adds new linear objective `ShareParameters` which can enforce that the chosen parameters of two or more objects of the same type remain identical during an optimization. Potentially useful for flexible stellarator optimization, where one has two coilsets with the same geometry but differing currents, and attempts to optimize for two different stellarator equilibria.
 - Changes related to ``field_line_integrate``:
     - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
     - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.

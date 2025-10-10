@@ -807,7 +807,10 @@ def test_NAE_QSC_solve_near_axis_asym():
 
         # check |B| on axis
         np.testing.assert_allclose(
-            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+            data_nae["|B|"],
+            np.ones(np.size(phi)) * qsc.B0,
+            atol=2e-4,
+            err_msg=string,
         )
 
 

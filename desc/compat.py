@@ -220,7 +220,7 @@ def rescale(
     L_new = L_new or L_old
     cL = L_new / L_old
     cL = cL ** (1 / 3) if L_key == "V" else cL  # V = 2 π^2 R0 a^2
-    cL = jnp.float64(cL.squeeze())
+    cL = jnp.float64(float(cL.squeeze()))
     # field scaling
     if B_key == "B0":
         grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
@@ -236,7 +236,7 @@ def rescale(
         B_old = np.max(data_B["|B|"])
     B_new = B_new or B_old
     cB = B_new / B_old
-    cB = jnp.float64(cB.squeeze())
+    cB = jnp.float64(float(cB.squeeze()))
 
     # scaling factor = desired / actual
     if verbose:

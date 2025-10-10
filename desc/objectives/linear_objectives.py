@@ -243,11 +243,10 @@ class ShareParameters(_Objective):
     ----------
     things : list of Optimizable
         List of objects whose degrees of freedom are being fixed to
-        each other's values.
-        Must be at least length 2, but may be of arbitrary length.
+        each other's values. Must be at least length 2, but may be of arbitrary length.
         Every object must be of the same type, and have the same size array for the
         desired parameter to be fixed (e.g. same geometric resolution if fixing
-         ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
+        ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
     params : dict
         Dict keys are the names of parameters to fix (str), and dict values are the
         indices to fix for each corresponding parameter (int array).
@@ -311,7 +310,7 @@ class ShareParameters(_Objective):
             # but not "Y_n", for other coil
             {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
         ]
-        obj=ShareParameters([full_coilset, coilset2], params=params )
+        obj=ShareParameters([full_coilset, coilset2], params=params)
 
     """
     _scalar = False

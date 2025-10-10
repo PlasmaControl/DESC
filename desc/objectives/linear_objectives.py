@@ -257,6 +257,7 @@ class ShareParameters(_Objective):
         The default is to fix all indices of all parameters.
     name : str, optional
         Name of the objective function.
+
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(

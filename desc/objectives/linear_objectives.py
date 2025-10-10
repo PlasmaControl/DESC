@@ -257,7 +257,18 @@ class ShareParameters(_Objective):
         The default is to fix all indices of all parameters.
     name : str, optional
         Name of the objective function.
+    """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    __doc__ += """
     Examples
     --------
     .. code-block:: python
@@ -302,16 +313,6 @@ class ShareParameters(_Objective):
         obj=ShareParameters([full_coilset, coilset2], params=params )
 
     """
-
-    __doc__ = __doc__.rstrip() + collect_docs(
-        overwrite={
-            "target": "",
-            "bounds": "",
-            "normalize": "",
-            "normalize_target": "",
-            "weight": "",
-        }
-    )
     _scalar = False
     _linear = True
     _fixed = False

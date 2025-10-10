@@ -236,7 +236,7 @@ class PointBMeasurement(_Objective):
             # dot with directions if directions provided
             self._B_from_field = (
                 self._B_from_field
-                if not self._directions
+                if not self._use_directions
                 else dot(self._B_from_field, self._directions)
             )
 

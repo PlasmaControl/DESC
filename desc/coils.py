@@ -274,7 +274,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, current, *args, **kwargs):
-        self._current = float(np.squeeze(current))
+        self._current = jnp.float64(np.squeeze(current))
         super().__init__(*args, **kwargs)
 
     def _set_up(self):
@@ -291,7 +291,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     @current.setter
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._current = float(np.squeeze(new))
+        self._current = jnp.float64(np.squeeze(new))
 
     @property
     def num_coils(self):

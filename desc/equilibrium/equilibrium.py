@@ -219,7 +219,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(Psi)
 
         errorif(
             spectral_indexing
@@ -1545,7 +1545,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(np.squeeze(Psi))
 
     @property
     def NFP(self):

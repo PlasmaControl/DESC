@@ -4139,7 +4139,7 @@ def test_coil_objective_input(DummyMixedCoilSet):
     """Tests broadcasting for inputs to _CoilObjectives."""
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
-    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
     indices = [False, False, True, True]
     mask_expanded = [0, 0, 0, 0, 1, 1]
@@ -4165,6 +4165,9 @@ def test_coil_objective_input(DummyMixedCoilSet):
     assert np.size(obj._weight) == 1
     assert obj._mask == 1
 
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight, indices=indices)
+    obj.build()
+
 
 @pytest.mark.unit
 def test_coil_objective_indices(DummyMixedCoilSet):
@@ -4181,3 +4184,26 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     compA = jnp.array([compA[i] for i in [1, 4, 5]])
     compB = objB.compute_scaled_error(None)
     np.testing.assert_allclose(compA, compB, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    obj = CoilLength(coilset)
+    obj.build()
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    indices = [False, False, True, True]
+    mask_expanded = [0, 0, 0, 0, 1, 1]
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+
+    obj.bounds = bounds
+    obj.weight = weight
+    obj.mask = indices
+    np.testing.assert_allclose(obj._bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj._bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj._weight, weight_expanded, atol=1e-13)
+    np.testing.assert_allclose(obj._mask, mask_expanded, atol=1e-13)

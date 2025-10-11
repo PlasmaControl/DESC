@@ -85,7 +85,6 @@ class _CoilObjective(_Objective):
         self._data_keys = data_keys
         self._normalize = normalize
 
-        self._coil_tree = self.coilset_expand(coil)
         indices = tree_map(lambda x: int(x), indices)
         self._mask = indices
 
@@ -129,6 +128,36 @@ class _CoilObjective(_Objective):
             else:
                 return coilset  # single coil
 
+        def _build_params_tree(x):
+            """Nested lists showing structure of individual CoilSets and Grids."""
+            # Local import to avoid circular import
+            from desc.coils import CoilSet, MixedCoilSet, _Coil
+
+            def expand(t, idx=0):
+                if isinstance(t, MixedCoilSet):
+                    return expand(t.coils, idx)
+                if isinstance(t, CoilSet):
+                    return (
+                        len(t.coils),
+                        [grid[idx].num_nodes] * len(t.coils),
+                        idx + len(t.coils),
+                    )
+                if isinstance(t, _Coil):
+                    return 1, grid[idx].num_nodes, idx + 1
+                if isinstance(t, list):
+                    l_coils = []
+                    l_nodes = []
+                    idx_curr = idx
+                    for i in range(len(t)):
+                        a_coils, a_nodes, idx_curr = expand(t[i], idx_curr)
+                        l_coils += [a_coils]
+                        l_nodes += [a_nodes]
+                    return l_coils, l_nodes, idx_curr
+                return t, idx
+
+            tree = expand(x)
+            return {"coils": tree[0], "nodes": tree[1]}
+
         coil = self.things[0]
         grid = self._grid
 
@@ -165,35 +194,7 @@ class _CoilObjective(_Objective):
             "Only use toroidal resolution for coil grids.",
         )
 
-        def broadcast_input(arr):
-            """Expand an array in accordance with the attribute _broadcast_input."""
-            # No need to broadcast if input is a scalar
-            arr_flat = tree_leaves(arr)
-            if len(arr_flat) == 1:
-                return arr_flat[0]
-
-            # Map array to match the structure of self._coil_tree
-            arr, _ = tree_flatten(jax_tree_broadcast(arr, self._coil_tree))
-
-            # Further map to individual grid points if appropriate
-            if self._broadcast_input == "Node":
-                arr = [
-                    [arr[i] for k in range(0, grid[i].num_nodes)]
-                    for i in range(0, len(coils))
-                ]
-                arr, _ = tree_flatten(arr)
-            return jnp.array(arr)
-
-        if self._bounds:
-            self._bounds = (
-                broadcast_input(self._bounds[0]),
-                broadcast_input(self._bounds[1]),
-            )
-        elif self._target:
-            self._target = broadcast_input(self._target)
-        self._mask = broadcast_input(self._mask)
-        self._weight = broadcast_input(self._weight)
-
+        self._coilset_tree = _build_params_tree(coil)
         self._dim_f = np.sum([g.num_nodes for g in grid])
         quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])
 
@@ -201,6 +202,17 @@ class _CoilObjective(_Objective):
         grid = tree_unflatten(structure, grid)
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
+
+        # broadcast various arrays
+        if self._bounds:
+            self._bounds = (
+                self._coilset_broadcast(self._bounds[0]),
+                self._coilset_broadcast(self._bounds[1]),
+            )
+        elif self._target:
+            self._target = self._coilset_broadcast(self._target)
+        self._mask = self._coilset_broadcast(self._mask)
+        self._weight = self._coilset_broadcast(self._weight)
 
         timer = Timer()
         if verbose > 0:
@@ -253,35 +265,65 @@ class _CoilObjective(_Objective):
         )
         return data
 
-    @staticmethod
-    def coilset_expand(x):
-        """Expands CoilSets into nested lists showing the constituent Coils.
+    @_Objective.bounds.setter
+    def bounds(self, bounds):
+        assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
+        if bounds:
+            self._bounds = (
+                self._coilset_broadcast(bounds[0]),
+                self._coilset_broadcast(bounds[1]),
+            )
+        self._check_dimensions()
+
+    @_Objective.target.setter
+    def target(self, target):
+        self._target = self._coilset_broadcast(target) if target is not None else target
+        self._check_dimensions()
+
+    @_Objective.weight.setter
+    def weight(self, weight):
+        assert np.all(np.asarray(tree_leaves(weight)) > 0)
+        self._weight = self._coilset_broadcast(weight)
+        self._check_dimensions()
+
+    @property
+    def mask(self):
+        """int/bool or list[int/bool]: Mask marking coils subject to optimization."""
+        return self._mask
+
+    @mask.setter
+    def mask(self, mask):
+        assert all(isinstance(a, bool) for a in tree_leaves(mask)) or all(
+            (a == 0) or (a == 1) for a in tree_leaves(mask)
+        )
+        mask = tree_map(lambda x: int(x), mask)
+        self._mask = self._coilset_broadcast(mask)
+
+    def _coilset_broadcast(self, x):
+        """Expand an array in accordance with the attribute _broadcast_input.
 
         Parameters
         ----------
-        x : CoilSet
-            CoilSet to be expanded.
+        x : float or list[float]
+            Must be broadcastable to the structure of self._things[0].
 
         Returns
         -------
-        list: (Potentially nested) lists of zeros
-            E.g. given a MixedCoilSet consisting of [CoilSet, CoilSet, CoilSet]
-            with 1,2,3 coils respectively, output is [0,[0,0],[0,0,0]]
-
+        arr: float or list[float]
+            Float inputs are returned unchanged, and list inputs are
+            expanded to size self._dim_f.
         """
-        # Local import to avoid circular import
-        from desc.coils import CoilSet, _Coil
+        # No need to broadcast if input is a scalar
+        arr_flat = tree_leaves(x)
+        if len(arr_flat) == 1:
+            return arr_flat[0]
 
-        def expand(t):
-            if isinstance(t, CoilSet):
-                return expand(t.coils)
-            if isinstance(t, _Coil):
-                return 0
-            if isinstance(t, list):
-                return [expand(c) for c in t]
-            return t
-
-        return expand(x)
+        tree_nodes = self._coilset_tree["nodes"]
+        arr = jax_tree_broadcast(x, tree_nodes)
+        if self._broadcast_input == "Node":
+            arr = tree_map(lambda a, b: [a] * b, arr, tree_nodes)
+        arr, _ = tree_flatten(arr)
+        return jnp.array(arr)
 
 
 class CoilLength(_CoilObjective):

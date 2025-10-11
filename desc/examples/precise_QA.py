@@ -1,4 +1,8 @@
-"""Example script for recreating the precise QA configuration of Landreman and Paul."""
+"""Example script for recreating the "precise QA" configuration of Landreman and Paul.
+
+Note that this resembles their optimization process in SIMSOPT, but the final optimized
+equilibrium is slightly different from their VMEC solution.
+"""
 
 from desc import set_device
 

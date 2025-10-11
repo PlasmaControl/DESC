@@ -6,32 +6,37 @@ If the limit has yet to be derived, add it to the ``not_implemented_limits`` set
 """
 
 import functools
-import inspect
 
 import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import dot, errorif, getsource
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
-# "current Redl" needs special treatment because it is generally not defined for all
-# configurations (giving NaN values), except it is always 0 at the magnetic axis
-not_continuous_limits = {"current Redl"}
+zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
+
+# These compute quantities require kinetic profiles, which are not defined for all
+# configurations (giving NaN values). Gamma_c is 0 on axis.
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>", "Gamma_c"}
+
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
     "D_well",
     "J^theta",
+    "J^theta_t",
+    "J^theta_z",
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -40,11 +45,13 @@ not_finite_limits = {
     "curvature_k1_zeta",
     "curvature_k2_rho",
     "curvature_k2_zeta",
+    "cvdrift",
     "e^helical",
     "e^theta",
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
+    "e^vartheta",
     "g^rt",
     "g^rt_r",
     "g^rt_t",
@@ -57,10 +64,24 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "g^aa",
+    "g^ra",
+    "g^rv",
+    "(g^rv_p)|PEST",
+    "gbdrift",
     "grad(alpha)",
+    "grad(alpha) (periodic)",
+    "gbdrift (periodic)",
+    "cvdrift (periodic)",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    "current Redl",
+    "J^theta_PEST",
+    "(J^theta_PEST_v)|PEST",
+    "(J^theta_PEST_p)|PEST",
+    "(e^vartheta_v)|PEST",
+    "(e^vartheta_p)|PEST",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -85,9 +106,17 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "(e^zeta_v)|PEST",
+    "(e^zeta_z)|PEST",
+    "(e^rho_v)|PEST",
+    "(e^rho_z)|PEST",
+    "J^zeta_t",
+    "J^zeta_z",
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "gds2",
+    "(B*grad) grad(rho)",
 }
 
 
@@ -109,40 +138,11 @@ def add_all_aliases(names):
 zero_limits = add_all_aliases(zero_limits)
 not_finite_limits = add_all_aliases(not_finite_limits)
 not_implemented_limits = add_all_aliases(not_implemented_limits)
-
-
-def grow_seeds(
-    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
-):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
-
-    Parameters
-    ----------
-    seeds : set
-        Keys to find paths toward.
-    search_space : iterable
-        Additional keys to consider returning.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
-
-    Returns
-    -------
-    out : set
-        All keys in search space with any path in the dependency DAG to any seed.
-
-    """
-    out = seeds.copy()
-    for key in search_space:
-        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
-        if not seeds.isdisjoint(deps):
-            out.add(key)
-    return out
-
-
-not_implemented_limits = grow_seeds(
+not_implemented_limits = _grow_seeds(
+    "desc.equilibrium.equilibrium.Equilibrium",
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
+    has_axis=True,
 )
 
 
@@ -153,18 +153,29 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.electron_density is None and "ni" in name)
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "source_grid_requirement"
+            ]
+        )
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "grid_requirement"
+            ]
+        )
     )
 
 
 def assert_is_continuous(
     eq,
     names=data_index["desc.equilibrium.equilibrium.Equilibrium"].keys(),
-    delta=5e-5,
-    rtol=1e-4,
-    atol=1e-6,
+    delta=1e-4,
+    rtol=1e-5,
+    atol=5e-7,
     desired_at_axis=None,
     kwargs=None,
 ):
@@ -200,42 +211,45 @@ def assert_is_continuous(
         }
 
     """
+    p = "desc.equilibrium.equilibrium.Equilibrium"
     if kwargs is None:
         kwargs = {}
-    # TODO: remove when boozer transform works with multiple surfaces
-    names = [
-        name
-        for name in names
-        if not (
-            "Boozer" in name
-            or "_mn" in name
-            or name == "B modes"
-            or _skip_this(eq, name)
-        )
-    ]
+    names = set(names)
+    names -= _grow_seeds(
+        parameterization=p,
+        seeds={
+            name
+            for name in names
+            if _skip_this(eq, name)
+            # TODO (#671): Boozer axis limits are not yet implemented
+            or ("Boozer" in name or "_mn" in name or name == "B modes")
+        },
+        search_space=names,
+    )
+    names = list(names)
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
-    grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     axis = grid.nodes[:, 0] == 0
     assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names=names, grid=grid)
 
-    p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_continuous_limits:
             continue
         elif name in not_finite_limits:
-            assert (np.isfinite(data[name]).T != axis).all(), name
+            errorif(np.any(np.isfinite(data[name]).T == axis), AssertionError, msg=name)
             continue
         else:
-            assert np.isfinite(data[name]).all(), name
+            errorif(not np.isfinite(data[name]).all(), AssertionError, msg=name)
+
         if (
             data_index[p][name]["coordinates"] == ""
             or data_index[p][name]["coordinates"] == "z"
         ):
-            # can't check continuity of global scalar or function of toroidal angle
+            # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
@@ -276,7 +290,7 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()
@@ -296,18 +310,27 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {"rtol": 5e-03},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 5e-3},
-            "alpha_r": {"rtol": 1e-3},
+            "iota_r": {"atol": 1e-6},
+            "iota_num_rr": {"atol": 5e-5},
+            "grad(B)": {"rtol": 1e-4},
+            "alpha_r (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 2e-4},
+            "gbdrift (secular)": {"atol": 1e-4},
+            "gbdrift (secular)/phi": {"atol": 1e-4},
+            "(psi_r/sqrt(g))_rr": {"rtol": 2e-5},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
-        # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
-        kwargs = dict(weaker_tolerance, **zero_map)
+        kwargs = weaker_tolerance | zero_map
         # fixed iota
-        assert_is_continuous(get("W7-X"), kwargs=kwargs)
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+        eq = get("NCSX")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -340,8 +363,14 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 1], B[0, 1])
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
-        test(get("W7-X"))
-        test(get("NCSX"))
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+        eq = get("NCSX")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
 
 
 def _reverse_mode_unsafe_names():
@@ -356,7 +385,7 @@ def _reverse_mode_unsafe_names():
 
     def get_source(name):
         return "".join(
-            inspect.getsource(
+            getsource(
                 data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
             ).split("def ")[1:]
         )
@@ -381,18 +410,21 @@ def _reverse_mode_unsafe_names():
             unsafe_names.append(name)
 
     unsafe_names = sorted(unsafe_names)
-    print("Unsafe names: ", unsafe_names)
     return unsafe_names
 
 
+@pytest.mark.slow
+@pytest.mark.regression
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
     eq = get("ESTELL")
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid))
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))
+    print(np.count_nonzero(g), name)

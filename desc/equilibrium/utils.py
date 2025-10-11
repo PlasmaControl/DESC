@@ -12,7 +12,6 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
-from desc.utils import isnonnegint
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -142,49 +141,16 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             axis[:, 1],
             axis[:, 2],
             axis[:, 0].astype(int),
+            axis[:, 0].astype(int),
             NFP=NFP,
             sym=sym,
             name="axis",
         )
     elif axis is None:  # use the center of surface
-        # TODO: make this method of surface, surface.get_axis()?
         if isinstance(surface, FourierRZToroidalSurface):
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
-                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
-                modes_R=surface.R_basis.modes[
-                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
-                ],
-                modes_Z=surface.Z_basis.modes[
-                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
-                ],
-                NFP=NFP,
-            )
+            axis = surface.get_axis()
         elif isinstance(surface, ZernikeRZToroidalSection):
-            # FIXME: include m=0 l!=0 modes
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[
-                    np.where(
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                Z_n=surface.Z_lmn[
-                    np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                modes_R=[0],
-                modes_Z=[0],
-                NFP=NFP,
-            )
+            axis = surface.get_axis()
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
-
-
-def _assert_nonnegint(x, name=""):
-    assert (x is None) or isnonnegint(
-        x
-    ), f"{name} should be a non-negative integer or None, got {x}"

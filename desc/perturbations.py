@@ -11,13 +11,15 @@ from desc.objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    ObjectiveFunction,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize import LinearConstraintProjection
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, get_instance, warnif
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -90,7 +92,7 @@ def get_deltas(things1, things2):  # noqa: C901
     return deltas
 
 
-def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
+def perturb(  # noqa: C901
     eq,
     objective,
     constraints,
@@ -140,6 +142,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Perturbed equilibrium.
 
     """
+    is_linear_proj = isinstance(objective, LinearConstraintProjection)
     if not use_jax:
         warnings.warn(
             colored(
@@ -156,6 +159,13 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 len(tr_ratio), order
             )
         )
+
+    if is_linear_proj and constraints is not None:
+        raise ValueError(
+            "If a LinearConstraintProjection is passed, "
+            "no constraints should be passed. Passed constraints:"
+            f"{constraints}."
+        )
     # remove deltas that are zero
     deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
 
@@ -165,16 +175,24 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         deltas[key] = jnp.atleast_1d(deltas[key])
 
     if not objective.built:
-        objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(eq, constraints)
-    for con in constraints:
-        if not con.built:
-            con.build(eq, verbose=verbose)
+        objective.build(verbose=verbose)
 
-    if objective.scalar:  # FIXME: change to num objectives >= num parameters
-        raise AttributeError(
-            "Cannot perturb with a scalar objective: {}.".format(objective)
-        )
+    if is_linear_proj:
+        obj = objective
+        objective = obj._objective
+        constraints = obj._constraint.objectives
+        constraint = obj._constraint
+        dim_f = obj.dim_f
+    else:
+        constraints = maybe_add_self_consistency(eq, constraints)
+        constraint = ObjectiveFunction(constraints)
+        constraint.build(verbose=verbose)
+        dim_f = objective.dim_f
+    warnif(
+        dim_f < (objective.dim_x - constraint.dim_f),
+        UserWarning,
+        "Perturbing an underdetermined system may give bad results",
+    )
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -185,9 +203,19 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective
-    )
+    if is_linear_proj:
+        xp, Z, D, unfixed_idx, project, recover = (
+            obj._xp,
+            obj._Z,
+            obj._D,
+            obj._unfixed_idx,
+            obj._project,
+            obj._recover,
+        )
+    else:
+        xp, _, _, Z, D, unfixed_idx, project, recover, *_ = (
+            factorize_linear_constraints(objective, constraint)
+        )
     timer.stop("linear constraint factorize")
     if verbose > 1:
         timer.disp("linear constraint factorize")
@@ -195,14 +223,15 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # state vector
     x = objective.x(eq)
     x_reduced = project(x)
+
     x_norm = jnp.linalg.norm(x_reduced)
+    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
 
     # perturbation vectors
     dx1_reduced = jnp.zeros_like(x_reduced)
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -254,7 +283,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 1st order
     if order > 0:
-
         if (weight is None) or (weight == "auto"):
             w = jnp.ones((eq.dim_x,))
             if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
@@ -274,7 +302,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                     (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
             weight = w
-        weight = jnp.atleast_1d(weight)
+        weight = jnp.atleast_1d(jnp.asarray(weight))
         assert (
             len(weight) == objective.dim_x
         ), "Size of weight supplied to perturbation does not match objective.dim_x."
@@ -291,8 +319,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac_scaled(x)
-        Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
+        Jx = objective.jac_scaled_error(x)
+        Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
             f = objective.compute_scaled_error(x)
@@ -309,13 +337,13 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("df/dx factorization")
 
-        dx1_h, hit, alpha = trust_region_step_exact_svd(
+        dx1_h, _, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
             vt.T,
             tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -324,7 +352,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 2nd order
     if order > 1:
-
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing d^2f")
@@ -335,7 +362,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2_h, hit, alpha = trust_region_step_exact_svd(
+        dx2_h, _, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
@@ -350,7 +377,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 3rd order
     if order > 2:
-
         # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing d^3f")
@@ -361,7 +387,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3_h, hit, alpha = trust_region_step_exact_svd(
+        dx3_h, _, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
@@ -386,12 +412,19 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update perturbation attributes
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
-    for constraint in constraints:
-        if hasattr(constraint, "update_target"):
-            constraint.update_target(eq_new)
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective
-    )
+
+    if is_linear_proj:
+        obj.update_constraint_target(eq_new)
+        recover = obj._recover
+    else:
+        for con in constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_new)
+        constraint = ObjectiveFunction(constraints)
+        constraint.build(verbose=verbose)
+        _, _, _, _, _, _, _, recover, *_ = factorize_linear_constraints(
+            objective, constraint
+        )
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
@@ -415,7 +448,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     return eq_new
 
 
-def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
+def optimal_perturb(  # noqa: C901
     eq,
     objective_f,
     objective_g,
@@ -491,9 +524,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
 
     if not objective_f.built:
-        objective_f.build(eq, verbose=verbose)
+        objective_f.build(verbose=verbose)
     if not objective_g.built:
-        objective_g.build(eq, verbose=verbose)
+        objective_g.build(verbose=verbose)
 
     argmap = {
         "R_lmn": dR,
@@ -542,22 +575,14 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Number of parameters: {}".format(dim_opt))
         print("Number of objectives: {}".format(objective_g.dim_f))
 
-    # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(eq=eq)
     constraints = maybe_add_self_consistency(eq, constraints)
-    for con in constraints:
-        if not con.built:
-            con.build(eq, verbose=verbose)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
 
-    (
-        xp,
-        _,
-        _,
-        Z,
-        unfixed_idx,
-        project,
-        recover,
-    ) = factorize_linear_constraints(constraints, objective_f)
+    _, _, _, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
+        objective_f, constraint
+    )
 
     # state vector
     xf = objective_f.x(eq)
@@ -572,7 +597,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = 0
 
     # dx/dx_reduced
-    dxdx_reduced = jnp.eye(eq.dim_x)[:, unfixed_idx] @ Z
+    dxdx_reduced = jnp.diag(D)[:, unfixed_idx] @ Z
 
     # dx/dc
     dxdc = []
@@ -598,7 +623,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 1st order
     if order > 0:
-
         f = objective_f.compute_scaled_error(xf)
         g = objective_g.compute_scaled_error(xg)
 
@@ -606,7 +630,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fx = objective_f.jac_scaled(xf)
+        Fx = objective_f.jac_scaled_error(xf)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -615,14 +639,14 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gx = objective_g.jac_scaled(xg)
+        Gx = objective_g.jac_scaled_error(xg)
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")
 
         # projections onto optimization space
-        Fx_reduced = Fx[:, unfixed_idx] @ Z
-        Gx_reduced = Gx[:, unfixed_idx] @ Z
+        Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Gx_reduced = Gx @ jnp.diag(D)[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
 
@@ -668,7 +692,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             sg,
             vtg.T,
             tr_ratio[0] * c_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -683,14 +707,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             sf,
             vtf.T,
             tr_ratio[0] * x_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
         dx1_reduced = dx1h_reduced * wx
     # 2nd order
     if order > 1:
-
         # 2nd partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing d^2f")
@@ -719,7 +742,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             sg,
             vtg.T,
             tr_ratio[1] * jnp.linalg.norm(dc1h_opt),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -734,7 +757,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             sf,
             vtf.T,
             tr_ratio[1] * jnp.linalg.norm(dx1h_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -757,11 +780,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + len(value)])
         idx0 += len(value)
-    for constraint in constraints:
-        if hasattr(constraint, "update_target"):
-            constraint.update_target(eq_new)
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective_f
+    for con in constraints:
+        if hasattr(con, "update_target"):
+            con.update_target(eq_new)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
+    _, _, _, _, _, _, _, recover, *_ = factorize_linear_constraints(
+        objective_f, constraint
     )
 
     # update other attributes

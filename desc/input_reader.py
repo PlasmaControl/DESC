@@ -137,7 +137,7 @@ class InputReader:
         """
         return get_parser()
 
-    def parse_inputs(self, fname=None):  # noqa: C901 - FIXME: simplify this
+    def parse_inputs(self, fname=None):  # noqa: C901
         """Read input from DESC input file; converts from VMEC input if necessary.
 
         Parameters
@@ -189,6 +189,7 @@ class InputReader:
         iota_flag = False
         pres_flag = False
         curr_flag = False
+        vac_flag = False
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -275,9 +276,8 @@ class InputReader:
                 flag = True
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
-                inputs["NFP"] = numbers[0]
-                if len(numbers) > 1:
-                    inputs["NFP"] /= numbers[1]
+                assert numbers[0] == int(numbers[0]), "NFP should be an integer"
+                inputs["NFP"] = int(numbers[0])
                 flag = True
             match = re.search(r"Psi", argument, re.IGNORECASE)
             if match:
@@ -360,7 +360,11 @@ class InputReader:
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
-                inputs["objective"] = words[0].lower()
+                method = words[0].lower()
+                if method == "vacuum":
+                    method = "force"
+                    vac_flag = True
+                inputs["objective"] = method
                 flag = True
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
@@ -382,7 +386,6 @@ class InputReader:
             if match:
                 inputs["bdry_mode"] = words[0].lower()
                 flag = True
-                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -558,20 +561,20 @@ class InputReader:
         if curr_flag and iota_flag:
             raise OSError(colored("Cannot specify both iota and current.", "red"))
 
+        if vac_flag and (pres_flag or iota_flag or curr_flag):
+            warnings.warn(
+                "Vacuum objective assumes 0 pressure and 0 current, "
+                + "ignoring provided pressure, iota, and current profiles"
+            )
+            _ = inputs.pop("iota", None)
+            _ = inputs.pop("current", None)
+            _ = inputs.pop("pressure", None)
+
         # remove unused profile
         if iota_flag:
-            if inputs["objective"] != "vacuum":
-                del inputs["current"]
-            else:  # if vacuum objective from input file, use zero current
-                del inputs["iota"]
+            _ = inputs.pop("current", None)
         else:
-            del inputs["iota"]
-
-        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
-            warnings.warn(
-                "Vacuum objective does not use any profiles, "
-                + "ignoring pressure, iota, and current"
-            )
+            _ = inputs.pop("iota", None)
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
@@ -644,7 +647,7 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            if inputs_ii["pres_ratio"] is not None:
+            if "pressure" in inputs_ii and inputs_ii["pres_ratio"] is not None:
                 inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply current ratio
             if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:
@@ -678,6 +681,7 @@ class InputReader:
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
+            filename = os.path.expanduser(filename)
             f = open(filename, "w+")
         else:
             f = filename
@@ -691,7 +695,7 @@ class InputReader:
         f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
-        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
+        f.write("Psi = {:.8e} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -792,7 +796,7 @@ class InputReader:
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
-        threshold=1e-10,
+        threshold=0,
     ):
         """Generate a DESC input file from a DESC output file.
 
@@ -822,8 +826,9 @@ class InputReader:
             Fourier coefficients below this value will be set to 0.
         """
         from desc.grid import LinearGrid
-        from desc.io.equilibrium_io import load
+        from desc.io.optimizable_io import load
         from desc.profiles import PowerSeriesProfile
+        from desc.utils import copy_coeffs
 
         f = open(outfile, "w+")
 
@@ -868,7 +873,7 @@ class InputReader:
 
         # fit profiles to power series
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        rho = grid.nodes[grid._unique_rho_idx, 0]
+        rho = grid.nodes[grid.unique_rho_idx, 0]
         if not isinstance(eq.pressure, PowerSeriesProfile):
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])
             pres_profile = PowerSeriesProfile.from_values(
@@ -902,11 +907,15 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
+        prof_modes = np.zeros((L_profile + 1, 3))
+        prof_modes[:, 0] = np.arange(L_profile + 1)
+        p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
+        p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
-        for l in range(L_profile):
+        for l in range(L_profile + 1):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
-                    int(l), pres_profile.params[l], char, profile.params[l]
+                    int(l), p1[l], char, p2[l]
                 )
             )
 
@@ -961,7 +970,7 @@ class InputReader:
         InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
-    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901 - FIXME: simplify this
+    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901
         """Parse a VMEC input file into a dictionary of DESC inputs.
 
         Parameters
@@ -1166,9 +1175,8 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
-            if match:
-                if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
+            if re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Pressure is not a power series!", "yellow"))
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -1326,26 +1334,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, -numbers[k], 0.0])
             match = re.search(
-                r"ZAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                for k in range(len(numbers)):
-                    n = k
-                    idx = np.where(inputs["axis"][:, 0] == n)[0]
-                    if np.size(idx):
-                        inputs["axis"][idx[0], 2] = numbers[k]
-                    else:
-                        inputs["axis"] = np.pad(
-                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
-            match = re.search(
-                r"ZAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS(_CS)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1364,6 +1353,25 @@ class InputReader:
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
                         )
                         inputs["axis"][-1, :] = np.array([n, 0.0, -numbers[k]])
+            match = re.search(
+                r"ZAXIS_CC\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    n = k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
+                    if np.size(idx):
+                        inputs["axis"][idx[0], 2] = numbers[k]
+                    else:
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
 
             # boundary shape
             # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)

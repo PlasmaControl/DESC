@@ -4,16 +4,18 @@ import mpmath
 import numpy as np
 import pytest
 
+from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    _jacobi,
     chebyshev,
     fourier,
-    jacobi_poly_single,
     polyder_vec,
     polyval_vec,
     powers,
@@ -21,6 +23,7 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
+from desc.derivatives import Derivative
 from desc.grid import LinearGrid
 
 
@@ -96,10 +99,10 @@ class TestBasis:
         ).T
 
         mpmath.mp.dps = 15
-        approx1f = zernike_radial(r, l, m)
-        approx1df = zernike_radial(r, l, m, dr=1)
-        approx1ddf = zernike_radial(r, l, m, dr=2)
-        approx1dddf = zernike_radial(r, l, m, dr=3)
+        approx1f = zernike_radial(r[:, np.newaxis], l, m)
+        approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
+        approx1ddf = zernike_radial(r[:, np.newaxis], l, m, dr=2)
+        approx1dddf = zernike_radial(r[:, np.newaxis], l, m, dr=3)
         approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
         approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
         approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
@@ -199,7 +202,9 @@ class TestBasis:
             dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr), Z4_2(r, dr)]).T
             for dr in range(max_dr + 1)
         }
-        radial = {dr: zernike_radial(r, l, m, dr) for dr in range(max_dr + 1)}
+        radial = {
+            dr: zernike_radial(r[:, np.newaxis], l, m, dr) for dr in range(max_dr + 1)
+        }
         radial_poly = {
             dr: zernike_radial_poly(r[:, np.newaxis], l, m, dr)
             for dr in range(max_dr + 1)
@@ -207,43 +212,6 @@ class TestBasis:
         for dr in range(max_dr + 1):
             np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
             np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
-
-    @pytest.mark.unit
-    def test_jacobi_poly_single(self):
-        """Test Jacobi Polynomial evaluation for special cases."""
-        # https://en.wikipedia.org/wiki/Jacobi_polynomials#Special_cases
-
-        def exact(r, n, alpha, beta):
-            if n == 0:
-                return np.ones_like(r)
-            elif n == 1:
-                return (alpha + 1) + (alpha + beta + 2) * ((r - 1) / 2)
-            elif n == 2:
-                a0 = (alpha + 1) * (alpha + 2) / 2
-                a1 = (alpha + 2) * (alpha + beta + 3)
-                a2 = (alpha + beta + 3) * (alpha + beta + 4) / 2
-                z = (r - 1) / 2
-                return a0 + a1 * z + a2 * z**2
-            elif n < 0:
-                return np.zeros_like(r)
-
-        r = np.linspace(0, 1, 11)
-        # alpha and beta pairs for test
-        pairs = np.array([[2, 3], [3, 0], [1, 1], [10, 4]])
-        n_values = np.array([-1, -2, 0, 1, 2])
-
-        for pair in pairs:
-            alpha = pair[0]
-            beta = pair[1]
-            P0 = jacobi_poly_single(r, 0, alpha, beta)
-            P1 = jacobi_poly_single(r, 1, alpha, beta)
-            desired = {n: exact(r, n, alpha, beta) for n in n_values}
-            values = {
-                n: jacobi_poly_single(r, n, alpha, beta, P1, P0) for n in n_values
-            }
-
-            for n in n_values:
-                np.testing.assert_allclose(values[n], desired[n], err_msg=n)
 
     @pytest.mark.unit
     def test_fourier(self):
@@ -391,42 +359,106 @@ class TestBasis:
     @pytest.mark.unit
     def test_basis_resolutions_assert_integers(self):
         """Test that basis modes are asserted as integers."""
-        L = 3.0
-        M = 3.0
-        N = 3.0
+        with pytest.raises(ValueError):
+            _ = PowerSeries(L=3.0)
 
-        basis = PowerSeries(L=L)
-        assert isinstance(basis.L, int)
-        assert basis.L == 3
+        with pytest.raises(ValueError):
+            _ = FourierSeries(N=3.0)
+        with pytest.raises(ValueError):
+            _ = FourierSeries(N=3, NFP=1.0)
 
-        basis = FourierSeries(N=N)
-        assert isinstance(basis.N, int)
-        assert basis.N == 3
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3.0, N=2)
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3, N=2.0)
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3, N=2, NFP=1.0)
 
-        basis = DoubleFourierSeries(M=M, N=N)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.N, int)
-        assert basis.M == 3
-        assert basis.N == 3
+        with pytest.raises(ValueError):
+            _ = ZernikePolynomial(L=3.0, M=1)
+        with pytest.raises(ValueError):
+            _ = ZernikePolynomial(L=3, M=1.0)
 
-        basis = ZernikePolynomial(L=L, M=M)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.L, int)
-        assert basis.M == 3
-        assert basis.L == 3
+        with pytest.raises(ValueError):
+            _ = ChebyshevPolynomial(L=3.0)
 
-        L = 3.1
-        M = 3.1
-        N = 3.1
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3.0, M=1, N=1)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1.0, N=1)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1, N=1.0)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1, N=1, NFP=1.0)
 
-        with pytest.raises(AssertionError):
-            PowerSeries(L=L)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3.0, M=1, N=1)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1.0, N=1)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1.0)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
-        with pytest.raises(AssertionError):
-            FourierSeries(N=N)
+    @pytest.mark.unit
+    def test_basis_hash(self):
+        """Test that all basis classes can be hashable."""
+        all_bases = []
+        all_types = []
+        all_bases.append([PowerSeries(L=3), PowerSeries(L=3)])
+        all_bases.append([FourierSeries(N=3), FourierSeries(N=3)])
+        all_bases.append([DoubleFourierSeries(M=3, N=3), DoubleFourierSeries(M=3, N=3)])
+        all_bases.append([ZernikePolynomial(L=3, M=3), ZernikePolynomial(L=3, M=3)])
+        all_bases.append(
+            [FourierZernikeBasis(L=3, M=3, N=3), FourierZernikeBasis(L=3, M=3, N=3)]
+        )
+        all_bases.append(
+            [
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+            ]
+        )
+        all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
+        for basis1, basis2 in all_bases:
+            # check that hash is consistent
+            assert hash(basis1) == hash(basis2)
+            # check that equality is consistent
+            assert basis1 == basis2
+            # check that they are not the same object (i.e., not the same instance)
+            assert basis1 is not basis2
 
-        with pytest.raises(AssertionError):
-            DoubleFourierSeries(M=M, N=N)
+            all_types.append(str(basis1.__class__.__name__))
 
-        with pytest.raises(AssertionError):
-            ZernikePolynomial(L=L, M=M)
+        bases1 = [hash(basis[0]) for basis in all_bases]
+        bases2 = [hash(basis[1]) for basis in all_bases]
+
+        # check that all bases have unique hashes
+        assert len(bases1) == len(set(bases1))
+        assert len(bases2) == len(set(bases2))
+
+        import desc
+
+        # chech that this test tests all basis types
+        assert set(all_types) == set(
+            desc.basis.__all__
+        ), "Not all basis types were tested."
+
+
+@pytest.mark.unit
+def test_jacobi_jvp():
+    """Test that custom derivative rule for jacobi polynomials works."""
+    basis = ZernikePolynomial(25, 25)
+    l, m = basis.modes[:, :2].T
+    m = jnp.abs(m)
+    alpha = m
+    beta = 0
+    n = (l - m) // 2
+    r = np.linspace(0, 1, 1000)
+    jacobi_arg = 1 - 2 * r**2
+    for i in range(5):
+        # custom jvp rule for derivative of jacobi should just call jacobi with dx+1
+        f1 = jnp.vectorize(Derivative(_jacobi, 3, "grad"))(
+            n, alpha, beta, jacobi_arg[:, None], i
+        )
+        f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
+        np.testing.assert_allclose(f1, f2)

@@ -1,17 +1,15 @@
 name: Benchmarks
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - master
-    paths-ignore:
-      - 'docs/**'
-      - 'devtools/**'
+    types: [labeled, synchronize]
   workflow_dispatch:
     inputs:
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        description: '(https://github.com/marketplace/actions/debugging-with-tmate)'
         required: false
         default: false
 
@@ -21,45 +19,123 @@ concurrency:
 
 jobs:
   benchmark:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run_benchmarks') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      # make sure that when you change the Python version here, you also change it in
+      # the compare_bench_results.py script
+      matrix:
+        python-version: ['3.12']
+        group: [1, 2]
 
     steps:
       # Enable tmate debugging of manually-triggered workflows if the input option was provided
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v5
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
         with:
-          python-version: 3.9
-      - name: Install dependencies
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'tests/benchmarks/benchmark_*.py'
+              - 'tests/benchmarks/compare_bench_results.py'
+              - 'setup.cfg'
+              - '.github/workflows/benchmark.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes}}" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check full Python version
         run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
+      - name: Restore Python environment cache
+        if: env.has_changes == 'true'
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
+        run: |
+          gh cache list
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-      - name: Benchmark with pytest-benchmark
+          pip install matplotlib==3.9.2
+
+      - name: Action Details
+        if: env.has_changes == 'true'
         run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
           pwd
           lscpu
+          pip list
+
+      - name: Benchmark with pytest-benchmark (PR)
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0 --benchmark-save-data
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='Latest_Commit' \
+            --durations=0 \
+            --benchmark-save-data \
+            --splits 2 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration
+
       - name: Checkout current master
-        uses: actions/checkout@v4
+        if: env.has_changes == 'true'
+        uses: actions/checkout@v5
         with:
           ref: master
           clean: false
+
       - name: Checkout benchmarks from PR head
+        if: env.has_changes == 'true'
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
-      - name: Benchmark with pytest-benchmark
+
+      - name: Benchmark with pytest-benchmark (MASTER)
+        if: env.has_changes == 'true'
         run: |
-          pwd
-          lscpu
+          source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0 --benchmark-save-data
-      - name: put benchmark results in same folder
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='master' \
+            --durations=0 \
+            --benchmark-save-data \
+            --splits 2 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration
+
+      - name: Put benchmark results in same folder
+        if: env.has_changes == 'true'
         run: |
+          source .venv-${{ env.version }}/bin/activate
           pwd
           cd tests/benchmarks
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
@@ -69,25 +145,36 @@ jobs:
           mkdir compare_results
           cp $t1 compare_results
           cp $t2 compare_results
+
+      - name: Download artifact
+        if: always() && env.has_changes == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark_artifact_*
+          path: tests/benchmarks
+
       - name: Compare latest commit results to the master branch results
+        if: env.has_changes == 'true'
         run: |
-          pwd
+          source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
+          pwd
           python compare_bench_results.py
           cat commit_msg.txt
-      - name: comment PR with the results
-        uses: thollander/actions-comment-pull-request@v2
+
+      - name: Comment PR with the results
+        if: env.has_changes == 'true'
+        uses: thollander/actions-comment-pull-request@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         with:
-          filePath: tests/benchmarks/commit_msg.txt
-          comment_tag: benchmark
+          file-path: tests/benchmarks/commit_msg.txt
+          comment-tag: benchmark
+
       - name: Upload benchmark data
-        if: always()
+        if: always() && env.has_changes == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark_artifact
+          name: benchmark_artifact_${{ matrix.group }}
           path: tests/benchmarks/.benchmarks
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
+          include-hidden-files: true

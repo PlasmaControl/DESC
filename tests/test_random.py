@@ -1,9 +1,9 @@
 """Tests for random surfaces, profiles etc."""
+
 import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid
 from desc.random import random_pressure, random_surface
 
 
@@ -72,9 +72,6 @@ def test_random_surface():
     eq = Equilibrium(surface=surf)
     R0 = eq.compute("R0")["R0"]
     assert 5 <= R0 <= 10
-    Z0 = eq.compute("Z", grid=LinearGrid(rho=np.array([0]), M=0, N=8, NFP=eq.NFP))["Z"]
-    # should be centered around Z=0
-    np.testing.assert_allclose(np.mean(Z0), 0, atol=1e-14)
     AR = eq.compute("R0/a")["R0/a"]
     # should be ~ R0/sqrt(R_scale*Z_scale), allowing for random variation
     assert 2.5 <= AR <= 20

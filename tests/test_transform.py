@@ -29,7 +29,7 @@ class TestTransform:
         grid_3 = ConcentricGrid(L=4, M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
-        basis_2 = FourierZernikeBasis(L=-1, M=1, N=1)
+        basis_2 = FourierZernikeBasis(L=1, M=1, N=1)
 
         transf_11 = Transform(grid_1, basis_1)
         transf_21 = Transform(grid_2, basis_1)
@@ -146,7 +146,7 @@ class TestTransform:
     def test_volume_zernike(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
-        basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
+        basis = FourierZernikeBasis(L=1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
         r = grid.nodes[:, 0]  # rho coordinates
@@ -173,7 +173,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_set_grid(self):
         """Tests the grid setter method."""
-        basis = FourierZernikeBasis(L=-1, M=1, N=1)
+        basis = FourierZernikeBasis(L=1, M=1, N=1)
 
         grid_1 = LinearGrid(L=0)
         grid_3 = LinearGrid(L=2)
@@ -197,9 +197,9 @@ class TestTransform:
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
 
-        basis_20 = FourierZernikeBasis(L=-1, M=2, N=0)
-        basis_21 = FourierZernikeBasis(L=-1, M=2, N=1)
-        basis_31 = FourierZernikeBasis(L=-1, M=3, N=1)
+        basis_20 = FourierZernikeBasis(L=1, M=2, N=0)
+        basis_21 = FourierZernikeBasis(L=1, M=2, N=1)
+        basis_31 = FourierZernikeBasis(L=1, M=3, N=1)
 
         transf_20 = Transform(grid, basis_20, method="fft")
         transf_21 = Transform(grid, basis_21, method="fft")
@@ -326,15 +326,16 @@ class TestTransform:
         basis2 = FourierSeries(N, NFP, sym="sin")
         basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
 
-        t1f.change_resolution(grid, basis1)
-        t2f.change_resolution(grid, basis2)
-        t3f.change_resolution(grid, basis3)
-        t1d1.change_resolution(grid, basis1)
-        t2d1.change_resolution(grid, basis2)
-        t3d1.change_resolution(grid, basis3)
-        t1d2.change_resolution(grid, basis1)
-        t2d2.change_resolution(grid, basis2)
-        t3d2.change_resolution(grid, basis3)
+        # should pass the methods, otherwise default might change
+        t1f.change_resolution(grid, basis1, method="fft")
+        t2f.change_resolution(grid, basis2, method="fft")
+        t3f.change_resolution(grid, basis3, method="fft")
+        t1d1.change_resolution(grid, basis1, method="direct1")
+        t2d1.change_resolution(grid, basis2, method="direct1")
+        t3d1.change_resolution(grid, basis3, method="direct1")
+        t1d2.change_resolution(grid, basis1, method="direct2")
+        t2d2.change_resolution(grid, basis2, method="direct2")
+        t3d2.change_resolution(grid, basis3, method="direct2")
 
         for d in t1f.derivatives:
             dr = d[0]
@@ -392,7 +393,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_project(self):
         """Tests projection method for Galerkin method."""
-        basis = FourierZernikeBasis(L=-1, M=5, N=3)
+        basis = FourierZernikeBasis(L=1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
@@ -406,7 +407,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
-        basis = FourierZernikeBasis(L=-1, M=5, N=3, sym="cos")
+        basis = FourierZernikeBasis(L=1, M=5, N=3, sym="cos")
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
@@ -420,7 +421,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
-        basis = FourierZernikeBasis(L=-1, M=5, N=0, sym="sin")
+        basis = FourierZernikeBasis(L=1, M=5, N=0, sym="sin")
         grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
@@ -437,28 +438,13 @@ class TestTransform:
     @pytest.mark.unit
     def test_fft_warnings(self):
         """Test that warnings are thrown when trying to use fft where it won't work."""
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = ZernikePolynomial(L=0, M=0)
-        with pytest.warns(UserWarning):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
-
         g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
+        with pytest.warns(UserWarning, match="compatible grid"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=2, N=2)
-        b._modes = b.modes[np.random.permutation(25)]
-        with pytest.warns(
-            UserWarning, match="zernike indices to be sorted by toroidal mode"
-        ):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
+        g = LinearGrid(rho=2, M=2, N=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
         # this actually will emit 2 warnings, one for the NFP for
         # basis and grid not matching, and one for nodes completing 1 full period
@@ -473,84 +459,50 @@ class TestTransform:
         for r in record:
             if "Unequal number of field periods" in str(r.message):
                 NFP_grid_basis_warning_exists = True
-            if "nodes complete 1 full field period" in str(r.message):
+            if "grid and basis to have the same NFP" in str(r.message):
                 nodes_warning_exists = True
         assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=1, N=1)
-        b._modes[:, 2] = np.where(b._modes[:, 2] == 1, 2, b._modes[:, 2])
-        with pytest.warns(UserWarning, match="toroidal modes are equally spaced in n"):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=2)
+        g = LinearGrid(rho=2, M=2, N=2)
         b = DoubleFourierSeries(M=1, N=3)
         with pytest.warns(UserWarning, match="can not undersample in zeta"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        g = LinearGrid(rho=2, theta=2, zeta=4)
-        b = DoubleFourierSeries(M=1, N=1)
-        with pytest.warns(
-            UserWarning, match="requires an odd number of toroidal nodes"
-        ):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
-
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes = g._nodes[::-1]
-        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
+        b._fft_toroidal = False
+        g = LinearGrid(2, 3, 4)
+        with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes[:, 2] = np.where(g._nodes[:, 2] == 0, 0.01, g.nodes[:, 2])
-        with pytest.warns(UserWarning, match="nodes to be equally spaced in zeta"):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
 
     @pytest.mark.unit
     def test_direct2_warnings(self):
         """Test that warnings are thrown when trying to use direct2 if it won't work."""
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes = g._nodes[::-1]
-        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
-            t = Transform(g, b, method="direct2")
-        assert t.method == "direct1"
-
-        g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
-        b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
-            t = Transform(g, b, method="direct2")
-        assert t.method == "direct1"
-
         g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="node pattern is the same"):
+        with pytest.warns(UserWarning, match="requires compatible grid"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=2, N=2)
-        b._modes = b.modes[np.random.permutation(25)]
-        with pytest.warns(
-            UserWarning, match="zernike indices to be sorted by toroidal mode"
-        ):
+        b._fft_toroidal = False
+        g = LinearGrid(2, 3, 4)
+        with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
     @pytest.mark.unit
-    def test_fit_direct1(self):
-        """Test fitting with direct1 method."""
+    def test_fit_direct1_and_jitable(self):
+        """Test fitting with direct1 and jitable method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
         transform = Transform(grid, basis, method="direct1", build_pinv=True)
         np.random.seed(0)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+        # also test jitable which is the same as direct1
+        transform = Transform(grid, basis, method="jitable", build_pinv=True)
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
@@ -611,6 +563,32 @@ class TestTransform:
         )
         _ = tr["Z"].project(f)
 
+    @pytest.mark.unit
+    def test_fft_even_grid(self):
+        """Test fft method with even number of grid points."""
+        for sym in ["cos", "sin", False]:
+            basis = FourierZernikeBasis(2, 2, 4, sym=sym)
+            c = np.random.random(basis.num_modes)
+            for N in range(9, 16):
+                grid = LinearGrid(L=2, M=2, zeta=N)
+                t1 = Transform(grid, basis, method="direct1", build_pinv=True)
+                t2 = Transform(grid, basis, method="fft", build_pinv=True)
+                x1 = t1.transform(c)
+                x2 = t2.transform(c)
+                np.testing.assert_allclose(
+                    x1, x2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+                c1 = t1.fit(x1)
+                c2 = t2.fit(x2)
+                np.testing.assert_allclose(
+                    c1, c2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+                y1 = t1.project(x1)
+                y2 = t2.project(x2)
+                np.testing.assert_allclose(
+                    y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+
 
 @pytest.mark.unit
 def test_transform_pytree():
@@ -643,10 +621,10 @@ def test_transform_pytree():
 def test_NFP_warning():
     """Make sure we only warn about basis/grid NFP in cases where it matters."""
     rho = np.linspace(0, 1, 20)
-    g01 = LinearGrid(rho=rho, L=5, N=0, NFP=1)
-    g02 = LinearGrid(rho=rho, L=5, N=0, NFP=2)
-    g21 = LinearGrid(rho=rho, L=5, N=5, NFP=1)
-    g22 = LinearGrid(rho=rho, L=5, N=5, NFP=2)
+    g01 = LinearGrid(rho=rho, M=5, N=0, NFP=1)
+    g02 = LinearGrid(rho=rho, M=5, N=0, NFP=2)
+    g21 = LinearGrid(rho=rho, M=5, N=5, NFP=1)
+    g22 = LinearGrid(rho=rho, M=5, N=5, NFP=2)
     b01 = FourierZernikeBasis(L=2, M=2, N=0, NFP=1)
     b02 = FourierZernikeBasis(L=2, M=2, N=0, NFP=2)
     b21 = FourierZernikeBasis(L=2, M=2, N=2, NFP=1)

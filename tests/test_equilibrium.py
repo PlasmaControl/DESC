@@ -1,19 +1,20 @@
 """Tests for Equilibrium class."""
 
 import os
-import pickle
 import warnings
 
 import numpy as np
 import pytest
-from netCDF4 import Dataset
+from qic import Qic
 
-import desc.examples
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import _map_clebsch_coordinates
+from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
@@ -21,42 +22,11 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_geometry(DSHAPE_current):
-    """Test computation of plasma geometric values."""
-
-    def test(stellarator):
-        # VMEC values
-        file = Dataset(str(stellarator["vmec_nc_path"]), mode="r")
-        V_vmec = float(file.variables["volume_p"][-1])
-        R0_vmec = float(file.variables["Rmajor_p"][-1])
-        a_vmec = float(file.variables["Aminor_p"][-1])
-        ar_vmec = float(file.variables["aspect"][-1])
-        file.close()
-
-        # DESC values
-        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        data = eq.compute("R0/a")
-        V_desc = data["V"]
-        R0_desc = data["R0"]
-        a_desc = data["a"]
-        ar_desc = data["R0/a"]
-
-        assert abs(V_vmec - V_desc) < 5e-3
-        assert abs(R0_vmec - R0_desc) < 5e-3
-        assert abs(a_vmec - a_desc) < 5e-3
-        assert abs(ar_vmec - ar_desc) < 5e-3
-
-    test(DSHAPE_current)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-@pytest.mark.solve
-def test_compute_theta_coords(DSHAPE_current):
-    """Test root finding for theta(theta*,lambda(theta))."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
+def test_map_PEST_coordinates():
+    """Test root finding for theta(theta_PEST,lambda(theta))."""
+    eq = get("DSHAPE_CURRENT")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 0, 6, 6, 0)
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -66,7 +36,7 @@ def test_compute_theta_coords(DSHAPE_current):
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = eq.map_coordinates(flux_coords, inbasis=("rho", "theta_PEST", "zeta"))
     geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
@@ -78,10 +48,19 @@ def test_compute_theta_coords(DSHAPE_current):
 
 @pytest.mark.unit
 def test_map_coordinates():
-    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    # finding coordinates along a single field line
+    eq = get("NCSX")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
+    n = 100
+    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
-    inbasis = ["alpha", "phi", "rho"]
+    eq = get("DSHAPE")
+
+    inbasis = ["R", "phi", "Z"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
     rho = np.linspace(0.01, 0.99, 20)
@@ -90,61 +69,56 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,
         inbasis,
         outbasis,
-        period=(2 * np.pi, 2 * np.pi, np.inf),
+        period=(np.inf, 2 * np.pi, np.inf),
         maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.unit
-def test_map_coordinates2():
-    """Test root finding for (rho,theta,zeta) for common use cases."""
-    eq = desc.examples.get("W7-X")
+def test_map_clebsch_coordinates():
+    """Test root finding for (rho,alpha,zeta)."""
+    eq = get("NCSX")
+    assert eq.NFP > 1
+    rho = np.linspace(0.5, 1, 2)
+    alpha = np.linspace(0, 2 * np.pi, 3)
+    zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
 
-    n = 100
-    # finding coordinates along a single field line
-    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     out = eq.map_coordinates(
-        coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
+        grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
     )
-    assert not np.any(np.isnan(out))
-
-    # contours of const theta for plotting
-    grid_kwargs = {
-        "rho": np.linspace(0, 1, 10),
-        "NFP": eq.NFP,
-        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
-        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
-    }
-    t_grid = LinearGrid(**grid_kwargs)
-
-    out = eq.map_coordinates(
-        t_grid.nodes,
-        ["rho", "theta_PEST", "phi"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        lmbda = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+        )["L"]
+    assert lmbda.basis.NFP == eq.NFP
+    np.testing.assert_allclose(
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
     )
-    assert not np.any(np.isnan(out))
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        grid.meshgrid_reshape(out[:, 1], "raz"),
+    )
 
 
 @pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
-
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
+    eq = get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 0, 6, 6, 0)
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -157,11 +131,11 @@ def test_map_coordinates_derivative():
     import jax
 
     @jax.jit
-    def foo(params):
+    def foo(params, in_coords):
         out = eq.map_coordinates(
             in_coords,
             inbasis,
-            outbasis,
+            ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
             period=(2 * np.pi, 2 * np.pi, np.inf),
@@ -169,12 +143,12 @@ def test_map_coordinates_derivative():
         )
         return out
 
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict)
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
+        np.testing.assert_allclose(j1, j2, atol=1e-12)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -185,9 +159,15 @@ def test_map_coordinates_derivative():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
+    # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
-        geom_coords = eq.compute_theta_coords(flux_coords, L_lmn)
+        params = {"L_lmn": L_lmn}
+        geom_coords = eq.map_coordinates(
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
+        )
         return geom_coords
 
     J1 = jax.jit(jax.jacfwd(bar))(eq.params_dict["L_lmn"])
@@ -200,17 +180,15 @@ def test_map_coordinates_derivative():
 
 @pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
-def test_to_sfl(DSHAPE_current):
+def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
+    eq = get("DSHAPE_CURRENT")
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
 
 
 @pytest.mark.slow
@@ -236,26 +214,24 @@ def test_grid_resolution_warning():
     eq = Equilibrium(L=3, M=3, N=3)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
-    with pytest.warns(Warning):
-        eqN.solve(ftol=1e-2, maxiter=2)
+    # if we first raise warnings to errors then check for error we can avoid
+    # actually running the full solve
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqN.solve(ftol=1e-2, maxiter=2)
     eqM = eq.copy()
     eqM.change_resolution(M=eq.M, M_grid=eq.M - 1)
-    with pytest.warns(Warning):
-        eqM.solve(ftol=1e-2, maxiter=2)
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqM.solve(ftol=1e-2, maxiter=2)
     eqL = eq.copy()
     eqL.change_resolution(L=eq.L, L_grid=eq.L - 1)
-    with pytest.warns(Warning):
-        eqL.solve(ftol=1e-2, maxiter=2)
-
-
-@pytest.mark.unit
-def test_eq_change_grid_resolution():
-    """Test changing equilibrium grid resolution."""
-    eq = Equilibrium(L=2, M=2, N=2)
-    eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
-    assert eq.L_grid == 10
-    assert eq.M_grid == 10
-    assert eq.N_grid == 10
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqL.solve(ftol=1e-2, maxiter=2)
 
 
 @pytest.mark.unit
@@ -289,6 +265,9 @@ def test_eq_change_symmetry():
     assert eq.surface.sym
     assert eq.surface.R_basis.sym == "cos"
     assert eq.surface.Z_basis.sym == "sin"
+    assert eq.axis.sym
+    assert eq.axis.R_basis.sym == "cos"
+    assert eq.axis.Z_basis.sym == "sin"
 
     # undo symmetry
     eq.change_resolution(sym=False)
@@ -302,6 +281,9 @@ def test_eq_change_symmetry():
     assert not eq.surface.sym
     assert not eq.surface.R_basis.sym
     assert not eq.surface.Z_basis.sym
+    assert eq.axis.sym is False
+    assert eq.axis.R_basis.sym is False
+    assert eq.axis.Z_basis.sym is False
 
 
 @pytest.mark.unit
@@ -314,33 +296,62 @@ def test_resolution():
     eq2.change_resolution(**eq1.resolution)
     assert eq1.resolution == eq2.resolution
 
-    eq1.L = 2
-    eq1.M = 3
-    eq1.N = 4
-    eq1.NFP = 5
-    assert eq1.R_basis.L == 2
-    assert eq1.R_basis.M == 3
-    assert eq1.R_basis.N == 4
-    assert eq1.R_basis.NFP == 5
-
 
 @pytest.mark.unit
 def test_equilibrium_from_near_axis():
     """Test loading a solution from pyQSC/pyQIC."""
-    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
-    file = open(qsc_path, "rb")
-    na = pickle.load(file)
-    file.close()
+    na = Qic.from_paper("r2 section 5.5", rs=[0, 1e-5], zc=[0, 1e-5])
 
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     data = eq.compute("|B|", grid=grid)
 
+    # get the sin/cos modes
+    eq_rc = eq.Ra_n[
+        np.where(
+            np.logical_and(
+                eq.axis.R_basis.modes[:, 2] >= 0,
+                eq.axis.R_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_zc = eq.Za_n[
+        np.where(
+            np.logical_and(
+                eq.axis.Z_basis.modes[:, 2] >= 0,
+                eq.axis.Z_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_rs = np.flipud(
+        eq.Ra_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.R_basis.modes[:, 2] < 0,
+                    eq.axis.R_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+    eq_zs = np.flipud(
+        eq.Za_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.Z_basis.modes[:, 2] < 0,
+                    eq.axis.Z_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-    np.testing.assert_allclose(eq.Ra_n[:2], na.rc, atol=1e-10)
-    np.testing.assert_allclose(eq.Za_n[-2:], na.zs, atol=1e-10)
+    np.testing.assert_allclose(eq_rc, na.rc, atol=1e-10)
+    # na.zs[0] is always 0, which DESC doesn't include
+    np.testing.assert_allclose(eq_zs, na.zs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_rs, na.rs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_zc, na.zc, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
@@ -395,7 +406,9 @@ def test_change_NFP():
     """Test that changing the eq NFP correctly changes everything."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        eq = desc.examples.get("HELIOTRON")
+        eq = get("HELIOTRON")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 1, 6, 6, 2)
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
@@ -404,7 +417,7 @@ def test_change_NFP():
 @pytest.mark.unit
 def test_error_when_ndarray_or_integer_passed():
     """Test that errors raise correctly when a non-Grid object is passed."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     with pytest.raises(TypeError):
         eq.compute("R", grid=1)
     with pytest.raises(TypeError):
@@ -429,10 +442,35 @@ def test_backward_compatible_load_and_resolve():
         eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
 
     # reducing resolution since we only want to test eq.solve
-    eq.L = 4
-    eq.M = 4
-    eq.N = 4
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 4, 4, 4)
 
     f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
+    obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_assigning_profile_iota_current():
+    """Test assigning current to iota-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # iota-constrained
+    with pytest.warns(UserWarning, match="existing rotational"):
+        eq.current = PowerSeriesProfile()
+    assert eq.iota is None
+    with pytest.warns(UserWarning, match="existing toroidal"):
+        eq.iota = PowerSeriesProfile()
+    assert eq.current is None
+
+
+@pytest.mark.unit
+def test_eq_optimize_default_constraints_warning(DummyStellarator):
+    """Tests default constraints warning for eq.optimize."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

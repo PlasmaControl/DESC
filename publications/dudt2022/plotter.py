@@ -12,7 +12,6 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.vmec_utils import ptolemy_linear_transform
 
-
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["mathtext.fontset"] = "dejavusans"
 plt.rcParams["font.size"] = 14

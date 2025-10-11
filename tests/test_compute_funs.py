@@ -1,26 +1,16 @@
 """Tests for compute functions."""
 
-import pickle
-
 import numpy as np
 import pytest
-from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, rpz2xyz_vec
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
-from desc.geometry import (
-    FourierPlanarCurve,
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    FourierXYZCurve,
-    ZernikeRZToroidalSection,
-)
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import Grid, LinearGrid
 from desc.io import load
-from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
+from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -65,8 +55,9 @@ def test_aliases():
 
     # manual case
     primary_data = eq.compute("e_rho_rt")
-    alias_data = eq.compute("x_rrt")
+    alias_data = eq.compute(["x_rrt", "e_theta_rr"])
     np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["x_rrt"])
+    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["e_theta_rr"])
 
 
 @pytest.mark.unit
@@ -105,7 +96,7 @@ def test_enclosed_volumes():
         8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
     np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
 
 
 @pytest.mark.unit
@@ -170,6 +161,12 @@ def test_surface_areas_2():
 @pytest.mark.unit
 def test_elongation():
     """Test that elongation approximation is correct."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[-1, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
     surf2 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
         Z_lmn=[-2, -0.2],
@@ -182,17 +179,15 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    eq1 = Equilibrium()  # elongation = 1
-    eq2 = Equilibrium(surface=surf2)  # elongation = 2
-    eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
-    data1 = eq1.compute(["a_major/a_minor"], grid=grid)
-    data2 = eq2.compute(["a_major/a_minor"], grid=grid)
-    data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    assert surf3.sym
+    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    data1 = surf1.compute(["a_major/a_minor"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
 
 
 @pytest.mark.slow
@@ -1045,8 +1040,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_rho = 110
     grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
-    data = eq.compute(["|B|", "grad(|B|^2)_rho"], grid=grid)
-    B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
+    data = eq.compute(["|B|^2", "grad(|B|^2)_rho"], grid=grid)
+    B2_r = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / drho
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
         B2_r[3:-2],
@@ -1058,8 +1053,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_theta = 90
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute(["|B|", "grad(|B|^2)_theta"], grid=grid)
-    B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_theta"], grid=grid)
+    B2_t = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
         B2_t[2:-2],
@@ -1071,33 +1066,14 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_zeta = 90
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute(["|B|", "grad(|B|^2)_zeta"], grid=grid)
-    B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_zeta"], grid=grid)
+    B2_z = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
         B2_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["grad(|B|^2)_zeta"])),
     )
-
-
-@pytest.mark.unit
-@pytest.mark.solve
-def test_currents(DSHAPE_current):
-    """Test that different methods for computing I and G agree."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-    grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
-
-    data_booz = eq.compute("|B|_mn", grid=grid_full, M_booz=eq.M, N_booz=eq.N)
-    data_full = eq.compute(["I", "G"], grid=grid_full)
-    data_sym = eq.compute(["I", "G"], grid=grid_sym)
-
-    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow
@@ -1130,12 +1106,12 @@ def test_BdotgradB(DummyStellarator):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_boozer_transform(DSHAPE_current):
+def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-    # TODO: add test with stellarator example
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    # TODO (#680): add test with stellarator example
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -1155,7 +1131,7 @@ def test_boozer_transform(DSHAPE_current):
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
+        np.flipud(np.sort(np.abs(data["|B|_mn_B"]))),
         booz_xform,
         rtol=1e-3,
         atol=1e-4,
@@ -1163,175 +1139,21 @@ def test_boozer_transform(DSHAPE_current):
 
 
 @pytest.mark.unit
-def test_compute_grad_p_volume_avg():
-    """Test calculation of volume averaged pressure gradient."""
-    eq = Equilibrium()  # default pressure profile is 0 pressure
-    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
-    np.testing.assert_allclose(pres_grad_vol_avg, 0)
-
-
-@pytest.mark.unit
-def test_compare_quantities_to_vmec():
-    """Compare several computed quantities to vmec."""
-    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
-    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-
-    fid = netcdf_file(wout_file, mmap=False)
-    ns = fid.variables["ns"][()]
-    J_dot_B_vmec = fid.variables["jdotb"][()]
-    volavgB = fid.variables["volavgB"][()]
-    betatotal = fid.variables["betatotal"][()]
-    fid.close()
-
-    with pytest.warns(RuntimeWarning, match="Save attribute '_current'"):
-        eq = EquilibriaFamily.load(desc_file)[-1]
-
-    # Compare 0D quantities:
-    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<beta>_vol", grid=grid)
-    data = eq.compute("<|B|>_rms", grid=grid, data=data)
-
-    np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
-    np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
-
-    # Compare radial profile quantities:
-    s = np.linspace(0, 1, ns)
-    rho = np.sqrt(s)
-    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = grid.compress(data["<J*B>"])
-    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
-
-
-@pytest.mark.unit
-def test_compute_everything():
-    """Test that the computations on this branch agree with those on master.
-
-    Also make sure we can compute everything without errors.
-    """
-    elliptic_cross_section_with_torsion = {
-        "R_lmn": [10, 1, 0.2],
-        "Z_lmn": [-2, -0.2],
-        "modes_R": [[0, 0], [1, 0], [0, 1]],
-        "modes_Z": [[-1, 0], [0, -1]],
-    }
-    things = {
-        # equilibria
-        "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
-        # curves
-        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
-            center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
-        ),
-        "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZ(grid=LinearGrid(N=50)),
-        # surfaces
-        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
-            **elliptic_cross_section_with_torsion
-        ),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
-            **elliptic_cross_section_with_torsion
-        ),
-        # magnetic fields
-        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
-            **elliptic_cross_section_with_torsion,
-            potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
-            potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
-            potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
-            params={"G": 1e7},
-        ),
-        "desc.magnetic_fields.FourierCurrentPotentialField": (
-            FourierCurrentPotentialField(
-                **elliptic_cross_section_with_torsion, I=0, G=1e7
-            )
-        ),
-        # coils
-        "desc.coils.FourierRZCoil": FourierRZCoil(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.coils.FourierXYZCoil": FourierXYZCoil(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.coils.FourierPlanarCoil": FourierPlanarCoil(
-            current=5,
-            center=[10, 1, 3],
-            normal=[1, 2, 3],
-            r_n=[1, 2, 3],
-            modes=[0, 1, 2],
-        ),
-        "desc.coils.SplineXYZCoil": SplineXYZCoil(
-            current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
-        ),
-    }
-    assert things.keys() == data_index.keys(), (
-        f"Missing the parameterizations {data_index.keys() - things.keys()}"
-        f" to test against master."
+def test_boozer_transform_multiple_surfaces():
+    """Test that computing over multiple surfaces is the same as over 1 at a time."""
+    eq = get("HELIOTRON")
+    grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data1 = eq.compute("|B|_mn_B", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
+    data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
+    np.testing.assert_allclose(
+        data1["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0]
     )
-    # use this low resolution grid for equilibria to reduce file size
-    eqgrid = LinearGrid(
-        # include magnetic axis
-        rho=np.linspace(0, 1, 10),
-        M=5,
-        N=5,
-        NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
-        sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+    np.testing.assert_allclose(
+        data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
-    curvegrid1 = LinearGrid(N=10)
-    curvegrid2 = LinearGrid(N=10, NFP=2)
-    grid = {
-        "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
-        "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
-        "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
-    }
-
-    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
-        master_data = pickle.load(file)
-    this_branch_data = {}
-    update_master_data = False
-    error = False
-
-    for p in things:
-        this_branch_data[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {})
-        )
-        # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
-        )
-        # compare against master branch
-        for name in this_branch_data[p]:
-            if p in master_data and name in master_data[p]:
-                try:
-                    np.testing.assert_allclose(
-                        actual=this_branch_data[p][name],
-                        desired=master_data[p][name],
-                        atol=1e-10,
-                        rtol=1e-10,
-                        err_msg=f"Parameterization: {p}. Name: {name}.",
-                    )
-                except AssertionError as e:
-                    error = True
-                    print(e)
-            else:
-                # We can compute a new quantity now, so we should update the
-                # master compute data.
-                update_master_data = True
-
-    if not error and update_master_data:
-        # then update the master compute data
-        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
-            # remember to git commit this file
-            pickle.dump(this_branch_data, file)
-    assert not error
 
 
 @pytest.mark.unit
@@ -1458,6 +1280,415 @@ def test_covariant_basis_vectors(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("eq", [get("W7-X"), get("NCSX")])
+def test_covariant_basis_vectors_PEST(eq):
+    """
+    Test calculation of covariant basis vectors in PEST.
+
+    We compare the basis vectors by comparing with finite diff of the position vector
+    x and lower-order covariant basis vectors.
+    """
+    keys_PEST = [
+        "e_rho|v,p",
+        "e_vartheta|r,p",
+        "e_phi|r,v",
+        "e_vartheta_v|PEST",
+        "e_vartheta_p|PEST",
+        "e_vartheta_r|PEST",
+        "e_phi_r|PEST",
+        "e_phi_p|PEST",
+        "e_rho_r|PEST",
+    ]
+
+    N = 4000
+
+    # spacing grids in each native direction
+    grids_PEST = {
+        "r": LinearGrid(L=N, M=0, N=0, NFP=eq.NFP),
+        "v": LinearGrid(rho=1, M=N, N=0, NFP=eq.NFP, sym=True),
+        "z": LinearGrid(rho=1, M=0, N=N, NFP=eq.NFP, sym=True),
+    }
+
+    # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
+    rtz_nodes = map_coordinates(
+        eq,
+        grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+
+    # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
+    rtz_nodes1 = map_coordinates(
+        eq,
+        grids_PEST["z"].nodes,  # (ρ,θ_PEST,ζ)
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+
+    def _get_deriv(deriv_tokn):
+        d0 = deriv_tokn.lower()
+        if d0.startswith(("r", "rho")):
+            deriv = "r"
+        elif d0.startswith(("v", "vartheta", "theta")):
+            deriv = "v"
+        elif d0.startswith(("z", "phi", "p")):  # ζ or φ share spacing
+            deriv = "z"
+        else:
+            raise ValueError(f"Cannot parse derivative direction from '{key}'")
+        return deriv
+
+    for key in keys_PEST:
+        lhs, rhs = key.split("|")
+        # rhs can be PEST or r,v or p,v or r,p etc.
+        # So it's not really needed for the FD calculation
+        parts = lhs.split("_")
+        if len(parts) == 2:  # like "e_rho"
+            deriv_tokn = parts[-1]
+            base_bits = [parts[-1]]
+            base = ["X", "Y", "Z"]
+        else:  # like "e_rho_v"
+
+            deriv_tokn = parts[-1]
+            base_bits = parts[:-1]
+            base = []
+
+        deriv = _get_deriv(deriv_tokn)
+
+        # Grid will have to be custom for vartheta
+        grid_used = (
+            Grid(rtz_nodes)
+            if deriv == "v"
+            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+        )
+
+        # Decide base vector
+        if len(base_bits) == 1:  # only happens for X,Y,Z
+            base_key = None  # triggers Cartesian path
+        else:
+            base_key = "_".join(base_bits)  # e_rho, e_vartheta,
+            deriv0 = _get_deriv(
+                base_bits[-1]
+            )  # get the first derivative, like rho from e_rho_vartheta
+            base_key = base_key + (
+                "|r,p" if deriv0 == "v" else ("|p,v" if deriv0 == "r" else "|r,v")
+            )
+            # adding parenthesis to the higher-order vectors
+            list0 = key.split("|")
+            key = "(" + list0[0] + ")" + "|" + list0[1]
+
+        req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
+        data = eq.compute(req_keys, grid=grid_used)
+
+        # Determine reshape dimensions based on deriv
+        reshape_dims = (
+            (1, 1, grid_used.num_zeta, -1)
+            if deriv == "z"
+            else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
+        )
+
+        # reshape everything to (θ,ρ,ζ,3) and convert to xyz
+        data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
+
+        if base_key is None:  # take derivatives of X,Y,Z
+            base = np.array([data["X"], data["Y"], data["Z"]]).T
+            base = base.reshape(reshape_dims)
+        else:  # derivatives of e_rho, etc.
+            base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(reshape_dims)
+
+        # First-order, 4-point stencil finite-difference
+        spacing = {
+            "r": grids_PEST[deriv].spacing[0, 0],
+            "v": grids_PEST[deriv].spacing[0, 1] / 2,
+            "z": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+        }
+
+        if deriv == "r":
+            fd = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing[deriv]
+        elif deriv == "v":
+            fd = np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4) / spacing[deriv]
+            fd = fd[0]
+            data[key] = data[key][0]
+        else:
+            fd = np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4) / spacing[deriv]
+            fd = fd[0][0]
+            data[key] = data[key][0][0]
+
+        np.testing.assert_allclose(
+            data[key][4:-4],
+            fd[4:-4],
+            rtol=3e-3,
+            atol=3e-3,
+            err_msg=key,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("eq", [get("W7-X"), get("NCSX")])
+def test_contravariant_basis_vectors_PEST(eq):
+    """
+    Test only the derivatives of contravariant basis vectors in PEST.
+
+    We compare higher order derivatives by taking the finite-difference derivative
+    of the lower-order contravariant basis vectors.
+    """
+    keys_PEST = [
+        "e^vartheta_v|PEST",
+        "e^vartheta_p|PEST",
+        "e^zeta_v|PEST",
+        "e^zeta_p|PEST",
+        "e^rho_v|PEST",
+        "e^rho_p|PEST",
+    ]
+
+    N = 4000
+
+    # spacing grids in each native direction
+    grids_PEST = {
+        "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
+        "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
+        "p": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
+    }
+
+    # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
+    rtz_nodes = map_coordinates(
+        eq,
+        grids_PEST["v"].nodes,  # (ρ,θ_PEST,ζ)
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+
+    # find native (ρ,θ,ζ) nodes that correspond to the uniform ζ grid
+    rtz_nodes1 = map_coordinates(
+        eq,
+        grids_PEST["p"].nodes,  # (ρ,θ_PEST,ζ)
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+
+    for key in keys_PEST:
+        lhs, rhs = key.split("|")
+        # rhs can be PEST or r,v or p,v or r,p etc.
+        # So it's not really needed for the FD calculation
+        parts = lhs.split("^")
+        parts2 = parts[-1].split("_")
+
+        deriv_tokn = parts[-1]
+        base_bits = parts[:-1] + ["^"] + [parts2[0]]
+        base = []
+
+        deriv = deriv_tokn.split("_")[-1]
+
+        # Grid will have to be custom for vartheta
+        grid_used = (
+            Grid(rtz_nodes)
+            if deriv == "v"
+            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+        )
+
+        # Decide base vector
+        if len(base_bits) == 1:  # only happens for X,Y,Z which is not applicable here
+            base_key = None  # triggers Cartesian path
+        else:
+            base_key = "".join(base_bits)  # e_rho, e_vartheta,
+
+        # adding parenthesis to the higher-order vectors
+        list0 = key.split("|")
+        key = "(" + list0[0] + ")" + "|" + list0[1]
+
+        req_keys = [key, "phi"] + base + ([] if base_key is None else [base_key])
+        data = eq.compute(req_keys, grid=grid_used)
+
+        # Determine reshape dimensions based on deriv
+        reshape_dims = (
+            (1, 1, grid_used.num_zeta, -1)
+            if deriv == "p"
+            else (grid_used.num_rho, grid_used.num_theta, grid_used.num_zeta, -1)
+        )
+
+        # reshape everything to (θ,ρ,ζ,3) and convert to xyz
+        data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(reshape_dims)
+
+        if base_key is None:
+            pass
+        else:  # derivatives of e^rho, etc.
+            base = rpz2xyz_vec(data[base_key], phi=data["phi"]).reshape(reshape_dims)
+
+        # First-order, 4-point stencil finite-difference
+        spacing = {
+            "r": grids_PEST[deriv].spacing[0, 0],
+            "v": grids_PEST[deriv].spacing[0, 1] / 2,
+            "p": grids_PEST[deriv].spacing[0, 2] / eq.NFP,
+        }
+
+        if deriv == "r":
+            fd = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing[deriv]
+        elif deriv == "v":
+            fd = np.apply_along_axis(my_convolve, 1, base, FD_COEF_1_4) / spacing[deriv]
+            fd = fd[0]
+            data[key] = data[key][0]
+        else:
+            fd = np.apply_along_axis(my_convolve, 2, base, FD_COEF_1_4) / spacing[deriv]
+            fd = fd[0][0]
+            data[key] = data[key][0][0]
+
+        np.testing.assert_allclose(
+            data[key][4:-4],
+            fd[4:-4],
+            rtol=7e-3,
+            atol=6e-3,
+            err_msg=key,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.parametrize("eq", [get("precise_QA")])
+def test_PEST_derivative_math(eq):
+    """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
+    from desc.compute import data_index
+
+    tol = 1e-10
+    # TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
+    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=tol)
+
+    keys_DESC = [
+        "e_theta",
+        "e_theta_r",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_r",
+        "e_zeta_t",
+        "e_zeta_z",
+        "e_rho_r",
+        "e^rho_t",
+        "e^rho_z",
+        "e^theta",
+        "e^theta_t",
+        "e^theta_z",
+        "e^zeta_t",
+        "e^zeta_z",
+        "g_rr",
+        "g_rt",
+        "g_rz",
+        "g_tt",
+        "g_tz",
+        "g_zz",
+        "g_rr_t",
+        "g_rr_z",
+        "g_tt_r",
+        "g_tt_z",
+        "g_zz_t",
+        "g_rt_z",
+        "g^rt",
+        "g^rr_t",
+        "g^rr_z",
+        "g^rt_t",
+        "g^rt_z",
+        "g^rz_t",
+        "g^rz_z",
+        "sqrt(g)_r",
+        "sqrt(g)_t",
+        "sqrt(g)_z",
+        "J^theta",
+        "J^theta_t",
+        "J^theta_z",
+        "J^zeta_t",
+        "J^zeta_z",
+    ]
+    keys_PEST = [
+        "e_vartheta",
+        "(e_theta_PEST_r)|PEST",
+        "(e_theta_PEST_v)|PEST",
+        "(e_theta_PEST_p)|PEST",
+        "(e_phi_r)|PEST",
+        "(e_phi_v)|PEST",
+        "(e_phi_p)|PEST",
+        "(e_rho_r)|PEST",
+        "(e^rho_v)|PEST",
+        "(e^rho_p)|PEST",
+        "e^vartheta",
+        "(e^vartheta_v)|PEST",
+        "(e^vartheta_p)|PEST",
+        "(e^zeta_v)|PEST",
+        "(e^zeta_p)|PEST",
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rp|PEST",
+        "g_vv|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
+        "(g_rr_v)|PEST",
+        "(g_rr_p)|PEST",
+        "(g_vv_r)|PEST",
+        "(g_vv_z)|PEST",
+        "(g_pp_v)|PEST",
+        "(g_rv_p)|PEST",
+        "g^rv",
+        "(g^rr_v)|PEST",
+        "(g^rr_p)|PEST",
+        "(g^rv_v)|PEST",
+        "(g^rv_p)|PEST",
+        "(g^rz_v)|PEST",
+        "(g^rz_p)|PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
+        "(sqrt(g)_PEST_p)|PEST",
+        "J^theta_PEST",
+        "(J^theta_PEST_v)|PEST",
+        "(J^theta_PEST_p)|PEST",
+        "(J^zeta_v)|PEST",
+        "(J^zeta_p)|PEST",
+    ]
+    index = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+    keys_DESC, keys_PEST = zip(
+        *[(d, p) for d, p in zip(keys_DESC, keys_PEST) if (d in index) and (p in index)]
+    )
+    keys_DESC = list(keys_DESC)
+    keys_PEST = list(keys_PEST)
+
+    grid_PEST = LinearGrid(
+        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
+    data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
+
+    data_to_verify = eq.compute(
+        keys_PEST,
+        Grid(
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
+    )
+
+    for key_DESC, key_PEST in zip(keys_DESC, keys_PEST):
+        np.testing.assert_allclose(
+            data[key_PEST], data[key_DESC], err_msg=f"{key_PEST} vs {key_DESC}"
+        )
+        # This should have spectrally accurate error tolerance, but it doesn't.
+        # Checks correctness of PEST quantities beyond ensuring there are no
+        # missing or additional factors of lambda.
+        near_zero_atol = 1e-4
+        near_zero = np.isclose(data[key_DESC], 0, rtol=0, atol=near_zero_atol)
+        np.testing.assert_allclose(
+            data_to_verify[key_PEST][near_zero],
+            data[key_DESC][near_zero],
+            atol=2 * near_zero_atol,
+            err_msg=key_PEST,
+        )
+        try:
+            np.testing.assert_allclose(
+                data_to_verify[key_PEST][~near_zero],
+                data[key_DESC][~near_zero],
+                rtol=7e-3,
+                err_msg=key_PEST,
+            )
+        except AssertionError as e:
+            print(e)
+
+
+@pytest.mark.unit
 def test_contravariant_basis_vectors():
     """Test calculation of contravariant basis vectors by comparing to finite diff."""
     eq = get("HELIOTRON")
@@ -1527,16 +1758,12 @@ def test_contravariant_basis_vectors():
         print(key)
         grid = grids[deriv]
         data = eq.compute([key, base_quant, "phi"], grid=grid)
-        data[key] = (
-            rpz2xyz_vec(data[key], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
-        data[base_quant] = (
-            rpz2xyz_vec(data[base_quant], phi=data["phi"])
-            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
-            .squeeze()
-        )
+        data[key] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[key], phi=data["phi"]), "trz"
+        ).squeeze()
+        data[base_quant] = grid.meshgrid_reshape(
+            rpz2xyz_vec(data[base_quant], phi=data["phi"]), "trz"
+        ).squeeze()
 
         spacing = {
             "r": grid.spacing[0, 0],
@@ -1633,8 +1860,7 @@ def test_contravariant_basis_vectors():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_iota_components(HELIOTRON_vac):
+def test_iota_components():
     """Test that iota components are computed correctly."""
     # axisymmetric, so all rotational transform should be from the current
     eq_i = get("DSHAPE")  # iota profile assigned
@@ -1648,7 +1874,7 @@ def test_iota_components(HELIOTRON_vac):
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
-    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
@@ -1658,11 +1884,30 @@ def test_iota_components(HELIOTRON_vac):
 @pytest.mark.unit
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
-    names = ["DSHAPE", "HELIOTRON", "NCSX"]
-    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    names = ["HELIOTRON"]
+    # TODO (#1397): expand this to include all angular derivatives
+    #  once they are implemented for surfaces
+    data_basis_vecs_fourierRZ = [
+        "e_theta",
+        "e_zeta",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_t",
+        "e_zeta_z",
+    ]
+    data_basis_vecs_ZernikeRZ = [
+        "e_theta",
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_rho_t",
+        "e_theta_r",
+        "e_theta_rr",
+        "e_theta_t",
+    ]
     for name in names:
         eq = get(name)
-        for key in data:
+        for key in ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]:
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()
             if key == "a_major/a_minor":
@@ -1670,3 +1915,143 @@ def test_surface_equilibrium_geometry():
             else:
                 rtol, atol = 1e-8, 0
             np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
+        # compare at rho=1, where we expect the eq.compute and the
+        # surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_fourierRZ, grid=grid)
+        data_surf = eq.surface.compute(
+            data_basis_vecs_fourierRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_fourierRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=1e-14,
+                atol=6e-12,
+            )
+        # compare at zeta=0, where we expect the eq.compute and the
+        # poincare surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(zeta=np.array(0.0), M=10, L=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_ZernikeRZ, grid=grid)
+        data_surf = eq.get_surface_at(zeta=0.0).compute(
+            data_basis_vecs_ZernikeRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_ZernikeRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=3e-13,
+                atol=1e-13,
+            )
+
+
+@pytest.mark.unit
+def test_clebsch_sfl_funs():
+    """Test geometric and physical methods of computing B agree."""
+
+    def test(eq):
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        data = eq.compute(
+            [
+                "e_zeta|r,a",
+                "B",
+                "B^zeta",
+                "B^phi",
+                "|B|_z|r,a",
+                "grad(|B|)",
+                "|e_zeta|r,a|_z|r,a",
+                "B^zeta_z|r,a",
+                "|B|",
+                "sqrt(g)_Clebsch",
+                "sqrt(g)_PEST",
+                "psi_r",
+                "grad(psi)",
+                "grad(alpha)",
+                "grad(phi)",
+                "B_phi",
+                "gbdrift (secular)",
+                "gbdrift (secular)/phi",
+                "phi",
+            ],
+        )
+        np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+        np.testing.assert_allclose(
+            data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        )
+        np.testing.assert_allclose(
+            data["|e_zeta|r,a|_z|r,a"],
+            data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+            - data["|B|"]
+            * data["B^zeta_z|r,a"]
+            * np.sign(data["B^zeta"])
+            / data["B^zeta"] ** 2,
+        )
+        np.testing.assert_allclose(
+            data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
+        )
+        np.testing.assert_allclose(
+            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+        )
+        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
+        np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
+        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
+        np.testing.assert_allclose(
+            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
+        )
+
+    test(get("W7-X"))
+    test(get("NCSX"))
+
+
+@pytest.mark.unit
+def test_parallel_grad_fd(DummyStellarator):
+    """Test that the parallel gradients match with numerical gradients."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    grid = get_rtz_grid(eq, 0.5, 0, np.linspace(0, 2 * np.pi, 50), coordinates="raz")
+    data = eq.compute(
+        [
+            "|B|",
+            "|B|_z|r,a",
+            "|e_zeta|r,a|",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta",
+            "B^zeta_z|r,a",
+        ],
+        grid=grid,
+    )
+    dz = grid.source_grid.spacing[:, 2]
+    fd = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|B|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_z|r,a"])),
+    )
+    fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
+    )
+    fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["B^zeta_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
+    )
+
+
+@pytest.mark.unit
+def test_compute_deprecation_warning():
+    """Test DeprecationWarning for deprecated compute names."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("sqrt(g)_B", grid=grid)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)

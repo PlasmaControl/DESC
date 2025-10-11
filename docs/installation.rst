@@ -3,273 +3,409 @@ Installation
 ============
 
 Follow these instructions to install DESC and its dependencies.
-Note that most of the installation options here do not install JAX with GPU support.
-We do include installation instructions to install JAX with GPU support on some computing clusters that we have tested.
-In general, to install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`__.
 
+We only test installation with conda environments, so your mileage may vary with other managers.
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
-Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.8.**
-**If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
+.. attention::
+
+    DESC requires ``python>=3.10``. If you have ``python2`` also locally installed, replace all ``pip`` commands with ``pip3`` and all ``python`` commands with ``python3`` to ensure the correct python version is used.
+
+.. attention::
+
+    We do not support DESC on Windows OS.
+    There have been instances where numerical discrepancies on Windows cause incorrect results.
+    For these reasons, we recommend using Windows Subsystem for Linux (WSL) if you have a Windows machine.
+    For instructions to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__.
+    To use WSL in VS code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
+
 
 On Your Local Machine
 *********************
 
-**Install from PyPI**
+.. tab-set::
 
-.. code-block:: console
+    .. tab-item:: CPU
 
-    pip install desc-opt
+        .. dropdown:: PyPI
 
-**Or from GitHub (for development builds)**
+            .. code-block:: sh
 
-First download the repository from GitHub.
+                pip install desc-opt
 
-.. code-block:: sh
+        .. dropdown:: GitHub
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
+            .. code-block:: sh
 
-Now pick one of the installation options below.
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
+                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda activate desc-env
+                pip install --editable .
 
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+            You may optionally install developer requirements if you want to run tests.
 
-`Option 1 tested to work on M1 Macbook on 5-3-23`
+            .. code-block:: sh
 
-.. code-block:: sh
+                pip install -r devtools/dev-requirements.txt
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
-    conda activate desc-env
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
+            These instructions were tested to work on an M1 Macbook device on May 3, 2023.
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+        .. dropdown:: uv
 
-.. code-block:: sh
+            One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
+            For a project that modifies DESC and also uses it to perform analysis,
+            it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
+            This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
+            and with the ability to use DESC in a jupyter notebook.
 
-    # only need to do one of these conda env create commands, not both
-    # option A: without developer requirements
-    conda env create --file requirements_conda.yml
-    # option B: with developer requirements (if you want to run tests)
-    conda env create --file devtools/dev-requirements_conda.yml
+            .. code-block:: sh
 
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
+                # download UV; it installs into .local/bin
+                curl -LsSf https://astral.sh/uv/install.sh | sh
+
+                # the depth=1 option reduces the quantity of older data downloaded
+                git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+
+                # initialize a project
+                uv init myproject
+                cd myproject
+
+                # add dependencies
+                uv add --editable "../DESC"
+
+                # test the installation
+                uv run python
+
+                >>> from desc.backend import print_backend_info
+                >>> print_backend_info()
+
+                # Jupyter Notebooks
+                # ----------------
+                # install a jupyter kernel
+                uv add --dev ipykernel
+                uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject
+
+                # run jupyter
+                uv run --with jupyter jupyter lab
+
+    .. tab-item:: CPU+GPU (partial support)
+
+        For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
+        For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
+        These instructions install GPU support for a subset of the features in DESC.
+
+        .. code-block:: sh
+
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
+            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda activate desc-env
+            sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+            pip install --editable .
+
+        Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
+
+        You may optionally install developer requirements if you want to run tests.
+
+        .. code-block:: sh
+
+            pip install -r devtools/dev-requirements.txt
+
+    .. tab-item:: CPU+GPU (with FINUFFT)
+
+        .. code-block:: sh
+
+            git clone https://github.com/PlasmaControl/DESC.git
+            cd DESC
+            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.13' 'fftw' 'gxx<12'
+            conda activate desc-env
+
+            sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+            sed -i '/^jax-finufft/d' requirements.txt
+
+            export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
+            pip install --editable .
+            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+
+        Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+        in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
+
+        You may optionally install developer requirements if you want to run tests.
+
+        .. code-block:: sh
+
+            pip install -r devtools/dev-requirements.txt
+
 
 On Most Linux Computing Clusters
 ********************************
 
-These examples use conda environments.
-On computing clusters you must ensure to `module load anaconda` in order to use conda (or in some clusters, you must specify the version of anaconda module you want).
+.. tab-set::
 
-With CPU support only
----------------------
+    .. tab-item:: CPU
 
-**Install from PyPI**
+        .. dropdown:: PyPI
 
-.. code-block:: console
+            .. code-block:: sh
 
-    pip install desc-opt
+                pip install desc-opt
 
-**Or from GitHub (for development builds)**
+        .. dropdown:: GitHub
 
-First download the repository from GitHub.
+            On computing clusters one typically types ``module load anaconda`` to use conda.
+            Some clusters require specifying the version of anaconda too.
 
-.. code-block:: sh
+            .. code-block:: sh
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # load your python module
-    module load anaconda  # this command may vary depending on cluster
+                module load anaconda
 
-Now pick one of the installation options below.
+            .. code-block:: sh
 
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
+                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda activate desc-env
+                pip install --editable .
 
-.. code-block:: sh
+            You may optionally install developer requirements if you want to run tests.
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
-    conda activate desc-env
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
+            .. code-block:: sh
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+                pip install -r devtools/dev-requirements.txt
 
-.. code-block:: sh
+    .. tab-item:: CPU+GPU
 
-    # only need to do one of these conda env create commands, not both
-    # option A: without developer requirements
-    conda env create --file requirements_conda.yml
-    # option B: with developer requirements (if you want to run tests)
-    conda env create --file devtools/dev-requirements_conda.yml
+        For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
+        We will show instructions that work for the clusters we have tested.
+        Most of these clusters are ``x86_64`` architectures.
+        You may try the instructions for the cluster most resembling your own, or see if your cluster has
+        JAX GPU installation instructions, as that is the main cause for installation differences.
 
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
+        .. attention::
 
-With CPU+GPU support
---------------------
+            DESC does not always guarantee support for the latest version of JAX (which does not have a stable 1.0 release yet).
+            Older versions of ``jax`` may need to be installed, which may in turn require lower versions of ``jaxlib``, as well as CUDA and CuDNN.
 
-We will show the installation instructions that work for the clusters we've tested.
-If your cluster is not shown, try the installation for the cluster most resembling your own, or see if your cluster has
-specific JAX GPU installation instructions, as that is the main installation difference between clusters.
-(note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`__ for more info if you have a different architecture ).
+        .. dropdown:: Perlmutter (NERSC)
 
-**Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
+            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 24, 2025
+            for both CPU and GPU runs.
+            They do not install FINUFFT with GPU support.
 
-Perlmutter (NERSC)
-++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 11-02-2023
+            .. code-block:: sh
 
-Set up the correct cuda environment for jax installation
+                module load conda
 
-.. code-block:: sh
+            .. code-block:: sh
 
-    module load cudatoolkit/11.7
-    module load cudnn/8.9.1_cuda11
-    module load python
+                conda create --name desc-env python=3.12
+                conda activate desc-env
 
-Check that you have loaded these modules
+            Now clone the DESC repository and enter the DESC directory
 
-.. code-block:: sh
+            .. code-block:: sh
 
-    module list
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
 
-Create a conda environment for DESC
+                pip install --no-cache-dir -r devtools/dev-requirements.txt
+                pip install --no-cache-dir --editable .
+                pip install --no-cache-dir "jax[cuda12]==0.6.2"
 
-.. code-block:: sh
+            The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
 
-    conda create -n desc-env python=3.9
-    conda activate desc-env
-    pip install --no-cache-dir "jax[cuda11_cudnn82]==0.4.7" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+            Before running a DESC script, you may also need to execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
+            or in your SLURM script (for submitted jobs).
 
-Clone and install DESC
+        .. dropdown:: Della and Stellar Clusters (Princeton)
 
-.. code-block:: sh
+            We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
+            If this does not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    sed -i '/jax/d' ./requirements.txt
-    # installation for users
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
+            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
 
+            .. code-block:: sh
 
-Della and Stellar Clusters (Princeton)
-++++++++++++++++++++++++++++++++++++++
+                module load anaconda3/2024.10
+                module load cudatoolkit/12.9
 
-First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
+                git clone https://github.com/PlasmaControl/DESC.git
+                cd DESC
+                conda create --name desc-env -c conda-forge 'python=3.12' 'fftw' 'gxx<12'
+                conda activate desc-env
 
-.. code-block:: sh
+                sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
+                sed -i '/^jax-finufft/d' requirements.txt
 
-    module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
-    conda activate desc-env
+                export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
+                pip install --editable .
+                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
 
-Then, install DESC,
+            Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
+            in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
 
-.. code-block:: sh
+            You may optionally install developer requirements if you want to run tests.
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
+            .. code-block:: sh
 
-Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
+                pip install -r devtools/dev-requirements.txt
 
-On Clusters with IBM Power Architecture
-***************************************
 
-If pre-built JAX binaries are not available, you will first need to build JAX from source.
-More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
+        .. dropdown:: RAVEN (IPP, Germany)
 
-These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 11-6-2023.
+            These instructions were verified to work on the RAVEN cluster at IPP on Aug 18, 2024.
+            They do not install FINUFFT with GPU support.
 
-NOTE: You must use an older version of DESC in order to use Traverse, as there are some compatibility issues with JAX and the architecture.
-Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to work fine on Traverse with these instructions.
+            .. code-block:: sh
 
-.. code-block:: sh
+                module load anaconda/3/2023.03
+                CONDA_OVERRIDE_CUDA="12.2" conda create --name desc-env "jax==0.4.23" "jaxlib==0.4.23=cuda12*" -c conda-forge
+                conda activate desc-env
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
+                git clone https://github.com/PlasmaControl/DESC
+                cd DESC
 
-    module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
+            Top pin the allowed ``scipy`` version as follows by editing the ``requirements.txt`` file in the current directory.
 
-    conda create --name desc-env python=3.8
-    conda activate desc-env
-    # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor
-    pip install nvgpu
+            .. code-block:: sh
 
-Build and install JAX with GPU support:
+                scipy >= 1.7.0, <= 1.11.3
 
-.. code-block:: sh
+            Now install DESC.
 
-    cd ..
-    git clone https://github.com/google/jax.git
-    cd jax
-    # last commit of JAX that we got to work with Traverse
-    git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
+            .. code-block:: sh
 
-    python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
-    pip install dist/*.whl
-    pip install .
+                pip install --editable .
 
-Add DESC to your Python path:
+            You may optionally install developer requirements if you want to run tests.
 
-.. code-block:: sh
+            .. code-block:: sh
 
-    cd ../DESC
-    pip install --no-deps --editable .
+                pip install -r devtools/dev-requirements.txt
 
 
-Checking your Installation
-**************************
+Verifying your Installation
+***************************
 
-To check that you have properly installed DESC and its dependencies, try the following:
+To verify your installation works, try the following.
 
-.. code-block:: python
+.. tab-set::
 
-    python
-    >>> from desc import set_device  # only needed if running on a GPU
-    >>> set_device('gpu')  # only needed if running on a GPU
-    >>> import desc.equilibrium
+    .. tab-item:: CPU
 
+        The following command should show an output stating the DESC version, the JAX version, and your device.
 
-You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
+        .. code-block:: python
 
-You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__):
+            from desc.backend import print_backend_info
+            print_backend_info()
 
-.. code-block:: console
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
 
-    python -m desc -vv desc/examples/SOLOVEV
+        .. code-block:: sh
+
+            python -m desc -vv desc/examples/SOLOVEV
+
+    .. tab-item:: CPU+GPU
+
+        The following command should show an output stating the DESC version, the JAX version, and your device.
+
+        .. code-block:: python
+
+            from desc import set_device
+            set_device('gpu')
+
+            from desc.backend import print_backend_info
+            print_backend_info()
+
+        You can try running an example equilibrium solve.
+        (The filepath shown here is from the ``DESC`` folder if you have cloned the git repo. Otherwise the file can be downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__.)
+
+        .. code-block:: sh
+
+            python -m desc -vv desc/examples/SOLOVEV -g
+
+        If you installed DESC with FINUFFT on GPU, the following code should complete without error.
+
+        .. code-block:: python
+
+            from desc import set_device
+            set_device("gpu")
+
+            from desc.examples import get
+            from desc.objectives import ObjectiveFunction, GammaC
+
+            obj = ObjectiveFunction(GammaC(get("W7-X"), num_transit=1, num_pitch=1))
+            obj.build()
+            x = obj.x()
+            obj.compute_scaled_error(x).block_until_ready()
+
 
 Troubleshooting
 ***************
-We list here some common problems encountered during installation and their possible solutions.
-If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`__ and we will try our best to help!
+We list common problems and their possible solutions.
+If you encounter other problems, please `make an issue on Github <https://github.com/PlasmaControl/DESC/issues>`__ and we will help.
 
-**Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
+.. tip::
 
-**Solution**:
+    **Problem**: My installation yields the error :code:`ModuleNotFoundError: No module named 'desc'`.
 
-This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
+    **Solution**:
+    First ensure you have activated the conda environment where DESC is installed (``conda activate desc-env``).
+    If the issue persists, it is possible that DESC has not been added to your ``PYTHONPATH``.
+    Try adding the DESC directory to your ``PYTHONPATH`` manually by adding ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` to the end of your ``~/.bashrc`` (or other shell configuration) file.
+    Note that ``/path/to/DESC`` should be replaced with the actual path to the DESC directory on your machine.
+    You will also need to run ``source ~/.bashrc`` after making that change to ensure that your path updates for your current terminal session.
 
-Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file. You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
+.. tip::
 
-Try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
+    **Problem**: My installation yields the error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
 
-**Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
+    **Solution**:
+    Ensure you have activated the conda environment where DESC is installed (``conda activate desc-env``).
 
-**Solution**:
+.. tip::
 
-You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
+    **Problem**: Attempts to install yield ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behavior is the source of the following dependency conflicts.
+    desc-opt ...`` with a list of incompatibilities.
+
+    **Solution**:
+    This may be due to another version of DESC or ``jax`` that is installed in the conda ``base`` environment.
+    Try deleting the ``DESC`` folder, ensuring that ``pip list`` in the conda ``base`` environment no longer lists ``desc-opt`` or ``jax``, then repeating the installation.
+
+.. tip::
+
+    **Problem**: I am using JAX version 0.6.1 and getting errors like ``XlaRuntimeError: INTERNAL: cuSolver internal error``
+
+    **Solution**:
+    It is recommended to upgrade JAX to a newer version where these issues are resolved.
+    If you must use version 0.6.1, then you must install the following package.
+
+    .. code-block:: sh
+
+        pip install 'nvidia-cublas-cu12==12.9.0.13'
+
+.. tip::
+
+    **Problem**: Using ``pytest`` to run tests leads to import errors `as discussed here <https://github.com/PlasmaControl/DESC/issues/1859>`__.
+
+    **Solution**:
+    This issue occurs because ``pip`` is an imperfect package manager, and the packages
+    it installs have a tendency to leak out of the environment when ``pip`` thinks
+    it can cache files globally to share among local environments.
+    One way to resolve the issue is to prepend ``python -m`` to any command with ``pytest``.
+    Alternatively one can fix the broken ``pytest`` as follows.
+    Since ``pytest`` has leaked out of the environment, first remove it globally.
+    If you use ``conda`` it should suffice to remove it from the ``base`` environment, then install
+    in the local environment as follows.
+
+    .. code-block:: sh
+
+        conda deactivate
+        conda activate base
+        pip uninstall pytest
+        conda activate desc-env
+        pip install pytest

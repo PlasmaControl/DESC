@@ -382,17 +382,15 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     description="Normalized squared ideal ballooning growth rate",
     dim=4,
     params=[],
-    transforms={"grid": []},
+    transforms={"grid": [], "diffmat": []},
     profiles=[],
     coordinates="rtz",
     data=["c ballooning", "f ballooning", "g ballooning"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
-    diffmat="str: option to use a differentiation matricex based solver"
-    "Default is None, other options are 'Legendre', 'Lele'",
 )
-@partial(jit, static_argnames=["Neigvals", "diffmat"])
+@partial(jit, static_argnames=["Neigvals"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
@@ -414,7 +412,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
-    diffmat = kwargs.get("diffmat", None)
     grid = transforms["grid"].source_grid
 
     num_zeta0 = data["c ballooning"].shape[0]
@@ -429,7 +426,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    if diffmat == "Legendre":
+    if transforms["diffmat"].zeta_diffmat is not None:
 
         def _eval_1D(f, x, scale, shift):
             return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
@@ -483,7 +480,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         ## the kronecker product is created
         x0 = grid.nodes[:: num_alpha * num_rho, 2]
 
-        # The factor of two because we are mapping from (-1, 1) -> (-ntor pi, ntor pi)
+        # The factor of two because we are mapping from [-1, 1] -> (-ntor pi, ntor pi)
         scale = (x0[-1] - x0[0]) / 2
         shift = 1 - x0[0] / scale
 
@@ -493,9 +490,8 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
         scale_x1 = scale_vector1[:, None]
 
-        # Get differentiation matrices
-        # RG: setting the gradient to 0 to save some memory?
-        D_zeta = jax.lax.stop_gradient(legendre_D1(num_zeta - 1) * scale_x1)
+        # Check that the gradients of D_zeta are not calculated
+        D_zeta = transforms["diffmat"].zeta_diffmat * scale_x1
 
         # 2D matrices stacked in rho, alpha and zeta_0 dimensions
         w = (1 / scale_vector1) * w

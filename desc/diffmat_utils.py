@@ -7,7 +7,63 @@ Adds various functions to create differentiation matrices.
 
 from functools import partial
 
+from jax import tree_util
+
 from desc.backend import jax, jit, jnp
+
+
+@tree_util.register_pytree_node_class
+class DiffMat:
+    """Single-resolution constant matrices."""
+
+    __slots__ = ("rho_diffmat", "theta_diffmat", "zeta_diffmat", "_token")
+
+    def __init__(self, *, rho_diffmat=None, theta_diffmat=None, zeta_diffmat=None):
+        self.rho_diffmat = rho_diffmat  # (Nr×Nr) jax.Array or None
+        self.theta_diffmat = theta_diffmat  # (Nt×Nt) jax.Array or None
+        self.zeta_diffmat = zeta_diffmat  # (Nz×Nz) jax.Array or None
+
+        # Stable identity for hashing(JIT-safe)
+        self._token = (
+            "DiffMat",
+            (
+                None
+                if self.zeta_diffmat is None
+                else getattr(self.zeta_diffmat, "shape", None)
+            ),
+            (
+                None
+                if self.rho_diffmat is None
+                else getattr(self.rho_diffmat, "shape", None)
+            ),
+            (
+                None
+                if self.theta_diffmat is None
+                else getattr(self.theta_diffmat, "shape", None)
+            ),
+        )
+
+    # JAX PyTree protocol
+    def tree_flatten(self):
+        """Flatten PyTree."""
+        children = (self.rho_diffmat, self.theta_diffmat, self.zeta_diffmat)
+        aux = self._token
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Unflatten PyTree."""
+        rho, theta, zeta = children
+        dm = cls(rho_diffmat=rho, theta_diffmat=theta, zeta_diffmat=zeta)
+        dm._token = aux_data
+        return dm
+
+    def __hash__(self):
+        return hash(self._token)
+
+    def __eq__(self, other):
+        return isinstance(other, DiffMat) and self._token == other._token
+
 
 ########################################################################
 # ---------------------- CHEBYSHEV MATRICES -------------------------- #
@@ -400,8 +456,10 @@ def apply_compact_derivative(A, B, f):
 
 def D1_FD_4(N, h, dtype=jnp.float64):
     """
-    Fourth‑order / second‑order diagonal‑norm SBP first‑derivative matrix
-    on a uniform grid of spacing `h`.
+    Diagonal‑norm SBP first‑derivative matrix.
+
+    Fourth‑order / second‑order finite-difference matrix on a
+    uniform grid of spacing h.
 
     Returns
     -------

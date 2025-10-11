@@ -65,7 +65,7 @@ def _drift2(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Fast ion confinement proxy",
+    description="Fast ion confinement proxy (scalar)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -101,6 +101,7 @@ def _drift2(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -136,7 +137,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
@@ -148,6 +148,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -158,8 +161,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -170,6 +175,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -178,25 +184,28 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     drift1,
                     drift2
                     * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
+                        data["|grad(rho)|*|e_alpha|r,p|"],
+                        points,
+                        nufft_eps=nufft_eps,
+                        is_fourier=True,
                     ),
                 )
             )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
-    # Fourier series rather than transforming each component.
-    # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
-    # of a log argument with units. Smoothness determined by positive lower bound
-    # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+    # Fourier series rather than transforming each component. Last term in K
+    # behaves as ∂log(|B|²/(R₀B₀B^ϕ))/∂ρ |B| where R₀B₀ is a constant with
+    # units Tesla meters. Smoothness is determined by positive lower bound of
+    # log argument, and hence behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
     fun_data = {
         "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
@@ -245,6 +254,147 @@ def _binormal_drift(data, B, pitch):
 
 
 @register_compute_fun(
+    name="gamma_c",
+    label="\\sum_{w} \\gamma_c(\\rho, \\alpha, \\lambda, w)",
+    units="~",
+    units_long="None",
+    description="Fast ion confinement proxy",
+    dim=2,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "B^phi",
+        "B^phi_r|v,p",
+        "|B|_r|v,p",
+        "b",
+        "grad(phi)",
+        "grad(psi)",
+        "|grad(psi)|",
+        "|grad(rho)|",
+        "|e_alpha|r,p|",
+        "kappa_g",
+        "iota_r",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "nufft_eps",
+        "spline",
+    ],
+)
+def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Nemov et al.
+
+    Returns
+    -------
+    ∑_w γ_c(ρ, α, λ, w) where w indexes a well.
+        Shape (num rho, num alpha, num pitch).
+
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
+
+    def gamma_c0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            nufft_eps=nufft_eps,
+            is_fourier=True,
+            spline=spline,
+            vander=vander,
+        )
+
+        def fun(pitch_inv):
+            points = bounce.points(pitch_inv, num_well)
+            drift1, drift2 = bounce.integrate(
+                [_drift1, _drift2],
+                pitch_inv,
+                data,
+                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
+                points,
+                nufft_eps=nufft_eps,
+                is_fourier=True,
+            )
+            return (2 / jnp.pi) * jnp.arctan(
+                safediv(
+                    drift1,
+                    drift2
+                    * bounce.interp_to_argmin(
+                        data["|grad(rho)|*|e_alpha|r,p|"],
+                        points,
+                        nufft_eps=nufft_eps,
+                        is_fourier=True,
+                    ),
+                )
+            ).sum(-1)
+
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    fun_data = {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
+    grid = transforms["grid"]
+    data["gamma_c"] = _compute(
+        gamma_c0,
+        fun_data,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+        expand_out=False,
+    )
+    return data
+
+
+@register_compute_fun(
     name="Gamma_c Velasco",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
@@ -253,7 +403,7 @@ def _binormal_drift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Fast ion confinement proxy "
+    description="Fast ion confinement proxy (scalar) "
     "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
@@ -282,6 +432,7 @@ def _binormal_drift(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -312,7 +463,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
@@ -325,6 +475,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -335,8 +488,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -344,22 +499,24 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
-                ["gbdrift (periodic)", "gbdrift (secular)/phi", "cvdrift0"],
-                bounce.points(pitch_inv, num_well),
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
+
     data["Gamma_c Velasco"] = _compute(
         Gamma_c,
         {
@@ -404,6 +561,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -426,7 +584,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
+
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -435,6 +593,9 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-6)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def adiabatic_J0(data):
         bounce = Bounce2D(
@@ -445,25 +606,24 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             split_by_NFP=False,
             is_fourier=True,
-            spline=True,
+            spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
-            adiabatic_J = bounce.integrate(
+            return bounce.integrate(
                 [_adiabatic_J_num],
                 pitch_inv,
                 data,
                 [],
-                bounce.points(pitch_inv, num_well),
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
-            )
-            # Jpar sum over wells
-            Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
-            return Jpar_wellsum
+            ).sum(-1)
 
-        ## We normalize with (2 pi R0)
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
@@ -492,13 +652,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
     profiles=[],
     transforms={"grid": []},
     params=[],
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "cvdrift0",
-        "R0",
-    ]
-    + Bounce2D.required_names,
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "R0"] + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
@@ -513,6 +667,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -533,10 +688,10 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
+
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -545,6 +700,9 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def v_dot_grads0(data):
         bounce = Bounce2D(
@@ -555,8 +713,10 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -565,13 +725,12 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0"],
-                bounce.points(pitch_inv, num_well),
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
             # Take sum over wells, then divide
-            v_dot_grads = safediv(
-                jnp.sum(radial_drift, axis=-1), jnp.sum(v_tau, axis=-1)
-            )
+            v_dot_grads = safediv(radial_drift.sum(-1), v_tau.sum(-1))
 
             # Now take max in alpha (max radial excursion)
             # Negative or positive radial excursion is both departure
@@ -580,15 +739,13 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
 
         return (
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            / bounce.compute_fieldline_length(fl_quad)[:, None, None]
+            / bounce.compute_fieldline_length(fl_quad, vander)[:, None, None]
         )
 
     grid = transforms["grid"]
     data["<v_dot_grads>"] = _compute(
         v_dot_grads0,
-        {
-            "cvdrift0": data["cvdrift0"],
-        },
+        {"cvdrift0": data["cvdrift0"]},
         data,
         theta,
         grid,
@@ -629,11 +786,11 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
     static_argnames=[
         "Y_B",
         "num_transit",
-        "num_well",
         "num_quad",
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -653,10 +810,10 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
+
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -665,6 +822,9 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def dJ_dalpha0(data):
         bounce = Bounce2D(
@@ -675,18 +835,20 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         # Find the most "leaky"/"lossy" fieldline and pick that,
         # then integrate over the pitch angle
         return jnp.sum(
-            jnp.max(jnp.abs(data["radial_drift"]), axis=1)
+            jnp.abs(data["radial_drift"]).max(-1)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        ) / bounce.compute_fieldline_length(fl_quad, vander)
 
     grid = transforms["grid"]
 
@@ -741,6 +903,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -763,7 +926,7 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
+
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -772,6 +935,9 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
             (automorphism_sin, grad_automorphism_sin),
         )
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-7)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def dJ_ds0(data):
         bounce = Bounce2D(
@@ -784,6 +950,7 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
             quad,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -792,7 +959,8 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
 

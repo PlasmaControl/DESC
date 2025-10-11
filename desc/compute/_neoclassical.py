@@ -15,14 +15,12 @@ from .data_index import register_compute_fun
 _bounce_doc = {
     "theta": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``.
+        A reference value is 100. Default is double ``Y``.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -55,7 +53,9 @@ _bounce_doc = {
         Resolution for quadrature of bounce integrals.
         Default is 32. This parameter is ignored if given ``quad``.
         """,
-    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
+    "num_pitch": """int :
+        Resolution for quadrature over velocity coordinate.
+        """,
     "pitch_batch_size": """int :
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
@@ -78,12 +78,31 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
+    "nufft_eps": """float :
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        """,
+    "spline": """bool :
+        Whether to use cubic splines to compute bounce points.
+        """,
+    "_vander": """dict[str,jnp.ndarray] :
+        Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
+        This parameter is intended to be used by objectives only.
+        """,
 }
 
 
 def _compute(
-    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False, **kwargs
+    fun,
+    fun_data,
+    data,
+    theta,
+    grid,
+    num_pitch,
+    surf_batch_size=1,
+    simp=False,
+    expand_out=True,
+    **kwargs,
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -97,9 +116,7 @@ def _compute(
         DESC data dict.
     theta : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     grid : Grid
         Grid that can expand and compress.
@@ -110,6 +127,10 @@ def _compute(
         Default is ``1``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
+    expand_out : bool
+        Whether to expand output to full grid so that the first dimension
+        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
+        Default is True.
 
     """
     for name in Bounce2D.required_names:
@@ -129,8 +150,10 @@ def _compute(
         fun_data[key] = value
 
     out = batch_map(fun, fun_data, surf_batch_size)
-
-    return grid.expand(out)
+    if expand_out:
+        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
+        return grid.expand(out)
+    return out
 
 
 def _dH_ripple(data, B, pitch):
@@ -181,6 +204,7 @@ def _dI_ripple(data, B, pitch):
         "num_pitch",
         "pitch_batch_size",
         "surf_batch_size",
+        "nufft_eps",
         "spline",
     ],
 )
@@ -204,18 +228,20 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     assert (
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
+    nufft_eps = kwargs.get("nufft_eps", 1e-6)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H² / I).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce2D(
             grid,
@@ -225,8 +251,10 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             alpha,
             num_transit,
             quad,
+            nufft_eps=nufft_eps,
             is_fourier=True,
             spline=spline,
+            vander=vander,
         )
 
         def fun(pitch_inv):
@@ -235,17 +263,18 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 "|grad(rho)|*kappa_g",
-                bounce.points(pitch_inv, num_well),
+                num_well=num_well,
+                nufft_eps=nufft_eps,
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
+            return safediv(H**2, I).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        ) / bounce.compute_fieldline_length(fl_quad, vander)
 
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]
@@ -261,8 +290,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             simp=True,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * jnp.pi
-        / (8 * 2**0.5)
+        * (jnp.pi / (8 * 2**0.5))
     )
     return data
 

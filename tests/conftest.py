@@ -18,7 +18,6 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -27,6 +26,7 @@ from desc.magnetic_fields import (
     ToroidalMagneticField,
     solve_regularized_surface_current,
 )
+from desc.utils import rpz2xyz_vec
 from desc.vmec import VMECIO
 
 plt.rcParams.update({"figure.max_open_warning": 0})

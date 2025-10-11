@@ -3126,7 +3126,7 @@ class FixNearAxisR(_FixedObjective):
 
     """
 
-    _static_attrs = ["_nae_eq"]
+    _static_attrs = _Objective._static_attrs + ["_nae_eq", "_order"]
     _target_arg = "R_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
@@ -3277,7 +3277,7 @@ class FixNearAxisZ(_FixedObjective):
 
     """
 
-    _static_attrs = ["_nae_eq"]
+    _static_attrs = _Objective._static_attrs + ["_nae_eq", "_order"]
     _target_arg = "Z_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
@@ -3434,7 +3434,7 @@ class FixNearAxisLambda(_FixedObjective):
 
     """
 
-    _static_attrs = ["_nae_eq"]
+    _static_attrs = _Objective._static_attrs + ["_nae_eq", "_order"]
     _target_arg = "L_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(dimensionless)"

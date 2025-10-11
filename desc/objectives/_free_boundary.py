@@ -4,7 +4,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
@@ -62,6 +62,12 @@ class VacuumBoundaryError(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+    ]
 
     _scalar = False
     _linear = False
@@ -436,6 +442,17 @@ class BoundaryError(_Objective):
         objective = BoundaryError(eq, field)
 
     """
+
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+        "_q",
+        "_sheet_current",
+        "_sheet_data_keys",
+        "_use_same_grid",
+    ]
 
     _scalar = False
     _linear = False
@@ -992,11 +1009,6 @@ class BoundaryErrorNESTOR(_Objective):
         )
         grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         timer = Timer()
         if verbose > 0:

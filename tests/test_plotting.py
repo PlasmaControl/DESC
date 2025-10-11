@@ -7,10 +7,13 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
+    ZernikePolynomial,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
@@ -20,7 +23,12 @@ from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    PoloidalMagneticField,
+    SumMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -34,7 +42,9 @@ from desc.plotting import (
     plot_coefficients,
     plot_coils,
     plot_comparison,
+    plot_field_lines,
     plot_fsa,
+    plot_gammac,
     plot_grid,
     plot_logo,
     plot_qs_error,
@@ -42,7 +52,7 @@ from desc.plotting import (
     plot_surfaces,
     poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
 tol_1d = 4.5
 tol_2d = 10
@@ -86,7 +96,7 @@ class TestPlot1D:
     def test_1d_elongation(self):
         """Test plotting 1d elongation as a function of toroidal angle."""
         eq = get("precise_QA")
-        grid = LinearGrid(N=20, NFP=eq.NFP)
+        grid = LinearGrid(M=eq.M_grid, N=20, NFP=eq.NFP)
         fig, ax, data = plot_1d(
             eq, "a_major/a_minor", grid=grid, figsize=(4, 4), return_data=True
         )
@@ -139,6 +149,15 @@ class TestPlot1D:
         """Test plot_1d function for Surface objects."""
         surf = FourierRZToroidalSurface()
         fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_plot_1d_normalized(self):
+        """Test plotting normalized flux surface average <|B|> on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_1d(eq, "<|B|>", log=True, normalize="<|B|>_vol")
+        ax.set_ylim([9e-1, 1.1e0])
         return fig
 
 
@@ -216,10 +235,23 @@ class TestPlot2D:
         grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
-            eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+            eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
         )
-        for string in ["|F|", "theta", "zeta"]:
+        for string in ["|F|_normalized", "theta", "zeta"]:
             assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_2d_deprecated(self):
+        """Test deprecated 2d plot of normalized force."""
+        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_2d(eq, "|F|", figsize=(4, 4), norm_F=True, grid=grid)
         return fig
 
     @pytest.mark.unit
@@ -259,6 +291,26 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
+
+    @pytest.mark.unit
+    def test_3d_tz_normalized(self):
+        """Test 3d plot of normalized force on interior surface."""
+        eq = get("DSHAPE_CURRENT")
+        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        fig, data = plot_3d(
+            eq,
+            "|F|",
+            log=True,
+            grid=grid,
+            return_data=True,
+            normalize="<|grad(p)|>_vol",
+        )
+        assert "X" in data.keys()
+        assert "Y" in data.keys()
+        assert "Z" in data.keys()
+
+        assert "|F|" in data.keys()
+        assert "normalization" in data.keys()
 
     @pytest.mark.unit
     def test_3d_rz(self):
@@ -397,10 +449,22 @@ class TestPlotFSA:
     def test_fsa_F_normalized(self):
         """Test plotting flux surface average normalized force error on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_fsa(
-            eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol"
-        )
+        fig, ax = plot_fsa(eq, "|F|", log=True, normalize="<|grad(p)|>_vol")
         ax.set_ylim([1e-6, 1e-3])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_F_normalized_deprecated(self):
+        """Test plotting deprecated fsa normalized force error on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_fsa(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
         return fig
 
 
@@ -450,7 +514,22 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
+        fig, ax = plot_section(eq, "|F|_normalized", log=True)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_section_deprecated(self):
+        """Test old section plot of normalized force on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_section(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_section(eq, "|F|", log=True, norm_F=True)
+
         return fig
 
 
@@ -662,6 +741,34 @@ class TestPlotBasis:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_basis_chebyshevpoly(self):
+        """Test plotting Chebyshev polynomial."""
+        basis = ChebyshevPolynomial(L=6)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly(self):
+        """Test plotting zernike polynomial."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly_derivative(self):
+        """Test plotting zernike polynomial derivative."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax = plot_basis(basis, derivative=[2, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
@@ -687,6 +794,26 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_fourierzernike_derivative(self):
+        """Test plotting fourier-zernike basis derivative."""
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax = plot_basis(basis, derivative=[1, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_chebyshevdoublefourier(self):
+        """Test plotting chebyshev-double fourier basis."""
+        basis = ChebyshevDoubleFourierBasis(L=8, M=3, N=2)
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()
@@ -964,6 +1091,15 @@ def test_plot_poincare():
     return fig
 
 
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
+def test_plot_gammac():
+    """Test plotting gamma_c."""
+    eq = get("W7-X")
+    fig, ax = plot_gammac(eq, rho=0.5)
+    return fig
+
+
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_adiabatic_invariant_single_surface():
@@ -994,3 +1130,70 @@ def test_plot_adiabatic_invariant_cross_section():
     )
 
     return fig
+
+
+@pytest.mark.unit
+def test_plot_field_lines():
+    """Test plotting field lines."""
+    field = ToroidalMagneticField(B0=-1.0, R0=1.0)
+    fig, data = plot_field_lines(
+        field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
+    )
+    assert all(data["Z"][0] == 0)
+    assert np.allclose((data["X"][0] ** 2 + data["Y"][0] ** 2), 1)
+
+    field1 = ToroidalMagneticField(B0=1.0, R0=1.0)
+    field2 = PoloidalMagneticField(B0=1.0, R0=1.0, iota=3.0)
+    field = SumMagneticField([field1, field2])
+    _ = plot_field_lines(
+        field,
+        R0=[1.1, 1.3],
+        Z0=[0.0, 0.1],
+        nphi_per_transit=100,
+        ntransit=2,
+        endpoint=True,
+        bs_chunk_size=10,
+    )
+
+
+@pytest.mark.unit
+def test_plot_field_lines_reversed():
+    """Test plotting field lines with reversed direction."""
+    field = load("tests/inputs/precise_QA_helical_coils.h5")
+    eq = get("precise_QA")
+    grid_trace = LinearGrid(rho=[1])
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, data1 = plot_field_lines(
+        field, r0, z0, nphi_per_transit=100, ntransit=1, return_data=True
+    )
+    # get the last point of the field line
+    pt_end = np.array([data1["X"][0][-1], data1["Y"][0][-1], data1["Z"][0][-1]])
+    # convert to RPZ coordinates (actually not necessary since phi0=0)
+    pt_end_rpz = xyz2rpz(pt_end)
+    # plot the field line in the reversed direction starting from the end point
+    # and going backwards, this should overlap with the previous field line
+    fig, data2 = plot_field_lines(
+        field,
+        pt_end_rpz[0],
+        pt_end_rpz[2],
+        nphi_per_transit=100,
+        ntransit=-1,
+        return_data=True,
+        fig=fig,
+        color="red",
+        lw=10,
+        # test that passing options as dict works
+        options={"throw": True, "made_jump": None},
+    )
+    x1 = data1["X"][0]
+    y1 = data1["Y"][0]
+    z1 = data1["Z"][0]
+    x2 = data2["X"][0]
+    y2 = data2["Y"][0]
+    z2 = data2["Z"][0]
+    # we should flip the second field line to compare with the first one
+    assert np.allclose(x1, np.flip(x2), atol=1e-7)
+    assert np.allclose(y1, np.flip(y2), atol=1e-7)
+    assert np.allclose(z1, np.flip(z2), atol=1e-7)

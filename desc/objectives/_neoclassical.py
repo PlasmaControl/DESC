@@ -458,7 +458,7 @@ class TrappedResonance(_Objective):
     """
 
     _coordinates = "r" # "rtz" if need all three coordinates
-    _units = "~" # dimensionless
+    _units = "(s^-2)" # A is dimensionless, vD has units m/s, grad(psi) has units of 1/m, so this objective function has units of s^-2
     _print_value_fmt = "Resonant frequency vicinity: "
 
     _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]

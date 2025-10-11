@@ -8,7 +8,7 @@ from desc.backend import imap, jax, jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
-from ..integrals.quad_utils import chebgauss2
+# from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
 from .data_index import register_compute_fun
 
@@ -17,6 +17,7 @@ from ..integrals.quad_utils import (
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
+    simpson2
 )
 from ..integrals._bounce_utils import get_pitch_inv_quad
 from quadax import simpson
@@ -819,21 +820,25 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # sigma=jnp.ones((jnp.shape(omega_arr))) # for Gaussian
     # sigma = sigma*10 # can set to vary with order of resonance if desired
     
-    def tb_zr(res_arr_set,res_arr):
+    def tb_zr(res_arr_set,res_arr,q_arr):
         res_arr = res_arr.at[0].set(0)
-        return res_arr_set+1,res_arr
-    def fb_zr(res_arr_set,res_arr):
-        return res_arr_set, res_arr
-    def false_branch_res_setup(res_arr_set,res_arr,p,q): # do nothing
-        return res_arr_set, res_arr
-    def true_branch_res_setup(res_arr_set,res_arr,p,q): # add both positive and negative resonance to res_arr
+        q_arr = q_arr.at[0].set(1)
+        return res_arr_set+1,res_arr,q_arr
+    def fb_zr(res_arr_set,res_arr,q_arr):
+        return res_arr_set, res_arr, q_arr
+    def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
+        return res_arr_set, res_arr, q_arr
+    def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
         res_arr = res_arr.at[res_arr_set].set(p/q)
         res_arr = res_arr.at[res_arr_set+1].set(-p/q)
-        return res_arr_set+2, res_arr
+        q_arr = q_arr.at[res_arr_set].set(q)
+        q_arr = q_arr.at[res_arr_set+1].set(q)
+        return res_arr_set+2, res_arr, q_arr
 
     res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+    q_arr = jnp.full(2*p_max*q_max + 1, 0)
     res_arr_set = 0
-    res_arr_set, res_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr)
+    res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
     # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
     for p in range(1,p_max+1): # include the zero resonance
         for q in range(1,q_max+1):
@@ -841,7 +846,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
                 ~jnp.isin(p/q, res_arr),
                 jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
                 )
-            res_arr_set, res_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q )
+            res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
 
     # for perfect equilibria, using the [0,0,0,0] value is acceptable. But for non-perfect, need to average over all non-zero wells and different field lines and filter
     num_wells = ado_shape[3]
@@ -921,11 +926,10 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],res_arr.shape[0]))
     psi_da_broad = jnp.broadcast_to(psi_drift_avg[...,None], (psi_drift_avg.shape[0],psi_drift_avg.shape[1],psi_drift_avg.shape[2],res_arr.shape[0]))
 
-    # Set parameters (it is recommended to change wd if you desire a wider or narrower bump function, NOT w and A)
-    # w, A, wd are able to be configured for different weightings on different resonances if desired
-    w = jnp.ones((jnp.shape(omega_broad))) * 1 # in combination with A, changes width and amplitude of bump function
-    A = jnp.ones((jnp.shape(omega_broad))) * 100 # in combination with w, changes width and amplitude of bump function
-    wd = jnp.ones((jnp.shape(omega_broad))) * 0.5 # sets half-width of bump function
+    # Set parameters
+    w = 1 # in combination with A, changes width and amplitude of bump function
+    # A = 100 # in combination with w, changes width and amplitude of bump function
+    wd = jnp.ones((jnp.shape(omega_broad))) * 0.05 # sets half-width of bump function
     a = res_broad + wd
     b = res_broad - wd
     # t = -1 # for form option 1
@@ -933,16 +937,54 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Determine which resonances are considered for which frequencies
     y = omega_broad - res_broad
     condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
-    
+
+    # Create q array for division into objective function
+    q_broad = q_arr[None,None,None,:] # make 4D array with q values on axis=3
+    q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0]))
+
+    # Compute objective function, also computing normalization of bump function, satisfying Eq. 6 in Duignan et al., Physica D 449 (2023) 133749
+    # Calculate normalizing factor given w_res, wd for each resonance
+    def obj_func_calc(w,a,b,q_broad,psi_da_broad):
+
+        def bump_func_int(w,a,b):
+            # Set up quadrature points and weights
+            quad_points, quad_weights = get_quadrature(
+                simpson2(32),  # 32-point Gauss-Legendre quadrature
+                (automorphism_sin, grad_automorphism_sin)  # Coordinate transformation
+            ) # this is from negative one to positive one
+
+            # Recast to accomodate 4D arrays (rho,pitch,energy,resonance) and then the fifth dimension will be quadrature points
+            quad_points = quad_points[None,None,None,None,:]
+            quad_weights = quad_weights[None,None,None,None,:]
+            a = a[...,None]
+            b = b[...,None]
+
+            # Define integrand
+            x_transformed = 0.5 * (b - a) * (quad_points + 1) + a # transform to desired 1D interval
+            jacobian = 0.5 * (b - a) # Jacobian from transformation
+            integrand = jnp.exp(jnp.clip(
+                w * ((a - b)**2) / ((x_transformed - b) * (x_transformed - a)), 
+                -500, 500
+                )
+            )
+
+            # Compute integral
+            return jnp.sum(integrand * quad_weights * jacobian, axis=-1)
+
+        bump_func = bump_func_int(w,a,b)
+        A = 1 / bump_func # compute normalization of bump function
+        return safediv(A * (psi_da_broad**2) * bump_func, q_broad)
+    # note the normalization of psi_da_broad is roped into the entire objective function being normalized, see _neoclassical.py in "objectives" directory
+
     # Calculate objective function
     obj_out = jnp.where(
         condition,
         # A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # form option 1, clip to avoid overflow warning in jnp.exp()
-        A * (psi_da_broad**2) * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
+        obj_func_calc(w,a,b,q_broad,psi_da_broad), # form option 2, clip to avoid overflow warning in jnp.exp()
         # A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
-    obj_out = jnp.sum(obj_out,axis=3) # outputs array with size (rho,pitch,energy)
+    obj_out = jnp.sum(obj_out,axis=3) # outputs array with size (rho,pitch,energy), where we have summed over all resonances in this line
     # obj_out = y[:,0,0]**2 # debugging
 
     # Gaussian method

@@ -1319,8 +1319,10 @@ class TestMagneticFields:
             )
             return jnp.squeeze(r[-1])
 
-        df_dr = jax.grad(jit(fun))(10.1)
-        np.testing.assert_allclose(df_dr, 1, rtol=1e-8, atol=1e-8)
+        # skip jax 0.6.0 because of the reported bug jax-ml/jax#28144
+        if jax.__version__ != "0.6.0":
+            df_dr = jax.grad(jit(fun))(10.1)
+            np.testing.assert_allclose(df_dr, 1, rtol=1e-8, atol=1e-8)
 
     @pytest.mark.unit
     def test_field_line_integrate_long(self):

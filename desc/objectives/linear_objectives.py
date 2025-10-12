@@ -903,6 +903,12 @@ class FixBoundaryR(FixParameters):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    remove_optimizables : bool
+        If True, removes the optimizability of Rp_lmn, Zp_lmn, and Lp_lmn if they exist.
+        This is useful to increase the numerical accuracy of the nullspace of the
+        linear constraint matrix. This will cause the self-consistency constraints to be
+        skipped for these parameters, hence the eq.xsection won't be self-consistent.
+        Default is True.
     name : str, optional
         Name of the objective function.
 
@@ -995,6 +1001,12 @@ class FixBoundaryZ(FixParameters):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the surface modes.
+    remove_optimizables : bool
+        If True, removes the optimizability of Rp_lmn, Zp_lmn, and Lp_lmn if they exist.
+        This is useful to increase the numerical accuracy of the nullspace of the
+        linear constraint matrix. This will cause the self-consistency constraints to be
+        skipped for these parameters, hence the eq.xsection won't be self-consistent.
+        Default is True.
     name : str, optional
         Name of the objective function.
 
@@ -1087,6 +1099,12 @@ class FixSectionR(FixParameters):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    remove_optimizables : bool
+        If True, removes the optimizability of Rb_lmn and Zb_lmn if they exist.
+        This is useful to increase the numerical accuracy of the nullspace of the
+        linear constraint matrix. This will cause the self-consistency constraints to be
+        skipped for these parameters, hence the eq.surface won't be self-consistent.
+        Default is True.
     name : str, optional
         Name of the objective function.
 
@@ -1181,6 +1199,12 @@ class FixSectionZ(FixParameters):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    remove_optimizables : bool
+        If True, removes the optimizability of Rb_lmn and Zb_lmn if they exist.
+        This is useful to increase the numerical accuracy of the nullspace of the
+        linear constraint matrix. This will cause the self-consistency constraints to be
+        skipped for these parameters, hence the eq.surface won't be self-consistent.
+        Default is True.
     name : str, optional
         Name of the objective function.
 
@@ -1275,6 +1299,12 @@ class FixSectionLambda(FixParameters):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    remove_optimizables : bool
+        If True, removes the optimizability of Rb_lmn and Zb_lmn if they exist.
+        This is useful to increase the numerical accuracy of the nullspace of the
+        linear constraint matrix. This will cause the self-consistency constraints to be
+        skipped for these parameters, hence the eq.surface won't be self-consistent.
+        Default is True.
     name : str, optional
         Name of the objective function.
 

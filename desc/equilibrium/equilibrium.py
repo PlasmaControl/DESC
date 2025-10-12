@@ -268,17 +268,19 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_sym = "sin" if self.sym else False
         # Parse surface, magnetic axis and cross-section
         if xsection is not None:
-            self._xsection = parse_section(xsection, self.sym)
-            self._surface = parse_surface(
-                surface, self.NFP, self.sym, self.spectral_indexing
+            self._xsection = parse_section(
+                xsection, sym=self.sym, spectral_indexing=self.spectral_indexing
             )
+            self._surface = parse_surface(surface, self.NFP, self.sym)
             self._axis = parse_axis(axis, self.NFP, self.sym, xsection=self.xsection)
         else:
-            self._surface = parse_surface(
-                surface, self.NFP, self.sym, self.spectral_indexing
-            )
+            self._surface = parse_surface(surface, self.NFP, self.sym)
             self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
-            self._xsection = parse_section(surface=self.surface, sym=self.sym)
+            self._xsection = parse_section(
+                surface=self.surface,
+                sym=self.sym,
+                spectral_indexing=self.spectral_indexing,
+            )
 
         # resolution
         L = check_nonnegint(L, "L")

@@ -1057,9 +1057,8 @@ class ZernikeRZToroidalSection(Surface):
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
-        _ = kwargs.pop(
-            "NFP", None
-        )  # NFP is not used but need to pop to avoid unexpected kwarg
+        # NFP is not used but need to pop to avoid unexpected kwarg
+        _ = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
         if N is not None:

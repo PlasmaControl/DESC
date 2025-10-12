@@ -131,11 +131,7 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
-def get_fixed_boundary_constraints(
-    eq,
-    profiles=True,
-    normalize=True,
-):
+def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -164,12 +160,7 @@ def get_fixed_boundary_constraints(
     return constraints
 
 
-def get_fixed_xsection_constraints(
-    eq,
-    profiles=True,
-    normalize=True,
-    fix_lambda=True,
-):
+def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda=True):
     """Get the constraints necessary for a fixed cross-section equilibrium problem.
 
     Parameters

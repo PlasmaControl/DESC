@@ -59,7 +59,7 @@ def parse_profile(prof, name="", **kwargs):
     raise TypeError(f"Got unknown {name} profile {prof}")
 
 
-def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
+def parse_surface(surface, NFP=1, sym=True):
     """Parse surface input into Surface object.
 
     Parameters
@@ -70,8 +70,6 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
         Number of field periods of the Equilibrium.
     sym : bool
         Stellarator symmetry of the Equilibrium.
-    spectral_indexing : {"ansi", "fringe"}
-        Spectral indexing scheme of the Equilibrium.
 
     Returns
     -------
@@ -94,7 +92,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 check_orientation=False,
             )
         else:
-            raise ValueError("boundary should have l=0")
+            raise ValueError("boundary surface should have l=0")
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
@@ -148,31 +146,34 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     return axis
 
 
-def parse_section(xsection=None, surface=None, sym=True):
+def parse_section(xsection=None, surface=None, sym=True, spectral_indexing="ansi"):
     """Parse section input into ZernikeRZToroidalSection object.
 
     Parameters
     ----------
     xsection : ZernikeRZToroidalSection, None
         Poincare surface object to parse.
-    NFP : int
-        Number of field periods of the Equilibrium.
+    surface: FourierRZToroidalSurface
+        Last closed flux surface to get section from. Only used for resolution.
+        The proper coefficients will be set after set_initial_guess.
     sym : bool
         Stellarator symmetry of the Equilibrium.
+    spectral_indexing : {"ansi", "fringe"}
+        Spectral indexing scheme of the Equilibrium.
 
     Returns
     -------
     xsection : ZernikeRZToroidalSection
-        Parsed Poincare surface object.
+        Parsed Poincare section object.
     """
     if isinstance(xsection, ZernikeRZToroidalSection):
         _xsection = xsection
     elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
-        # This is temporary, until we have a proper ZernikeRZToroidalSection
-        # constructor from input file
         raise NotImplementedError(
             "ZernikeRZToroidalSection from input file not implemented"
         )
     else:
-        _xsection = ZernikeRZToroidalSection(L=surface.M, M=surface.M, sym=sym)
+        _xsection = ZernikeRZToroidalSection(
+            L=surface.M, M=surface.M, sym=sym, spectral_indexing=spectral_indexing
+        )
     return _xsection

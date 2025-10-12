@@ -817,8 +817,6 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Set which resonances to consider and create function for each considered resonance
     # consider the N lowest-order resonances over the range with minimum res_range_max and maximum res_range_max
     obj_out = omega_arr * 0
-    # sigma=jnp.ones((jnp.shape(omega_arr))) # for Gaussian
-    # sigma = sigma*10 # can set to vary with order of resonance if desired
     
     def tb_zr(res_arr_set,res_arr,q_arr):
         res_arr = res_arr.at[0].set(0)
@@ -929,7 +927,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Set parameters
     w = 1 # in combination with A, changes width and amplitude of bump function
     # A = 100 # in combination with w, changes width and amplitude of bump function
-    wd = jnp.ones((jnp.shape(omega_broad))) * 0.05 # sets half-width of bump function
+    wd = jnp.ones((jnp.shape(omega_broad))) * 0.0005 # sets half-width of bump function
     a = res_broad + wd
     b = res_broad - wd
     # t = -1 # for form option 1
@@ -944,71 +942,47 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 
     # Compute objective function, also computing normalization of bump function, satisfying Eq. 6 in Duignan et al., Physica D 449 (2023) 133749
     # Calculate normalizing factor given w_res, wd for each resonance
-    def obj_func_calc(w,a,b,q_broad,psi_da_broad):
+    def bump_func_normalize(w,a,b):
+        # Set up quadrature points and weights
+        quad_points, quad_weights = get_quadrature(
+            simpson2(32),  # 32-point Gauss-Legendre quadrature
+            (automorphism_sin, grad_automorphism_sin)  # Coordinate transformation
+        ) # this is from negative one to positive one
 
-        def bump_func_int(w,a,b):
-            # Set up quadrature points and weights
-            quad_points, quad_weights = get_quadrature(
-                simpson2(32),  # 32-point Gauss-Legendre quadrature
-                (automorphism_sin, grad_automorphism_sin)  # Coordinate transformation
-            ) # this is from negative one to positive one
+        # Recast to accomodate 4D arrays (rho,pitch,energy,resonance) and then the fifth dimension will be quadrature points
+        quad_points = quad_points[None,None,None,None,:]
+        quad_weights = quad_weights[None,None,None,None,:]
+        a = a[...,None]
+        b = b[...,None]
 
-            # Recast to accomodate 4D arrays (rho,pitch,energy,resonance) and then the fifth dimension will be quadrature points
-            quad_points = quad_points[None,None,None,None,:]
-            quad_weights = quad_weights[None,None,None,None,:]
-            a = a[...,None]
-            b = b[...,None]
-
-            # Define integrand
-            x_transformed = 0.5 * (b - a) * (quad_points + 1) + a # transform to desired 1D interval
-            jacobian = 0.5 * (b - a) # Jacobian from transformation
-            integrand = jnp.exp(jnp.clip(
-                w * ((a - b)**2) / ((x_transformed - b) * (x_transformed - a)), 
-                -500, 500
-                )
+        # Define integrand
+        x_transformed = 0.5 * (b - a) * (quad_points + 1) + a # transform to desired 1D interval
+        jacobian = jnp.abs(0.5 * (b - a)) # Jacobian from transformation
+        integrand = jnp.exp(jnp.clip(
+            w * ((a - b)**2) / ((x_transformed - b) * (x_transformed - a)), 
+            -500, 500
             )
+        )
+        # Compute integral
+        integral = jnp.sum(integrand * quad_weights * jacobian, axis=-1)
 
-            # Compute integral
-            return jnp.sum(integrand * quad_weights * jacobian, axis=-1)
-
-        bump_func = bump_func_int(w,a,b)
-        A = 1 / bump_func # compute normalization of bump function
-        return safediv(A * (psi_da_broad**2) * bump_func, q_broad)
+        return 1 / integral # compute normalization of bump function
     # note the normalization of psi_da_broad is roped into the entire objective function being normalized, see _neoclassical.py in "objectives" directory
 
     # Calculate objective function
+    A=bump_func_normalize(w,b,a)
     obj_out = jnp.where(
         condition,
         # A * jnp.exp(  jnp.clip(-w * (( -((y+0.5)**2) + (y+0.5) )**t),-500,500)  ), # form option 1, clip to avoid overflow warning in jnp.exp()
-        obj_func_calc(w,a,b,q_broad,psi_da_broad), # form option 2, clip to avoid overflow warning in jnp.exp()
-        # A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), # form option 2, clip to avoid overflow warning in jnp.exp()
+        # safediv(A * (psi_da_broad**2) * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # form option 2, clip to avoid overflow warning in jnp.exp()
+        safediv(A * jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad),
         0
         ) # need to broadcast res_arr to 3D to match each res with each 2D matrix of omega_arr and then do this subtraction and jnp.where operation
+    obj_out_test = obj_out
     obj_out = jnp.sum(obj_out,axis=3) # outputs array with size (rho,pitch,energy), where we have summed over all resonances in this line
     # obj_out = y[:,0,0]**2 # debugging
-
-    # Gaussian method
-    '''def true_branch_res(indict):
-        res_arr = indict['res_arr']
-        gaus_out = indict['obj_out']
-        res_arr = res_arr.at[indict['res_arr_set']].set(indict['p']/indict['q'])
-
-        p_arr = jnp.ones(jnp.shape(indict['A'])) * indict['p']
-        q_arr = jnp.ones(jnp.shape(indict['A'])) * indict['q']
-
-        gaus_out += indict['A']*jnp.exp( -( (indict['omega_arr']-(p_arr/q_arr))**2 ) / (2*indict['sigma']**2) ) # Gaussian evaluated at distance from resonance, one element per surface
-        return indict['res_arr_set']+1, res_arr, gaus_out
-    def false_branch_res(indict):
-        return indict['res_arr_set'], indict['res_arr'], indict['gaus_out']'''
-
+    
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = obj_out # not flattening for plotting, need to flatten for optimization
+    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition} # not flattening for plotting, need to flatten for optimization
     return data
-
-    # debugging
-    # idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
-    # idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
-    # idx_Zsc = eq_init.surface.Z_basis.get_idx(M=-1, N=2)
-    # idx_Zcs = eq_init.surface.Z_basis.get_idx(M=1, N=-2)
-    # debug = bd1**2 + bd2**2 + bd3**2 + bd4**2

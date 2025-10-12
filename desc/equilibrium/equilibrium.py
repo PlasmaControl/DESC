@@ -1267,15 +1267,23 @@ class Equilibrium(Optimizable, _MagneticField):
             to the source grid points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object. Should NOT include
-            endpoint at 2pi.
+        source_grid : Grid or None, optional
+        Grid used to discretize Equilibrium object. Should be a surface grid for
+        virtual casing method (i.e. rho=[1.0]) and a 3D grid for Biot-Savart method.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
+        return_data : bool, optional
+            If True, also returns a dictionary of intermediary calculations
+            (e.g. current density) used to compute the magnetic field.
+        return_rtz : bool, optional
+            If True, also includes the rho, theta, zeta coordinates of
+            the nearest source grid point to each evaluation point.
+            Useful as an initial guess for coordinate mapping.
+            Automatically sets return_data=True.
 
         Returns
         -------

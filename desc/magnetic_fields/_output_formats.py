@@ -50,9 +50,9 @@ def save_bmw_format(
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
-    source_grid : Grid, int or None or array-like, optional
-        Grid used to discretize MagneticField object. Should NOT include
-        endpoint at 2pi.
+    source_grid : Grid or None, optional
+        Grid used to discretize Equilibrium object. Should be a surface grid for
+        virtual casing method (i.e. rho=[1.0]) and a 3D grid otherwise.
     A_source_grid : Grid, int or None or array-like, optional
         Grid used to discretize MagneticField object for calculating A.
         Defaults to the source_grid unless method == 'virtual casing'.
@@ -194,11 +194,11 @@ def save_fieldlines_format(
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
     coil_grid : Grid, int or None or array-like, optional
-        Grid used to discretize _Magneticfield object. Should NOT include
+        Grid used to discretize _MagneticField object. Should NOT include
         endpoint at 2pi.
-    source_grid : Grid, int or None or array-like, optional
-        Grid used to discretize Equilibrium object. Should NOT include
-        endpoint at 2pi.
+    source_grid : Grid or None, optional
+        Grid used to discretize Equilibrium object. Should be a surface grid for
+        virtual casing method (i.e. rho=[1.0]) and a 3D grid otherwise.
     method: string, optional
         "biot-savart", "virtual casing" or "vector potential". "biot-savart"
         and "virtual casing" calculates the magnetic field directly from the

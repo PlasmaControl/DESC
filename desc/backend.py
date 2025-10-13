@@ -123,7 +123,12 @@ def _lstsq(A, y):
 
 
 def _tangent_solve(g, y):
+    # System is always square.
     return _lstsq(jax.jacfwd(g)(y), y)
+
+
+def _tangent_solve_scalar(g, y):
+    return y / g(1.0)
 
 
 def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
@@ -447,11 +452,13 @@ if use_jax:  # noqa: C901
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, _tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve_scalar, has_aux=True
             )
             return x, (abs(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(
+                res, x0, solve, _tangent_solve_scalar, has_aux=False
+            )
             return x
 
     def root(

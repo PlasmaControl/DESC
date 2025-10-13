@@ -484,25 +484,25 @@ def solve_continuation_automatic(  # noqa: C901
     eq : Equilibrium
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
     objective : {"force", "energy"}
-        function to solve for equilibrium solution
+        Function to solve for equilibrium solution
     optimizer : str or Optimizer (optional)
-        optimizer to use
+        Optimizer to use
     pert_order : int
-        order of perturbations to use.
+        Order of perturbations to use.
     ftol, xtol, gtol : float
-        stopping tolerances for subproblem at each step. `None` will use defaults
+        Stopping tolerances for subproblem at each step. `None` will use defaults
         for given optimizer.
     maxiter : int
-        maximum number of iterations in each equilibrium subproblem.
+        Maximum number of iterations in each equilibrium subproblem.
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
         * 2: as above plus timing information
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
-        file to save checkpoint data (Default value = None)
+        File to save checkpoint data (Default value = None)
     shaping_first : bool
-        whether to force applying the shaping perturbations first before
+        Whether to force applying the shaping perturbations first before
         pressure and current. This is the most robust option for finite
         beta equilibria, especially at higher beta, but may be less efficient.
         If False, this approach is only attempted if the pressure-first method
@@ -518,8 +518,8 @@ def solve_continuation_automatic(  # noqa: C901
     Returns
     -------
     eqfam : EquilibriaFamily
-        family of equilibria for the intermediate steps, where the last member is the
-        final desired configuration,
+        Family of equilibria for the intermediate steps, where the last member is the
+        final desired configuration.
 
     """
     errorif(

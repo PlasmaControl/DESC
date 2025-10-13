@@ -4150,10 +4150,10 @@ def test_coil_objective_input(DummyMixedCoilSet):
 
     obj = CoilLength(coilset, bounds=bounds, weight=weight, indices=indices)
     obj.build()
-    np.testing.assert_allclose(obj._bounds[0], bounds_expanded[0], atol=1e-13)
-    np.testing.assert_allclose(obj._bounds[1], bounds_expanded[1], atol=1e-13)
-    np.testing.assert_allclose(obj._weight, weight_expanded, atol=1e-13)
-    np.testing.assert_allclose(obj._mask, mask_expanded, atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    np.testing.assert_allclose(obj.mask, mask_expanded, atol=1e-13)
 
     obj = CoilLength(coilset, target=target)
     obj.build()
@@ -4195,15 +4195,22 @@ def test_coil_objective_setter(DummyMixedCoilSet):
 
     bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
     indices = [False, False, True, True]
     mask_expanded = [0, 0, 0, 0, 1, 1]
     weight = [1.0, 2.0, 3.0, 4.0]
     weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
 
     obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    obj.bounds = None
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)
+
     obj.weight = weight
     obj.mask = indices
-    np.testing.assert_allclose(obj._bounds[0], bounds_expanded[0], atol=1e-13)
-    np.testing.assert_allclose(obj._bounds[1], bounds_expanded[1], atol=1e-13)
-    np.testing.assert_allclose(obj._weight, weight_expanded, atol=1e-13)
-    np.testing.assert_allclose(obj._mask, mask_expanded, atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    np.testing.assert_allclose(obj.mask, mask_expanded, atol=1e-13)

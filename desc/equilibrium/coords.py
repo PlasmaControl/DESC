@@ -684,7 +684,12 @@ def to_sfl(
 
     eq_PEST = eq.copy() if copy else eq
     eq_PEST.change_resolution(
-        L, M, N, L_grid=int(1.5 * L), M_grid=int(1.5 * M), N_grid=int(1.5 * N)
+        L,
+        M,
+        N,
+        L_grid=max(eq_PEST.L_grid, L),
+        M_grid=max(eq_PEST.M_grid, M),
+        N_grid=max(eq_PEST.N_grid, N),
     )
 
     eq_PEST.R_lmn = Transform(

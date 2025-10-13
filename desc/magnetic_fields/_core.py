@@ -3633,6 +3633,8 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
             profiles=profiles,
             data=data,
             helicity=kwargs.pop("helicity", self.helicity),
+            S_func=kwargs.pop("S_func", self._S_func),
+            D_func=kwargs.pop("D_func", self._D_func),
             **kwargs,
         )
         return data

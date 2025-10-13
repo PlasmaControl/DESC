@@ -16,16 +16,12 @@ def compute_scaling_factors(thing):
 
     def get_max_mode(basis, coeffs):
         """Return max boundary mode that is not M=0 N=0."""
-        if basis.N > 0:
-            inds_not_00 = np.where(
-                np.logical_or(
-                    np.abs(basis.modes[:, 1]) > 0, np.abs(basis.modes[:, 2]) > 0
-                )
-            )[0]
-        else:
-            inds_not_00 = np.where(np.abs(basis.modes[:, 1]) > 0)[0]
+        inds_not_00 = np.where(
+            np.logical_or(np.abs(basis.modes[:, 1]) > 0, np.abs(basis.modes[:, 2]) > 0)
+        )[0]
+
         val = np.max(np.abs(coeffs[inds_not_00]))
-        if not np.isclose(val, 0):
+        if not np.isclose(val, 0, atol=1e-12):
             return val
         raise ValueError("No modes found, geometry is unphysical.")
 

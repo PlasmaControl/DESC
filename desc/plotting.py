@@ -1841,7 +1841,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             map_coordinates(
                 eq,
                 t_grid.nodes,
-                # TODO: once generalized toroidal angle is used, change
+                # TODO (#568): once generalized toroidal angle is used, change
                 # inbasis to ["rho", "theta_PEST", "phi"],
                 inbasis=["rho", "theta_PEST", "zeta"],
                 outbasis=["rho", "theta", "zeta"],

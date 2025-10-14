@@ -1360,8 +1360,9 @@ def test_omnigenityharmonics_qa():
     np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.optimize
+@pytest.mark.slow
 def test_omnigenity_optimization():
     """Test a realistic OP omnigenity optimization."""
     # this same example is used in docs/notebooks/tutorials/omnigenity
@@ -1450,6 +1451,7 @@ def test_omnigenity_optimization():
     np.testing.assert_allclose(data["mirror ratio"], 0.25, atol=1e-2)
 
 
+@pytest.mark.unit
 def test_omnigenityharmonics_proximal():
     """Test omnigenity optimization with proximal optimizer."""
     # this only tests that the optimization runs, not that it gives a good result

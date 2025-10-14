@@ -1124,7 +1124,9 @@ def _map_helical_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
     zeta2d_trans_real = -(h_o + alp2d) / nfp  # + jnp.pi/nfp
     return theta2d_trans_real, zeta2d_trans_real
 
+
 OOPS_branches = (_map_poloidal_OOPS, _map_toroidal_OOPS, _map_helical_OOPS)
+
 
 def _omnigenity_mapping_OOPS(M, N, iota, S_list, D_list, grid):
     # iota is a vector of length grid.num_rho
@@ -1162,7 +1164,7 @@ def _omnigenity_mapping_OOPS(M, N, iota, S_list, D_list, grid):
     parameterization="desc.magnetic_fields._core.OmnigenousFieldOOPS",
 )
 def _omni_map_theta_B_OOPS(params, transforms, profiles, data, **kwargs):
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -1190,6 +1192,7 @@ def _B_omni_OOPS(params, transforms, profiles, data, **kwargs):
     data["|B|_OOPS"] = B.flatten(order="F")
     return data
 
+
 @register_compute_fun(
     name="eta_LCForm",
     label="\\eta_LCForm",
@@ -1204,7 +1207,7 @@ def _B_omni_OOPS(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
 )
-def _eta_OOPS(params, transforms, profiles, data, **kwargs):
+def _eta_LCForm(params, transforms, profiles, data, **kwargs):
     # we need rescale to [-pi,pi], nodes is divided by NFP, so we multiply by NFP
     data["eta_LCForm"] = transforms["grid"].nodes[:, 2] * transforms["grid"].NFP
     return data
@@ -1350,7 +1353,7 @@ def _omni_map_zeta_B_LCForm(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.OmnigenousFieldLCForm",
 )
 def _omni_map_theta_B_LCForm(params, transforms, profiles, data, **kwargs):
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

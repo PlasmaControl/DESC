@@ -949,7 +949,7 @@ class TestPlotBoozerSurface:
             D_len=2,
             NFP=3,
             helicity=(0, 1),
-            S_list=np.array([0.35, 0.4]),
+            S_list=np.array([0.35, 0.1]),
             D_list=np.array([1, 0.1]),
         )
         fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)

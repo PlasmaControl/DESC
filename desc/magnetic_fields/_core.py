@@ -3268,6 +3268,7 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
         """
 
         old_S_len = self.S_len
+        old_D_len = self.D_len
 
         self._NFP = setdefault(NFP, self.NFP)
         self._S_len = setdefault(S_len, self.S_len)
@@ -3286,7 +3287,7 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
         D_old = self.D_list
         D_new = np.zeros(self.D_len)
         for i in range(self.D_len):
-            if i < self.D_len:
+            if i < old_D_len:
                 D_new[i] = D_old[i]
             else:
                 D_new[i] = 1.0 if i == 0 else 0.0
@@ -3541,6 +3542,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         """
 
         old_S_len = self.S_len
+        old_D_len = self.D_len
 
         self._NFP = setdefault(NFP, self.NFP)
         self._S_len = setdefault(S_len, self.S_len)
@@ -3559,7 +3561,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         D_old = self.D_list
         D_new = np.zeros(self.D_len)
         for i in range(self.D_len):
-            if i < self.D_len:
+            if i < old_D_len:
                 D_new[i] = D_old[i]
             else:
                 D_new[i] = 1.0 if i == 0 else 0.0

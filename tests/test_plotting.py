@@ -24,6 +24,8 @@ from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
+    OmnigenousFieldLCForm,
+    OmnigenousFieldOOPS,
     PoloidalMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
@@ -934,6 +936,49 @@ class TestPlotBoozerSurface:
             helicity=(1, 4),
             B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
             x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
+        )
+        fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_omnigenous_field_OOPS(self):
+        """Test plot omnigenous magnetic field OOPS."""
+        field = OmnigenousFieldOOPS(
+            S_len=2,
+            D_len=2,
+            NFP=3,
+            helicity=(0, 1),
+            S_list=np.array([0.35, 0.4]),
+            D_list=np.array([1, 0.1]),
+        )
+        fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_omnigenous_field_LCForm(self):
+        """Test plot omnigenous magnetic field LCForm."""
+
+        def _S_func(x2d, y2d, S_list):
+            S = S_list[0] * (x2d) * np.sin(y2d + S_list[1] * np.sin(y2d))
+            return S
+
+        def _D_func(x2d, D_list):
+            p = D_list[0]
+            a = np.clip(np.pi - x2d, 0, np.pi)  # make AD
+            D = (np.pi ** (p - 1)) ** (1 / p) * (a) ** (1 / p)
+            return D
+
+        field = OmnigenousFieldLCForm(
+            S_len=2,
+            D_len=1,
+            NFP=3,
+            helicity=(0, 1),
+            S_list=np.array([0.35, 0.4]),
+            D_list=np.array([1]),
+            S_func=_S_func,
+            D_func=_D_func,
         )
         fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
         return fig

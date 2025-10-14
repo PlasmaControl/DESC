@@ -27,6 +27,8 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     MagneticFieldFromUser,
     OmnigenousField,
+    OmnigenousFieldLCForm,
+    OmnigenousFieldOOPS,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -1527,6 +1529,64 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+    
+    @pytest.mark.unit
+    def test_omnigenous_field_OOPS_change_resolution_grid(self):
+        """Test OmnigenousFieldOOPS.change_resolution() of the grid."""
+        S_len_old = 1
+        S_len_new = 2
+        D_len_old = 1
+        D_len_new = 2
+        NFP = 3
+        field = OmnigenousFieldOOPS(
+            S_len = S_len_old,
+            D_len = D_len_old,
+            NFP = NFP,
+            helicity = (0,1),
+            S_list=np.array([0.35]),
+            D_list=np.array([1])
+        )
+        grid_lcfs = LinearGrid(rho=[1.0],theta=32,zeta=32)
+        B_lcfs = field.compute("|B|_OOPS",grid=grid_lcfs)["|B|_OOPS"]
+        field.change_resolution(S_len=S_len_new,D_len=D_len_new)
+        B_lcfs_highres = field.compute("|B|_OOPS",grid=grid_lcfs)["|B|_OOPS"]
+        np.testing.assert_allclose(B_lcfs,B_lcfs_highres,rtol=1e-6)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_LCForm_change_resolution_grid(self):
+        """Test OmnigenousFieldLCForm.change_resolution() of the grid."""
+
+        def _S_func(x2d, y2d, S_list):
+            S = S_list[0] * (x2d) * np.sin(y2d + S_list[1] * np.sin(y2d))
+            return S
+
+        def _D_func(x2d, D_list):
+            p = np.atleast_1d(D_list).astype(float)      
+            a = np.clip(np.pi - x2d, 0, np.pi) # AD
+            y = a / np.pi
+            D = np.pi * np.mean([y ** (1.0 / pi) for pi in p], axis=0)
+            return D
+        
+        S_len_old = 1
+        S_len_new = 2
+        D_len_old = 1
+        D_len_new = 2
+        NFP = 3
+        field = OmnigenousFieldLCForm(
+            S_len = S_len_old,
+            D_len = D_len_old,
+            NFP = NFP,
+            helicity = (0,1),
+            S_list=np.array([0.35]),
+            D_list=np.array([1]),
+            S_func=_S_func,
+            D_func=_D_func,
+        )
+        grid_lcfs = LinearGrid(rho=[1.0],theta=32,zeta=32)
+        B_lcfs = field.compute("|B|_LCForm",grid=grid_lcfs)["|B|_LCForm"]
+        field.change_resolution(S_len=S_len_new,D_len=D_len_new)
+        B_lcfs_highres = field.compute("|B|_LCForm",grid=grid_lcfs)["|B|_LCForm"]
+        np.testing.assert_allclose(B_lcfs,B_lcfs_highres,rtol=1e-6)
 
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):

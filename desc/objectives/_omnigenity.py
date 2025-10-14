@@ -981,6 +981,7 @@ class Isodynamicity(_Objective):
         )
         return data["isodynamicity"]
 
+
 class OmnigenityHarmonics(_Objective):
     """Omnigenity harmonics error.
 

@@ -285,7 +285,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = 0.0  # "Levenberg-Marquardt" parameter
+    alpha = jnp.float64(0.0)  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
@@ -314,7 +314,7 @@ def lsqtr(  # noqa: C901
         actual_reduction = -1
 
         # theta controls step back step ratio from the bounds.
-        theta = max(0.995, 1 - g_norm)
+        theta = jnp.float64(max(0.995, 1 - g_norm))
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.

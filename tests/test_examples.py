@@ -1363,7 +1363,7 @@ def test_omnigenityharmonics_qa():
 @pytest.mark.regression
 @pytest.mark.optimize
 @pytest.mark.slow
-def test_omnigenity_optimization():
+def test_omnigenityharmonics_optimization():
     """Test a realistic OP omnigenity optimization."""
     # this same example is used in docs/notebooks/tutorials/omnigenity
 

@@ -120,6 +120,13 @@ def sgd(
     step_norm = jnp.inf
     df_norm = jnp.inf
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 40)
+        print(f"{'Alpha':<15}: {alpha:.3e}")
+        print(f"{'Beta':<15}: {beta:.3e}")
+        print("-" * 40, "\n")
+
     if verbose > 1:
         print_header_nonlinear()
         print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)

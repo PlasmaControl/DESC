@@ -467,7 +467,7 @@ def argmin(z1, z2, f, ext, g_ext):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_fieldline(alpha, iota, num_transit):
+def get_fieldline(alpha, iota, num_transit, NFP=1):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -480,6 +480,9 @@ def get_fieldline(alpha, iota, num_transit):
         Rotational transform normalized by 2π.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP: int
+        Factor by which to split the number of toroidal transits.
+        Useful when calculating ``adiabaticJ`` for equilibria with NFP > 1.
 
     Returns
     -------
@@ -494,10 +497,10 @@ def get_fieldline(alpha, iota, num_transit):
     #      αᵢ = ϑ − ιϕᵢ
     #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
     # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
-    return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit)
 
 
-def fourier_chebyshev(theta, iota, alpha, num_transit):
+def fourier_chebyshev(theta, iota, alpha, num_transit, NFP=1):
     """Parameterize θ on field lines ``alpha``.
 
     Parameters
@@ -514,6 +517,9 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP: int
+        Factor by which to split the number of toroidal transits.
+        Useful when calculating ``adiabaticJ`` for equilibria with NFP > 1.
 
     Returns
     -------
@@ -565,7 +571,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
 
     """
     # peeling off field lines
-    fieldline = get_fieldline(alpha, iota, num_transit)
+    fieldline = get_fieldline(alpha, iota, num_transit, NFP)
     if theta.ndim == 2:
         fieldline = fieldline.squeeze(1)
 

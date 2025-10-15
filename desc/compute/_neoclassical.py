@@ -102,6 +102,7 @@ def _compute(
     surf_batch_size=1,
     simp=False,
     expand_out=True,
+    **kwargs,
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -145,6 +146,9 @@ def _compute(
         num_pitch,
         simp=simp,
     )
+    for key, value in kwargs.items():
+        fun_data[key] = value
+
     out = batch_map(fun, fun_data, surf_batch_size)
     if expand_out:
         assert out.ndim == 1, "Are you sure you want to expand to full grid?"

@@ -305,6 +305,7 @@ class Bounce2D(Bounce):
         is_fourier=False,
         Bref=1.0,
         Lref=1.0,
+        split_by_NFP=False,
         spline=True,
         check=False,
         vander=None,
@@ -330,6 +331,7 @@ class Bounce2D(Bounce):
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),
                 alpha,
                 num_transit,
+                NFP=self._NFP if split_by_NFP else 1,
             ),
         }
         if not is_reshaped:
@@ -730,6 +732,7 @@ class Bounce2D(Bounce):
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
         cov = grad_bijection_from_disc(z1, z2)
+
         result = [
             (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).dot(w) * cov
             for f in integrand

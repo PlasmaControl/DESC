@@ -450,7 +450,13 @@ def test_overstepping():
         options={
             "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0, "order": 1},
-            "solve_options": {"verbose": 0, "maxiter": 2},
+            "solve_options": {
+                "verbose": 0,
+                "maxiter": 2,
+                # Hidden kwarg just for debug/tests, to not solve
+                # during build
+                "solve_during_proximal_build": False,
+            },
         },
     )
 

@@ -896,7 +896,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
-        scale = float(np.squeeze(scale))
+        scale = jnp.float64(float(np.squeeze(scale)))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -916,7 +916,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        self._scale = float(np.squeeze(new))
+        self._scale = jnp.float64(float(np.squeeze(new)))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -1249,8 +1249,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0):
-        self.B0 = float(np.squeeze(B0))
-        self.R0 = float(np.squeeze(R0))
+        self.B0 = jnp.float64(float(np.squeeze(B0)))
+        self.R0 = jnp.float64(float(np.squeeze(R0)))
 
     @optimizable_parameter
     @property
@@ -1260,7 +1260,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1270,7 +1270,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1404,7 +1404,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1553,7 +1553,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1563,7 +1563,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1573,7 +1573,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        self._iota = float(np.squeeze(new))
+        self._iota = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,

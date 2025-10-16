@@ -86,7 +86,7 @@ def _fixed_point(
     maxiter,
     method,
     is_converged,
-    m=3,
+    m=4,
     beta=0.25,
 ):
     from desc.utils import safediv

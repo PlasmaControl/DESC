@@ -259,9 +259,11 @@ def _fixed_point_potential(
         (boundary_condition, potential_data, source_data, interpolator, chunk_size),
         xtol,
         maxiter,
-        method="simple",
+        method="anderson",
         scalar=True,
         full_output=full_output,
+        anderson_m=4,
+        anderson_beta=0.35,
     )
 
 
@@ -982,7 +984,9 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             **apply(kwargs, subset=_doc),
         )
         if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
+            data["Phi (periodic)"], (err, data["num iter"], _, _) = data[
+                "Phi (periodic)"
+            ]
             data["Phi error"] = jnp.abs(err).max()
 
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])

@@ -62,6 +62,7 @@ class Pressure(_Objective):
         grid=None,
         name="pressure",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -77,6 +78,7 @@ class Pressure(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -197,6 +199,7 @@ class RotationalTransform(_Objective):
         grid=None,
         name="rotational transform",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -212,6 +215,7 @@ class RotationalTransform(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -345,6 +349,7 @@ class Shear(_Objective):
         grid=None,
         name="shear",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -360,6 +365,7 @@ class Shear(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -485,6 +491,7 @@ class ToroidalCurrent(_Objective):
         grid=None,
         name="toroidal current",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -500,6 +507,7 @@ class ToroidalCurrent(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

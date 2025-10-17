@@ -32,7 +32,6 @@ _DESC_DERIVED_ARGNAMES = [
     'plasma_dofs',
     'net_poloidal_current_amperes',
     'Bnormal_plasma',
-    'winding_dofs',
     'metric_name',
     'value_only',
     'verbose',
@@ -271,8 +270,9 @@ class QuadcoilProxy(_Objective):
         self._quadcoil_full = jit(_quadcoil_full)
         
         # ----- Setting and registering keyword arguments -----
-        self._static_attrs = [
-            '_static_attrs', # A bug as of Oct 10 2025
+        self._static_attrs = _Objective._static_attrs + [
+            '_static_attrs'
+            '_deriv_mode',
             '_verbose',
             '_Bnormal_plasma_chunk_size',
             'enable_Bnormal_plasma',
@@ -661,96 +661,3 @@ def ptolemy_identity_rev_compute(A, c_indices, s_indices, x):
         c = jnp.zeros_like(s)
     assert len(s.T) == len(c.T)
     return s, c
-
-
-
-# def ptolemy_identity_rev_jit_precomputation(m_1, n_1):
-#     """
-#     Precompute a map that converts from double-Fourier to double-angle form using Ptolemy's identity.
-#     These pre-computed maps, along with some array manipulation, convert desc surfaces
-#     to simsopt surfaces. m_1, n_1 must be tuples
-
-#     .. code-block:: python
-    
-#         desc_to_vmec_surf_R = ptolemy_identity_rev_jit_precomputation(
-#             tuple(eq.surface.R_basis.modes[:,1]), 
-#             tuple(eq.surface.R_basis.modes[:,2])
-#         )
-#         desc_to_vmec_surf_Z = ptolemy_identity_rev_jit_precomputation(
-#             tuple(eq.surface.Z_basis.modes[:,1]), 
-#             tuple(eq.surface.Z_basis.modes[:,2])
-#         )
-#         rs_raw, rc_raw = desc_to_vmec_surf_R(eq.surface.R_lmn)
-#         zs_raw, zc_raw = desc_to_vmec_surf_Z(eq.surface.Z_lmn)# Stellsym SurfaceRZFourier's dofs consists of 
-#         # [rc, zs]
-#         # Non-stellsym SurfaceRZFourier's dofs consists of 
-#         # [rc, rs, zc, zs]
-#         # Because rs, zs from ptolemy_identity_rev shares the same m, n 
-#         # arrays as rc, zc, they both have a zero as the first element 
-#         # that need to be removed.
-#         rc = rc_raw.flatten()
-#         rs = rs_raw.flatten()[1:]
-#         zc = zc_raw.flatten()
-#         zs = zs_raw.flatten()[1:]
-#         if eq.sym:
-#             dofs = jnp.concatenate([rc, zs])
-#         else:
-#             dofs = jnp.concatenate([rc, rs, zc, zs])
-    
-#     Converts from a double Fourier series of the form:
-#         ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
-#         cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
-#     to the double-angle form:
-#         s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
-#     using Ptolemy's sum and difference formulas.
-
-#     Parameters
-#     ----------
-#     m_1 : ndarray, shape(num_modes,)
-#     n_1 : ndarray, shape(num_modes,)
-#         ``R_basis_modes[:,1], R_basis_modes[:,2]`` or ``Z_basis_modes[:,1], Z_basis_modes[:,2]`` 
-
-#     Returns
-#     -------
-#     A, vec_modes : ndarray
-#         .. code-block:: python
-
-#             # For calculating rs_raw, rc_raw,
-#             x = np.atleast_2d(desc_surf.R_lmn)
-#             y = (A @ x.T).T
-#             rs_raw, rc_raw = _modes_x_to_mnsc(vmec_modes, y)
-
-#     """
-#     try:
-#         from desc.backend import jnp, sign
-#         # from desc.vmec_utils import ptolemy_linear_transform # , _modes_x_to_mnsc
-#     except:
-#         raise ModuleNotFoundError('desc.backend.jnp and desc.backend.sign unavailable.')
-
-#     # Precomputing linear operators
-#     m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
-#     desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
-#     A, vmec_modes = ptolemy_linear_transform(desc_modes)
-
-#     # Precomputing map
-#     def transform(x):
-#         y = (A @ x.T).T
-#         cmask = vmec_modes[:, 0] == 1
-#         smask = vmec_modes[:, 0] == -1
-    
-#         c_indices = np.where(cmask)[0]
-#         s_indices = np.where(smask)[0]
-    
-#         c = (y.T[c_indices]).T
-#         s = (y.T[s_indices]).T
-        
-#         if not len(s.T):
-#             s = jnp.zeros_like(c)
-#         elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
-#             s = jnp.concatenate([jnp.zeros_like(s.T[:1]), s.T]).T
-#         if not len(c.T):
-#             c = jnp.zeros_like(s)
-#         assert len(s.T) == len(c.T)
-#         return s, c
-        
-#     return transform

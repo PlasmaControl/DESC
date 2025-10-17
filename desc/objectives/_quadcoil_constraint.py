@@ -34,6 +34,7 @@ class QuadcoilConstraint(_Objective):
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
         
+        self._static_attrs = _Objective._static_attrs
         # self._g_quadcoil = qf._g_quadcoil
         # self._h_quadcoil = qf._h_quadcoil
         # self._static_attrs = [

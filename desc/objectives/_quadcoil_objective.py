@@ -32,6 +32,9 @@ class QuadcoilObjective(_Objective):
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
         
+
+        self._static_attrs = _Objective._static_attrs
+
         # ----- Superclass -----
         super().__init__(
             things=[qf.eq, qf], # things is a list of things that will be optimized, in this case just the equilibrium

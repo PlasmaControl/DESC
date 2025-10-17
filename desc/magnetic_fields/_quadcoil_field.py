@@ -91,8 +91,7 @@ class QuadcoilField(FourierCurrentPotentialField):
             '_aux_dofs_flat',
             '_f_quadcoil',
             '_g_quadcoil',
-            '_h_quadcoil',
-            
+            '_h_quadcoil',    
         ]
     )
 

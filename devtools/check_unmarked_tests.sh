@@ -10,7 +10,7 @@ start_time=$(date +%s)
 
 echo "Files to check: $@"
 # Collect unmarked tests for the specific file and suppress errors
-unmarked=$(pytest "$@" --collect-only -m "not unit and not regression and not benchmark" -q 2> /dev/null | head -n -2)
+unmarked=$(pytest "$@" --collect-only -m "not unit and not regression and not benchmark and not memory" -q 2> /dev/null | head -n -2)
 
 # Count the number of unmarked tests found, ignoring empty lines
 num_unmarked=$(echo "$unmarked" | sed '/^\s*$/d' | wc -l)

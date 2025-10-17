@@ -1,22 +1,38 @@
 """Classes for parameterized 3D space curves."""
 
+import os
 import warnings
 
 import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import rotation_matrix
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warnif
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Curve
 
-__all__ = ["FourierRZCurve", "FourierXYZCurve", "FourierPlanarCurve", "SplineXYZCurve"]
+__all__ = [
+    "FourierPlanarCurve",
+    "FourierRZCurve",
+    "FourierXYCurve",
+    "FourierXYZCurve",
+    "SplineXYZCurve",
+]
 
 
 class FourierRZCurve(Curve):
@@ -48,7 +64,7 @@ class FourierRZCurve(Curve):
         "_NFP",
     ]
 
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + ["_sym", "_NFP", "_R_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -221,6 +237,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
@@ -262,6 +279,7 @@ class FourierRZCurve(Curve):
             New representation of the curve parameterized by Fourier series for R,Z.
 
         """
+        coords = jnp.atleast_2d(coords)
         if basis == "rpz":
             coords_rpz = coords
             coords_xyz = rpz2xyz(coords)
@@ -293,15 +311,23 @@ class FourierRZCurve(Curve):
         )
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
-        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
-        transform = Transform(grid, basis, build_pinv=True)
-        R_n = transform.fit(R)
-        Z_n = transform.fit(Z)
+        R_basis = FourierSeries(N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = FourierSeries(N=N, NFP=NFP, sym="sin" if sym else False)
+        with warnings.catch_warnings():
+            # grid and basis have uneven NFP because we want to allow the user to either
+            # pass in an entire curve (in which case phi : 0-> 2pi) which has some
+            # field-periodicity, or only a portion of the curve
+            # (in which case phi: 0->2pi/NFP) and still have this fit work.
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            R_transform = Transform(grid, R_basis, build_pinv=True)
+            Z_transform = Transform(grid, Z_basis, build_pinv=True)
+        R_n = R_transform.fit(R)
+        Z_n = Z_transform.fit(Z)
         return FourierRZCurve(
             R_n=R_n,
             Z_n=Z_n,
-            modes_R=basis.modes[:, 2],
-            modes_Z=basis.modes[:, 2],
+            modes_R=R_basis.modes[:, 2],
+            modes_Z=Z_basis.modes[:, 2],
             NFP=NFP,
             sym=sym,
             name=name,
@@ -309,7 +335,10 @@ class FourierRZCurve(Curve):
 
 
 def _unclose_curve(X, Y, Z):
-    if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
+    if (
+        np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14)
+        and X.size != 1
+    ):
         closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
         X, Y, Z = X[:-1], Y[:-1], Z[:-1]
         flag = True
@@ -324,7 +353,7 @@ def _unclose_curve(X, Y, Z):
 
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle s.
+    """Curve parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
 
     Parameters
     ----------
@@ -346,7 +375,7 @@ class FourierXYZCurve(Curve):
         "_Z_basis",
     ]
 
-    _static_attrs = ["_X_basis", "_Y_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + ["_X_basis", "_Y_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -599,7 +628,7 @@ class FourierPlanarCurve(Curve):
 
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
-    _static_attrs = ["_r_basis", "_basis"]
+    _static_attrs = Curve._static_attrs + ["_basis", "_r_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.
@@ -815,28 +844,58 @@ class FourierPlanarCurve(Curve):
 
         # center
         center = np.mean(coords, axis=0)
-        coords = coords - center  # shift to origin
+        coords_centered = coords - center  # shift to origin
 
         # normal
-        U, _, _ = np.linalg.svd(coords.T)
+        U, _, _ = np.linalg.svd(coords_centered.T)
         normal = U[:, -1].T  # left singular vector of the least singular value
 
         # axis and angle of rotation
         Z_axis = np.array([0, 0, 1])
         axis = np.cross(Z_axis, normal)
-        angle = np.arccos(np.dot(Z_axis, normal))
-        rotmat = rotation_matrix(axis, angle)
-        coords = coords @ rotmat  # rotate to X-Y plane
+        dotprod = np.dot(Z_axis, normal)
+        angle = np.arccos(dotprod)
+        rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
+            np.allclose(dotprod, -1.0),
+            np.diag(np.array([1.0, -1.0, -1.0])),
+            rotation_matrix(axis, angle),
+        )
+        coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         warnif(
-            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2])) > 1e-14,  # check Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
+        # polar angle
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
+        unwrapped_s = np.unwrap(s)
+        # Determine if the sequence is monotonically increasing or decreasing
+        if np.all(np.diff(unwrapped_s) > 0):
+            curve_sign = 1
+        elif np.all(np.diff(unwrapped_s) < 0):
+            curve_sign = -1
+        else:
+            warnings.warn(
+                "The curve parameter s is not strictly increasing or decreasing. "
+                "Assuming default direction.",
+                UserWarning,
+            )
+            curve_sign = 1
+
+        if curve_sign == -1:
+            # original curve was parameterized "backwards" (clockwise),
+            # compared to FourierPlanarCurve assumption
+            normal = -normal  # flip normal vector direction
+            rotmat = rotation_matrix(axis, np.pi)
+            coords_rotated = (
+                coords_rotated @ rotmat
+            )  # flip on X-Y plane to match normal vector
+
         # polar radius and angle
-        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
-        s = np.arctan2(coords[:, 1], coords[:, 0])
+        r = np.sqrt(coords_rotated[:, 0] ** 2 + coords_rotated[:, 1] ** 2)
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
         s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
         idx = np.argsort(s)  # sort angle to be monotonically increasing
         r = r[idx]
@@ -853,6 +912,382 @@ class FourierPlanarCurve(Curve):
             normal=normal,
             r_n=r_n,
             modes=basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
+
+class FourierXYCurve(Curve):
+    """Curve that lies in a plane.
+
+    Parameterized by a point (the center of the curve), a vector (normal to the plane),
+    and Fourier series defining the X and Y coordinates in the plane as a function of
+    an arbitrary angle s.
+
+    Parameters
+    ----------
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    X_n : array-like
+        Fourier coefficients of the X coordinate in the plane.
+    Y_n : array-like
+        Fourier coefficients of the Y coordinate in the plane.
+    modes : array-like
+        Mode numbers associated with X_n and Y_n. The n=0 mode will be ignored.
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this curve.
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_center",
+        "_normal",
+        "_X_n",
+        "_Y_n",
+        "_X_basis",
+        "_Y_basis",
+        "_basis",
+    ]
+    _static_attrs = Curve._static_attrs + ["_basis", "_X_basis", "_Y_basis"]
+
+    # Reference frame is centered at the origin with normal in the +Z direction.
+    # Curve is computed in reference frame, then displaced/rotated to the desired frame.
+    def __init__(
+        self,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        X_n=[0, 2],
+        Y_n=[2, 0],
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(name)
+        X_n, Y_n = np.atleast_1d(X_n), np.atleast_1d(Y_n)
+        if modes is None:
+            modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
+            if len(X_n) % 2 == 0:
+                modes = modes[modes != 0]
+        else:
+            modes = np.asarray(modes)
+
+        assert issubclass(modes.dtype.type, np.integer)
+        assert X_n.size == modes.size, "X_n and modes must be the same size"
+        assert Y_n.size == modes.size, "Y_n and modes must be the same size"
+        assert basis.lower() in ["xyz", "rpz"]
+
+        idx0 = np.where(modes == 0)[0]
+        if len(idx0):
+            warnif(
+                True,
+                UserWarning,
+                "Ignoring n=0 mode because it is redundant with center.",
+            )
+            modes = np.delete(modes, idx0)
+            X_n = np.delete(X_n, idx0)
+            Y_n = np.delete(Y_n, idx0)
+
+        N = np.max(abs(modes))
+        self._X_basis = FourierSeries(N, NFP=1, sym="no n=0")
+        self._Y_basis = FourierSeries(N, NFP=1, sym="no n=0")
+        self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
+        self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
+
+        self._basis = basis
+        self.normal = normal
+        self.center = center
+
+    @optimizable_parameter
+    @property
+    def center(self):
+        """Center of planar curve."""
+        return self._center
+
+    @center.setter
+    def center(self, new):
+        if len(new) == 3:
+            self._center = np.asarray(new)
+        else:
+            raise ValueError(
+                "center should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
+            )
+
+    @optimizable_parameter
+    @property
+    def normal(self):
+        """Normal vector to plane."""
+        return self._normal
+
+    @normal.setter
+    def normal(self, new):
+        if len(np.asarray(new)) == 3:
+            self._normal = np.asarray(new) / np.linalg.norm(new)
+        else:
+            raise ValueError(
+                "normal should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
+            )
+
+    @optimizable_parameter
+    @property
+    def X_n(self):
+        """Spectral coefficients for X."""
+        return self._X_n
+
+    @X_n.setter
+    def X_n(self, new):
+        if len(new) == self.X_basis.num_modes:
+            self._X_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"X_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.X_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Y_n(self):
+        """Spectral coefficients for Y."""
+        return self._Y_n
+
+    @Y_n.setter
+    def Y_n(self, new):
+        if len(new) == self.Y_basis.num_modes:
+            self._Y_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Y_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Y_basis.num_modes} modes."
+            )
+
+    @property
+    def X_basis(self):
+        """Spectral basis for X Fourier series."""
+        return self._X_basis
+
+    @property
+    def Y_basis(self):
+        """Spectral basis for Y Fourier series."""
+        return self._Y_basis
+
+    @property
+    def basis(self):
+        """Coordinate system for center and normal vectors."""
+        return self._basis
+
+    @basis.setter
+    def basis(self, new):
+        assert new.lower() in ["xyz", "rpz"]
+        if new != self.basis:
+            if new == "xyz":
+                self.normal = rpz2xyz_vec(self.normal, phi=self.center[1])
+                self.center = rpz2xyz(self.center)
+            else:
+                self.center = xyz2rpz(self.center)
+                self.normal = xyz2rpz_vec(self.normal, phi=self.center[1])
+            self._basis = new
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return max(self.X_basis.N, self.Y_basis.N)
+
+    def change_resolution(self, N=None):
+        """Change the maximum angular resolution."""
+        N = check_posint(N, "N")
+        if (N is not None) and (N != self.N):
+            N = int(N)
+            Xmodes_old = self.X_basis.modes
+            Ymodes_old = self.Y_basis.modes
+            self.X_basis.change_resolution(N=N)
+            self.Y_basis.change_resolution(N=N)
+            self.X_n = copy_coeffs(self.X_n, Xmodes_old, self.X_basis.modes)
+            self.Y_n = copy_coeffs(self.Y_n, Ymodes_old, self.Y_basis.modes)
+
+    def get_coeffs(self, n):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        X = np.zeros_like(n).astype(float)
+        Y = np.zeros_like(n).astype(float)
+
+        Xidx = np.where(n[:, np.newaxis] == self.X_basis.modes[:, 2])
+        Yidx = np.where(n[:, np.newaxis] == self.Y_basis.modes[:, 2])
+
+        X[Xidx[0]] = self.X_n[Xidx[1]]
+        Y[Yidx[0]] = self.Y_n[Yidx[1]]
+        return X, Y
+
+    def set_coeffs(self, n, X=None, Y=None):
+        """Set specific Fourier coefficients."""
+        n, X, Y = np.atleast_1d(n), np.atleast_1d(X), np.atleast_1d(Y)
+        X = np.broadcast_to(X, n.shape)
+        Y = np.broadcast_to(Y, n.shape)
+        for nn, XX in zip(n, X):
+            idx = self.X_basis.get_idx(0, 0, nn)
+            if XX is not None:
+                self.X_n = put(self.X_n, idx, XX)
+
+        for nn, YY in zip(n, Y):
+            idx = self.Y_basis.get_idx(0, 0, nn)
+            if YY is not None:
+                self.Y_n = put(self.Y_n, idx, YY)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            override_grid=override_grid,
+            basis_in=self.basis,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierXYCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new X & Y representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierXYCurve
+            New representation of the curve parameterized by Fourier series for X and Y.
+
+        """
+        # convert to xyz basis
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        coords = np.atleast_2d(coords)
+
+        # center
+        center = np.mean(coords, axis=0)
+        coords = coords - center  # shift to origin
+
+        # normal
+        U, _, _ = np.linalg.svd(coords.T)
+        normal = U[:, -1].T  # left singular vector of the least singular value
+
+        # axis and angle of rotation
+        Z_axis = np.array([0, 0, 1])
+        axis = np.cross(Z_axis, normal)
+        dotprod = np.dot(Z_axis, normal)
+        angle = np.arccos(dotprod)
+        rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
+            np.allclose(dotprod, -1.0),
+            np.diag(np.array([1.0, -1.0, -1.0])),
+            rotation_matrix(axis, angle),
+        )
+        coords = coords @ rotmat  # rotate to X-Y plane
+
+        X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
+        warnif(
+            np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
+            UserWarning,
+            "Curve values are not planar! Using the projection onto a plane.",
+        )
+
+        if isinstance(s, str):
+            assert s == "arclength", f"got unknown specification for s {s}"
+            # find equal arclength angle-like variable, and use that as theta
+            # L_along_curve / L = theta / 2pi
+            lengths = np.sqrt(np.diff(closedX) ** 2 + np.diff(closedY) ** 2)
+            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
+            thetas = np.insert(thetas, 0, 0)
+            s = thetas[:-1]
+        elif s is None:
+            s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
+        else:
+            s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
+            errorif(
+                not np.all(np.diff(s) > 0),
+                ValueError,
+                "supplied s must be monotonically increasing",
+            )
+            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
+            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
+
+        # Fourier transform
+        grid = LinearGrid(zeta=s, NFP=1)
+        basis = FourierSeries(N, NFP=1, sym=False)
+        transform = Transform(grid, basis, build_pinv=True)
+        idx = np.where(basis.modes[:, 2] != 0)  # exclude n=0 mode
+        X_n = transform.fit(X)
+        Y_n = transform.fit(Y)
+        center_from_n0 = np.array([X_n[N], Y_n[N], 0]) @ np.linalg.inv(rotmat)
+
+        return FourierXYCurve(
+            center=center + center_from_n0,  # add n=0 mode to center
+            normal=normal,
+            X_n=X_n[idx],
+            Y_n=Y_n[idx],
+            modes=basis.modes[:, 2][idx],
             basis="xyz",
             name=name,
         )
@@ -894,6 +1329,8 @@ class SplineXYZCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
+
+    _static_attrs = Curve._static_attrs + ["_method"]
 
     def __init__(
         self,

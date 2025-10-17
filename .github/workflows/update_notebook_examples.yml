@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TITLE: Update Notebooks
-          ASSIGNEES: f0uriest, dpanici, ddudt, rahulgaur104, unalmis, YigitElma
+          ASSIGNEES: f0uriest,dpanici,ddudt,rahulgaur104,unalmis,YigitElma
           LABELS: monthly_update_notebooks
           BODY: |
             Reminder to check that notebooks evaluate correctly, and to update
@@ -66,7 +66,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TITLE: Update Examples
-          ASSIGNEES: f0uriest, dpanici, ddudt, rahulgaur104, unalmis, YigitElma
+          ASSIGNEES: f0uriest,dpanici,ddudt,rahulgaur104,unalmis,YigitElma
           LABELS: monthly_update_examples
           BODY: |
               Reminder to check that examples run correctly, and to update

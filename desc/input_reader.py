@@ -681,6 +681,7 @@ class InputReader:
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
+            filename = os.path.expanduser(filename)
             f = open(filename, "w+")
         else:
             f = filename
@@ -1174,9 +1175,8 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
-            if match:
-                if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
+            if re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Pressure is not a power series!", "yellow"))
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:

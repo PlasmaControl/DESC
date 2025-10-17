@@ -175,7 +175,7 @@ def perturb(  # noqa: C901
         deltas[key] = jnp.atleast_1d(deltas[key])
 
     if not objective.built:
-        objective.build(eq, verbose=verbose)
+        objective.build(verbose=verbose)
 
     if is_linear_proj:
         obj = objective
@@ -343,7 +343,7 @@ def perturb(  # noqa: C901
             s,
             vt.T,
             tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -524,9 +524,9 @@ def optimal_perturb(  # noqa: C901
         )
 
     if not objective_f.built:
-        objective_f.build(eq, verbose=verbose)
+        objective_f.build(verbose=verbose)
     if not objective_g.built:
-        objective_g.build(eq, verbose=verbose)
+        objective_g.build(verbose=verbose)
 
     argmap = {
         "R_lmn": dR,
@@ -692,7 +692,7 @@ def optimal_perturb(  # noqa: C901
             sg,
             vtg.T,
             tr_ratio[0] * c_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -707,7 +707,7 @@ def optimal_perturb(  # noqa: C901
             sf,
             vtf.T,
             tr_ratio[0] * x_norm,
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -742,7 +742,7 @@ def optimal_perturb(  # noqa: C901
             sg,
             vtg.T,
             tr_ratio[1] * jnp.linalg.norm(dc1h_opt),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )
@@ -757,7 +757,7 @@ def optimal_perturb(  # noqa: C901
             sf,
             vtf.T,
             tr_ratio[1] * jnp.linalg.norm(dx1h_reduced),
-            initial_alpha=None,
+            initial_alpha=0.0,
             rtol=0.01,
             max_iter=10,
         )

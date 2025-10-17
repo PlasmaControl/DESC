@@ -253,6 +253,7 @@ def fmin_auglag(  # noqa: C901
         hess_wrapped = BFGS(
             hess_exception_strategy, hess_min_curvature, hess_init_scale
         )
+
     if isinstance(hess_wrapped, BFGS):
         bfgs = True
         if hasattr(hess_wrapped, "n"):  # assume its already been initialized
@@ -342,7 +343,17 @@ def fmin_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
+
+    # TODO: place this function under JIT (#1669)
+    # doing operation H = d * H * d[:, None]
+    H *= d[:, None]
+    H *= d
+
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    H_h = H
+    del H
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -415,6 +426,29 @@ def fmin_auglag(  # noqa: C901
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print(f"{'Alpha Omega':<35}: {alpha_omega:.3e}")
+        print(f"{'Beta Omega':<35}: {beta_omega:.3e}")
+        print(f"{'Alpha Eta':<35}: {alpha_eta:.3e}")
+        print(f"{'Beta Eta':<35}: {beta_eta:.3e}")
+        print(f"{'Omega':<35}: {omega:.3e}")
+        print(f"{'Eta':<35}: {eta:.3e}")
+        print(f"{'Tau':<35}: {beta_eta:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
@@ -581,7 +615,16 @@ def fmin_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            H_h = d * H * d[:, None]
+
+            # doing operation H = d * H * d[:, None]
+            H *= d[:, None]
+            H *= d
+
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it to avoid carrying so many H-sized matrices
+            # in memory, which can be large
+            H_h = H
+            del H
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]

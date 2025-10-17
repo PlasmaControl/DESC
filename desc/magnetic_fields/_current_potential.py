@@ -1,5 +1,6 @@
 """Magnetic field due to sheet current on a winding surface."""
 
+import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -9,7 +10,6 @@ from scipy.constants import mu_0
 
 from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -22,9 +22,12 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._core import (
@@ -89,6 +92,12 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + [
             "_params",
         ]
+    )
+
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + ["_potential", "_potential_dtheta", "_potential_dzeta"]
     )
 
     def __init__(
@@ -194,6 +203,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             mode for save file. Only used if file_name is a file path
 
         """
+        file_name = os.path.expanduser(file_name)
         raise OSError(
             "Saving CurrentPotentialField is not supported,"
             " as the potential function cannot be serialized."
@@ -464,6 +474,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + [
+            "_M_Phi",
+            "_N_Phi",
+            "_sym_Phi",
+            "_Phi_basis",
+        ]
+    )
+
     def __init__(
         self,
         Phi_mn=np.array([0.0]),
@@ -501,8 +522,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        self._I = float(np.squeeze(I))
-        self._G = float(np.squeeze(G))
+        self._I = jnp.float64(float(np.squeeze(I)))
+        self._G = jnp.float64(float(np.squeeze(G)))
 
         super().__init__(
             R_lmn=R_lmn,
@@ -525,7 +546,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @I.setter
     def I(self, new):  # noqa: E743
-        self._I = float(np.squeeze(new))
+        self._I = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -535,7 +556,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @G.setter
     def G(self, new):
-        self._G = float(np.squeeze(new))
+        self._G = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1469,8 +1490,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     if verbose > 1:
         timer.disp("Jacobian Calculation")
 
-    current_potential_field.I = float(I)
-    current_potential_field.G = float(G)
+    current_potential_field.I = jnp.float64(float(I))
+    current_potential_field.G = jnp.float64(float(G))
 
     # find the normal field from the secular part of the current potential
     # also mutliply by necessary weights and normal vector magnitude

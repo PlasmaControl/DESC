@@ -369,6 +369,6 @@ def write_fieldlines_file(
         dset.attrs[f"{key}_description"] = description
 
     for ds in save_data:
-        add_ds(ds["key"], ds["value"], ds["description"])
+        add_ds(ds["key"], np.asarray(ds["value"]), ds["description"])
 
     f.close()

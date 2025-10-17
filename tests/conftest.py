@@ -249,9 +249,11 @@ def DummyCoilSet(tmpdir_factory):
     # CoilSet with symmetry
     num_coils = 3  # number of unique coils per half field period
     grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
         data_center = eq.axis.compute("x", grid=grid, basis="xyz")
         data_normal = eq.compute("e^zeta", grid=grid)
+
     centers = data_center["x"]
     normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
     coils = []

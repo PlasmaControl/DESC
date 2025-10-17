@@ -256,6 +256,7 @@ def save_fieldlines_format(
             B = field.compute_magnetic_grid(R, phi, Z, NFP).reshape(-1, 3)
     else:
         B = np.zeros_like(coords)
+        pressure = None
 
     # Add magnetic field from coils
     if coils is not None:

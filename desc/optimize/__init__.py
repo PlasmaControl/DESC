@@ -5,7 +5,7 @@ from ._constraint_wrappers import (
     LinearConstraintProjection,
     ProximalProjection,
     ProximalProjectionFB2,
-    ProximalProjectionFreeBoundary,
+    ProximalProjectionFreeBoundary,FiniteDifferenceFreeBoundary
 )
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag

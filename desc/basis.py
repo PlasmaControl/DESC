@@ -1706,7 +1706,7 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
 
 if desc_config["kind"] == "cpu":  # noqa: C901
 
-    @custom_jvp
+    @functools.partial(custom_jvp, nondiff_argnums=(3,))
     @functools.partial(jit, static_argnums=3)
     def zernike_radial(r, l, m, dr=0):
         """Radial part of zernike polynomials.
@@ -1889,9 +1889,9 @@ if desc_config["kind"] == "cpu":  # noqa: C901
         return out
 
     @zernike_radial.defjvp
-    def _zernike_radial_jvp(x, xdot):
-        (r, l, m, dr) = x
-        (rdot, ldot, mdot, drdot) = xdot
+    def _zernike_radial_jvp(dr, x, xdot):
+        (r, l, m) = x
+        (rdot, ldot, mdot) = xdot
         f = zernike_radial(r, l, m, dr)
         df = zernike_radial(r, l, m, dr + 1)
         # in theory l, m, dr aren't differentiable (they're integers)

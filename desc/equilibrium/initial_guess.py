@@ -314,11 +314,11 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
 
         # Get scale values for all modes
         m_values = b_modes[:, 1]
-        scales = zernike_radial(coord, abs(m_values), m_values)
+        scales = zernike_radial(coord, abs(m_values), m_values).squeeze()
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
 
         # now overwrite stuff to deal with the axis
-        scale = zernike_radial(coord, 0, 0)
+        scale = zernike_radial(coord, 0, 0).squeeze()
         for k, (l, m, n) in enumerate(b_basis.modes):
             if m != 0:
                 continue

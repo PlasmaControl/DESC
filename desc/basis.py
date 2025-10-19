@@ -1706,37 +1706,8 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
 
 if desc_config["kind"] == "cpu":  # noqa: C901
 
-    def custom_jvp_with_jit(func):
-        """Decorator for custom_jvp with jit.
-
-        This decorator is specifically with functions that have the same
-        structure as the zernike_radial such as r, l, m, dr, where dr is
-        the static argument. This is decorator is faster than custom_jvp
-        of a jit compiled function. See jax#22513 for more details.
-        """
-
-        @functools.partial(
-            custom_jvp,
-            nondiff_argnums=(3,),
-        )
-        def dummy(r, l, m, dr):
-            return func(r, l, m, dr)
-
-        @dummy.defjvp
-        def _dummy_jvp(nondiff_dr, x, xdot):
-            """Custom derivative rule for the function.
-
-            This is just the same function called with dx+1.
-            """
-            (r, l, m) = x
-            (rdot, ldot, mdot) = xdot
-            f = dummy(r, l, m, nondiff_dr)
-            df = dummy(r, l, m, nondiff_dr + 1)
-            return f, (df.T * rdot).T
-
-        return jit(dummy, static_argnums=3)
-
-    @custom_jvp_with_jit
+    @custom_jvp
+    @functools.partial(jit, static_argnums=3)
     def zernike_radial(r, l, m, dr=0):
         """Radial part of zernike polynomials.
 
@@ -1916,6 +1887,18 @@ if desc_config["kind"] == "cpu":  # noqa: C901
         # loop which will execute necessary n values.
         out = fori_loop(0, (M_max + 1).astype(int), body, (out))
         return out
+
+    @zernike_radial.defjvp
+    def _zernike_radial_jvp(x, xdot):
+        (r, l, m, dr) = x
+        (rdot, ldot, mdot, drdot) = xdot
+        f = zernike_radial(r, l, m, dr)
+        df = zernike_radial(r, l, m, dr + 1)
+        # in theory l, m, dr aren't differentiable (they're integers)
+        # but marking them as non-diff argnums seems to cause escaped tracer values.
+        # probably a more elegant fix, but just setting those derivatives to zero seems
+        # to work fine.
+        return f, (df.T * rdot).T
 
     def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
         """Evaluate Jacobi for single alpha and n pair."""

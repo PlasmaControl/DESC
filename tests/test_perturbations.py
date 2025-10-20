@@ -213,3 +213,28 @@ def test_perturb_axis():
     assert ax2.N == 0
     eq.axis = ax2
     assert eq.axis.N == 2
+
+
+@pytest.mark.unit
+def test_perturb_to_lower_resolution_profile():
+    """Test that perturbing to a lower-resolution profile works correctly."""
+    from desc.perturbations import get_deltas
+
+    # related to gh issue #1974
+    eq = desc.equilibrium.Equilibrium(L=5, M=3)
+
+    p1 = desc.profiles.PowerSeriesProfile(np.array([1e4, 0, -1e4]), modes=[0, 1, 2])
+    p1.change_resolution(L=eq.L)
+    eq.pressure = p1
+    p2 = desc.profiles.PowerSeriesProfile(np.array([0.5e4, -0.5e4]), modes=[0, 2])
+
+    eq.current = None
+    eq.iota = desc.profiles.PowerSeriesProfile(0.42)
+
+    deltas = get_deltas({"pressure": eq.pressure}, {"pressure": p2})
+
+    eq_new = eq.perturb(deltas, copy=True)
+
+    assert eq_new.is_nested()
+
+    np.testing.assert_allclose(eq_new.p_l[0:-1], p2.params)

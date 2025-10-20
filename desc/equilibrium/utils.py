@@ -60,7 +60,7 @@ def parse_profile(prof, name="", **kwargs):
     raise TypeError(f"Got unknown {name} profile {prof}")
 
 
-def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=True):
+def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=False):
     """Ensure that the profile resolution is consistent with the Equilibrium resolution.
 
     Parameters

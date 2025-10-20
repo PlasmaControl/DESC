@@ -370,8 +370,13 @@ class Equilibrium(IOAble, Optimizable):
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = self._current = None
-        self.iota = parse_profile(iota, "iota")
-        self.current = parse_profile(current, "current")
+        with warnings.catch_warnings():
+            # to suppress resolution warnings here, as if we just
+            # initiate the profiles by default we would get the warning
+            # in the setter methods for these
+            warnings.simplefilter("ignore", category=UserWarning)
+            self.iota = parse_profile(iota, "iota")
+            self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [

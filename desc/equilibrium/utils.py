@@ -60,7 +60,7 @@ def parse_profile(prof, name="", **kwargs):
     raise TypeError(f"Got unknown {name} profile {prof}")
 
 
-def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=False):
+def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=True):
     """Ensure that the profile resolution is consistent with the Equilibrium resolution.
 
     Parameters
@@ -83,8 +83,9 @@ def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=False):
         return None
     changed_res = False
     if hasattr(profile, "change_resolution"):
+        changed_res = profile.basis.L < eq.L
         profile.change_resolution(max(profile.basis.L, eq.L))
-        changed_res = True
+
     warnif(
         changed_res and warn,
         msg=(

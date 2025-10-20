@@ -27,11 +27,11 @@ from desc.utils import (
 )
 
 from ._constraint_wrappers import (
+    FiniteDifferenceFreeBoundary,
     LinearConstraintProjection,
     ProximalProjection,
     ProximalProjectionFB2,
     ProximalProjectionFreeBoundary,
-    FiniteDifferenceFreeBoundary
 )
 
 
@@ -54,7 +54,7 @@ class Optimizer(IOAble):
     """
 
     _io_attrs_ = ["_method"]
-    _wrappers = [None, "prox", "proximal","findif"]
+    _wrappers = [None, "prox", "proximal", "findif"]
 
     def __init__(self, method):
         self.method = method
@@ -297,7 +297,10 @@ class Optimizer(IOAble):
             result["allx"] = [objective.recover(x) for x in result["allx"]]
             objective = objective._objective
 
-        if isinstance(objective, (ProximalProjection, ProximalProjectionFB2, FiniteDifferenceFreeBoundary)):
+        if isinstance(
+            objective,
+            (ProximalProjection, ProximalProjectionFB2, FiniteDifferenceFreeBoundary),
+        ):
             # reset eq params to initial
             if eq is not None:
                 eq.params_dict = eq_params_init
@@ -470,12 +473,12 @@ def _maybe_wrap_nonlinear_constraints(
             )
         )
         wrapper = "proximal"
-    if wrapper is not None and wrapper.lower() in ["prox", "proximal","findif"]:
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal", "findif"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
         free_boundary_options = options.pop("free_boundary_options", {})
         if np.any([hasattr(c, "_free_boundary") for c in nonlinear_constraints]):
-            if wrapper.lower() in ["prox","proximal"]:
+            if wrapper.lower() in ["prox", "proximal"]:
                 # then we are doing a free boundary ProximalProjection
                 # make the prox projection for the free bdry suboproblem
                 for i in range(len(nonlinear_constraints)):
@@ -509,7 +512,7 @@ def _maybe_wrap_nonlinear_constraints(
                 )
             else:
                 # findif wrapper
-                # I think later need to pass through the upper linear constraints, 
+                # I think later need to pass through the upper linear constraints,
                 # so that we can project down toreduce space, perform findif along
                 # reduced space, then project back up
                 for i in range(len(nonlinear_constraints)):
@@ -522,7 +525,7 @@ def _maybe_wrap_nonlinear_constraints(
                             eq_free_bdry_obj = nonlinear_constraints[i]
                 nonlinear_constraints = list(nonlinear_constraints)
                 nonlinear_constraints.remove(eq_free_bdry_obj)
-                nonlinear_constraints.remove(eq_obj) #TODO: should also handle this
+                nonlinear_constraints.remove(eq_obj)  # TODO: should also handle this
                 nonlinear_constraints = tuple(nonlinear_constraints)
 
                 errorif(
@@ -541,10 +544,9 @@ def _maybe_wrap_nonlinear_constraints(
                     solve_options=solve_options,
                     free_boundary_options=free_boundary_options,
                     eq=eq,
-                    linear_constraints_coil_profiles_etc=None # update this in combined constraint
+                    linear_constraints_coil_profiles_etc=None,  # update this in combined constraint
                 )
 
-        
         else:  # usual proximal projection
             objective = ProximalProjection(
                 objective,
@@ -582,7 +584,12 @@ def get_combined_constraint_objectives(
     )
     is_prox = isinstance(
         objective,
-        (ProximalProjection, ProximalProjectionFreeBoundary, ProximalProjectionFB2, FiniteDifferenceFreeBoundary),
+        (
+            ProximalProjection,
+            ProximalProjectionFreeBoundary,
+            ProximalProjectionFB2,
+            FiniteDifferenceFreeBoundary,
+        ),
     )
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
@@ -619,17 +626,18 @@ def get_combined_constraint_objectives(
     # wrap to handle linear constraints
     if linear_constraint is not None:
         linear_constraint_options = options.pop("linear_constraint_options", {})
-        is_findif= isinstance(objective,FiniteDifferenceFreeBoundary)
-            
+        is_findif = isinstance(objective, FiniteDifferenceFreeBoundary)
+
         objective = LinearConstraintProjection(
             objective, linear_constraint, **linear_constraint_options
         )
         objective.build(verbose=verbose)
         # use set the recover/project stuff here
         if is_findif:
-            objective._set_proj_recover(objective.recover,objective.project,
-                                        objective._Z,objective._A)  
-        
+            objective._set_proj_recover(
+                objective.recover, objective.project, objective._Z, objective._A
+            )
+
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
                 nonlinear_constraint, linear_constraint

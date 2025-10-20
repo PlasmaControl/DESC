@@ -1,6 +1,7 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
 import functools
+import pickle
 
 import jax
 import numpy as np
@@ -24,7 +25,7 @@ from desc.objectives.utils import (
     remove_fixed_parameters,
 )
 from desc.utils import Timer, errorif, get_instance, setdefault
-import pickle
+
 from .utils import f_where_x
 
 
@@ -1353,6 +1354,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             out.append(outi)
     return jnp.concatenate(out).T
 
+
 class FiniteDifferenceFreeBoundary(ObjectiveFunction):
     """Remove free boundary constraint by projecting onto constraint at each step.
 
@@ -1363,7 +1365,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
     through free-boundary solves
 
     At each iteration, after a step is taken to reduce the objective, the equilibrium
-    is re-solved to bring it back into free boundary force balance. 
+    is re-solved to bring it back into free boundary force balance.
 
     Parameters
     ----------
@@ -1415,15 +1417,17 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
                 "ProximalProjection can only handle equality constraints, "
                 + f"got bounds for constraint {con}",
             )
-        self._abs_step=1e-3
+        self._abs_step = 1e-3
         self._objective = objective
         self._constraint = constraint
-        self._constraint_fb=constraint_fb
-        self._linear_constraints_coil_profiles_etc=linear_constraints_coil_profiles_etc
-        self._recover_coils_profiles_etc=None
-        self._project_coils_profiles_etc=None
-        self._Z_coils_profiles_etc=None
-        self._A_coils_profiles_etc=None
+        self._constraint_fb = constraint_fb
+        self._linear_constraints_coil_profiles_etc = (
+            linear_constraints_coil_profiles_etc
+        )
+        self._recover_coils_profiles_etc = None
+        self._project_coils_profiles_etc = None
+        self._Z_coils_profiles_etc = None
+        self._A_coils_profiles_etc = None
         free_boundary_options = (
             {} if free_boundary_options is None else free_boundary_options
         )
@@ -1443,11 +1447,13 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         self._compiled = False
         self._eq = eq
         self._name = name
-    def _set_proj_recover(self,recover,project,Z,A):
-        self._recover_coils_profiles_etc=recover
-        self._project_coils_profiles_etc=project
-        self._Z_coils_profiles_etc=Z
-        self._A_coils_profiles_etc=A
+
+    def _set_proj_recover(self, recover, project, Z, A):
+        self._recover_coils_profiles_etc = recover
+        self._project_coils_profiles_etc = project
+        self._Z_coils_profiles_etc = Z
+        self._A_coils_profiles_etc = A
+
     def _set_eq_state_vector(self):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]:
@@ -1492,7 +1498,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         # make sure FixPsi FixPressure FixCurrent or FixIota are
         # respected in this subproblem
         self._linear_constraints = get_free_boundary_constraints(eq)
-        self._eq_linear_constraints=get_fixed_boundary_constraints(eq)
+        self._eq_linear_constraints = get_fixed_boundary_constraints(eq)
         self._eq_linear_constraints = maybe_add_self_consistency(
             self._eq, self._eq_linear_constraints
         )
@@ -1508,13 +1514,40 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
-        self._eq_solve_objective =LinearConstraintProjection(
+        self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
             constraint=ObjectiveFunction(self._eq_linear_constraints),
             name="Free Bdry Eq Update LinearConstraintProjection",
         )
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
-        self._constraint_fb.build()
+
+        # here, we would need to
+        # - use as constraint the _constraint
+        # - obj is _constraint_fb
+        # - re-use self._eq_linear_constraints
+        # call it like self._eq_fb_objective
+        prox_solve_options = self._solve_options.copy()
+        # need this to avoid issues in update_equilibrium
+        # relating to re-solving eq, since we re-build it
+        # each time inside of this update_eq
+        # without this, errors will occur, so we set
+        # solve during build to false for the fb subproblem/steps
+        prox_solve_options["solve_during_proximal_build"] = False
+        self._eq_fb_objective = ProximalProjection(
+            objective=self._constraint_fb,
+            constraint=self._constraint,
+            perturb_options=self._perturb_options,
+            solve_options=self._solve_options,
+            eq=self._eq,
+        )
+        self._fb_linear_constraints = tuple(
+            [c for c in get_free_boundary_constraints(self._eq) if not c._equilibrium]
+        )
+        self._eq_fb_objective_wrapped = LinearConstraintProjection(
+            self._eq_fb_objective,
+            constraint=ObjectiveFunction(self._fb_linear_constraints),
+        )
+        self._eq_fb_objective_wrapped.build()
 
         # TODO: what if we are letting coils change in outer loop?
         # I think this would be fine... bc the coils dont change
@@ -1562,6 +1595,13 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         )
 
         # history and caching
+
+        # ensure eq is in free bdry eq first
+        self._eq.optimize(
+            objective=self._eq_fb_objective_wrapped,
+            constraints=None,
+            **self._free_boundary_options,
+        )
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]
         self._allxopt = [self._objective.x(*self.things)]
@@ -1699,19 +1739,25 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
                 deltas=deltas,
                 **self._perturb_options,
             )
-            
+
             self._eq.solve(
                 objective=self._eq_solve_objective,
                 constraints=None,
                 **self._solve_options,
             )
 
-            #TODO: self._eq_solve_objective should be
+            # TODO: self._eq_solve_objective should be
             # a lin con proj of proximalproj
             # of free bdry error
+            for con in self._fb_linear_constraints:
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
+            # re-build so that it resets its history of x etc
+            # to one beginning with the current eq params
+            self._eq_fb_objective.build(verbose=0)
             self._eq.optimize(
-                objective=self._constraint_fb,
-                constraints=get_free_boundary_constraints(self._eq),
+                objective=self._eq_fb_objective,
+                constraints=self._fb_linear_constraints,
                 **self._free_boundary_options,
             )
 
@@ -1734,6 +1780,11 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
+            self._eq_solve_objective.update_constraint_target(self._eq)
+            # self._eq_fb_objective_wrapped.update_constraint_target(self._eq)
+        for con in self._fb_linear_constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(self._eq)
 
         return xopt, xeq
 
@@ -1834,9 +1885,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         """
         # TODO (#1393): figure out projected vjp to make this better
 
-
-
-        return 
+        return
 
     def hess(self, x, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -1878,7 +1927,6 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         """
         v = jnp.eye(x.shape[0])
         return self.jvp_scaled(v, x, constants).T
-    
 
     def jac_scaled_error(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled_error.
@@ -1896,9 +1944,9 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
             Jacobian matrix.
 
         """
-        
+
         # we want to do this in reduced space, then project
-        reduced_x =self._project_coils_profiles_etc(x)
+        reduced_x = self._project_coils_profiles_etc(x)
         reduced_v = v = jnp.eye(reduced_x.shape[0])
         # for each col in reduced_v, recover the corr. x
         # do a findif step in that direction, compute new
@@ -1906,7 +1954,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=True)
         f0 = self.compute_scaled_error(x)
         # use for loop as we cant run multiple fb at once
-        jac=[] # will be list of cols of dim_f
+        jac = []  # will be list of cols of dim_f
         for i in range(reduced_v.shape[1]):
             vi = reduced_v[i]
             xi = self._recover_coils_profiles_etc(vi)
@@ -1914,7 +1962,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
             step = xi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col=(self.compute_scaled_error(x+step)-f0)/step
+            jac_col = (self.compute_scaled_error(x + step) - f0) / step
             jac.append(self._project_coils_profiles_etc(jac_col))
         jac = jnp.hstack(jac)
         return jac
@@ -1981,15 +2029,15 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=True)
         f0 = self.compute_scaled_error(x)
         # use for loop as we cant run multiple fb at once
-        if v.ndim>1:
-            jac=[] # will be list of cols of dim_f
+        if v.ndim > 1:
+            jac = []  # will be list of cols of dim_f
 
             for i in range(v.shape[0]):
                 vi = v[i]
                 step = vi * (self._abs_step)
                 # and should be able to just call compute_scald_error
                 # as it already does update eq
-                jac_col=(self.compute_scaled_error(x+step)-f0)/step
+                jac_col = (self.compute_scaled_error(x + step) - f0) / step
                 jac.append(self._project_coils_profiles_etc(jac_col))
             jac = jnp.atleast_2d(jac)
             return jac
@@ -1998,7 +2046,7 @@ class FiniteDifferenceFreeBoundary(ObjectiveFunction):
             step = vi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col=(self.compute_scaled_error(x+step)-f0)/step
+            jac_col = (self.compute_scaled_error(x + step) - f0) / step
             return jac_col
 
     def jvp_unscaled(self, v, x, constants=None):

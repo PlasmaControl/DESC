@@ -513,8 +513,6 @@ from above are not repeated here)
             return mirror_ratio # return the value of the objective
 
 
-
-
 Converting to Cartesian coordinates
 -----------------------------------
 

@@ -39,7 +39,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -61,7 +61,12 @@ from .coords import (
     to_sfl,
 )
 from .initial_guess import set_initial_guess
-from .utils import parse_axis, parse_profile, parse_surface
+from .utils import (
+    ensure_consistent_profile_eq_resolution,
+    parse_axis,
+    parse_profile,
+    parse_surface,
+)
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -71,6 +76,9 @@ class Equilibrium(IOAble, Optimizable):
     and profile inputs. It can compute additional information, such as the magnetic
     field and plasma currents, as well as "solving" itself by finding the equilibrium
     fields, and perturbing those fields to find nearby equilibria.
+
+    Note that any passed-in profiles with resolution lower than eq.L will be
+    automatically increased in resolution to match eq.L.
 
     Parameters
     ----------
@@ -377,12 +385,7 @@ class Equilibrium(IOAble, Optimizable):
             "anisotropy",
         ]:
             p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
-            warnif(
-                isinstance(p, PowerSeriesProfile) and p.sym != "even",
-                msg=f"{profile} profile is not an even power series.",
-            )
+            ensure_consistent_profile_eq_resolution(p, self, name=profile, warn=False)
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -1711,6 +1714,9 @@ class Equilibrium(IOAble, Optimizable):
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
+        self._pressure = ensure_consistent_profile_eq_resolution(
+            self._pressure, self, name="pressure"
+        )
 
     @optimizable_parameter
     @property
@@ -1759,6 +1765,9 @@ class Equilibrium(IOAble, Optimizable):
     @electron_temperature.setter
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
+        self._electron_temperature = ensure_consistent_profile_eq_resolution(
+            self._electron_temperature, self, name="electron temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -1787,6 +1796,9 @@ class Equilibrium(IOAble, Optimizable):
     @electron_density.setter
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
+        self._electron_density = ensure_consistent_profile_eq_resolution(
+            self._electron_density, self, name="electron density"
+        )
 
     @optimizable_parameter
     @property
@@ -1815,6 +1827,9 @@ class Equilibrium(IOAble, Optimizable):
     @ion_temperature.setter
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
+        self._ion_temperature = ensure_consistent_profile_eq_resolution(
+            self._ion_temperature, self, name="ion temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -1841,6 +1856,9 @@ class Equilibrium(IOAble, Optimizable):
     @atomic_number.setter
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
+        self._atomic_number = ensure_consistent_profile_eq_resolution(
+            self._atomic_number, self, name="atomic number"
+        )
 
     @optimizable_parameter
     @property
@@ -1865,6 +1883,9 @@ class Equilibrium(IOAble, Optimizable):
     @iota.setter
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
+        self._iota = ensure_consistent_profile_eq_resolution(
+            self._iota, self, name="iota"
+        )
         if self.iota is None:
             return
         warnif(
@@ -1900,6 +1921,9 @@ class Equilibrium(IOAble, Optimizable):
     @current.setter
     def current(self, new):
         self._current = parse_profile(new, "current")
+        self._current = ensure_consistent_profile_eq_resolution(
+            self._current, self, name="current"
+        )
         if self.current is None:
             return
         warnif(

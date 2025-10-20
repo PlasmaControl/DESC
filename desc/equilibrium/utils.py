@@ -12,6 +12,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
+from desc.utils import warnif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -57,6 +58,46 @@ def parse_profile(prof, name="", **kwargs):
     if prof is None:
         return None
     raise TypeError(f"Got unknown {name} profile {prof}")
+
+
+def ensure_consistent_profile_eq_resolution(profile, eq, name="", warn=True):
+    """Ensure that the profile resolution is consistent with the Equilibrium resolution.
+
+    Parameters
+    ----------
+    profile : Profile
+        Profile to check.
+    eq : Equilibrium
+        Equilibrium to check against.
+    name : str, optional
+        Name of the profile.
+    warn : bool, optional
+        Whether to issue warnings if changes are made.
+
+    Returns
+    -------
+    profile : Profile
+        Profile with updated resolution if necessary.
+    """
+    if profile is None:
+        return None
+    changed_res = False
+    if hasattr(profile, "change_resolution"):
+        profile.change_resolution(max(profile.basis.L, eq.L))
+        changed_res = True
+    warnif(
+        changed_res and warn,
+        msg=(
+            f"{name} profile was not consistent with  eq.L, changing"
+            + " profile resolution to match eq.L"
+        ),
+    )
+    warnif(
+        isinstance(profile, PowerSeriesProfile) and profile.sym != "even",
+        msg=f"{name} profile is not an even power series.",
+    )
+
+    return profile
 
 
 def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):

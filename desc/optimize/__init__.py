@@ -1,7 +1,11 @@
 """Functions for minimization and wrappers for scipy methods."""
 
 from . import _desc_wrappers, _scipy_wrappers
-from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
+from ._constraint_wrappers import (
+    FiniteDifferenceSingleStage,
+    LinearConstraintProjection,
+    ProximalProjection,
+)
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr

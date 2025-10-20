@@ -68,7 +68,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 + " but not included in objective.",
             )
 
-    from desc.optimize import ProximalProjection
+    from desc.optimize import FiniteDifferenceSingleStage, ProximalProjection
 
     # particular solution to Ax=b
     xp = jnp.zeros(objective.dim_x)
@@ -81,6 +81,21 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     if isinstance(objective, ProximalProjection):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
         # see desc.optimize._constraint_wrappers.ProximalProjection._set_eq_state_vector
+        c = 0
+        cols = np.array([], dtype=int)
+        for t in objective.things:
+            if t is objective._eq:
+                for arg, dim in objective._eq.dimensions.items():
+                    if arg in objective._args:  # these Equilibrium args are kept
+                        cols = np.append(cols, np.arange(c, c + dim))
+                    c += dim  # other Equilibrium args are removed
+            else:  # non-Equilibrium args are always included
+                cols = np.append(cols, np.arange(c, c + t.dim_x))
+                c += t.dim_x
+        A = A[:, cols]
+    elif isinstance(objective, (FiniteDifferenceSingleStage)):
+        # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"
+        # ,"Zb_lmn","Rb_lmn"]
         c = 0
         cols = np.array([], dtype=int)
         for t in objective.things:

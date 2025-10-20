@@ -601,7 +601,28 @@ class FourierXYZCurve(Curve):
             X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
         )
 
-
+    def from_simsopt(curve_simsopt, name=""):
+        from simsopt.geo import CurveXYZFourier 
+        if not isinstance(curve_simsopt, CurveXYZFourier):
+            raise AttributeError('The imput curve must be a Simsopt CurveXYZFourier')
+        dofs = curve_simsopt.get_dofs()
+        order = curve_simsopt.order
+        # [xc0, xs1, xc1, ....]
+        x = dofs[:2*order+1]
+        y = dofs[2*order+1:4*order+2]
+        z = dofs[4*order+2:]
+        def convert_x(x):
+            xc = x[::2]
+            xs = x[1:][::2]
+            xn = np.concatenate((np.flip(xs), xc))
+            return xn
+        xn = convert_x(x)
+        yn = convert_x(y)
+        zn = convert_x(z)
+        modes = np.arange(-order, order+1)
+        curve_desc = FourierXYZCurve(xn, yn, zn, modes=modes, name=name)
+        return curve_desc
+    
 class FourierPlanarCurve(Curve):
     """Curve that lies in a plane.
 

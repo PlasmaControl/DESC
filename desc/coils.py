@@ -948,6 +948,18 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             modes=curve.X_basis.modes[:, 2],
             name=name,
         )
+    
+    def from_simsopt(coil_simsopt, name=""):
+        current = coil_simsopt.current.get_dofs()
+        curve = FourierXYZCurve.from_simsopt(coil_simsopt.curve)
+        return FourierXYZCoil(
+            current=current,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            Z_n=curve.Z_n,
+            modes=curve.X_basis.modes[:, 2],
+            name=name,
+        )
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):

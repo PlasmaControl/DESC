@@ -10,7 +10,6 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
-    SectionLambdaSelfConsistency,
     SectionRSelfConsistency,
     SectionZSelfConsistency,
     get_fixed_boundary_constraints,
@@ -652,7 +651,6 @@ class ProximalProjection(ObjectiveFunction):
                 "Za_n",
                 "Rp_lmn",
                 "Zp_lmn",
-                "Lp_lmn",
             ]
         elif self._solve_method == "section":
             args2remove = [
@@ -686,7 +684,7 @@ class ProximalProjection(ObjectiveFunction):
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn", "Lp_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
@@ -716,14 +714,6 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZp)
-            if arg == "Lp_lmn":
-                c = get_instance(
-                    self._eq_linear_constraints, SectionLambdaSelfConsistency
-                )
-                A = c.jac_unscaled(xz)[0]["L_lmn"]
-                Ainv = np.linalg.pinv(A)
-                dxdLp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["L_lmn"]] @ Ainv
-                dxdc.append(dxdLp)
 
         # dxdc is a matrix that when multiplied by the optimization variables (only
         # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and

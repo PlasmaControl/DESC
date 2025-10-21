@@ -1127,10 +1127,6 @@ class FixSectionR(FixParameters):
     ):
         if "Rp_lmn" not in eq.params_dict:
             make_optimizable("Rp_lmn", eq)
-        if "Zp_lmn" not in eq.params_dict:
-            make_optimizable("Zp_lmn", eq)
-        if "Lp_lmn" not in eq.params_dict:
-            make_optimizable("Lp_lmn", eq)
         if remove_optimizables:
             if "Rb_lmn" in eq.params_dict:
                 make_nonoptimizable("Rb_lmn", eq)
@@ -1225,12 +1221,8 @@ class FixSectionZ(FixParameters):
         remove_optimizables=True,
         name="fixed cross-section Z",
     ):
-        if "Rp_lmn" not in eq.params_dict:
-            make_optimizable("Rp_lmn", eq)
         if "Zp_lmn" not in eq.params_dict:
             make_optimizable("Zp_lmn", eq)
-        if "Lp_lmn" not in eq.params_dict:
-            make_optimizable("Lp_lmn", eq)
         if remove_optimizables:
             if "Rb_lmn" in eq.params_dict:
                 make_nonoptimizable("Rb_lmn", eq)
@@ -1325,13 +1317,9 @@ class FixSectionLambda(FixParameters):
         remove_optimizables=True,
         name="fixed cross-section λ",
     ):
-        if "Rp_lmn" not in eq.params_dict:
-            make_optimizable("Rp_lmn", eq)
-        if "Zp_lmn" not in eq.params_dict:
-            make_optimizable("Zp_lmn", eq)
+        if "Lp_lmn" not in eq.params_dict:
+            make_optimizable("Lp_lmn", eq)
         if remove_optimizables:
-            if "Lp_lmn" not in eq.params_dict:
-                make_optimizable("Lp_lmn", eq)
             if "Rb_lmn" in eq.params_dict:
                 make_nonoptimizable("Rb_lmn", eq)
             if "Zb_lmn" in eq.params_dict:

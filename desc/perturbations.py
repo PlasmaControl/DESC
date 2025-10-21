@@ -12,7 +12,6 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
-    SectionLambdaSelfConsistency,
     SectionRSelfConsistency,
     SectionZSelfConsistency,
     get_fixed_boundary_constraints,
@@ -82,8 +81,6 @@ def get_deltas(things1, things2):  # noqa: C901
                 deltas["Rp_lmn"] = s2.R_lmn - s1.R_lmn
             if not jnp.allclose(s2.Z_lmn, s1.Z_lmn):
                 deltas["Zp_lmn"] = s2.Z_lmn - s1.Z_lmn
-            if not jnp.allclose(s2.L_lmn, s1.L_lmn):
-                deltas["Lp_lmn"] = s2.L_lmn - s1.L_lmn
 
     for key, val in profile_names.items():
         if key in things1:
@@ -275,12 +272,6 @@ def perturb(  # noqa: C901
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zp_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Lp_lmn" in deltas.keys():
-        con = get_instance(constraints, SectionLambdaSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["L_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Lp_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["L_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
         A = con.jac_unscaled(xz)[0]["R_lmn"]
@@ -297,7 +288,7 @@ def perturb(  # noqa: C901
     other_args = [
         arg
         for arg in eq.optimizable_params
-        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn", "Lp_lmn"]
+        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(

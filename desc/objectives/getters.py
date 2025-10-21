@@ -185,6 +185,7 @@ def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda
         FixSectionR(**kwargs),
         FixSectionZ(**kwargs),
     )
+    fix_lambda = False
     if fix_lambda:
         constraints += (FixSectionLambda(**kwargs),)
     constraints += (FixPsi(**kwargs),)

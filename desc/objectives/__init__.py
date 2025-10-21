@@ -23,6 +23,7 @@ from ._equilibrium import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    ForceBalanceGalerkin,
     HelicalForceBalance,
     RadialForceBalance,
 )
@@ -43,6 +44,7 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    SpectralCondensation,
     Volume,
 )
 from ._neoclassical import EffectiveRipple

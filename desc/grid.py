@@ -1688,12 +1688,9 @@ class ConcentricGrid(_Grid):
             rho[0] = rho[1] / 10
 
         if node_pattern == "jacobi":
-            rho = np.atleast_1d(rho)
             drho = special.js_roots(L // 2 + 1, 2, 2)[1]
             # remove r weight function associated with the shifted Jacobi weights
             drho /= rho
-            print(drho.shape)
-            print(rho.shape)
         else:
             drho = _midpoint_spacing(rho, jnp=np)
         r = []

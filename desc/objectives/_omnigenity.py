@@ -1212,8 +1212,8 @@ class OmnigenityHarmonics(_Objective):
                 self._dim_f = 1 * M_harmonics * (2 * N_harmonics + 1)
             else:
                 self._is_imag = True
-                # self._dim_f = 2 * M_harmonics * (2 * N_harmonics + 1)
-                self._dim_f = (2 * M_harmonics + 1) * (2 * N_harmonics + 1) + 1
+                self._dim_f = 2 * M_harmonics * (2 * N_harmonics + 1)
+                # self._dim_f = (2 * M_harmonics + 1) * (2 * N_harmonics + 1) + 1
             if self._normalize:
                 scales = compute_scaling_factors(eq)
                 self._normalization = scales["B"]

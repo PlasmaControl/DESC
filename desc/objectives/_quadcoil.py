@@ -51,6 +51,8 @@ _DIFF_USER_ARGNAMES = [
 
 # Data keys needed to calculate Bnormal_plasma.
 _BPLASMA_DATA_KEYS = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
+# Data keys needed to calculate Bnormal from external coils.
+_BCOIL_DATA_KEYS = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
 
 class QuadcoilProxy(_Objective):  
     """
@@ -125,8 +127,40 @@ class QuadcoilProxy(_Objective):
         name="QUADCOIL Proxy",
         Bnormal_plasma_chunk_size=None,
         source_grid=None,
+        # External coils - no external coils by default
+        field=[],
+        field_grid=None,
+        enable_net_current_plasma=True,
+        eq_fixed=False, # Whether the equilibrium are fixed
+        field_fixed=True, # Whether the external fields are fixed
+        # misc
         jac_chunk_size=None,
+        bs_chunk_size=None,
     ):
+        self._eq = eq
+        self._field = [field] if not isinstance(field, list) else field
+        # Coil and things initialization
+        self._enable_net_current_plasma = enable_net_current_plasma
+        self._eq_fixed = eq_fixed
+        self._field_fixed = field_fixed
+        things = []
+        if not (eq_fixed or field_fixed):
+            warnings.warn('Both eq_fixed and field_fixed are True. things will be empty.')
+        if not eq_fixed:
+            things += [eq]
+        if not field_fixed:
+            if not field:
+                raise AttributeError('When field_fixed is False, field must be an object or a non-empty list.')
+            things += [field]
+
+        if not (enable_net_current_plasma or field):
+            warnings.warn('enable_net_current_plasma is false and field is empty. The problem may be trivial.')
+        
+        if enable_net_current_plasma and field:
+            warnings.warn('There are both external coils and net current. '
+                          'This is very uncommon (windowpane filaments + winding surface with net current).')
+        
+
         quadcoil_args = quadcoil_args.copy()
         if target is None and bounds is None:
             target = 0 # default target value
@@ -207,10 +241,12 @@ class QuadcoilProxy(_Objective):
         self._verbose = verbose  
         self._source_grid = source_grid # B_normal grids
         self._Bnormal_plasma_chunk_size = Bnormal_plasma_chunk_size
-        self.enable_Bnormal_plasma = enable_Bnormal_plasma
+        self._bs_chunk_size = bs_chunk_size
+        self._enable_Bnormal_plasma = enable_Bnormal_plasma
         self._plasma_M_theta = plasma_M_theta
         self._plasma_N_phi = plasma_N_phi
         self._constants = {}
+        self._constants['field_grid'] = field_grid
         # These are differentiable quantities that are not equilibrium-dependent. 
         # They can be user-provided, but they also all have default values, so 
         # we set them here. This is necessary because we're calling quadcoil through
@@ -222,10 +258,7 @@ class QuadcoilProxy(_Objective):
         # it is also used to calculate surface Bnormal_plasma
         # when enable_Bnormal_plasma=True, along with surface_grid.
         # because we the quadrature points must be calculated before generating
-        # quadcoil callable, it will be constructed here, instead of in the 
-        # 
-        # quadrature points, and will still be computed
-        # when self.enable_Bnormal_plasma=False.
+        # quadcoil callable, it will be constructed here, instead of in the build().
         eval_grid = LinearGrid(
             NFP=eq.NFP,
             # If we set this to sym it'll only evaluate 
@@ -235,8 +268,13 @@ class QuadcoilProxy(_Objective):
             N=self._plasma_N_phi,
             rho=1.0
         )
-        eval_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
-        eval_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
+        eval_data_keys = []
+        if not self._field:
+            eval_data_keys = eval_data_keys + _BCOIL_DATA_KEYS
+        if not self._enable_Bnormal_plasma:
+            eval_data_keys = eval_data_keys + _BPLASMA_DATA_KEYS
+        eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=eval_grid)
         self._constants['eval_profiles'] = eval_profiles
         self._constants['eval_transforms'] = eval_transforms
         # The grid used to calculate net toroidal current
@@ -264,38 +302,47 @@ class QuadcoilProxy(_Objective):
         # partial(quadcoil, **quadcoil_args), implemented in gen_quadcoil_for_diff.
         # The function also generates the custom_jvp rule based on the static arguments.
         # We store the resulting function as a static attribute.
-        _quadcoil_full, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_args)
+        _quadcoil_values, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_args)
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)
-        self._quadcoil_full = jit(_quadcoil_full)
+        self._quadcoil_values = jit(_quadcoil_values)
         
         # ----- Setting and registering keyword arguments -----
         self._static_attrs = _Objective._static_attrs + [
-            '_static_attrs'
+            # External-coils related
+            '_enable_net_current_plasma',
+            '_eq_fixed',
+            '_field_fixed',
+            '_bs_chunk_size',
+            # Basics
+            '_static_attrs', 
             '_deriv_mode',
             '_verbose',
+            # Free-boundary-related
             '_Bnormal_plasma_chunk_size',
-            'enable_Bnormal_plasma',
+            '_enable_Bnormal_plasma',
+            # QUADCOIL-related
             'metric_name',
             'nfp',
             'stellsym',
             '_plasma_M_theta',
             '_plasma_N_phi',
+            '_quadcoil_for_diff',
+            '_quadcoil_values',
+            'plasma_quadpoints_phi',
+            'plasma_quadpoints_theta',
+            # VMEC <=> DESC
             '_surf_R_A',
             '_surf_R_c_indices',
             '_surf_R_s_indices',
             '_surf_Z_A',
             '_surf_Z_c_indices',
             '_surf_Z_s_indices',
-            '_quadcoil_for_diff',
-            '_quadcoil_full',
-            'plasma_quadpoints_phi',
-            'plasma_quadpoints_theta'
         ]
         
         # ----- Superclass -----
         super().__init__(
-            things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium
+            things=things, # things is a list of things that will be optimized, in this case just the equilibrium
             target=target,
             bounds=bounds,
             weight=weight,
@@ -320,7 +367,7 @@ class QuadcoilProxy(_Objective):
         # things is the list of things that will be optimized,
         # we assigned things to be just eq in the init, so we know that the
         # first (and only) element of things is the equilibrium
-        eq = self.things[0]
+        eq = self._eq
         # dim_f = size of the output vector returned by self.compute.
         # This is a scalar objective.
         self._dim_f = 1
@@ -341,34 +388,36 @@ class QuadcoilProxy(_Objective):
             eq.surface.Z_basis.modes[:,1], 
             eq.surface.Z_basis.modes[:,2]
         )
+
         # ----- Building grids and transforms -----
         # source_grid for Bnormal_plasma, and eval_grid.
         # Eval grid has a special role, in that it helps
         # generate plasma_quadpoint_phi and theta. Therefore,
         # it will be generated in init instead.
-        net_poloidal_current_grid = LinearGrid(rho=jnp.array(1.0))
-        net_poloidal_current_profiles = get_profiles(['G'], obj=eq, grid=net_poloidal_current_grid)
-        net_poloidal_current_transforms = get_transforms(['G'], obj=eq, grid=net_poloidal_current_grid)
-        # Storing transforms
-        # Attributes inside and outside _constants aren't really treated
-        # differently, except that self._constants is traced. Because quadcoil_arg
-        # is a mixture of traced and static inputs, we want to individually register
-        # all the static inputs. Moreover, dicts are not hashable, so the static 
-        # arguments in quadcoil_args must all be stored as individual attributes. 
-        # We might as well store everything in quadcoil_args as individual attributes,\
-        # and only store the transforms and profiles here in self._constants.
+        if self._enable_net_current_plasma:
+            net_poloidal_current_grid = LinearGrid(rho=jnp.array(1.0))
+            net_poloidal_current_profiles = get_profiles(['G'], obj=eq, grid=net_poloidal_current_grid)
+            net_poloidal_current_transforms = get_transforms(['G'], obj=eq, grid=net_poloidal_current_grid)
+            # Storing transforms
+            # Attributes inside and outside _constants aren't really treated
+            # differently, except that self._constants is traced. Because quadcoil_arg
+            # is a mixture of traced and static inputs, we want to individually register
+            # all the static inputs. Moreover, dicts are not hashable, so the static 
+            # arguments in quadcoil_args must all be stored as individual attributes. 
+            # We might as well store everything in quadcoil_args as individual attributes,\
+            # and only store the transforms and profiles here in self._constants.
+            self._constants['net_poloidal_current_profiles'] = net_poloidal_current_profiles
+            self._constants['net_poloidal_current_transforms'] = net_poloidal_current_transforms
 
-        self._constants['net_poloidal_current_profiles'] = net_poloidal_current_profiles
-        self._constants['net_poloidal_current_transforms'] = net_poloidal_current_transforms
         # Mose DESC objectives are fields, so they 
         # hard-coded the superclass to ask for a weight 
         # to integrate the field over a quadrature...
 
-        # source_grid will only be generated when self.enable_Bnormal_plasma == True.
+        # source_grid will only be generated when self._enable_Bnormal_plasma == True.
         # Here, eval_grid is not only used to define Bnormal_plasma, 
         # but also used to generate plasma_quadpoints_phi and theta.
         # Therefore, it will be greated regardless self.valuum == True.
-        if self.enable_Bnormal_plasma:
+        if self._enable_Bnormal_plasma:
             if verbose:
                 jax.debug.print('enable_Bnormal_plasma=True, QUADCOIL will no '\
                                 'longer assume zero Bnormal_plasma at the boundary.')
@@ -403,6 +452,43 @@ class QuadcoilProxy(_Objective):
             self._constants['source_profiles'] = source_profiles
             self._constants['source_transforms'] = source_transforms
             self._constants['interpolator'] = interpolator
+        
+        if self._field:
+            from desc.magnetic_fields import SumMagneticField
+            self._constants['field'] = SumMagneticField(self._field)
+
+        # ----- Precomputing quantities -----
+
+        # Now that all transforms are calculated, time to 
+        # precompute quantities where applicable.
+        if self._eq_fixed:
+            # Plasma dofs
+            self._constants['plasma_dofs'] = self.compute_plasma_dofs(eq.params_dict)
+
+            # Net plasma current
+            if self._enable_net_current_plasma:
+                self._constants['G'] = compute_G(eq.params_dict, self._constants)
+
+            # B plasma
+            if self._enable_Bnormal_plasma:
+                self._constants['Bnormal_plasma'] = compute_Bnormal_plasma(
+                    self._constants, 
+                    eq.params_dict, 
+                    self._B_plasma_chunk_size
+                )
+
+            # Part of external field
+            if self._field:
+                coils_x, coils_n_rho = compute_eval_data_coils(self._constants, eq.params_dict)
+                self._constants['coils_x'] = coils_x
+                self._constants['coils_n_rho'] = coils_n_rho
+
+                if self._field_fixed:
+                    self._constants['Bnormal_ext'] = compute_Bnormal_ext(
+                        self._constants, 
+                        self._constants['field'].params_dict, # params_field, 
+                        self._bs_chunk_size
+                    )
             
         
         # ----- Normalization scales -----
@@ -430,11 +516,11 @@ class QuadcoilProxy(_Objective):
         # finally, call ``super.build()``
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *all_params, constants=None):
         # We prohibit the user from providing constants
-        return self.compute_full(params=params, full_mode=False)
+        return self.compute_full(*all_params, full_mode=False)
     
-    def compute_full(self, params, full_mode=True):
+    def compute_full(self, *all_params, full_mode=True):
         """
         Takes the same parameters as compute, but can either output the 
         full quadcoil results, or do what compute() is supposed to do.
@@ -452,76 +538,73 @@ class QuadcoilProxy(_Objective):
         -------
         f : scalar
         """ 
-        # ----- Constructing rz surface dofs in Simsopt convention -----
-        rs_raw, rc_raw = ptolemy_identity_rev_compute(self._surf_R_A, self._surf_R_c_indices, self._surf_R_s_indices, params['Rb_lmn'])
-        zs_raw, zc_raw = ptolemy_identity_rev_compute(self._surf_Z_A, self._surf_Z_c_indices, self._surf_Z_s_indices, params['Zb_lmn'])
-        # Stellsym SurfaceRZFourier's dofs consists of 
-        # [rc, zs]
-        # Non-stellsym SurfaceRZFourier's dofs consists of 
-        # [rc, rs, zc, zs]
-        # Because rs, zs from ptolemy_identity_rev shares the same m, n 
-        # arrays as rc, zc, they both have a zero as the first element 
-        # that need to be removed.
-        rc = rc_raw.flatten()
-        rs = rs_raw.flatten()[1:]
-        zc = zc_raw.flatten()
-        zs = zs_raw.flatten()[1:]
-        if self.stellsym:
-            plasma_dofs = jnp.concatenate([rc, zs])
-        else:
-            plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
-
-        # ----- Computing Bnormal_plasma -----
-        # Copied from DESC/desc/objectives/_free_boundary.py
+        # Loading constants
         constants = self._constants
-        
-        if self.enable_Bnormal_plasma:
-            # Using the stored transforms to calculate B_normal_plasma
-            source_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                _BPLASMA_DATA_KEYS,
-                params=params,
-                transforms=constants["source_transforms"],
-                profiles=constants["source_profiles"],
-            )
-            eval_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                _BPLASMA_DATA_KEYS,
-                params=params,
-                transforms=constants["eval_transforms"],
-                profiles=constants["eval_profiles"],
-            )
-            Bplasma = virtual_casing_biot_savart(
-                eval_data,
-                source_data,
-                constants["interpolator"],
-                chunk_size=self._B_plasma_chunk_size,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + eval_data["B"] / 2
-            Bnormal_plasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
+
+        # Load fixed params 
+        if self._eq_fixed:
+            params_eq = self._eq.params_dict
+            params_field = all_params
         else:
-            Bnormal_plasma = jnp.zeros((
-                len(self.plasma_quadpoints_phi),
-                len(self.plasma_quadpoints_theta)
-            ))
+            params_eq = all_params[0]
+            if self._field_fixed:
+                params_field = constants['field'].params_dict
+            else:
+                params_field = all_params[1:]
+
+
+        # ----- Quantities with pre-computation -----
+
+        # Plasma dofs
+        if self._eq_fixed:
+            plasma_dofs = constants['plasma_dofs']
+        else:
+            plasma_dofs = self.compute_plasma_dofs(params_eq)
+
+        # Net fields  
+        Bnormal = jnp.zeros((
+            len(self.plasma_quadpoints_phi),
+            len(self.plasma_quadpoints_theta)
+        ))
+
+        # External fields
+        if self._field:
+            if self._eq_fixed:
+                if self._field_fixed:
+                    Bnormal += constants['Bnormal_ext'] # eq and field fixed
+                else:
+                    Bnormal += compute_Bnormal_ext(constants, params_field, self._bs_chunk_size).reshape(Bnormal.shape) # neither fixed, field fixed only.
+            else:
+                coils_x, coils_n_rho = compute_eval_data_coils(constants, params_eq)
+                constants['coils_x'] = coils_x
+                constants['coils_n_rho'] = coils_n_rho
+                Bnormal += compute_Bnormal_ext(constants, params_field, self._bs_chunk_size).reshape(Bnormal.shape) # neither fixed, field fixed only.
+
+        # Plasma fields
+        if self._enable_Bnormal_plasma:
+            if self._eq_fixed:
+                Bnormal += constants['Bnormal_plasma']
+            else:
+                Bnormal += compute_Bnormal_plasma(constants, params_eq, self._B_plasma_chunk_size).reshape(Bnormal.shape)
         
         # ----- Calling the net poloidal current -----
-        G_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            ["G"],                
-            params=params,                   
-            transforms=constants['net_poloidal_current_transforms'],
-            profiles=constants['net_poloidal_current_profiles'],
-        )
-        net_poloidal_current_amperes = - G_data["G"][0] / mu_0 * 2 * jnp.pi
+        if self._enable_net_current_plasma:
+            if self._eq_fixed:
+                net_poloidal_current_amperes = constants['G']
+            else:
+                net_poloidal_current_amperes = compute_G(params_eq, constants)
+        else:
+            net_poloidal_current_amperes = 0.
+
         # ----- Calling the quadcoil wrapper with custom_vjp -----  
         if full_mode:
-            out_dict, qp, cp_mn, solve_results = self._quadcoil_full(
+            print('plasma_dofs', plasma_dofs.shape)
+            print('Bnormal', Bnormal.shape)
+            out_dict, qp, cp_mn, solve_results = self._quadcoil_values(
                 plasma_dofs=plasma_dofs,
                 net_poloidal_current_amperes=net_poloidal_current_amperes,
                 net_toroidal_current_amperes=self.net_toroidal_current_amperes, 
-                Bnormal_plasma=Bnormal_plasma,
+                Bnormal_plasma=-Bnormal, # Because DESC plasma surface is flipped.
                 plasma_coil_distance=self.plasma_coil_distance,
                 winding_dofs=self.winding_dofs,
                 objective_weight=self.objective_weight,
@@ -534,7 +617,7 @@ class QuadcoilProxy(_Objective):
             plasma_dofs=plasma_dofs,
             net_poloidal_current_amperes=net_poloidal_current_amperes,
             net_toroidal_current_amperes=self.net_toroidal_current_amperes, 
-            Bnormal_plasma=Bnormal_plasma,
+            Bnormal_plasma=Bnormal,
             plasma_coil_distance=self.plasma_coil_distance,
             winding_dofs=self.winding_dofs,
             objective_weight=self.objective_weight,
@@ -559,8 +642,99 @@ class QuadcoilProxy(_Objective):
             f_out = f_out + f_weight * jnp.where(f_val_eff > f_target_eff, f_val_eff-f_target_eff, 0.)
 
         return f_out
+    
+    def compute_plasma_dofs(self, params_eq):
+        rs_raw, rc_raw = ptolemy_identity_rev_compute(
+            self._surf_R_A, 
+            self._surf_R_c_indices, self._surf_R_s_indices, 
+            params_eq['Rb_lmn']
+        )
+        zs_raw, zc_raw = ptolemy_identity_rev_compute(
+            self._surf_Z_A, 
+            self._surf_Z_c_indices, self._surf_Z_s_indices, 
+            params_eq['Zb_lmn']
+        )
+        # Stellsym SurfaceRZFourier's dofs consists of 
+        # [rc, zs]
+        # Non-stellsym SurfaceRZFourier's dofs consists of 
+        # [rc, rs, zc, zs]
+        # Because rs, zs from ptolemy_identity_rev shares the same m, n 
+        # arrays as rc, zc, they both have a zero as the first element 
+        # that need to be removed.
+        rc = rc_raw.flatten()
+        rs = rs_raw.flatten()[1:]
+        zc = zc_raw.flatten()
+        zs = zs_raw.flatten()[1:]
+        if self.stellsym:
+            plasma_dofs = jnp.concatenate([rc, zs])
+        else:
+            plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
+        return plasma_dofs
 
 # ----- Helper functions -----
+def compute_Bnormal_plasma(constants, params_eq, _B_plasma_chunk_size):
+    # Using the stored transforms to calculate B_normal_plasma
+    source_data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        _BPLASMA_DATA_KEYS,
+        params=params_eq,
+        transforms=constants["source_transforms"],
+        profiles=constants["source_profiles"],
+    )
+    eval_data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        _BPLASMA_DATA_KEYS,
+        params=params_eq,
+        transforms=constants["eval_transforms"],
+        profiles=constants["eval_profiles"],
+    )
+    Bplasma = virtual_casing_biot_savart(
+        eval_data,
+        source_data,
+        constants["interpolator"],
+        chunk_size=_B_plasma_chunk_size,
+    )
+    # need extra factor of B/2 bc we're evaluating on plasma surface
+    Bplasma = Bplasma + eval_data["B"] / 2
+    Bnormal_plasma += jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
+    return Bnormal_plasma
+
+def compute_eval_data_coils(constants, params_eq):
+    eval_data_coils = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        _BCOIL_DATA_KEYS,
+        params=params_eq,
+        transforms=constants["eval_transforms"],
+        profiles=constants["eval_profiles"],
+    )
+    coils_x = jnp.array([eval_data_coils["R"], eval_data_coils["phi"], eval_data_coils["Z"]]).T
+    coils_n_rho = eval_data_coils["n_rho"]
+    return coils_x, coils_n_rho
+
+def compute_Bnormal_ext(constants, params_field, _bs_chunk_size):
+    coils_nrho = constants['coils_n_rho']
+    coils_x = constants['coils_x']
+    B_ext = constants["field"].compute_magnetic_field(
+        coils_x,
+        source_grid=constants["field_grid"],
+        basis="rpz",
+        params=params_field,
+        chunk_size=_bs_chunk_size,
+    )
+    B_ext = jnp.sum(B_ext * coils_nrho, axis=-1)
+    return B_ext
+
+def compute_G(params_eq, constants):
+    G_data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        ["G"],                
+        params=params_eq,                   
+        transforms=constants['net_poloidal_current_transforms'],
+        profiles=constants['net_poloidal_current_profiles'],
+    )
+    net_poloidal_current_amperes += - G_data["G"][0] / mu_0 * 2 * jnp.pi
+    return net_poloidal_current_amperes
+
 def ptolemy_identity_rev_precompute(m_1, n_1):
     """
     We have split ptolemy_identity_rev into two parts:

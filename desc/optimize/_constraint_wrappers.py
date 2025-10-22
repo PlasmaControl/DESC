@@ -1901,7 +1901,7 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
             step = xi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col = (self.compute_scaled_error(x + step) - f0) / step
+            jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
             jac.append(self._project_coils_profiles_etc(jac_col))
         jac = jnp.hstack(jac)
         return f0.T @ jac
@@ -1980,7 +1980,7 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
             step = xi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col = (self.compute_scaled_error(x + step) - f0) / step
+            jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
             jac.append(self._project_coils_profiles_etc(jac_col))
         jac = jnp.hstack(jac)
         return jac
@@ -2052,19 +2052,21 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
 
             for i in range(v.shape[0]):
                 vi = v[i]
+                vi = vi / jnp.linalg.norm(vi)
                 step = vi * (self._abs_step)
                 # and should be able to just call compute_scald_error
                 # as it already does update eq
-                jac_col = (self.compute_scaled_error(x + step) - f0) / step
+                jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
                 jac.append(self._project_coils_profiles_etc(jac_col))
             jac = jnp.atleast_2d(jac)
             return jac
         else:
             vi = v
+            vi = vi / jnp.linalg.norm(vi)
             step = vi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col = (self.compute_scaled_error(x + step) - f0) / step
+            jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
             return jac_col
 
     def jvp_unscaled(self, v, x, constants=None):

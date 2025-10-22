@@ -1407,6 +1407,7 @@ def test_omnigenityharmonics_qa():
     # S_list=0 because the equilibrium is QS
     np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
 
+
 @pytest.mark.regression
 @pytest.mark.optimize
 @pytest.mark.slow
@@ -1463,9 +1464,7 @@ def test_omnigenityharmonics_optimization():
             self._S_func = 0.0
             self._D_func = 1.0
 
-    with pytest.raises(
-        ValueError, match="requires _S_func and _D_func to be callable"
-    ):
+    with pytest.raises(ValueError, match="requires _S_func and _D_func to be callable"):
         OmnigenityHarmonics(
             eq=eq,
             field=_BadCallableField(helicity=field.helicity, NFP=field.NFP),
@@ -1529,6 +1528,7 @@ def test_omnigenityharmonics_optimization():
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([1]))
     data = eq.compute("mirror ratio", grid=grid)
     np.testing.assert_allclose(data["mirror ratio"], 0.25, atol=1e-2)
+
 
 @pytest.mark.regression
 @pytest.mark.optimize
@@ -1604,10 +1604,9 @@ def test_omnigenityharmonicsOOPS_fix_field_optimization():
         MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
     )
     optimizer = Optimizer("lsq-auglag")
-    eq.optimize(
-         objective, constraints,optimizer, maxiter=150, verbose=3
-    )
+    eq.optimize(objective, constraints, optimizer, maxiter=150, verbose=3)
     eq, _ = eq.solve(objective="force", verbose=3)
+
 
 @pytest.mark.regression
 @pytest.mark.optimize
@@ -1628,6 +1627,7 @@ def test_omnigenityharmonicsLCForm_fix_field_optimization():
     )
     eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
     eq, _ = eq.solve(objective="force", verbose=3)
+
     def _S_func(x2d, y2d, S_list):
         return 0.35 * x2d * jnp.sin(y2d)
 
@@ -1691,10 +1691,9 @@ def test_omnigenityharmonicsLCForm_fix_field_optimization():
         MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
     )
     optimizer = Optimizer("lsq-auglag")
-    eq.optimize(
-         objective, constraints,optimizer, maxiter=150, verbose=3
-    )
+    eq.optimize(objective, constraints, optimizer, maxiter=150, verbose=3)
     eq, _ = eq.solve(objective="force", verbose=3)
+
 
 @pytest.mark.unit
 def test_omnigenityharmonics_proximal():

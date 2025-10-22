@@ -154,6 +154,34 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
+def get_free_boundary_constraints(eq, profiles=True, normalize=True):
+    """Get the constraints necessary for a typical free-boundary equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixPsi(**kwargs),)
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (con(**kwargs),)
+    constraints += (ForceBalance(eq),)
+    return constraints
+
+
 def get_NAE_constraints(
     desc_eq,
     qsc_eq,

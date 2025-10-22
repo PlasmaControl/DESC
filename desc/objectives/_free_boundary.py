@@ -74,6 +74,7 @@ class VacuumBoundaryError(_Objective):
     _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
+    _free_boundary = True
 
     def __init__(
         self,
@@ -458,6 +459,7 @@ class BoundaryError(_Objective):
     _linear = False
     _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2, T*m^2)"
+    _free_boundary = True
 
     _coordinates = "rtz"
 
@@ -938,6 +940,7 @@ class BoundaryErrorNESTOR(_Objective):
     _print_value_fmt = "Boundary magnetic pressure error: "
     _units = "(T^2*m^2)"
     _coordinates = "rtz"
+    _free_boundary = True
 
     def __init__(
         self,

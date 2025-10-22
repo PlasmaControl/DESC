@@ -62,6 +62,15 @@ Specialized Plots for QS Metrics
     desc.plotting.plot_qs_error
 
 
+Plotting energetic particle proxies
+-----------------------------------
+.. autosummary::
+    :toctree: _api/plotting
+    :recursive:
+
+    desc.plotting.plot_gammac
+
+
 Misc Plotting Utilities
 -----------------------
 .. autosummary::

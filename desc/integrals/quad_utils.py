@@ -417,6 +417,5 @@ def get_quadrature(quad, automorphism):
     if automorphism is not None:
         auto, grad_auto = automorphism
         w = w * grad_auto(x)
-        # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.
         x = auto(x)
     return x, w

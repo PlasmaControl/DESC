@@ -2,9 +2,18 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign
 
-from ..utils import cross, dot, safearccos, safenormalize
+from ..utils import (
+    cross,
+    dot,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safearccos,
+    safenormalize,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from .data_index import register_compute_fun
-from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 
 @register_compute_fun(

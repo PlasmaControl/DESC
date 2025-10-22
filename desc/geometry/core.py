@@ -8,7 +8,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.geom_utils import reflection_matrix, rotation_matrix
 from desc.compute.utils import (
     _parse_parameterization,
     get_data_deps,
@@ -18,13 +17,14 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif
+from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "_shift", "_rotmat"]
+    _static_attrs = Optimizable._static_attrs + ["_name"]
 
     def __init__(self, name=""):
         self._shift = jnp.array([0, 0, 0], dtype=float)
@@ -400,6 +400,7 @@ class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
+    _static_attrs = Optimizable._static_attrs + ["_name", "_sym", "_L", "_M", "_N"]
 
     def _set_up(self):
         """Set things after loading."""

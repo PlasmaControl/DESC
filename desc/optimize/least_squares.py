@@ -258,6 +258,22 @@ def lsqtr(  # noqa: C901
     actual_reduction = jnp.inf
     reduction_ratio = 0
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print("-" * 60, "\n")
+
     if verbose > 1:
         print_header_nonlinear()
         print_iteration_nonlinear(
@@ -269,7 +285,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = None  # "Levenberg-Marquardt" parameter
+    alpha = jnp.float64(0.0)  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
@@ -298,7 +314,7 @@ def lsqtr(  # noqa: C901
         actual_reduction = -1
 
         # theta controls step back step ratio from the bounds.
-        theta = max(0.995, 1 - g_norm)
+        theta = jnp.float64(max(0.995, 1 - g_norm))
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.

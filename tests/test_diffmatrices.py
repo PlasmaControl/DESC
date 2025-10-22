@@ -21,9 +21,6 @@ from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
 )
 from desc.integrals.quad_utils import leggauss_lob
 
-jax.config.update("jax_enable_x64", False)
-
-
 NFP = 5
 
 

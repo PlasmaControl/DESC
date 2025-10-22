@@ -15,7 +15,6 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..diffmat_utils import fourier_diffmat, legendre_D1  # --no-verify D1_FD_4,
 from ..integrals.quad_utils import leggauss_lob
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -682,7 +681,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     + "using the most compact representation of diffmatrices",
     dim=1,
     params=["Psi"],
-    transforms={"grid": []},
+    transforms={"grid": [], "diffmat": []},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -778,12 +777,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             n_zeta_max = 2
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
-        D_zeta0 = fourier_diffmat(n_zeta_max)
+        D_zeta0 = transforms["diffmat"].zeta_diffmat
 
     def _f(x):
-        x_0 = 0.5
-        m_1 = 2.0
-        m_2 = 2.0
+        x_0 = 0.8
+        m_1 = 3.0
+        m_2 = 1.0
         lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
         upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
         eps = 1.0e-3
@@ -793,7 +792,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     dx_f = jax.vmap(jax.grad(_f))
 
     x, w = leggauss_lob(n_rho_max)
-
     scale_vector1 = dx_f(x) ** -1
 
     # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
@@ -802,14 +800,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     scale_x1 = scale_vector1[:, None]
 
     # Get differentiation matrices
-    # RG: setting the gradient to 0 to save some memory?
-    D_rho0 = legendre_D1(n_rho_max - 1) * scale_x1
-
-    # --no-verify D_rho0 = fourier_diffmat(n_rho_max) * scale_x1
-    # --no-verify D_rho0, W0 = D1_FD_4(n_rho_max, h)
-    # --no-verify D_rho0 = D_rho0 * scale_x1
-
-    D_theta0 = fourier_diffmat(n_theta_max)
+    D_rho0 = transforms["diffmat"].rho_diffmat * scale_x1
+    D_theta0 = transforms["diffmat"].theta_diffmat
 
     wrho = jnp.diag(1 / scale_vector1 * w)
     wrho = wrho.at[jnp.abs(wrho) < 1e-12].set(0.0)

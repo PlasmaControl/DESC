@@ -1687,7 +1687,15 @@ class ConcentricGrid(_Grid):
         elif rho[0] == 0:
             rho[0] = rho[1] / 10
 
-        drho = _midpoint_spacing(rho, jnp=np)
+        if node_pattern == "jacobi":
+            rho = np.atleast_1d(rho)
+            drho = special.js_roots(L // 2 + 1, 2, 2)[1]
+            # remove r weight function associated with the shifted Jacobi weights
+            drho /= rho
+            print(drho.shape)
+            print(rho.shape)
+        else:
+            drho = _midpoint_spacing(rho, jnp=np)
         r = []
         t = []
         dr = []
@@ -1696,8 +1704,9 @@ class ConcentricGrid(_Grid):
         for iring in range(L // 2 + 1, 0, -1):
             rho_idx = -iring
             if iring == L // 2 + 1 and rho[rho_idx] > 0:
-                iring -= 1  # make innermost ring have as many nodes as next ring
+                # make innermost ring have as many nodes as next ring
                 # unless it is a point on-axis
+                iring -= 1
             ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
             if ntheta % 2 == 0:
                 # ensure an odd number of nodes on each surface

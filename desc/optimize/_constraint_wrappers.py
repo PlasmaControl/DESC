@@ -1593,6 +1593,9 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
         # history and caching
 
         # ensure eq is in free bdry eq first
+        # TODO: how to use ess xscale with this method? we would need to
+        # calc it here then update the linear constraint projection, I guess, or
+        # calc it once and apply to the lin con proj for bdry error
         self._eq.optimize(
             objective=self._eq_fb_objective_wrapped,
             constraints=None,

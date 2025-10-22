@@ -1359,6 +1359,53 @@ def test_omnigenityharmonics_qa():
     # S_list=0 because the equilibrium is QS
     np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
 
+    # LCFORM without stellarator symmetric
+    eq.change_resolution(sym=False)
+    eq.solve()
+    field = OmnigenousFieldLCForm(
+        S_len=1,
+        D_len=1,
+        NFP=eq.NFP,
+        helicity=(1, 0),
+        S_func=_S_func,
+        D_func=_D_func,
+        S_list=np.array([0.01]),
+        D_list=np.array([1.0]),
+    )
+
+    objective = ObjectiveFunction(
+        (
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        field,
+        objective,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    # S_list=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.S_list, 0, atol=1e-12)
 
 @pytest.mark.regression
 @pytest.mark.optimize
@@ -1391,6 +1438,39 @@ def test_omnigenityharmonics_optimization():
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
     )
+
+    # Ensure lcform guard rails raise informative errors without affecting the slow run
+    with pytest.raises(
+        ValueError, match="field_type must be 'desc', 'oops' or 'lcform'"
+    ):
+        OmnigenityHarmonics(eq=eq, field=field, field_type="not-a-type")
+
+    class _BareLCField:
+        def __init__(self, helicity, NFP):
+            self.helicity = helicity
+            self.NFP = NFP
+
+    with pytest.raises(ValueError, match="requires field to define attributes"):
+        OmnigenityHarmonics(
+            eq=eq,
+            field=_BareLCField(helicity=field.helicity, NFP=field.NFP),
+            field_type="lcform",
+        )
+
+    class _BadCallableField(_BareLCField):
+        def __init__(self, helicity, NFP):
+            super().__init__(helicity, NFP)
+            self._S_func = 0.0
+            self._D_func = 1.0
+
+    with pytest.raises(
+        ValueError, match="requires _S_func and _D_func to be callable"
+    ):
+        OmnigenityHarmonics(
+            eq=eq,
+            field=_BadCallableField(helicity=field.helicity, NFP=field.NFP),
+            field_type="lcform",
+        )
 
     eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
     eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
@@ -1450,6 +1530,171 @@ def test_omnigenityharmonics_optimization():
     data = eq.compute("mirror ratio", grid=grid)
     np.testing.assert_allclose(data["mirror ratio"], 0.25, atol=1e-2)
 
+@pytest.mark.regression
+@pytest.mark.optimize
+@pytest.mark.slow
+def test_omnigenityharmonicsOOPS_fix_field_optimization():
+    """Test a realistic OP omnigenity optimization."""
+    # this same example is used in docs/notebooks/tutorials/omnigenity
+
+    # initial equilibrium from QP model
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+
+    # omnigenity optimization
+    field = OmnigenousFieldOOPS(
+        S_len=1,
+        D_len=1,
+        NFP=2,
+        helicity=(0, 1),
+    )
+    field.S_list = np.array([0.35])
+    field.D_list = np.array([1])
+
+    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_half_grid = LinearGrid(
+        rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="oops",
+                eq_grid=eq_half_grid,
+                field_grid=field_half_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+                field_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="oops",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+                field_fixed=True,
+            ),
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
+    )
+    optimizer = Optimizer("lsq-auglag")
+    eq.optimize(
+         objective, constraints,optimizer, maxiter=150, verbose=3
+    )
+    eq, _ = eq.solve(objective="force", verbose=3)
+
+@pytest.mark.regression
+@pytest.mark.optimize
+@pytest.mark.slow
+def test_omnigenityharmonicsLCForm_fix_field_optimization():
+    """Test a realistic OP omnigenity optimization."""
+    # this same example is used in docs/notebooks/tutorials/omnigenity
+
+    # initial equilibrium from QP model
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+    def _S_func(x2d, y2d, S_list):
+        return 0.35 * x2d * jnp.sin(y2d)
+
+    def _D_func(x2d, D_list):
+        p = D_list[0]
+        a = jnp.clip(jnp.pi - x2d, 0.0, jnp.pi)  # enforce AD domain with tracers
+        return jnp.power(jnp.pi, (p - 1) / p) * jnp.power(a, 1 / p)
+
+    field = OmnigenousFieldLCForm(
+        S_len=1,
+        D_len=1,
+        NFP=2,
+        helicity=(0, 1),
+        S_list=np.array([0.35]),
+        D_list=np.array([1]),
+        S_func=_S_func,
+        D_func=_D_func,
+    )
+
+    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_half_grid = LinearGrid(
+        rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=field.NFP, sym=False
+    )
+
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_half_grid,
+                field_grid=field_half_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+                field_fixed=True,
+            ),
+            OmnigenityHarmonics(
+                eq=eq,
+                field=field,
+                field_type="lcform",
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                M_harmonics=16,
+                N_harmonics=8,
+                field_fixed=True,
+            ),
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
+    )
+    optimizer = Optimizer("lsq-auglag")
+    eq.optimize(
+         objective, constraints,optimizer, maxiter=150, verbose=3
+    )
+    eq, _ = eq.solve(objective="force", verbose=3)
 
 @pytest.mark.unit
 def test_omnigenityharmonics_proximal():

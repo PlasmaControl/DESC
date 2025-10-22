@@ -7,34 +7,27 @@ Using tensor product approach in 3D:
 - Fourier methods in y dimension
 - Fourier methods in z dimension
 """
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 from desc.backend import jax, jnp, vmap
-from desc.diffmat_utils import (
-    cheb_D1,
-    cheb_D2,
-    chebpts_lobatto,
+from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
     fourier_diffmat,
     fourier_pts,
+    legendre_diffmat,
 )
+from desc.integrals.quad_utils import leggauss_lob
 
-# --no-verify jax.config.update("jax_enable_x64", False)
+jax.config.update("jax_enable_x64", False)
+
 
 NFP = 5
 
 
 # === Helper Functions ===
-def _eval_1D(f, x):
-    """Evaluate function f at all grid points (x[i])."""
-    return vmap(lambda x_val: f(x_val))(x)
-
-
-def _eval_2D(f, x, y):
-    """Evaluate function f at all grid points (x[i], y[j])."""
-    return vmap(lambda y_val: vmap(lambda x_val: f(x_val, y_val))(x))(y)
-
-
 def _eval_3D(f, x, y, z, NFP):
     """Evaluate function f at grid points (x[i], y[j], z[k])."""
     return vmap(
@@ -115,11 +108,11 @@ def _map_domain(x, option):
         def _f(x):
             return (x + 1) / 2
 
-    dx_f = jax.grad(_f)
-    dxx_f = jax.grad(dx_f)
+    dx_f = jax.vmap(jax.grad(_f))
+    dxx_f = jax.vmap(jax.grad(jax.grad(_f)))
 
-    scale_vector1 = (_eval_1D(dx_f, x)) ** -1
-    scale_vector2 = (_eval_1D(dxx_f, x)) * scale_vector1
+    scale_vector1 = dx_f(x) ** -1
+    scale_vector2 = dxx_f(x) * scale_vector1
 
     one_matrix = jnp.ones((len(x), len(x)))
 
@@ -162,7 +155,7 @@ def _tensor_product_derivative_3D(  # noqa: C901
         z collocation points
     """
     # Generate collocation points
-    x_cheb = chebpts_lobatto(nx)
+    x_cheb, w = leggauss_lob(nx)
     y_four = fourier_pts(ny)
     z_four = fourier_pts(nz)
 
@@ -175,9 +168,10 @@ def _tensor_product_derivative_3D(  # noqa: C901
     if dx_order == 0:
         Dx = jnp.eye(nx)
     elif dx_order == 1:
-        Dx = cheb_D1(nx) * scale_x1
+        Dx = legendre_diffmat(nx) * scale_x1
     elif dx_order == 2:
-        Dx = (cheb_D2(nx) - cheb_D1(nx) * scale_x2) * scale_x1**2
+        D = legendre_diffmat(nx)
+        Dx = (D @ D - D * scale_x2) * scale_x1**2
 
     # Get y differentiation matrix (Fourier)
     if dy_order == 0:
@@ -204,7 +198,6 @@ def _tensor_product_derivative_3D(  # noqa: C901
     # Following the approach in the 2D code
 
     # Construct the appropriate matrix based on the derivative order
-
     if dx_order > 0 and dy_order > 0 and dz_order > 0:
         # Full 3D mixed derivative (x, y, z)
         D = jnp.kron(Dz, jnp.kron(Dy, Dx))
@@ -236,7 +229,6 @@ def _tensor_product_derivative_3D(  # noqa: C901
         # Identity (no derivative)
         D = jnp.kron(Iz, jnp.kron(Iy, Ix))
 
-    print("condition number=", jnp.linalg.cond(Dx))
     # Clean up small values
     D = jnp.where(jnp.abs(D) < 1e-12, 0.0, D)
 
@@ -276,7 +268,7 @@ dzz_f = jax.grad(dz_f, argnums=2)
 test_cases = [
     # Pure x derivatives
     (1, 0, 0, dx_f, 4e-3, NFP),
-    (2, 0, 0, dxx_f, 5e-3, NFP),
+    (2, 0, 0, dxx_f, 6e-3, NFP),
     # Pure y derivatives
     (0, 1, 0, dy_f, 1e-7, NFP),
     (0, 2, 0, dyy_f, 1e-5, NFP),
@@ -370,49 +362,82 @@ def test_tensor_mixed_derivative(
         error {error:.2e} exceeds tol {tol}"
 
 
-# Unusual but works
 # To view the plots, run pytest -s
-@pytest.mark.skip
-def _teardown_module(module):
-    """For making convergence plots."""
-    print("\n\n=== Collected errors ===")
+def teardown_module(module=None):
+    """
+    Optional convergence plotting routine.
+
+    After the normal tests finish, run the SAME test for extra resolutions and
+    then plot using the global `collected_errors`.
+    """
+    # run extra resolutions (skip 48 to avoid duplicates from the base test)
+    extra_ns = [16, 24, 32, 64, 96, 128]
+
+    for dx_order, dy_order, dz_order, analytic_fn, tol, NFP in test_cases:
+        for n in extra_ns:
+            try:
+                test_tensor_mixed_derivative(
+                    dx_order=dx_order,
+                    dy_order=dy_order,
+                    dz_order=dz_order,
+                    analytic_fn=analytic_fn,
+                    tol=tol,
+                    NFP=NFP,
+                    n=n,
+                )
+            except AssertionError as e:
+                print(
+                    f"[teardown] FAIL n={n} (dx,dy,dz)"
+                    + f"=({dx_order},{dy_order},{dz_order}):{e}"
+                )
+
+            # print the last appended entry (so you see errors as they happen)
+            try:
+                dx, dy, dz, nn, err = collected_errors[-1]
+                if (dx, dy, dz, nn) == (dx_order, dy_order, dz_order, n):
+                    print(f"[teardown] dx={dx}, dy={dy}, dz={dz}, n={nn} -> err={err}")
+            except Exception:
+                pass
+
+    # make plot from collected_errors
+    if "collected_errors" not in globals() or not collected_errors:
+        print("[teardown] No collected_errors; nothing to plot.")
+        return
+
+    # group by derivative orders
+    series = {}
     for dx, dy, dz, n, err in collected_errors:
-        print(f"  dx={dx}, dy={dy}, dz={dz}, n={n} → error={err:.2e}")
+        series.setdefault((dx, dy, dz), []).append((n, float(err)))
 
-    data = {}
-    for dx, dy, dz, n, err in collected_errors:
-        data.setdefault((dx, dy, dz), []).append((n, err))
+    plt.figure(figsize=(7, 5))
+    for (dx, dy, dz), pts in series.items():
+        pts = sorted(pts, key=lambda t: t[0])  # sort by n
+        ns = np.array([t[0] for t in pts], float)
+        errs = np.array([t[1] for t in pts], float)
 
-    plt.figure(figsize=(8, 6))
-    slopes = {}
-    for (dx, dy, dz), pts in data.items():
-        # sort by grid size
-        pts_sorted = sorted(pts, key=lambda t: t[0])
-        ns = jnp.array([t[0] for t in pts_sorted])
-        errs = jnp.array([t[1] for t in pts_sorted])
+        # slope from the last few valid points (stable, no NaNs)
+        mask = np.isfinite(errs) & (errs > 0)
+        if mask.sum() >= 2:
+            k = min(3, mask.sum())
+            slope = np.polyfit(np.log(ns[mask][-k:]), np.log(errs[mask][-k:]), 1)[0]
+            label = f"dx={dx}, dy={dy}, dz={dz} (slope={slope:.2f})"
+        else:
+            label = f"dx={dx}, dy={dy}, dz={dz}"
 
-        # fit a line: log(err) = slope*log(n) + intercept
-        slope, intercept = jnp.polyfit(jnp.log(ns), jnp.log(errs), 1)
-        slopes[(dx, dy, dz)] = slope
-
-        # label with orders and slope
-        label = f"dx={dx},dy={dy} (slope={slope:.2f})"
         plt.loglog(ns, errs, "o-", label=label)
 
-    ref_ns = jnp.array(
-        sorted({n for _, _, n, _ in collected_errors}), dtype=jnp.float64
-    )
-    plt.loglog(ref_ns, ref_ns**-4, "k--", label="O(n⁻⁴)")
-    plt.loglog(ref_ns, ref_ns**-8, "k-.", label="O(n⁻⁸)")
+    xs = np.unique([n for _, _, _, n, _ in collected_errors]).astype(float)
+    if xs.size:
+        plt.loglog(xs, xs**-4, "k--", label="O(n⁻⁴)")
+        plt.loglog(xs, xs**-8, "k-.", label="O(n⁻⁸)")
 
     plt.xlabel("n (grid points per dim)")
     plt.ylabel("max error")
     plt.title("Convergence from collected_errors")
-    plt.legend(fontsize=9)
     plt.grid(True, which="both", ls=":")
-    plt.savefig("tensor_product_convergence.png")
-    plt.show()
+    plt.legend(fontsize=9)
 
-    print("\nEmpirical convergence slopes:")
-    for (dx, dy, dz), m in slopes.items():
-        print(f"  dx={dx}, dy={dy}, dz={dz} → slope ≃ {m:.2f}")
+    out_path = os.path.join(os.getcwd(), "tensor_product_convergence.png")
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[teardown] Saved plot -> {out_path}")

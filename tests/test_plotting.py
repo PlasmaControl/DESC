@@ -970,16 +970,37 @@ class TestPlotBoozerSurface:
             D = (np.pi ** (p - 1)) ** (1 / p) * (a) ** (1 / p)
             return D
 
+        with pytest.raises(NotImplementedError, match="S_func must be provided"):
+            OmnigenousFieldLCForm(
+                S_len=2,
+                D_len=1,
+                NFP=3,
+                helicity=(0, 1),
+                D_func=_D_func,
+            )
+
+        with pytest.raises(NotImplementedError, match="D_func must be provided"):
+            OmnigenousFieldLCForm(
+                S_len=2,
+                D_len=1,
+                NFP=3,
+                helicity=(0, 1),
+                S_func=_S_func,
+            )
+
         field = OmnigenousFieldLCForm(
             S_len=2,
             D_len=1,
             NFP=3,
             helicity=(0, 1),
+            S_func=_S_func,
+            D_func=_D_func,
         )
+        assert np.allclose(field.S_list, np.zeros(2))
+        assert np.allclose(field.D_list, np.array([1.0]))
+
         field.S_list = np.array([0.35, 0.4])
         field.D_list = np.array([1])
-        field.S_func = _S_func
-        field.D_func = _D_func
         fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
         return fig
 

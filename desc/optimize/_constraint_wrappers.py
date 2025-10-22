@@ -1902,8 +1902,8 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
             # and should be able to just call compute_scald_error
             # as it already does update eq
             jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
-            jac.append(self._project_coils_profiles_etc(jac_col))
-        jac = jnp.hstack(jac)
+            jac.append(jac_col)
+        jac = jnp.hstack(jac) @ self._Z_coils_profiles_etc
         return f0.T @ jac
 
     def hess(self, x, constants=None):
@@ -2057,7 +2057,7 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
                 # and should be able to just call compute_scald_error
                 # as it already does update eq
                 jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
-                jac.append(self._project_coils_profiles_etc(jac_col))
+                jac.append(jac_col)
             jac = jnp.atleast_2d(jac)
             return jac
         else:

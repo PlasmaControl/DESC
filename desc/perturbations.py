@@ -76,7 +76,9 @@ def get_deltas(things1, things2):  # noqa: C901
                 t1 = t1.copy()
                 t2 = t2.copy()
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
-                    t1.change_resolution(t2.basis.L)
+                    max_res = max(t1.basis.L, t2.basis.L)
+                    t1.change_resolution(max_res)
+                    t2.change_resolution(max_res)
                 if not jnp.allclose(t2.params, t1.params):
                     deltas[val] = t2.params - t1.params
 

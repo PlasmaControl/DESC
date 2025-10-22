@@ -7,6 +7,7 @@ from .singularities import (
     DFTInterpolator,
     FFTInterpolator,
     compute_B_plasma,
+    get_interpolator,
     singular_integral,
     virtual_casing_biot_savart,
 )

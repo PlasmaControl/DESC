@@ -598,11 +598,6 @@ def test_ballooning_stability_eval():
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.01, 0.8, 1.0]
 
-    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
-    eq_data_keys = ["iota"]
-
-    data = eq.compute(eq_data_keys, grid=grid)
-
     N_alpha = 8
 
     # Field lines on which to evaluate ballooning stability
@@ -748,13 +743,13 @@ def test_ballooning_stability_eval():
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
         # now compute our regular metrics and compare them
-        data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         diffmat = DiffMat()
-        data = eq.compute(data_keys, grid=grid, diffmat=diffmat)
+        data00 = eq.compute(["ideal ballooning lambda"], grid=grid, diffmat=diffmat)
+        data01 = eq.compute(["Newcomb ballooning metric"], grid=grid)
 
-        lam2_full = data["ideal ballooning lambda"]
+        lam2_full = data00["ideal ballooning lambda"]
 
-        X0_full = data["ideal ballooning eigenfunction"]
+        X0_full = data00["ideal ballooning eigenfunction"]
 
         assert np.shape(lam2_full) == (
             1,
@@ -773,7 +768,7 @@ def test_ballooning_stability_eval():
 
         lam2 = jnp.max(lam2_full)
 
-        Newcomb_metric = data["Newcomb ballooning metric"]
+        Newcomb_metric = data01["Newcomb ballooning metric"]
 
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
 

@@ -2294,6 +2294,37 @@ def test_coil_arclength_optimization():
     assert np.var(np.linalg.norm(xs1, axis=1)) < np.var(np.linalg.norm(xs2, axis=1))
 
 
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_coil_individual_targets_optimization(DummyMixedCoilSet):
+    """Test coil arclength optimization where length targets vary between coils."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    target = [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0]
+    weight = [1.0]
+    indices = [True, [False, True, True], False, False]
+    obj = CoilLength(coilset, target=target, weight=weight, indices=indices)
+    obj_fun = ObjectiveFunction(obj)
+    obj_fun.build()
+    length_init = obj.compute(None)
+
+    optimizer = Optimizer("lsq-exact")
+
+    (optimized_coilset,), _ = optimizer.optimize(
+        coilset,
+        objective=obj_fun,
+        maxiter=5,
+        verbose=3,
+        ftol=1e-4,
+        copy=False,
+    )
+    length_fin = obj.compute(None)
+    length_ref = np.array(
+        [obj._target[i] if obj._mask[i] else length_init[i] for i in range(0, 6)]
+    )
+
+    np.testing.assert_allclose(length_fin, length_ref, rtol=1e-4)
+
+
 @pytest.mark.regression
 def test_ballooning_stability_opt():
     """Perform ballooning stability optimization with DESC."""

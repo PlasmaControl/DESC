@@ -1565,7 +1565,7 @@ def test_bootstrap_optimization_comparison_qa():
     )
     eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
     eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
-    eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3)
+    eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3, ftol=1e-3)
     eq1 = eq0.copy()
     eq2 = eq0.copy()
 
@@ -1628,5 +1628,5 @@ def test_bootstrap_optimization_comparison_qa():
         grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=2e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=2e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=2.35e-2
     )

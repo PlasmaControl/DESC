@@ -15,6 +15,7 @@ import pytest
 
 from desc.backend import jax, jnp, vmap
 from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
+    finite_difference_diffmat,
     fourier_diffmat,
     fourier_pts,
     legendre_diffmat,
@@ -301,6 +302,73 @@ def test_tensor_mixed_derivative(
         error < tol
     ), f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
         error {error:.2e} exceeds tol {tol}"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "N, alpha, x0, tol",
+    [
+        (48, 100.0, 0.7, 8.0e-2),
+        (96, 100.0, 0.7, 9.0e-3),
+        (192, 100.0, 0.7, 9.0e-4),
+    ],
+)
+def test_finite_difference_diffmat(N, alpha, x0, tol):
+    """
+    Test the accuracy of the finite differentation matrix.
+
+    The test function is an oscillating gaussian.
+    """
+    a, b = 0.0, 1.0
+    x = jnp.linspace(a, b, N)
+    h = (b - a) / (N - 1)
+
+    D, _ = finite_difference_diffmat(N, h)
+
+    # oscillating Gaussian
+    f = jnp.exp(-alpha * (x - x0) ** 2) * jnp.cos(4 * jnp.pi * (x - 0.5))
+
+    df_true = jax.vmap(
+        jax.grad(
+            lambda x_val: jnp.exp(-alpha * (x_val - x0) ** 2)
+            * jnp.cos(4 * jnp.pi * (x_val - 0.5))
+        )
+    )(x)
+
+    df_num = D @ f
+
+    # ignore lower-order boundary closures
+    err = jnp.max(jnp.abs(df_num - df_true))
+
+    assert float(err) < tol, f"max|err|={float(err):.2e} (N={N}, alpha={alpha})"
+
+
+@pytest.mark.unit
+def test_summation_by_parts():
+    """
+    Tests the summation by parts (SBP) property of differentiation matrices.
+
+    SBP is a discretized version of integration by parts. This is a powerful
+    property that is useful when a system needs to satisy conservation
+    property.
+
+    (W @ D) + (W @ D).T = B
+
+    where B = diag(-1, 0, ...., 0, 1)
+    """
+    a, b = 0.0, 1.0
+    N = 100
+    h = (b - a) / (N - 1)
+
+    D0, W0 = finite_difference_diffmat(N, h)
+    D1, W1 = legendre_diffmat(N)
+
+    B = jnp.zeros_like(D0)
+    B = B.at[0, 0].set(-1)
+    B = B.at[N - 1, N - 1].set(1)
+
+    np.testing.assert_allclose(W0 @ D0 + (W0 @ D0).T, B, atol=1e-15)
+    np.testing.assert_allclose(W1 @ D1 + (W1 @ D1).T, B, atol=5e-13)
 
 
 # To view the plots, run pytest -s

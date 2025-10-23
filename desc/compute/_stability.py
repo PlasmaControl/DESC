@@ -518,7 +518,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     description="A measure of Newcomb's distance from marginal ballooning stability",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={"grid": [], "diffmat": []},
     profiles=[],
     coordinates="r",
     data=["c ballooning", "g ballooning"],

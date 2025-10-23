@@ -165,26 +165,30 @@ def _tensor_product_derivative_3D(  # noqa: C901
     if dx_order == 0:
         Dx = jnp.eye(nx)
     elif dx_order == 1:
-        Dx = legendre_diffmat(nx) * scale_x1
+        D, _ = legendre_diffmat(nx)
+        Dx = D * scale_x1
     elif dx_order == 2:
-        D = legendre_diffmat(nx)
+        D, _ = legendre_diffmat(nx)
         Dx = (D @ D - D * scale_x2) * scale_x1**2
 
     # Get y differentiation matrix (Fourier)
     if dy_order == 0:
         Dy = jnp.eye(ny)
     elif dy_order == 1:
-        Dy = fourier_diffmat(ny)
+        Dy, _ = fourier_diffmat(ny)
     elif dy_order == 2:
-        Dy = fourier_diffmat(ny) @ fourier_diffmat(ny)
+        D, _ = fourier_diffmat(ny)
+        Dy = D @ D
 
     # Get z differentiation matrix (Fourier)
     if dz_order == 0:
         Dz = jnp.eye(nz)
     elif dz_order == 1:
-        Dz = fourier_diffmat(nz) * NFP
+        D, _ = fourier_diffmat(nz)
+        Dz = D * NFP
     elif dz_order == 2:
-        Dz = fourier_diffmat(nz) @ fourier_diffmat(nz) * NFP**2
+        D, _ = fourier_diffmat(nz)
+        Dz = (D @ D) * NFP**2
 
     # Create identity matrices for tensor product
     Ix = jnp.eye(nx)
@@ -367,6 +371,8 @@ def teardown_module(module=None):
     After the normal tests finish, run the SAME test for extra resolutions and
     then plot using the global `collected_errors`.
     """
+    if not os.environ.get("PLOT_CONVERGENCE"):
+        return
     # run extra resolutions (skip 48 to avoid duplicates from the base test)
     extra_ns = [16, 24, 32, 64, 96, 128]
 
@@ -434,7 +440,7 @@ def teardown_module(module=None):
     plt.grid(True, which="both", ls=":")
     plt.legend(fontsize=9)
 
-    out_path = os.path.join(os.getcwd(), "tensor_product_convergence.png")
+    out_path = os.path.join(os.getcwd(), "diffmatrix_convergence_plots.png")
     plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close()
     print(f"[teardown] Saved plot -> {out_path}")

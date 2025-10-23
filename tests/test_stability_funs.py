@@ -9,6 +9,7 @@ from scipy.interpolate import interp1d
 import desc.examples
 import desc.io
 from desc.backend import jnp
+from desc.diffmat_utils import DiffMat
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.objectives import MagneticWell, MercierStability
@@ -748,7 +749,8 @@ def test_ballooning_stability_eval():
 
         # now compute our regular metrics and compare them
         data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
-        data = eq.compute(data_keys, grid=grid)
+        diffmat = DiffMat()
+        data = eq.compute(data_keys, grid=grid, diffmat=diffmat)
 
         lam2_full = data["ideal ballooning lambda"]
 
@@ -847,9 +849,10 @@ def test_ballooning_compare_with_COBRAVMEC():
     N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
     lam2_array = []
+    diffmat = DiffMat()
     for i in range(surfaces.size):
         grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
-        data = eq.compute("ideal ballooning lambda", grid=grid)
+        data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
         lam2_array.append(data["ideal ballooning lambda"].max())
     lam2_array = np.array(lam2_array)
     root_DESC = find_root_simple(surfaces, lam2_array)

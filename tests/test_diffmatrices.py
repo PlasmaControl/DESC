@@ -19,7 +19,7 @@ from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
     fourier_pts,
     legendre_diffmat,
 )
-from desc.integrals.quad_utils import leggauss_lob
+from desc.integrals.quad_utils import automorphism_staircase1, leggauss_lob
 
 NFP = 5
 
@@ -34,89 +34,13 @@ def _eval_3D(f, x, y, z, NFP):
     )(z)
 
 
-def _map_domain(x, option):
-    """
-    Map points from one domain to another nonlinearly.
-
-    option = 0 is to move points to the middle
-    option = 1 is to move points towards the edge
-    """
-    if option == 0:  # always bunch near the middle
-
-        def _f(x):
-            a = 0.015  # [0.0, 0.1]
-            return 0.5 * (x + 1) + a * jnp.sin(jnp.pi * (x + 1))
-
-    elif option == 1:  # bunch colocation nodes near a specific point
-
-        def _f(x):
-            x_0 = 0.8
-            m_1 = 2.0
-            m_2 = 3.0
-            lower = x_0 * (
-                1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1)
-            )
-            upper = (1 - x_0) * (
-                jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2)
-            )
-            return lower + upper
-
-    elif option == 3:
-
-        def _f(x):
-            return 0.5 * (x + 1) - 0.3 * (1 - x**16) * jnp.cos(0.5 * jnp.pi * (x - 1.8))
-
-    elif option == 4:
-
-        def _f(x):
-            map_term1 = 0.5 * (x + 1)
-            exp_term = jnp.exp(0.3 * (x - 1) ** 2)
-            map_term2 = 0.3 * (1 - x**16) * exp_term * jnp.cos(0.5 * jnp.pi * (x - 1.8))
-            return map_term1 - map_term2
-
-    elif option == 5:
-
-        def _f(x):
-            x_0 = 0.8
-            x_1 = 1.0
-            m_1 = 2.0
-            m_2 = 3.0
-            m_3 = 20
-            m_4 = 30
-            lower = x_0 * (
-                1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1)
-            )
-            upper = (1 - x_0) * (
-                jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2)
-            )
-            axis = x_0 * (
-                -1
-                + 2 / (1 + jnp.exp(-m_3 * (x + 1)))
-                - (x + 1) / (1 + jnp.exp(-2 * m_3))
-            )
-            edge = (1 - x_0) * (
-                -1 + 2 / (1 + jnp.exp(m_4 * (x - 1))) + (x - 1) / (1 + jnp.exp(2 * m_4))
-            )
-
-            return x_1 * (lower + upper) + (1 - x_1) * (axis + edge)
-
-    else:
-
-        def _f(x):
-            return (x + 1) / 2
-
-    dx_f = jax.vmap(jax.grad(_f))
-    dxx_f = jax.vmap(jax.grad(jax.grad(_f)))
-
-    scale_vector1 = dx_f(x) ** -1
-    scale_vector2 = dxx_f(x) * scale_vector1
-
-    one_matrix = jnp.ones((len(x), len(x)))
-
-    scale_matrix1 = one_matrix * scale_vector1[:, None]
-    scale_matrix2 = one_matrix * scale_vector2[:, None]
-
-    return _f(x), scale_matrix1, scale_matrix2
+# --no-verify a = 0.015  # [0.0, 0.1]
+# --no-verify #0.5 * (x + 1) + a * jnp.sin(jnp.pi * (x + 1))
+# --no-verify 0.5 * (x + 1) - 0.3 * (1 - x**16) * jnp.cos(0.5 * jnp.pi * (x - 1.8))
+# --no-verify map_term1 = 0.5 * (x + 1)
+# --no-verify exp_term = jnp.exp(0.3 * (x - 1) ** 2)
+# --no-verify map_term2 = 0.3 * (1 - x**16) *exp_term * jnp.cos(0.5*jnp.pi*(x-1.8))
+# --no-verify return map_term1 - map_term2
 
 
 def _tensor_product_derivative_3D(  # noqa: C901
@@ -156,8 +80,21 @@ def _tensor_product_derivative_3D(  # noqa: C901
     y_four = fourier_pts(ny)
     z_four = fourier_pts(nz)
 
-    # Map Chebyshev points to desired domain
-    x, scale_x1, scale_x2 = _map_domain(x_cheb, option=1)
+    x = automorphism_staircase1(x_cheb, x_0=0.8, m_1=2.0, m_2=3.0)
+    dx_f = jax.vmap(
+        lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
+            x_val, x_0=0.8, m_1=2.0, m_2=3.0
+        )
+    )
+    dxx_f = jax.vmap(
+        lambda x_val: jax.grad(jax.grad(automorphism_staircase1, argnums=0), argnums=0)(
+            x_val, x_0=0.8, m_1=2.0, m_2=3.0
+        )
+    )
+
+    scale_x1 = 1 / dx_f(x_cheb)[:, None]
+    scale_x2 = dxx_f(x_cheb)[:, None] / dx_f(x_cheb)[:, None]
+
     y = y_four  # Already in [0, 2π]
     z = z_four / NFP  # Already in [0, 2π/NFP]
 
@@ -292,7 +229,10 @@ collected_errors = []
 def test_tensor_mixed_derivative(
     dx_order, dy_order, dz_order, analytic_fn, tol, NFP, n
 ):
-    """Validate 3D tensor-product differentiation against analytical JAX derivatives."""
+    """Validate 3D tensor-product differentiation against analytical JAX derivatives.
+
+    We calculate mixed and non-mixed derivatives w.r.t rho, theta, zeta.
+    """
     # Grid resolution
     nx, ny, nz = n, n, n
 
@@ -368,8 +308,8 @@ def teardown_module(module=None):
     """
     Optional convergence plotting routine.
 
-    After the normal tests finish, run the SAME test for extra resolutions and
-    then plot using the global `collected_errors`.
+    To create the convergence plot, set the envinronment variable
+    `PLOT_CONVERGENCE=1` and rerun the test.
     """
     if not os.environ.get("PLOT_CONVERGENCE"):
         return

@@ -927,7 +927,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     # Set parameters
     w = 1 # in combination with A, changes width and amplitude of bump function
     # A = 100 # in combination with w, changes width and amplitude of bump function
-    wd = jnp.ones((jnp.shape(omega_broad))) * 0.0005 # sets half-width of bump function
+    wd = jnp.ones((jnp.shape(omega_broad))) * 0.05 # sets half-width of bump function
     a = res_broad + wd
     b = res_broad - wd
     # t = -1 # for form option 1
@@ -985,5 +985,5 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition, 'psi_da': psi_drift_avg} # not flattening for plotting, need to flatten for optimization
+    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition, 'psi_da': psi_drift_avg, 'pitch_invs': pitch_inv} # not flattening for plotting, need to flatten for optimization
     return data

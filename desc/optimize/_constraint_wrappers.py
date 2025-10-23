@@ -750,7 +750,9 @@ class ProximalProjection(ObjectiveFunction):
         if self._solve_method == "lcfs":
             self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
         else:
-            self._eq_linear_constraints = get_fixed_xsection_constraints(eq=self._eq)
+            self._eq_linear_constraints = get_fixed_xsection_constraints(
+                eq=self._eq, fix_lambda=False
+            )
         self._eq_linear_constraints = maybe_add_self_consistency(
             self._eq, self._eq_linear_constraints
         )

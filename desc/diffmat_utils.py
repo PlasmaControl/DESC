@@ -14,14 +14,6 @@ The implementations follow the formulas in
   **Trefethen, L. N. (2000). *Spectral Methods in MATLAB*. SIAM** and
   **Canuto et al. (2006). *Spectral Methods – Fundamentals in Single Domains*.**
 
-Examples
---------
->>> from desc.backend import jnp
->>> from jax import jit
->>> D1 = jit(diffmat1_lobatto)(16)   # first‑derivative, 16‑point grid
->>> x  = chebpts_lobatto(16)
->>> f  = jnp.sin(jnp.pi * x)
->>> df = D1 @ f                     # approximate derivative at the nodes
 """
 from functools import partial
 
@@ -186,3 +178,87 @@ def fourier_diffmat(n: int):
     W = W.at[jnp.diag_indices(n)].set(2 * jnp.pi / n)
 
     return D, W
+
+
+##########################################################################
+# --------------------- FINITE-DIFFERENCE MATRIX ----------------------- #
+##########################################################################
+
+
+def finite_difference_diffmat(N, h, dtype=jnp.float64):
+    """
+    Diagonal‑norm SBP first‑derivative matrix.
+
+    Fourth‑order / second‑order finite-difference matrix on a
+    uniform grid of spacing h.
+
+    Returns
+    -------
+    D : (N, N) jax.numpy.ndarray
+    W : (N, N) jax.numpy.ndarray
+    """
+    D = jnp.zeros((N, N), dtype)
+    H = jnp.ones((N,), dtype)
+    W = jnp.zeros((N, N), dtype)
+
+    # ---- interior rows (indices 4 … N‑5) 5‑point central stencil
+    rows = jnp.arange(4, N - 4, dtype=jnp.int32)  # shape (Ni,)
+    offsets = jnp.array([-2, -1, 0, 1, 2], dtype=jnp.int32)
+    stencil_coeffs = jnp.array([1, -8, 0, 8, -1], dtype) / 12.0  # shape (5,)
+
+    row_idx = jnp.repeat(rows, 5)  # (Ni*5,)
+    col_idx = (rows[:, None] + offsets).reshape(-1)  # (Ni*5,)
+    vals = jnp.tile(stencil_coeffs, rows.size)  # (Ni*5,)
+
+    D = D.at[row_idx, col_idx].set(vals)
+
+    # ---- forward boundary closures (Carpenter–Nordstrom)
+    f0 = jnp.array([-24 / 17, 59 / 34, -4 / 17, -3 / 34], dtype)
+    f1 = jnp.array([-1 / 2, 0.0, 1 / 2], dtype)
+    f2 = jnp.array([4 / 43, -59 / 86, 0.0, 59 / 86, -4 / 43], dtype)
+    f3 = jnp.array([3 / 98, 0.0, -59 / 98, 0.0, 32 / 49, -4 / 49], dtype)
+
+    D = (
+        D.at[0, :4]
+        .set(f0)
+        .at[1, :3]
+        .set(f1)
+        .at[2, :5]
+        .set(f2)
+        .at[3, :6]
+        .set(f3)
+        # lower boundary rows by SBP antisymmetry  D[N‑1‑i,N‑1‑j] = −D[i,j]
+        .at[-1, -4:]
+        .set(-f0[::-1])
+        .at[-2, -3:]
+        .set(-f1[::-1])
+        .at[-3, -5:]
+        .set(-f2[::-1])
+        .at[-4, -6:]
+        .set(-f3[::-1])
+    )
+
+    # specialised edge weights
+    edge_vals = jnp.array([17 / 48, 59 / 48, 43 / 48, 49 / 48], dtype)
+    H = (
+        H.at[0]
+        .set(edge_vals[0])
+        .at[-1]
+        .set(edge_vals[0])
+        .at[1]
+        .set(edge_vals[1])
+        .at[-2]
+        .set(edge_vals[1])
+        .at[2]
+        .set(edge_vals[2])
+        .at[-3]
+        .set(edge_vals[2])
+        .at[3]
+        .set(edge_vals[3])
+        .at[-4]
+        .set(edge_vals[3])
+    )
+
+    W = W.at[jnp.diag_indices(W)].set(H * h)
+
+    return D / h, W

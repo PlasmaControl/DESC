@@ -10,7 +10,16 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+from desc.backend import (
+    flatnonzero,
+    fori_loop,
+    jax,
+    jit,
+    jnp,
+    pure_callback,
+    sign,
+    take,
+)
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -560,7 +569,7 @@ class ResolutionWarning(UserWarning):
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(colored(msg, "yellow"), err)
+        warnings.warn(msg, err)
 
 
 def check_nonnegint(x, name="", allow_none=True):
@@ -740,9 +749,22 @@ def take_mask(a, mask, /, *, size=None, fill_value=None):
     )
 
 
-def flatten_matrix(y):
-    """Flatten matrix to vector."""
-    return y.reshape(*y.shape[:-2], -1)
+def flatten_mat(y, axes=2):
+    """Flatten matrix to vector.
+
+    Parameters
+    ----------
+    axes : int
+        Number of trailing axes to flatten into last dimension.
+        Default is two.
+
+    Returns
+    -------
+    y : jnp.ndarray
+        Shape (*y.shape[:-axes], -1).
+
+    """
+    return y.reshape(*y.shape[:-axes], -1)
 
 
 # TODO: Eventually remove and use numpy's stuff.
@@ -852,7 +874,10 @@ def atleast_2d_end(ary):
 
 
 def dot(a, b, axis=-1):
-    """Batched vector dot product.
+    """Batched coordinate dot product.
+
+    This returns the dot product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal.
 
     Parameters
     ----------
@@ -869,11 +894,15 @@ def dot(a, b, axis=-1):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis)
 
 
 def cross(a, b, axis=-1):
-    """Batched vector cross product.
+    """Batched coordinate cross product.
+
+    This returns the cross product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal
+    and right-handed.
 
     Parameters
     ----------
@@ -893,7 +922,7 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     """Like jnp.linalg.norm, but without nan gradient at x=0.
 
     Parameters
@@ -908,12 +937,19 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
         Value to return where x is zero.
     threshold : float >= 0
         How small is x allowed to be.
+    keepdims : bool, optional
+        If this is set to True, the axes which are normed over are left in the result
+        as dimensions with size one. With this option the result will broadcast
+        correctly against the original x.
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
     n = jnp.linalg.norm(y, ord=ord, axis=axis)
     n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    if keepdims:
+        axis = 0 if axis is None else axis
+        n = jnp.expand_dims(n, axis)
     return n
 
 
@@ -936,7 +972,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims=True) * jnp.ones_like(x)
     # return unit vector with equal components if norm <= threshold
     return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 
@@ -952,11 +988,18 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):
@@ -973,3 +1016,202 @@ def getsource(obj):
     if isinstance(obj, functools.partial):
         return getsource(obj.func)
     return inspect.getsource(obj)
+
+
+def reflection_matrix(normal):
+    """Matrix to reflect points across plane through origin with specified normal.
+
+    Parameters
+    ----------
+    normal : array-like, shape(3,)
+        Vector normal to plane of reflection, in cartesian (X,Y,Z) coordinates
+
+    Returns
+    -------
+    flip : ndarray, shape(3,3)
+        Matrix to flip points in cartesian (X,Y,Z) coordinates
+    """
+    normal = jnp.asarray(normal)
+    R = jnp.eye(3) - 2 * jnp.outer(normal, normal) / jnp.inner(normal, normal)
+    return R
+
+
+def rotation_matrix(axis, angle=None):
+    """Matrix to rotate points about axis by given angle.
+
+    Parameters
+    ----------
+    axis : array-like, shape(3,)
+        Axis of rotation, in cartesian (X,Y,Z) coordinates
+    angle : float or None
+        Angle to rotate by, in radians. If None, use norm of axis vector.
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    axis = jnp.asarray(axis)
+    norm = safenorm(axis)
+    axis = safenormalize(axis)
+    if angle is None:
+        angle = norm
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
+    R1 = jnp.cos(angle) * jnp.eye(3)
+    R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
+    R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+
+
+def xyz2rpz(pts):
+    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+
+    Parameters
+    ----------
+    pts : ndarray, shape(...,3)
+        points in cartesian (X,Y,Z) coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(...,3)
+        points in polar (R,phi,Z) coordinates
+
+    """
+    x, y, z = pts.T
+    r = jnp.hypot(x, y)
+    p = jnp.arctan2(y, x)
+    return jnp.array([r, p, z]).T
+
+
+def rpz2xyz(pts):
+    """Transform points from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+
+    Parameters
+    ----------
+    pts : ndarray, shape(...,3)
+        points in polar (R,phi,Z) coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(...,3)
+        points in cartesian (X,Y,Z) coordinates
+
+    """
+    r, p, z = pts.T
+    x = r * jnp.cos(p)
+    y = r * jnp.sin(p)
+    return jnp.array([x, y, z]).T
+
+
+def xyz2rpz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(...,3)
+        vectors, in cartesian (X,Y,Z) form
+    x, y, phi : ndarray, shape(...,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(...,3)
+        vectors, in polar (R,phi,Z) form
+
+    """
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+                [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        polar = jnp.matmul(rot, vec)
+        return polar
+
+    return inner(vec, phi)
+
+
+def rpz2xyz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(n,3)
+        vectors, in polar (R,phi,Z) form
+    x, y, phi : ndarray, shape(n,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(n,3)
+        vectors, in cartesian (X,Y,Z) form
+
+    """
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+                [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        cart = jnp.matmul(rot, vec)
+        return cart
+
+    return inner(vec, phi)
+
+
+def copy_rpz_periods(rpz, NFP):
+    """Copy an rpz coordinate triplet into multiple field periods."""
+    r, p, z = rpz.T
+    r = jnp.tile(r, NFP)
+    z = jnp.tile(z, NFP)
+    p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
+    return jnp.array([r, p.flatten(), z]).T
+
+
+def identity(y):
+    """Returns the input."""
+    return y
+
+
+def apply(d, fun=identity, subset=None, exclude=None):
+    """Applies ``fun`` to ``d``.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary to map.
+    fun : callable
+        Function to apply to values in dictionary.
+        Default is the identity.
+    subset : list or set or tuple
+        Subset of keys in ``d`` to consider.
+        Default is all keys in ``d``.
+    exclude : collection
+        Stuff in subset to exclude.
+
+    Returns
+    -------
+    d : dict
+        New dictionary with ``fun`` mapped over values with keys in ``subset``
+        and keys not in ``exclude``.
+
+    """
+    if subset is None:
+        subset = d.keys()
+    exclude = () if (exclude is None) else exclude
+    return {k: fun(d[k]) for k in subset if k not in exclude}

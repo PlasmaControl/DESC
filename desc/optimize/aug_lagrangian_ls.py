@@ -281,7 +281,13 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    J_h = J * d
+    # TODO: place this function under JIT to use in-place operation (#1669)
+    # we don't need unscaled J anymore, so we overwrite
+    # it with J_h = J * d to avoid carrying so many J-sized matrices
+    # in memory, which can be large
+    J *= d
+    J_h = J
+    del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -329,7 +335,7 @@ def lsq_auglag(  # noqa: C901
     step_norm = jnp.inf
     actual_reduction = jnp.inf
     Lactual_reduction = jnp.inf
-    alpha = None  # "Levenberg-Marquardt" parameter
+    alpha = 0.0  # "Levenberg-Marquardt" parameter
 
     allx = [z]
     alltr = [trust_radius]
@@ -347,6 +353,29 @@ def lsq_auglag(  # noqa: C901
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print(f"{'Alpha Omega':<35}: {alpha_omega:.3e}")
+        print(f"{'Beta Omega':<35}: {beta_omega:.3e}")
+        print(f"{'Alpha Eta':<35}: {alpha_eta:.3e}")
+        print(f"{'Beta Eta':<35}: {beta_eta:.3e}")
+        print(f"{'Omega':<35}: {omega:.3e}")
+        print(f"{'Eta':<35}: {eta:.3e}")
+        print(f"{'Tau':<35}: {beta_eta:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
@@ -381,6 +410,10 @@ def lsq_auglag(  # noqa: C901
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
+            # We don't need the Q and R matrices anymore
+            # Trust region solver will solve the augmented system
+            # with a new Q and R
+            del Q, R
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -531,7 +564,12 @@ def lsq_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            J_h = J * d
+            # we don't need unscaled J anymore, so we overwrite
+            # it with J_h = J * d to avoid carrying so many J-sized matrices
+            # in memory, which can be large
+            J *= d
+            J_h = J
+            del J
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -572,7 +610,7 @@ def lsq_auglag(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J,
+        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

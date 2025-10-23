@@ -31,7 +31,6 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
-    ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -54,7 +53,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import (
+    _map_clebsch_coordinates,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -164,7 +169,23 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
+    _static_attrs = Optimizable._static_attrs + [
+        "_sym",
+        "_R_sym",
+        "_Z_sym",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_spectral_indexing",
+        "_bdry_mode",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -194,11 +215,11 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         errorif(
-            not isinstance(Psi, numbers.Real),
+            not isinstance(float(Psi), numbers.Real),
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(float(Psi))
 
         errorif(
             spectral_indexing
@@ -969,43 +990,27 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        deps_after_0d = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d
+            )
+            + names
         )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep
-            for dep in deps
-            if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d
+            if is_1dr_rad_grid(dep) and dep not in need_src_deps
         }
+        deps_after_0d_1dr = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d | dep1dr
+            )
+            + names
+        )
         dep1dz = {
             dep
-            for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
-            if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d_1dr
+            if is_1dz_tor_grid(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -1018,14 +1023,15 @@ class Equilibrium(IOAble, Optimizable):
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1dr = calc1dz = False
+                calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1dr = calc1dz = False
+                calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
         else:
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
-                coords = data_index[p][dep]["coordinates"]
                 msg = lambda direction: (
                     f"Dependency {dep} may require more {direction}"
                     " resolution to compute accurately."
@@ -1034,7 +1040,9 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more radial resolution
                     "r" in req and grid.L < self.L_grid
                     # and won't override grid to one with more radial resolution
-                    and not (override_grid and coords in {"z", ""}),
+                    and not (
+                        override_grid and (is_1dz_tor_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
                     msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
                 )
@@ -1042,17 +1050,27 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more poloidal resolution
                     "t" in req and grid.M < self.M_grid
                     # and won't override grid to one with more poloidal resolution
-                    and not (override_grid and coords in {"r", "z", ""}),
+                    and not (
+                        override_grid
+                        and (
+                            is_1dr_rad_grid(dep)
+                            or is_1dz_tor_grid(dep)
+                            or is_0d_vol_grid(dep)
+                        )
+                    ),
                     ResolutionWarning,
                     msg("poloidal") + f" got M_grid={grid.M} < {self._M_grid}.",
                 )
                 warnif(
                     # if need more toroidal resolution
-                    "z" in req and grid.N < self.N_grid
+                    "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
-                    and not (override_grid and coords in {"r", ""}),
+                    and not (
+                        override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
-                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
+                    f"< {self._N_grid}*{self.NFP}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -1213,7 +1231,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1246,6 +1264,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1322,61 +1341,67 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
-    def compute_theta_coords(
-        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    @staticmethod
+    def _map_clebsch_coordinates(
+        iota,
+        alpha,
+        zeta,
+        L_lmn,
+        lmbda,
+        guess=None,
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
+        return _map_clebsch_coordinates(
+            iota,
+            alpha,
+            zeta,
+            L_lmn,
+            lmbda,
+            guess,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
+        )
+
+    def _compute_iota_under_jit(self, rho, params=None, profiles=None, **kwargs):
+        """Compute rotational transform in JITable manner.
 
         Parameters
         ----------
-        flux_coords : ndarray
-            Shape (k, 3).
-            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
+        rho : jnp.ndarray
+            Surface to compute rotational transform.
+        params : dict[str,jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
 
         Returns
         -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
+        iota : jnp.ndarray
+            Shape (len(rho), ).
 
         """
-        warnif(
-            True,
-            DeprecationWarning,
-            "Use map_coordinates instead of compute_theta_coords.",
-        )
-        return map_coordinates(
-            self,
-            coords=flux_coords,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
-        )
+        setdefault(params, self.params_dict)
+        if profiles is None:
+            profiles = get_profiles("iota", self)
+        if profiles["iota"] is None:
+            iota_profile = self.get_profile(["iota", "iota_r"], params=params, **kwargs)
+        else:
+            iota_profile = profiles["iota"]
+
+        if jnp.ndim(rho) < 2:
+            zero = jnp.zeros_like(rho)
+            rho = jnp.column_stack([rho, zero, zero])
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1418,42 +1443,52 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         rcond=None,
         copy=False,
+        tol=1e-9,
     ):
-        """Transform this equilibrium to use straight field line coordinates.
+        """Transform this equilibrium to use straight field line PEST coordinates.
 
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
+        The flux surfaces of the returned equilibrium usually differ from the original
+        by 1% when the default resolution parameters are used.
 
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+            Radial resolution to use for SFL equilibrium.
+            Default is ``3*eq.L``.
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+            Poloidal resolution to use for SFL equilibrium.
+            Default is ``4*eq.M``.
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+            toroidal resolution to use for SFL equilibrium.
+            Default is ``3*eq.N``.
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 2*L
+            Radial grid resolution to use for fit to Zernike series.
+            Default is ``1.5*L``.
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 2*M
+            Poloidal grid resolution to use for fit to Zernike series.
+            Default is ``1.5*M``.
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 2*N
+            Toroidal grid resolution to use for fit to Fourier series.
+            Default is ``N``.
         rcond : float, optional
-            cutoff for small singular values in least squares fit.
+            Cutoff for small singular values in the least squares fit.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
+        tol : float
+            Tolerance for coordinate mapping.
+            Default is ``1e-9``.
 
         Returns
         -------
-        eq_sfl : Equilibrium
+        eq_PEST : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
 
     @property
     def surface(self):
@@ -1510,7 +1545,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(float(np.squeeze(Psi)))
 
     @property
     def NFP(self):
@@ -2067,26 +2102,16 @@ class Equilibrium(IOAble, Optimizable):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
-        basis_L = FourierZernikeBasis(
-            L=L,
-            M=M,
-            N=N,
-            NFP=na_eq.nfp,
-            sym="sin" if not na_eq.lasym else False,
-            spectral_indexing=spectral_indexing,
-        )
 
         transform_R = Transform(grid, basis_R, method="direct1")
         transform_Z = Transform(grid, basis_Z, method="direct1")
-        transform_L = Transform(grid, basis_L, method="direct1")
         A_R = transform_R.matrices["direct1"][0][0][0]
         A_Z = transform_Z.matrices["direct1"][0][0][0]
-        A_L = transform_L.matrices["direct1"][0][0][0]
 
         W = 1 / grid.nodes[:, 0].flatten() ** w
-        A_Rw = A_R * W[:, None]
-        A_Zw = A_Z * W[:, None]
-        A_Lw = A_L * W[:, None]
+        A_R = A_R * W[:, None]
+        A_Z = A_Z * W[:, None]
+        A_L = A_Z  # can just reuse Z for L, works for both sym and asym cases
 
         rho = grid.nodes[grid.unique_rho_idx, 0]
         R_1D = np.zeros((grid.num_nodes,))
@@ -2103,9 +2128,9 @@ class Equilibrium(IOAble, Optimizable):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
-        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
-        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
+        inputs["R_lmn"] = np.linalg.lstsq(A_R, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Z, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_L, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -2218,6 +2243,8 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
@@ -2268,8 +2295,8 @@ class Equilibrium(IOAble, Optimizable):
 
     def optimize(
         self,
-        objective=None,
-        constraints=None,
+        objective,
+        constraints,
         optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
@@ -2288,7 +2315,7 @@ class Equilibrium(IOAble, Optimizable):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : Objective or tuple of Objective
-            Objective function to satisfy. Default = fixed-boundary force balance.
+            Objective function representing the constraints to satisfy.
         optimizer : str or Optimizer (optional)
             optimizer to use
         ftol, xtol, gtol, ctol : float
@@ -2322,15 +2349,22 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
-            constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
+        warnif(
+            not any([con._equilibrium for con in constraints]),
+            UserWarning,
+            "Detected no equilibrium constraints passed, equilibrium optimization "
+            "problems usually require equilibrium constraints in order to produce "
+            "meaningful, physical results. Consider adding `ForceBalance` as a "
+            "constraint.",
+        )
 
         things, result = optimizer.optimize(
             self,

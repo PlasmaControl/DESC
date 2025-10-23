@@ -40,6 +40,7 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
+    _static_attrs = _Objective._static_attrs + ["_helicity"]
 
     def __init__(
         self,
@@ -204,7 +205,6 @@ class QuasisymmetryBoozer(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            self._units = "(T)"
             self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
@@ -370,7 +370,6 @@ class QuasisymmetryTwoTerm(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            self._units = "(T^3)"
             self._print_value_fmt = "Quasi-symmetry ({},{}) error: ".format(
                 self.helicity[0], self.helicity[1]
             )
@@ -548,6 +547,14 @@ class Omnigenity(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_data_keys",
+        "_eq_fixed",
+        "_field_data_keys",
+        "_field_fixed",
+        "_helicity",
+    ]
 
     _coordinates = "rtz"
     _units = "(T)"

@@ -331,16 +331,6 @@ class ShareParameters(_Objective):
             [isinstance(things[0], type(t)) for t in things[1:]]
         ), f"expected same type for all things, got types {[type(t) for t in things]}"
 
-        # ensure things are the same resolution
-        # TODO: might be too strict? could we only try to ensure
-        #  that the desired params passed are same res?
-        for t in things[1:]:
-            assert np.all([things[0].dimensions == t.dimensions]), (
-                f"expected same dimensions for all things, but {t} has different "
-                + f"dimensions than {things[0]}.  Make sure that each thing is at "
-                + "the same resolution."
-            )
-
         super().__init__(
             things=things,
             target=0,
@@ -370,6 +360,23 @@ class ShareParameters(_Objective):
         self._params = broadcast_tree(self._params, default_params)
         self._indices = tree_leaves(self._params)
         assert tree_structure(self._params) == tree_structure(default_params)
+
+        # check here that the things being shared have the same dimensions
+        def look(d1, d2, p):
+            # p.size is 0 if user didn't pass them in as params to share,
+            # they shouldn't cause failure
+            if p.size == 0:
+                return True
+            else:
+                assert (
+                    d1 == d2
+                ), "At least one dimension that is being fixed does not match!"
+                return d1 == d2
+
+        [
+            tree_map(look, thing.dimensions, t2.dimensions, self._params)
+            for t2 in self.things[1:]
+        ]
 
         self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
 

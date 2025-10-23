@@ -2490,6 +2490,8 @@ def test_share_parameters():
     )
     surf2 = surf1.copy()
     surf2.G = necessary_G_for_eq2
+    surf3 = surf2.copy()
+    surf3.change_Phi_resolution(M=4, N=2)
 
     ## setup opt problem
     surf_grid = LinearGrid(M=10, N=10, NFP=surf1.NFP)
@@ -2529,20 +2531,31 @@ def test_share_parameters():
                 eq_fixed=True,
                 name="distance error  eq2",
             ),
+            PlasmaVesselDistance(
+                eq2,
+                surf3,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq2",
+            ),
         )
     )
     constraints = (
         ShareParameters(
             [surf1, surf2], params={"R_lmn": True, "Z_lmn": True, "Phi_mn": [0]}
         ),  # make the 2 surfaces have the same geometry
+        ShareParameters(
+            [surf1, surf3], params={"R_lmn": True, "Z_lmn": True, "Phi_mn": False}
+        ),
         FixParameters(surf1, {"I": True, "G": True}),
         FixParameters(surf2, {"I": True, "G": True}),
     )  # fix the secular parts as well
 
     opt = Optimizer("lsq-exact")
 
-    (surf1, surf2), _ = opt.optimize(
-        [surf1, surf2],
+    (surf1, surf2, surf3), _ = opt.optimize(
+        [surf1, surf2, surf3],
         objective=obj,
         constraints=constraints,
         verbose=3,
@@ -2552,10 +2565,15 @@ def test_share_parameters():
 
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn)
+    np.testing.assert_allclose(surf1.R_lmn, surf3.R_lmn)
+    np.testing.assert_allclose(surf1.Z_lmn, surf3.Z_lmn)
+
     # Phi should be different bc not shared and
     # the 2 target eqs are different
     assert not np.allclose(surf1.Phi_mn[1:], surf2.Phi_mn[1:])
-    # index 0 Phi_mn should be same bc was shared
+    assert not np.allclose(surf1.Phi_mn.shape, surf3.Phi_mn.shape)
+
+    # index 0 Phi_mn should be same bc was shared btwn surf1 and surf2
     assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0])
 
 
@@ -2576,9 +2594,13 @@ def test_share_parameters_coilsets():
     xyz_coil = FourierXYZCoil(
         current=2, X_n=[0, 1.4, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0], modes=[-1, 0, 1]
     )
+    xyz_coil2 = FourierXYZCoil(
+        current=2, X_n=[0, 20, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0], modes=[-1, 0, 1]
+    )
     # full coil set with TF coils, VF coils, and other single coil
-    coils1 = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+    coils1 = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, xyz_coil2))
     coils2 = coils1.copy()
+    coils2[-1].change_resolution(N=xyz_coil2.N + 1)
 
     # between the two coilsets...
     params = [
@@ -2587,13 +2609,15 @@ def test_share_parameters_coilsets():
             # share "center" and  "normal" for the 2nd TF coil
             {"center": True, "normal": True},
             {"r_n": True},  # share radius of the 3rd TF coil
-            {},  # share nothing in the 4th TF coil
+            {"r_n": False},  # dont share the r_n of 4th tf coil
         ],
         # share "shift" & "rotmat" for all VF coils
         {"shift": True, "rotmat": True},
         # share specified indices of "X_n" and "Z_n",
         # but not "Y_n", for other coil
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {"current": True},  # only current for the last coil, which has different N in
+        # second coilset
     ]
 
     ## setup opt problem
@@ -2632,10 +2656,12 @@ def test_share_parameters_coilsets():
     constraints = (
         ShareParameters([coils1, coils2], params=params),
         FixCoilCurrent(
-            coils1, indices=[[False] * len(coils1[0]), [True] * len(coils1[1]), False]
+            coils1,
+            indices=[[False] * len(coils1[0]), [True] * len(coils1[1]), False, False],
         ),
         FixCoilCurrent(
-            coils2, indices=[[False] * len(coils1[0]), [False] * len(coils1[1]), True]
+            coils2,
+            indices=[[False] * len(coils2[0]), [False] * len(coils2[1]), True, True],
         ),
     )  # fix different coils' current for each
 
@@ -2662,10 +2688,12 @@ def test_share_parameters_coilsets():
     np.testing.assert_allclose(coils1[2].X_n[1], coils2[2].X_n[1])
     np.testing.assert_allclose(coils1[2].X_n[2], coils2[2].X_n[2])
     np.testing.assert_allclose(coils1[2].Z_n[0], coils2[2].Z_n[0])
+    np.testing.assert_allclose(coils1[-1].current, coils2[-1].current)
 
     # did not share these
-    assert not np.isclose(coils1.current[-1], coils2.current[-1])
+    assert not np.isclose(coils1.current[-2], coils2.current[-2])
     assert not np.allclose(coils1[0][0].center[1:], coils2[0][0].center[1:])
+    assert not np.allclose(coils1[-1].N, coils2[-1].N)
 
 
 @pytest.mark.unit

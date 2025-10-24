@@ -413,6 +413,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     Neigvals = kwargs.get("Neigvals", 1)
     grid = transforms["grid"].source_grid
 
+    num_zeta = grid.num_zeta
     num_zeta0 = data["c ballooning"].shape[0]
 
     def reshape(f):
@@ -425,85 +426,21 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    if transforms["diffmat"].zeta_diffmat is not None:
-
-        def _eval_1D(f, x, scale, shift):
-            return jax.vmap(lambda x_val: f(x_val, scale, shift))(x)
-
-        def _f(x, scale, shift):
-            x0 = 0.0
-            x1 = 0.4
-            m1 = 1.0
-            m2 = 1.0
-            m3 = 20
-            m4 = 20
-
-            wL = 0.5 * (1.0 + x0)  # left-side weigh
-            wR = 0.5 * (1.0 - x0)  # right-side weight
-
-            lower = wL * (
-                1.0 - jnp.exp(-m1 * (x + 1.0)) + 0.5 * (x + 1.0) * jnp.exp(-2.0 * m1)
-            )
-            upper = wR * (
-                jnp.exp(m2 * (x - 1.0)) + 0.5 * (x - 1.0) * jnp.exp(-2.0 * m2)
-            )
-
-            # Rescale to span [0,1] and shift to [-1,1]
-            g_cluster = 2.0 * (lower + upper) - 1.0
-
-            # Left logistic function
-            s_axis = 1.0 / (1.0 + jnp.exp(-m3 * (x + 1.0)))
-            s_axis0 = 1.0 / (1.0 + jnp.exp(-m3 * 0.0))
-            s_axis1 = 1.0 / (1.0 + jnp.exp(-m3 * 2.0))
-            axis = wL * (s_axis - s_axis0) / (s_axis1 - s_axis0)
-
-            # Right logistic fn, also increasing after the flip
-            s_edge_raw = 1.0 / (1.0 + jnp.exp(m4 * (x - 1.0)))
-            s_edge = 1.0 - s_edge_raw
-            s_edge0 = 1.0 - 1.0 / (1.0 + jnp.exp(m4 * -2.0))
-            s_edge1 = 1.0 - 1.0 / (1.0 + jnp.exp(0.0))
-            edge = wR * (s_edge - s_edge0) / (s_edge1 - s_edge0)
-
-            g_axisedge = 2.0 * (axis + edge) - 1.0
-
-            # Identity map contributes (1-x1) · x
-            return (1.0 - x1) * x + x1 * (g_cluster + g_axisedge - x)
-
-        dx_f = jax.grad(_f, argnums=0)
-
-        num_alpha = grid.num_alpha
-        num_rho = grid.num_rho
-        num_zeta = grid.num_zeta
-
-        ## The points in the supplied grid must be consistent with how
-        ## the kronecker product is created
-        x0 = grid.nodes[:: num_alpha * num_rho, 2]
-
-        # The factor of two because we are mapping from [-1, 1] -> (-ntor pi, ntor pi)
-        scale = (x0[-1] - x0[0]) / 2
-        shift = 1 - x0[0] / scale
-
-        x, w = leggauss_lob(num_zeta)
-
-        scale_vector1 = (_eval_1D(dx_f, x, scale, shift)) ** -1 * 1 / scale
-
-        scale_x1 = scale_vector1[:, None]
+    if transforms["diffmat"].D_zeta is not None:
 
         # Check that the gradients of D_zeta are not calculated
-        D_zeta = transforms["diffmat"].zeta_diffmat * scale_x1
+        D_zeta = transforms["diffmat"].D_zeta
+        W_zeta = transforms["diffmat"].W_zeta
 
-        # 2D matrices stacked in rho, alpha and zeta_0 dimensions
-        w = (1 / scale_vector1) * w
+        # W_zeta is purely diagonal for all the quadratures used
+        # This will give wrong answers for a non-diagonal W_zeta
+        w = jnp.diag(W_zeta)
+
         wg = -1 * w * g
-
-        # Row scaling D_rho by wg
         A = D_zeta.T @ (wg[..., :, None] * D_zeta)
 
-        # the scale due to the derivative
-        wc = w * c
         idx = jnp.arange(num_zeta)
-
-        A = A.at[..., idx, idx].add(wc)
+        A = A.at[..., idx, idx].add(w * c)
 
         b_inv = jnp.sqrt(jnp.reciprocal(w * f))
 
@@ -567,7 +504,7 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     Returns
     -------
     Ideal-ballooning lambda eigenfunctions
-        Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
+        Shape (num rho, num alpha, num zeta0, num zeta - 2, num eigvals).
 
     """
     return data  # noqa: unused dependency

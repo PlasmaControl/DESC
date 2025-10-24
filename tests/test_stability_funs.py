@@ -8,10 +8,11 @@ from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
-from desc.backend import jnp
-from desc.diffmat_utils import DiffMat
+from desc.backend import jax, jnp
+from desc.diffmat_utils import DiffMat, legendre_diffmat
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.integrals.quad_utils import automorphism_staircase2, leggauss_lob
 from desc.objectives import MagneticWell, MercierStability
 from desc.utils import PRINT_WIDTH, cross, dot
 
@@ -612,10 +613,38 @@ def test_ballooning_stability_eval():
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N_zeta)
 
+    # We create a separate grid(with fewer points) for the Legendre diffmatrix method
+    x, w = leggauss_lob(int(N_zeta / 2))
+
+    y = automorphism_staircase2(x, x_0=0.0, x_1=0.5, m_1=2.5, m_2=2.5, m_3=20, m_4=20)
+    dx_f = jax.vmap(
+        lambda x_val: jax.grad(automorphism_staircase2, argnums=0)(
+            x_val, x_0=0.0, x_1=0.5, m_1=2.5, m_2=2.5, m_3=20, m_4=20.0
+        )
+    )
+
+    scale = 2 * ntor * np.pi / (x[-1] - x[0])
+
+    # inverse scaled to a new zeta
+    zeta_diffmat = scale * y
+
+    scale_vector = 1 / (scale * dx_f(x)[:, None])
+    scale_vector_inv = scale * dx_f(x)[:, None]
+
+    D, W = legendre_diffmat(len(x))
+
+    D = D * scale_vector
+    W = W * scale_vector_inv
+
+    diffmat = DiffMat(D_zeta=D, W_zeta=W)
+
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
         grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        grid_diffmat = Grid.create_meshgrid(
+            [rho, alpha, zeta_diffmat], coordinates="raz"
+        )
 
         data_keys0 = [
             "g^aa",
@@ -743,13 +772,15 @@ def test_ballooning_stability_eval():
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
         # now compute our regular metrics and compare them
-        diffmat = DiffMat()
-        data00 = eq.compute(["ideal ballooning lambda"], grid=grid, diffmat=diffmat)
+        data00 = eq.compute(["ideal ballooning lambda"], grid=grid, diffmat=DiffMat())
         data01 = eq.compute(["Newcomb ballooning metric"], grid=grid)
 
         lam2_full = data00["ideal ballooning lambda"]
-
         X0_full = data00["ideal ballooning eigenfunction"]
+
+        lam2_diffmat = eq.compute(
+            ["ideal ballooning lambda"], grid=grid_diffmat, diffmat=diffmat
+        )["ideal ballooning lambda"]
 
         assert np.shape(lam2_full) == (
             1,
@@ -767,10 +798,14 @@ def test_ballooning_stability_eval():
         ), "output eigenfunction spectrum does not have the right shape"
 
         lam2 = jnp.max(lam2_full)
+        lam2_diffmat = jnp.max(lam2_diffmat)
 
         Newcomb_metric = data01["Newcomb ballooning metric"]
 
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
+
+        # The tolerance goes down sharply as you increase the resolution
+        np.testing.assert_allclose(lam2, lam2_diffmat, rtol=2e-3, atol=2e-3)
 
         if lam2 > 0:
             assert Newcomb_metric <= 0, (

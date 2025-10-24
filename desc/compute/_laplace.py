@@ -262,8 +262,8 @@ def _fixed_point_potential(
         method="anderson",
         scalar=True,
         full_output=full_output,
-        anderson_m=4,
-        anderson_beta=0.25,
+        anderson_m=8,
+        anderson_beta=1.0,
     )
 
 

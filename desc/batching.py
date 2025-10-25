@@ -62,13 +62,23 @@ def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
             f" Got {aval.str_short(True, True)}"
         )
 
-    out_s = aval.sharding.update(
-        spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
-    )
+    try:
+        # JAX < 0.5
+        out_s = aval.sharding.update(
+            spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
+        )
+    except AttributeError:
+        # JAX ≥ 0.5 (no .update method)
+        from jax.sharding import NamedSharding, PartitionSpec
+        mesh = aval.sharding.mesh
+        out_s = NamedSharding(mesh, PartitionSpec(None, None, *aval.sharding.spec[1:]))
+    
     out_s = canonicalize_sharding(out_s, "lax.map")
     if out_s is not None and out_s.mesh._any_axis_explicit:
         return auto_axes(f, out_sharding=out_s, axes=out_s.mesh.explicit_axes)(leaf)
     return f(leaf)
+
+
 
 
 def _remainder_leaf(leaf, batch_elems):

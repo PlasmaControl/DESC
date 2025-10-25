@@ -4435,7 +4435,7 @@ def plot_gammac(
 from desc.integrals.bounce_integral import Bounce2D
 
 def plot_adiabatic_invariant(
-    eq, rhos=None, alphas=None, num_pitch=None, pitch_idx=-1, mode="single-surface"
+    eq, rhos=None, alphas=None, num_pitch=None, pitch_idx=-1, mode="single-surface",return_data=False
 ):
     """Plot the second adiabatic invariant J_|| (parallel action).
 
@@ -4552,6 +4552,13 @@ def plot_adiabatic_invariant(
         plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
         plt.title(r"$J_{\parallel}$", fontsize=26)
 
+        if return_data:
+            data = {
+                "J": data_full,
+                "extent": [inv_pitch.min(), inv_pitch.max(), alphas.min(), alphas.max()]            
+            }
+            return fig, ax, data
+
     else:  # "cross-section" mode
         # Create figure
         fig = plt.figure(figsize=(6, 5))
@@ -4571,5 +4578,13 @@ def plot_adiabatic_invariant(
         plt.xlabel(r"$\rho \cos(\alpha)$", fontsize=24)
         plt.ylabel(r"$\rho \sin(\alpha)$", fontsize=24)
         plt.title(r"$J_{\parallel}$", fontsize=26)
+        
+        if return_data:
+            data = {
+                "J": data_full,
+                "rho_cosa": rho_cosa,
+                "rho_sina": rho_sina,
+            }
+            return fig, ax, data
 
     return fig, ax

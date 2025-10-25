@@ -585,7 +585,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
                 data,
                 [],
                 bounce.points(pitch_inv, num_well),
-                is_fourier=True,
+                is_fourier=True
             )
             # Jpar sum over wells
             Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
@@ -603,7 +603,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-    ) / (2 * jnp.pi * num_transit * data["R0"])
+    ) #/ (2 * jnp.pi * num_transit * data["R0"])
     return data
 
 

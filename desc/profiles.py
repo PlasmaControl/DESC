@@ -1545,120 +1545,20 @@ class FourierZernikeProfile(_Profile):
         return cls(c, modes=basis.modes, NFP=NFP, name=name)
 
 
-## Test
-'''
-class PerpendicularPressureProfile(_Profile):
-    """Implements p_perp(z, ψ) = Σ_s (a_s B^4 + b_s B^2 + c_s) * p'_⊥,s(ψ) + p_⊥,he(ψ)."""
+class FloraPerpendicularPressureProfile(_Profile):
+    """p_perp(ψ, B) = 
+       - old mode (3 coeffs):
+           Σ_s (a_s B^4 + b_s B^2 + c_s) * p'_⊥,s(ψ) + p_⊥,he(ψ)
+       - new mode (4 coeffs):
+           Σ_s (a_s B^6 + b_s B^4 + c_s B^2 + d_s) * p'_⊥,s(ψ) + p_⊥,he(ψ)
 
-    _io_attrs_ = ["_eq", "_coeffs", "_psi_profiles", "_hot_electron_profile"]
+    the radial pressure profile "psi_profiles" and the "hot_electron_profile" are not optimizable params
 
-    def __init__(self, eq, psi_profiles, coeffs, hot_electron_profile=None, name="p_perp_total"):
-        """
-        Parameters
-        ----------
-       eq : EquilibriumClass
-            Needs this so that B is tied to the equilibrium shape
-        psi_profiles : list of _Profile
-            List of radial profiles p'_⊥,s(ψ), one per species.
-        coeffs : list of (a, b, c) tuples
-            One (a_s, b_s, c_s) per species, matches psi_profiles.
-        hot_electron_profile : _Profile, optional
-            Adds p_⊥,he(ψ) at the end if provided.
-        name : str
-            Optional name for the profile.
-        """
-        super().__init__(name)
-        assert len(psi_profiles) == len(coeffs), "Each species must have matching coeffs and psi profile"
-        self._eq = eq
-        self._psi_profiles = psi_profiles
-        self._coeffs = coeffs
-        self._hot_electron_profile = hot_electron_profile
+    right now this class has two modes to explore higher order terms
 
-    @property
-    def params(self):
-        parts = [p.params for p in self._psi_profiles]
-        if self._hot_electron_profile is not None:
-            parts.append(self._hot_electron_profile.params)
-        return jnp.concatenate(parts)
+    hot electron profile is specified in the analytical formula, not used yet in a DESC force balance solve
 
-    @params.setter
-    def params(self, new):
-        new = jnp.atleast_1d(jnp.asarray(new))
-        offset = 0
-        for profile in self._psi_profiles:
-            n = len(profile.params)
-            profile.params = new[offset:offset + n]
-            offset += n
-        if self._hot_electron_profile is not None:
-            self._hot_electron_profile.params = new[offset:]
-
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
-        """Compute p_perp at specified grid points."""
-        B = self._eq.compute(["|B|"], grid)["|B|"]
-
-        if B.shape[0] != grid.num_nodes:
-            raise ValueError("Shape mismatch: B must be computed on the same grid.")
-
-        result = jnp.zeros_like(B)
-        for coeffs, profile in zip(self._coeffs, self._psi_profiles):
-            a, b, c = coeffs
-            psi_val = profile.compute(grid, dr=dr, dt=dt, dz=dz)
-            scale = a * B**4 + b * B**2 + c
-            result += scale * psi_val
-
-        if self._hot_electron_profile is not None:
-            result += self._hot_electron_profile.compute(grid, dr=dr, dt=dt, dz=dz)
-
-        return result
-
-
-    def set_params(self, *args, **kwargs):
-        """Forward set_params to subprofiles that support it."""
-        for p in self._psi_profiles:
-            try:
-                p.set_params(*args, **kwargs)
-            except Exception:
-                continue
-        if self._hot_electron_profile is not None:
-            try:
-                self._hot_electron_profile.set_params(*args, **kwargs)
-            except Exception:
-                pass
-
-    def get_params(self, *args, **kwargs):
-        """Try to retrieve params from any subprofile that supports get_params."""
-        for p in self._psi_profiles:
-            try:
-                return p.get_params(*args, **kwargs)
-            except Exception:
-                continue
-        if self._hot_electron_profile is not None:
-            try:
-                return self._hot_electron_profile.get_params(*args, **kwargs)
-            except Exception:
-                pass
-        raise AttributeError("None of the subprofiles support get_params with those arguments.")
-
-    def change_resolution(self, L, *args, **kwargs):
-        """Forward resolution change to subprofiles that support it."""
-        for p in self._psi_profiles:
-            try:
-                p.change_resolution(L, *args, **kwargs)
-            except Exception:
-                continue
-        if self._hot_electron_profile is not None:
-            try:
-                self._hot_electron_profile.change_resolution(L, *args, **kwargs)
-            except Exception:
-                pass
-'''
-
-
-class PerpendicularPressureProfile(_Profile):
-    """p_perp(ψ, B) = Σ_s (a_s B⁴ + b_s B² + c_s) * p'_⊥,s(ψ) + p_⊥,he(ψ)
-
-    - Only the (a_s, b_s, c_s) coefficients are optimizable.
-    - psi_profiles and hot_electron_profile are fixed.
+    this could be run with different profiles for mutiple species, not used yet in a DESC force balance solve
     """
 
     _io_attrs_ = _Profile._io_attrs_ + [
@@ -1666,113 +1566,116 @@ class PerpendicularPressureProfile(_Profile):
         "_psi_profiles",
         "_hot_electron_profile",
     ]
-
-    _static_attrs = _Profile._static_attrs + [
-        "_eq",    # <- keep the lambda or eq object static
-    ]
-
+    _static_attrs = _Profile._static_attrs + ["_eq"]
 
     def __init__(self, psi_profiles, coeffs, hot_electron_profile=None, name=""):
         super().__init__(name)
-        # assert len(psi_profiles) == len(coeffs), "Each species must have matching coeffs and psi profile"
         self._psi_profiles = psi_profiles
-        self._coeffs = np.asarray(coeffs)  # shape (S, 3)
+        coeffs = np.asarray(coeffs)
+
+        if coeffs.shape[1] == 3:
+            self._use_B6 = False
+        elif coeffs.shape[1] == 4:
+            self._use_B6 = True
+        else:
+            raise ValueError("Each species coeffs must be length 3 or 4 .")
+
+        self._coeffs = coeffs
         self._hot_electron_profile = hot_electron_profile
         self._basis = self.basis
 
-
-
     def __repr__(self):
-        """Get the string form of the object."""
         s = super().__repr__()
         s = s[:-1]
-        s += ", basis={})".format(self.basis)
+        s += f", basis={self.basis}, use_B6={self._use_B6})"
         return s
 
     @property
     def params(self):
-        """Return flattened list of all (a, b, c) coefficients per species."""
         return self._coeffs.ravel()
 
     @params.setter
     def params(self, new):
-        """Update only the coefficients (not psi or hot electron profiles)."""
         new = jnp.atleast_1d(jnp.asarray(new))
-        if new.size != len(self._psi_profiles) * 3:
-            raise ValueError(
-                "Expected {} parameters for coeffs".format(len(self._psi_profiles) * 3)
-            )
-        self._coeffs = new.reshape((len(self._psi_profiles), 3))
+        npsi = len(self._psi_profiles) 
+        if new.size == npsi * 3:
+            self._use_B6 = False
+            self._coeffs = new.reshape((npsi, 3))
+        elif new.size == npsi * 4:
+            self._use_B6 = True
+            self._coeffs = new.reshape((npsi, 4))
+        else:
+            raise ValueError(f"Expected {npsi*3} or {npsi*4} parameters, got {new.size}")
 
     @property
     def get_psi_profiles(self):
-        """for p_parallel to get attribute"""
-        return self._psi_profiles   
+        return self._psi_profiles
 
     @property
     def basis(self):
         return self._psi_profiles[0].basis
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0, B=None, B_r=0, B_t=0, B_z=0):
-        """Compute p_perp at specified grid points."""
-
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0,
+                B=None, B_r=0, B_t=0, B_z=0):
         if params is not None:
             self.params = params
 
         if B is None:
-            # this is for direct calls to the profile
-            # for optimization, B is an input to the profile from the p_parallel and p_perp computables so we are jittable
             B = self._eq().compute(["|B|"], grid)["|B|"]
-            #raise ValueError("Need to implement calculation on a grid to get B for profile calls")
-    
 
-        #if B is None:
-           # raise RuntimeError(
-            #    "Profile.compute called without B. "
-            #    "This should never happen in optimization. "
-            #    "Check compute_funs or objective setup."
-             #   ) 
-            
         if B.shape[0] != grid.num_nodes:
             raise ValueError("Shape mismatch: B must be computed on the same grid.")
-            
 
         dB = dr * B_r + dt * B_t + dz * B_z
         result = jnp.zeros_like(B)
-        for (a, b, c), profile in zip(self._coeffs, self._psi_profiles):
-            # psi contributions
-            psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)   # ∂q p'_s
-            psi_base = profile.compute(grid, dr=0,  dt=0,  dz=0)    # p'_s
-        
-            # S_perp and its B-derivative
-            scale     = a * B**4 + b * B**2 + c                    # S⊥(B)
-            dscale_dB = 4 * a * B**3 + 2 * b * B                   # S′⊥(B)
-        
-            # chain rule:  S⊥ * ∂q p'  +  p' * S′⊥ * ∂q B
-            result += scale * psi_val + psi_base * dscale_dB * dB
 
-        if self._hot_electron_profile is not None:
+        if self._use_B6:
+            # B^6 form
+            for (a, b, c, d), profile in zip(self._coeffs, self._psi_profiles):
+                psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
+                psi_base = profile.compute(grid, dr=0, dt=0, dz=0)
+
+                scale     = a*B**6 + b*B**4 + c*B**2 + d
+                dscale_dB = 6*a*B**5 + 4*b*B**3 + 2*c*B
+
+                result += scale * psi_val + psi_base * dscale_dB * dB
+        else:
+            # B^4 form
+            for (a, b, c), profile in zip(self._coeffs, self._psi_profiles):
+                psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
+                psi_base = profile.compute(grid, dr=0, dt=0, dz=0)
+
+                scale     = a*B**4 + b*B**2 + c
+                dscale_dB = 4*a*B**3 + 2*b*B
+
+                result += scale * psi_val + psi_base * dscale_dB * dB
+
+        if self._hot_electron_profile is not None: # this is hard coded to be isotropic 
             result += self._hot_electron_profile.compute(grid, dr=dr, dt=dt, dz=dz)
 
         return result
 
-    # causing bugs
     def set_equilibrium(self, eq):
         self._eq = lambda: eq
-        #self._eq = eq
-
-    def _get_eq(self):
-        return getattr(self, "_eq", None)
-
-    @classmethod
-    def from_values(cls, x, y, *args, **kwargs):
-        raise NotImplementedError("from_values not implemented for this profile")
 
 
-class ParallelPressureProfile(_Profile):
-    """Implements p_parallel(ψ, B) = Σ_s p'_⊥,s(ψ) * (-a_s/3 B⁴ - b_s B² + c_s + d_s B) + p_∥,he(ψ)
+class FloraParallelPressureProfile(_Profile):
+    """p_parallel(ψ, B) =
+       - new mode (4 coeffs):
+           Σ_s p'_⊥,s(ψ) *
+           ( -a_s/5 B^6 - b_s/3 B^4 - c_s B^2 + d_s + dcoeff_s B )
+           + p_∥,he(ψ)
 
-    Coefficients a_s, b_s, c_s are inherited from the PerpendicularPressureProfile.
+       - old mode (3 coeffs):
+           Σ_s p'_⊥,s(ψ) *
+           ( -a_s/3 B^4 - b_s B^2 + c_s + dcoeff_s B )
+           + p_∥,he(ψ)
+
+    d_coeff is an input, everything else is inherited from FloraPerpendicularProfile.
+
+    hot electron profile is specified in the analytical formula, not used yet in a DESC force balance solve
+
+    this could be run with different profiles for mutiple species, not used yet in a DESC force balance solve    
     """
 
     _io_attrs_ = _Profile._io_attrs_ + [
@@ -1780,18 +1683,10 @@ class ParallelPressureProfile(_Profile):
         "_d_coeffs",
         "_hot_electron_profile",
     ]
-    _static_attrs = _Profile._static_attrs + [
-        "_eq",    
-    ]
+    _static_attrs = _Profile._static_attrs + ["_eq"]
 
-
-    def __init__(
-        self,
-        p_perp_profile,
-        d_coeffs,
-        hot_electron_profile=None,
-        name="",
-    ):
+    def __init__(self, p_perp_profile, d_coeffs,
+                 hot_electron_profile=None, name=""):
         super().__init__(name)
         self._p_perp_profile = p_perp_profile
         self._psi_profiles = p_perp_profile.get_psi_profiles
@@ -1802,9 +1697,97 @@ class ParallelPressureProfile(_Profile):
         if len(self._psi_profiles) != len(d_coeffs):
             raise ValueError("Must provide one d_s coefficient per psi_profile")
 
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += f", basis={self.basis}, use_B6={self._p_perp_profile._use_B6})"
+        return s
+
+    @property
+    def params(self):
+        return self._d_coeffs
+
+    @params.setter
+    def params(self, new):
+        self._d_coeffs = jnp.atleast_1d(jnp.asarray(new))
+
+    @property
+    def basis(self):
+        return self._p_perp_profile.basis
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0,
+                B=None, B_r=0, B_t=0, B_z=0):
+        if params is not None:
+            self.params = params
+
+        if B is None:
+            B = self._eq().compute(["|B|"], grid)["|B|"]
+
+        if B.shape[0] != grid.num_nodes:
+            raise ValueError("Shape mismatch: B must be computed on the same grid.")
+
+        dB = dr * B_r + dt * B_t + dz * B_z
+        result = jnp.zeros_like(B)
+
+        try:
+            # if self._p_perp_profile._use_B6
+            # new mode
+            for (a, b, c, d), dcoeff, profile in zip(
+                self._p_perp_profile._coeffs,
+                self._d_coeffs,
+                self._p_perp_profile.get_psi_profiles,
+            ):
+                psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
+                psi_base = profile.compute(grid, dr=0, dt=0, dz=0)
+
+                scale     = (-a/5.0)*B**6 - (b/3.0)*B**4 - c*B**2 + d + dcoeff*B
+                dscale_dB = (-6*a/5.0)*B**5 - (4*b/3.0)*B**3 - 2*c*B + dcoeff
+
+                result += scale * psi_val + psi_base * dscale_dB * dB
+        #else:
+        except:
+            # old mode
+            for (a, b, c), dcoeff, profile in zip(
+                self._p_perp_profile._coeffs,
+                self._d_coeffs,
+                self._p_perp_profile.get_psi_profiles,
+            ):
+                psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
+                psi_base = profile.compute(grid, dr=0, dt=0, dz=0)
+
+                scale     = (-a/3.0)*B**4 - b*B**2 + c + dcoeff*B
+                dscale_dB = (-4*a/3.0)*B**3 - 2*b*B + dcoeff
+
+                result += scale * psi_val + psi_base * dscale_dB * dB
+
+        if self._hot_electron_profile is not None: # this is hard coded to be isotropic 
+            result += self._hot_electron_profile.compute(grid, dr=dr, dt=dt, dz=dz)
+
+        return result
+
+    def set_equilibrium(self, eq):
+        self._eq = lambda: eq
+
+
+class KotelnikovPerpendicularPressure(_Profile):
+    """Kotelnikov–Kesner perpendicular pressure model:
+       p_perp(ψ, B) = p(ψ) * b² * (1 - b)^(n - 1)
+       where b = B / B_T
+    """
+
+    _io_attrs_ = _Profile._io_attrs_ + [
+        "_coeffs",
+        "_psi_profiles",
+    ]
+    _static_attrs = _Profile._static_attrs + ["_eq"]
+
+    def __init__(self, psi_profiles, coeffs, name=""):
+        super().__init__(name)
+        self._psi_profiles = psi_profiles
+        self._coeffs = np.asarray(coeffs)  # shape (S, 2): (n, B_T)
+        self._basis = self.basis
 
     def __repr__(self):
-        """Get the string form of the object."""
         s = super().__repr__()
         s = s[:-1]
         s += ", basis={})".format(self.basis)
@@ -1812,73 +1795,150 @@ class ParallelPressureProfile(_Profile):
 
     @property
     def params(self):
-        """Return only the d_s coefficients."""
-        return self._d_coeffs
+        """Return flattened list of all (n, B_T) coefficients per species."""
+        return self._coeffs.ravel()
 
     @params.setter
     def params(self, new):
-        #new = jnp.atleast_1d(jnp.asarray(new))
-        #if new.size != len(self._psi_profiles):
-            #raise ValueError(f"Expected {len(self._psi_profiles)} d_s coefficients")
-        self._d_coeffs = new
+        """Update only the coefficients (not psi profiles)."""
+        new = jnp.atleast_1d(jnp.asarray(new))
+        if new.size != len(self._psi_profiles) * 2:
+            raise ValueError(
+                "Expected {} parameters for coeffs".format(len(self._psi_profiles) * 2)
+            )
+        self._coeffs = new.reshape((len(self._psi_profiles), 2))
+
+    @property
+    def get_psi_profiles(self):
+        """for p_parallel to get attribute"""
+        return self._psi_profiles   
+
+    @property
+    def basis(self):
+        return self._psi_profiles[0].basis
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0,
+            B=None, B_r=0, B_t=0, B_z=0):
+
+        if params is not None:
+            self.params = params
+    
+        if B is None:
+            B = self._eq().compute(["|B|"], grid)["|B|"]
+        if B.shape[0] != grid.num_nodes:
+            raise ValueError("Shape mismatch: B must be computed on the same grid.")
+    
+        dB = dr * B_r + dt * B_t + dz * B_z
+        result = jnp.zeros_like(B)
+    
+        eps = 1e-12  # minimal floors
+    
+        for (n, B_T), profile in zip(self._coeffs, self._psi_profiles):
+            psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
+            psi_base = profile.compute(grid, dr=0,  dt=0,  dz=0)
+    
+            n_safe  = jnp.maximum(n,  eps) # keep's n above ~ 0 
+            BT_safe = jnp.maximum(B_T, eps) # keep's B_T above ~ 0 
+    
+            b   = B / BT_safe
+            omb = 1.0 - b
+            # KK is physical for 0 <= b <= 1. Mask outside to avoid NaNs -- this will ruin optimization 
+            mask = (omb > 0.0)
+    
+            # scale and derivative only where mask is true; else 0
+            scale_pos     = (b**2) * (omb**(n_safe - 1.0))
+            dscale_dB_pos = (1.0 / BT_safe) * ( 2.0*b*(omb**(n_safe - 1.0))
+                                               - (n_safe - 1.0)*b**2*(omb**(n_safe - 2.0)) )
+            scale     = jnp.where(mask, scale_pos, 0.0)
+            dscale_dB = jnp.where(mask, dscale_dB_pos, 0.0)
+    
+            result += scale * psi_val + psi_base * dscale_dB * dB
+    
+        return result
+
+
+    def set_equilibrium(self, eq):
+        self._eq = lambda: eq
+
+
+class KotelnikovParallelPressure(_Profile):
+    """Kotelnikov–Kesner parallel pressure model:
+       p_parallel(ψ, B) = p(ψ) * (b / n) * (1 - b)^n
+       where b = B / B_T
+    """
+
+    _io_attrs_ = _Profile._io_attrs_ + [
+        "_p_perp_profile",
+        "_d_coeffs",
+    ]
+    _static_attrs = _Profile._static_attrs + ["_eq"]
+
+    def __init__(self, p_perp_profile, d_coeffs, name=""):
+        super().__init__(name)
+        self._p_perp_profile = p_perp_profile
+        self._psi_profiles = p_perp_profile.get_psi_profiles
+        self._d_coeffs = np.asarray(d_coeffs)  # shape (S, 2): (n, B_T)
+        self._basis = self.basis
+
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", basis={})".format(self.basis)
+        return s
+
+    @property
+    def params(self):
+        """Return flattened list of all (n, B_T) coefficients per species."""
+        return self._d_coeffs.ravel()
+
+    @params.setter
+    def params(self, new):
+        """Update the coefficients"""
+        new = jnp.atleast_1d(jnp.asarray(new))
+        self._d_coeffs = new.reshape((len(self._d_coeffs), 2))
 
     @property
     def basis(self):
         return self._p_perp_profile.basis
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0, B=None, B_r=0, B_t=0, B_z=0):
-        """Compute p_parallel at specified grid points."""
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0,
+                B=None, B_r=0, B_t=0, B_z=0):
+    
         if params is not None:
             self.params = params
-
+    
         if B is None:
-            # this is for direct calls to the profile
-            # for optimization, B is an input to the profile from the p_parallel and p_perp computables so we are jittable
             B = self._eq().compute(["|B|"], grid)["|B|"]
-            #raise ValueError("Need to implement calculation on a grid to get B for profile calls")
-
         if B.shape[0] != grid.num_nodes:
             raise ValueError("Shape mismatch: B must be computed on the same grid.")
-
-
+    
         dB = dr * B_r + dt * B_t + dz * B_z
         result = jnp.zeros_like(B)
-        for (a, b, c), d, profile in zip(
-            self._p_perp_profile._coeffs, self._d_coeffs, self._p_perp_profile.get_psi_profiles
-        ):
-            #psi_val = profile.compute(grid, dr=dr, dt=dt, dz=dz)
-
-            # implement hard coded d 
-            #d = (a/3) * Bmax**3 + b*Bmax - c/Bmax
-            
-            #scale = (-a / 3.0) * B**4 - b * B**2 + c + d * B
-            #result += scale * psi_val
-
+    
+        eps = 1e-12  # minimal floors
+    
+        for (n, B_T), profile in zip(self._d_coeffs, self._p_perp_profile.get_psi_profiles):
             psi_val  = profile.compute(grid, dr=dr, dt=dt, dz=dz)
-            psi_base = profile.compute(grid, dr=0, dt=0, dz=0)
-            
-            scale     = (-a/3.0) * B**4 - b * B**2 + c + d * B
-            dscale_dB = (-4*a/3.0) * B**3 - 2*b*B + d
-            
+            psi_base = profile.compute(grid, dr=0,  dt=0,  dz=0)
+    
+            n_safe  = jnp.maximum(n,  eps) # keep's n above ~ 0 
+            BT_safe = jnp.maximum(B_T, eps) # keep's BT above ~ 0 
+    
+            b   = B / BT_safe
+            omb = 1.0 - b
+            # KK is physical for 0 <= b <= 1. Mask outside to avoid NaNs -- this will ruin optimization 
+            mask = (omb > 0.0)
+    
+            scale_pos     = (b / n_safe) * (omb**(n_safe))
+            dscale_dB_pos = (1.0 / BT_safe) * ( (omb**(n_safe) / n_safe)
+                                               - b * (omb**(n_safe - 1.0)) )
+            scale     = jnp.where(mask, scale_pos, 0.0)
+            dscale_dB = jnp.where(mask, dscale_dB_pos, 0.0)
+    
             result += scale * psi_val + psi_base * dscale_dB * dB
-
-
-        if self._hot_electron_profile is not None:
-            result += self._hot_electron_profile.compute(grid, dr=dr, dt=dt, dz=dz)
-
+    
         return result
 
 
-    
-
-    # causing bugs
     def set_equilibrium(self, eq):
         self._eq = lambda: eq
-        #self._eq = eq
-
-    #def _get_eq(self):
-    #    return getattr(self, "_eq", None)
-
-    @classmethod
-    def from_values(cls, x, y, *args, **kwargs):
-        raise NotImplementedError("from_values not implemented for this profile")

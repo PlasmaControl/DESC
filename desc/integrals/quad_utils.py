@@ -106,6 +106,96 @@ def grad_automorphism_sin(x):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
+def automorphism_staircase1(x, x_0=0.5, m_1=2.0, m_2=2.0):
+    """[-1, 1] ∋ x ↦ y ∈ [0, 1].
+
+    This map increases the node density near the point x_0 and the
+    density on either side of x_0 is determined by m_1 and m_2.
+    When plotting this function it looks like a staircase with
+    a single step.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points to transform.
+    x_0 : float
+        Point around which to concetrate node density.
+    m_1 : float
+        Variable to control node density to the left.
+    m_2 : float
+        Variable to control node density to the right.
+
+    Returns
+    -------
+    y : jnp.ndarray
+        Transformed points.
+
+    """
+    lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
+    upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
+    return lower + upper
+
+
+def automorphism_staircase2(x, x_0=0.0, x_1=0.5, m_1=1.0, m_2=1.0, m_3=10.0, m_4=10.0):
+    """[-1, 1] ∋ x ↦ y ∈ [0, 1].
+
+    This map increases the node density near the point x_0 and the
+    density on either side of x_0 is determined by m_1 and m_2,
+    whereas m_3 and m_4 make sure that the points are spaced more
+    uniformly, especially further from the endpoints.
+    When plotting this function it looks like a staircase with
+    a three steps.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points to transform.
+    x_0 : float
+        Point around which to concetrate node density.
+    m_1 : float
+        Variable to control node density to the left.
+    m_2 : float
+        Variable to control node density to the right.
+    m_3 : float
+        Variable to control node density near the left end.
+    m_4 : float
+        Variable to control node density near the right end.
+
+    Returns
+    -------
+    y : jnp.ndarray
+        Transformed points.
+    """
+    wL = 0.5 * (1.0 + x_0)  # left-side weight  (≥0, ≤1)
+    wR = 0.5 * (1.0 - x_0)  # right-side weight (≥0, ≤1)
+
+    lower = wL * (
+        1.0 - jnp.exp(-m_1 * (x + 1.0)) + 0.5 * (x + 1.0) * jnp.exp(-2.0 * m_1)
+    )
+    upper = wR * (jnp.exp(m_2 * (x - 1.0)) + 0.5 * (x - 1.0) * jnp.exp(-2.0 * m_2))
+
+    # Rescale to span [0,1] and shift to [-1,1]
+    g_cluster = 2.0 * (lower + upper) - 1.0  # monotone, g_cluster(±1)=±1
+
+    # Left logistic — increasing from 0 at x=-1 to 1 at x=+1
+    s_axis = 1.0 / (1.0 + jnp.exp(-m_3 * (x + 1.0)))
+    s_axis0 = 1.0 / (1.0 + jnp.exp(-m_3 * 0.0))  # value at x=-1
+    s_axis1 = 1.0 / (1.0 + jnp.exp(-m_3 * 2.0))  # value at x=+1
+    axis = wL * (s_axis - s_axis0) / (s_axis1 - s_axis0)  # maps 0→1
+
+    # Right logistic — also increasing after the flip
+    s_edge_raw = 1.0 / (1.0 + jnp.exp(m_4 * (x - 1.0)))  # decreasing
+    s_edge = 1.0 - s_edge_raw  # now increasing
+    s_edge0 = 1.0 - 1.0 / (1.0 + jnp.exp(m_4 * -2.0))
+    s_edge1 = 1.0 - 1.0 / (1.0 + jnp.exp(0.0))
+    edge = wR * (s_edge - s_edge0) / (s_edge1 - s_edge0)  # maps 0→1
+
+    g_axisedge = 2.0 * (axis + edge) - 1.0  # monotone, ±1 at ends
+
+    # Identity map contributes (1-x1) · x
+    return (1.0 - x_1) * x + x_1 * (g_cluster + g_axisedge - x)  # still ↑, hits ±1
+
+
 def tanh_sinh(deg, m=10):
     """Tanh-Sinh quadrature.
 

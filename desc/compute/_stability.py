@@ -438,7 +438,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         wg = -1 * w * g
         A = D_zeta.T @ (wg[..., :, None] * D_zeta)
 
-        # the scale due to the derivative
         idx = jnp.arange(num_zeta)
         A = A.at[..., idx, idx].add(w * c)
 

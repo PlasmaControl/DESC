@@ -362,6 +362,7 @@ def test_summation_by_parts():
 
     D0, W0 = finite_difference_diffmat(N, h)
     D1, W1 = legendre_diffmat(N)
+    D2, W2 = fourier_diffmat(N)
 
     B = jnp.zeros_like(D0)
     B = B.at[0, 0].set(-1)
@@ -369,6 +370,7 @@ def test_summation_by_parts():
 
     np.testing.assert_allclose(W0 @ D0 + (W0 @ D0).T, B, atol=1e-15)
     np.testing.assert_allclose(W1 @ D1 + (W1 @ D1).T, B, atol=5e-13)
+    np.testing.assert_allclose(W2 @ D2 + (W2 @ D2).T, 0, atol=1e-16)
 
 
 # To view the plots, run pytest -s

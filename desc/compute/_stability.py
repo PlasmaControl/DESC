@@ -15,7 +15,6 @@ from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
-from ..integrals.quad_utils import leggauss_lob
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
@@ -645,9 +644,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         "p",
         "a",
     ],
-    n_rho_max="int: 2 x maximum radial mode number",
-    n_theta_max="int: 2 x maximum poloidal mode number",
-    n_zeta_max="int: 2 x maximum toroidal mode number",
     axisym="bool: if the equilibrium is axisymmetric",
     n_mode_axisym="int: toroidal mode number to study",
     incompressible="bool: imposes incompressibility",
@@ -699,10 +695,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # mode number to analyze.
     n_mode_axisym = kwargs.get("n_mode_axisym", 1)
     incompressible = kwargs.get("incompressible", False)
-    # --no-verify stable_only = kwargs.get("stable_only", False)
-
-    n_rho_max = kwargs.get("n_rho_max", 8)
-    n_theta_max = kwargs.get("n_theta_max", 8)
 
     if axisym:
         if n_mode_axisym == 0 and incompressible:
@@ -714,38 +706,20 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             n_zeta_max = 2
     else:
         n_zeta_max = kwargs.get("n_zeta_max", 4)
-        D_zeta0 = transforms["diffmat"].zeta_diffmat
-
-    def _f(x):
-        x_0 = 0.8
-        m_1 = 3.0
-        m_2 = 1.0
-        lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
-        upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-        eps = 1.0e-3
-        return eps + (1 - eps) * (lower + upper)
-
-    # ∫dρₛ (∂X/∂ρₛ) = ∫dρ f'(ρ) (∂ρ/∂ρₛ) (∂X/∂ρ)
-    dx_f = jax.vmap(jax.grad(_f))
-
-    x, w = leggauss_lob(n_rho_max)
-    scale_vector1 = dx_f(x) ** -1
-
-    # --no-verify scale_vector1 = jnp.ones_like(x0) * (1 - 1e-3)
-    # --no-verify h = (1-1e-3)/(n_rho_max-1)
-
-    scale_x1 = scale_vector1[:, None]
+        D_zeta0 = transforms["diffmat"].D_zeta
 
     # Get differentiation matrices
-    D_rho0 = transforms["diffmat"].rho_diffmat * scale_x1
-    D_theta0 = transforms["diffmat"].theta_diffmat
+    D_rho0 = transforms["diffmat"].D_rho
+    D_theta0 = transforms["diffmat"].D_theta
 
-    wrho = jnp.diag(1 / scale_vector1 * w)
-    wrho = wrho.at[jnp.abs(wrho) < 1e-12].set(0.0)
+    W_rho = transforms["diffmat"].W_rho
+    W_theta = transforms["diffmat"].W_theta
+    W_zeta = transforms["diffmat"].W_zeta
 
-    ### assuming uniform spacing in and θ and ζ
-    wtheta = 2 * jnp.pi / n_theta_max
-    wzeta = 2 * jnp.pi / n_zeta_max
+    # Square matrix
+    n_rho_max = D_rho0.shape[0]
+    n_theta_max = D_theta0.shape[0]
+    n_zeta_max = D_zeta0.shape[0]
 
     I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -758,7 +732,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     D_thetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(D_theta0.T, I_zeta0)))
     D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, D_zeta0.T)))
 
-    W = jnp.diag(jnp.kron(wrho * wtheta * wzeta, jnp.kron(I_theta0, I_zeta0)))[:, None]
+    W = jnp.diag(jnp.kron(W_rho, jnp.kron(W_theta, W_zeta)))[:, None]
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
 

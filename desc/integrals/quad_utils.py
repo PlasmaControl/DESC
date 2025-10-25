@@ -106,7 +106,7 @@ def grad_automorphism_sin(x):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
-def automorphism_staircase1(x, x_0=0.5, m_1=2.0, m_2=2.0):
+def automorphism_staircase1(x, eps=1e-3, x_0=0.5, m_1=2.0, m_2=2.0):
     """[-1, 1] ∋ x ↦ y ∈ [0, 1].
 
     This map increases the node density near the point x_0 and the
@@ -133,7 +133,7 @@ def automorphism_staircase1(x, x_0=0.5, m_1=2.0, m_2=2.0):
     """
     lower = x_0 * (1 - jnp.exp(-m_1 * (x + 1)) + 0.5 * (x + 1) * jnp.exp(-2 * m_1))
     upper = (1 - x_0) * (jnp.exp(m_2 * (x - 1)) + 0.5 * (x - 1) * jnp.exp(-2 * m_2))
-    return lower + upper
+    return eps + (1 - eps) * (lower + upper)
 
 
 def automorphism_staircase2(x, x_0=0.0, x_1=0.5, m_1=1.0, m_2=1.0, m_3=10.0, m_4=10.0):

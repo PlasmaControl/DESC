@@ -378,8 +378,6 @@ def test_poincare_bc():
         return eq
 
     eq = get("HELIOTRON")
-
-    print("Creating equilibrium...")
     xsection = eq.get_surface_at(zeta=0)
 
     eq_poincare = Equilibrium(
@@ -397,10 +395,6 @@ def test_poincare_bc():
         sym=eq.sym,  # explicitly enforce stellarator symmetry
         spectral_indexing=eq._spectral_indexing,
     )
-
-    eq_poincare.change_resolution(eq.L, eq.M, eq.N)
-    eq_poincare.axis = eq_poincare.get_axis()
-    eq_poincare.surface = eq_poincare.get_surface_at(rho=1)
 
     for n in range(1, eq.N + 1):
         print(f"\nSolving N={n}")

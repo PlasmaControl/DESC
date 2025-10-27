@@ -116,13 +116,16 @@ class Equilibrium(IOAble, Optimizable):
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
-        Fixed boundary surface shape, as a Surface object or array of
+        LCFS boundary shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
         Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
         of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
+    xsection : ZernikeRZToroidalSection (optional)
+        Cross-section at zeta=0 as a ZernikeRZToroidalSection object. Can be supplied
+        only if the `surface` parameter is not given.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
@@ -442,10 +445,10 @@ class Equilibrium(IOAble, Optimizable):
             if xsection is None:
                 # For none Poincare BC problems, we need to set the xsection
                 # from the initial guess.
-                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=True)
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs=True)
                 self._xsection = self.get_surface_at(zeta=0)
             else:
-                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=False)
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs=False)
                 self._surface = self.get_surface_at(rho=1.0)
                 self._axis = self.get_axis()
         if check_orientation:
@@ -521,20 +524,16 @@ class Equilibrium(IOAble, Optimizable):
 
     def __repr__(self):
         """String form of the object."""
-        if self.pressure is not None and hasattr(self.pressure, "params"):
-            vacuum = all(self.pressure.params == 0)
-        else:
-            vacuum = "no pressure profile"
-        profile = "iota" if self.iota is not None else "current"
         return (
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + f" (L={self.L}, M={self.M}, N={self.N}, NFP={self.NFP}, sym={self.sym},"
-            + f" spectral_indexing={self.spectral_indexing}, {vacuum=}, {profile=})"
+            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
+                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
+            )
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True, lcfs_surface=True):
+    def set_initial_guess(self, *args, ensure_nested=True, lcfs=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -556,10 +555,10 @@ class Equilibrium(IOAble, Optimizable):
             If True, and the default initial guess does not produce nested surfaces,
             run a small optimization problem to attempt to refine initial guess to
             improve coordinate mapping.
-        lcfs_surface : bool
-            If True, and the initial guess will be created by scaling down the LCFS
+        lcfs : bool
+            If True, the initial guess will be created by scaling down the LCFS
             surface(rho=1.0), to form nested surfaces. If False, the initial guess
-            will be created by rotating the given Poincare section(zeta=0) resulting in
+            will be created by revolving the given Poincare section(zeta=0) resulting in
             an axisymmetric equilibrium. Default is True.
 
         Examples
@@ -600,9 +599,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(
-            self, *args, ensure_nested=ensure_nested, lcfs_surface=lcfs_surface
-        )
+        set_initial_guess(self, *args, ensure_nested=ensure_nested, lcfs=lcfs)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""

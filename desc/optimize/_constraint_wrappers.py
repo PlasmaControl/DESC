@@ -889,9 +889,7 @@ class ProximalProjection(ObjectiveFunction):
                     {
                         arg: jnp.zeros_like(xis)
                         for arg, xis in t.params_dict.items()
-                        if arg not in self._args
-                        # R_lmn, Z_lmn, L_lmn, Ra_n, Za_n,
-                        # Rp_lmn, Zp_lmn, Lp_lmn or Rb_lmn, Zb_lmn  #noqa: E800
+                        if arg not in self._args  # R_lmn, Z_lmn, L_lmn, Ra_n, Za_n
                     }
                 )
                 params += [p]

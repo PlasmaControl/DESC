@@ -160,7 +160,7 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
-def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda=True):
+def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda=False):
     """Get the constraints necessary for a fixed cross-section equilibrium problem.
 
     Parameters
@@ -172,7 +172,7 @@ def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda
     normalize : bool
         Whether to apply constraints in normalized units.
     fix_lambda : bool
-        Whether to fix the λ coefficients to match the cross-section.
+        Whether to fix the λ coefficients to match the cross-section. Defaults to False.
 
     Returns
     -------
@@ -181,11 +181,7 @@ def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda
 
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
-    constraints = (
-        FixSectionR(**kwargs),
-        FixSectionZ(**kwargs),
-    )
-    fix_lambda = False
+    constraints = (FixSectionR(**kwargs), FixSectionZ(**kwargs))
     if fix_lambda:
         constraints += (FixSectionLambda(**kwargs),)
     constraints += (FixPsi(**kwargs),)

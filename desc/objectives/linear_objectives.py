@@ -293,7 +293,6 @@ class BoundaryRSelfConsistency(_Objective):
         modes = eq.surface.R_basis.modes
         self._dim_f = eq.surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
@@ -305,7 +304,6 @@ class BoundaryRSelfConsistency(_Objective):
         self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
             surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
         )
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -377,8 +375,6 @@ class BoundaryZSelfConsistency(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -400,7 +396,6 @@ class BoundaryZSelfConsistency(_Objective):
         self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
             surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
         )
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -474,14 +469,14 @@ class SectionRSelfConsistency(_Objective):
 
         """
         eq = self.things[0]
-
+        section = eq.xsection
         errorif(
-            eq.xsection.zeta != 0,
-            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+            section.zeta != 0,
+            f"Cross-section zeta value must be 0, the given value is {section.zeta}",
         )
 
-        modes = eq.xsection.R_basis.modes
-        self._dim_f = eq.xsection.R_basis.num_modes
+        modes = section.R_basis.modes
+        self._dim_f = section.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
         for i, (l, m, n) in enumerate(modes):
@@ -556,8 +551,6 @@ class SectionZSelfConsistency(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -565,14 +558,14 @@ class SectionZSelfConsistency(_Objective):
 
         """
         eq = self.things[0]
-
+        section = eq.xsection
         errorif(
-            eq.xsection.zeta != 0,
-            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+            section.zeta != 0,
+            f"Cross-section zeta value must be 0, the given value is {section.zeta}",
         )
 
-        modes = eq.xsection.Z_basis.modes
-        self._dim_f = eq.xsection.Z_basis.num_modes
+        modes = section.Z_basis.modes
+        self._dim_f = section.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
         for i, (l, m, n) in enumerate(modes):
@@ -653,30 +646,24 @@ class SectionLambdaSelfConsistency(_Objective):
             Level of output.
         """
         eq = self.things[0]
-
+        section = eq.xsection
         errorif(
-            eq.xsection.zeta != 0,
-            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+            section.zeta != 0,
+            f"Cross-section zeta value must be 0, the given value is {section.zeta}",
         )
 
-        L_modes = eq.L_basis.modes
-        dim_L = eq.L_basis.num_modes
+        modes = section.L_basis.modes
+        self._dim_f = section.L_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.L_basis.num_modes))
 
-        Lp_modes = eq.xsection.L_basis.modes
-        self._dim_f = eq.xsection.L_basis.num_modes
-        self._A = np.zeros((self._dim_f, dim_L))
-
-        for i, (l, m, n) in enumerate(Lp_modes):
+        for i, (l, m, n) in enumerate(modes):
             j = np.argwhere(
                 np.logical_and(
-                    (L_modes[:, :-1] == [l, m]).all(axis=1),
-                    L_modes[:, 2] >= 0,
+                    (eq.L_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                    eq.L_basis.modes[:, 2] >= 0,
                 )
             )
             self._A[i, j] = 1
-
-        if self.target is not None:
-            self._dim_f = self._A.shape[0]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1341,23 +1328,6 @@ class FixSectionLambda(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixLambdaGauge(FixParameters):

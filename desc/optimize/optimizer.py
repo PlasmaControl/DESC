@@ -520,19 +520,46 @@ def get_combined_constraint_objectives(
         nonlinear_constraint.build(verbose=verbose)
 
     # combine arguments from all three objective functions
+    inconsistent_things_error_msg = (
+        "Detected an inconsistency in the "
+        "things passed to the optimizer and/or the things targeted by the objective "
+        "and constraints.\n"
+        "\nOne reason this can happen is if you forgot to pass in every thing "
+        "expected by the objectives and constraints (e.g. did not pass in coils for an"
+        "optimization where the coils are allowed to change), or if you passed in "
+        "things that were not"
+        " targeted by the objectives or constraints.\n"
+        "\n Another reason could be that some of the things passed to the optimizer"
+        "are different objects than what the objective was created with. \n"
+        "This may happen if, for example, you are trying to re-use an objective but "
+        "not with the same exact thing it was created with. \n E.g. if you make an"
+        " objective for"
+        "an Equilibrium object, then try to optimize a different Equilibrium object "
+        "with that same objective, or you try to optimize a copy of that Equilibrium "
+        "object (which has a different Python object ID and therefore is a different"
+        " object), this error will occur."
+    )
     if linear_constraint is not None and nonlinear_constraint is not None:
         objective, linear_constraint, nonlinear_constraint = combine_args(
             objective, linear_constraint, nonlinear_constraint
         )
-        assert set(objective.things) == set(linear_constraint.things)
-        assert set(objective.things) == set(nonlinear_constraint.things)
+        assert set(objective.things) == set(
+            linear_constraint.things
+        ), inconsistent_things_error_msg
+        assert set(objective.things) == set(
+            nonlinear_constraint.things
+        ), inconsistent_things_error_msg
     elif linear_constraint is not None:
         objective, linear_constraint = combine_args(objective, linear_constraint)
-        assert set(objective.things) == set(linear_constraint.things)
+        assert set(objective.things) == set(
+            linear_constraint.things
+        ), inconsistent_things_error_msg
     elif nonlinear_constraint is not None:
         objective, nonlinear_constraint = combine_args(objective, nonlinear_constraint)
-        assert set(objective.things) == set(nonlinear_constraint.things)
-    assert set(objective.things) == set(things)
+        assert set(objective.things) == set(
+            nonlinear_constraint.things
+        ), inconsistent_things_error_msg
+    assert set(objective.things) == set(things), inconsistent_things_error_msg
 
     # wrap to handle linear constraints
     if linear_constraint is not None:

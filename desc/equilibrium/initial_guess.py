@@ -21,7 +21,7 @@ from desc.utils import copy_coeffs, warnif
 
 
 def set_initial_guess(  # noqa: C901 - FIXME: simplify
-    eq, *args, ensure_nested=True, lcfs_surface=True
+    eq, *args, ensure_nested=True, lcfs=True
 ):
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
@@ -47,6 +47,11 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
         If True, and the default initial guess does not produce nested surfaces,
         run a small optimization problem to attempt to refine initial guess to improve
         coordinate mapping.
+    lcfs : bool
+        If True, the initial guess will be created by scaling down the LCFS
+        surface(rho=1.0), to form nested surfaces. If False, the initial guess
+        will be created by revolving the given Poincare section(zeta=0) resulting in
+        an axisymmetric equilibrium. Default is True.
 
     Examples
     --------
@@ -92,7 +97,7 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
             "set_initial_guess should be called with 4 or fewer arguments."
         )
     if nargs == 0 or nargs == 1 and args[0] is None:
-        if hasattr(eq, "_surface") and lcfs_surface:
+        if hasattr(eq, "_surface") and lcfs:
             # use whatever surface is already assigned
             if hasattr(eq, "_axis"):
                 axisR = np.array([eq._axis.R_basis.modes[:, -1], eq._axis.R_n]).T
@@ -116,7 +121,7 @@ def set_initial_guess(  # noqa: C901 - FIXME: simplify
                 coord,
             )
             eq.L_lmn = np.zeros_like(eq.L_lmn)
-        elif hasattr(eq, "_xsection") and not lcfs_surface:
+        elif hasattr(eq, "_xsection") and not lcfs:
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
                 eq.Rp_lmn,

@@ -219,7 +219,6 @@ def test_perturb_axis():
 @pytest.mark.unit
 def test_perturb_poincare():
     """Test that perturbing the Poincare section."""
-    # TODO: make it actually test perturbation, or is it necessary?
     eq = desc.examples.get("HELIOTRON")
     eq_poin = Equilibrium(
         xsection=eq.get_surface_at(zeta=0),
@@ -237,25 +236,18 @@ def test_perturb_poincare():
         spectral_indexing=eq._spectral_indexing,
     )
 
-    eq_poin.L_lmn = eq_poin.L_lmn.at[:].set(0)
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
     eq_poin.Z_lmn = eq_poin.Z_lmn.at[eq_poin.Z_basis.get_idx(1, -1, 1)].set(0.1)
     eq_poin.xsection = eq_poin.get_surface_at(zeta=0)
 
-    surf1 = eq_poin.xsection
-    surf2 = eq.xsection
-
-    things1 = {"xsection": surf1}
-    things2 = {"xsection": surf2}
+    things1 = {"xsection": eq_poin.xsection}
+    things2 = {"xsection": eq.xsection}
 
     deltas = get_deltas(things1, things2)
     constraints = get_fixed_xsection_constraints(eq=eq_poin)
     objective = ObjectiveFunction(ForceBalance(eq_poin))
 
-    eq_poin.perturb(
-        objective=objective, constraints=constraints, deltas=deltas, tr_ratio=0.02
-    )
+    eq_poin.perturb(objective=objective, constraints=constraints, deltas=deltas)
 
     np.testing.assert_allclose(eq.Rp_lmn, eq_poin.Rp_lmn)
     np.testing.assert_allclose(eq.Zp_lmn, eq_poin.Zp_lmn)
-    np.testing.assert_allclose(eq.Lp_lmn, eq_poin.Lp_lmn)

@@ -11,7 +11,14 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
+from desc.backend import (
+    execute_on_cpu,
+    jnp,
+    tree_leaves,
+    tree_map,
+    tree_map_with_path,
+    tree_structure,
+)
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
@@ -362,28 +369,33 @@ class ShareParameters(_Objective):
         assert tree_structure(self._params) == tree_structure(default_params)
 
         # check here that the things being shared have the same dimensions
-        def look(d1, d2, p):
+        def look(kp, d1, d2, p):
             # p.size is 0 if user didn't pass them in as params to share,
             # they shouldn't cause failure
             if p.size == 0:
                 return True
             else:
-                assert (
-                    d1 == d2
-                ), "At least one dimension that is being fixed does not match!"
+                assert d1 == d2, (
+                    "At least one parameter that is being shared does not match"
+                    " dimensions between 2 or more of the passed things!\n"
+                    f"Differing parameter dimensions: {d1} versus {d2}\n"
+                    f"Parameter is at pytree key path {kp}\n"
+                    "Check that this parameter's dimension is the same across all"
+                    " things passed to ShareParameters.\n"
+                    "\nSee below link if confused on what a key path is:\n"
+                    "https://docs.jax.dev/en/latest/pytrees.html#explicit-key-paths"
+                )
                 return d1 == d2
 
-        [
-            tree_map(look, thing.dimensions, t2.dimensions, self._params)
-            for t2 in self.things[1:]
-        ]
+        for t2 in self.things[1:]:
+            tree_map_with_path(look, thing.dimensions, t2.dimensions, self._params)
 
         self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, *params, constants=None):
-        """Compute fixed degree of freedom errors.
+        """Compute shared degree of freedom errors.
 
         Parameters
         ----------
@@ -411,14 +423,15 @@ class ShareParameters(_Objective):
         #  [ 1 0  -1  0]
         #  [ 1 0   0 -1]
         params_1 = params[0]
+        reference_params_array = jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params_1), self._indices)
+            ]
+        )
         return jnp.concatenate(
             [
-                jnp.concatenate(
-                    [
-                        jnp.atleast_1d(param[idx])
-                        for param, idx in zip(tree_leaves(params_1), self._indices)
-                    ]
-                )
+                reference_params_array
                 - jnp.concatenate(
                     [
                         jnp.atleast_1d(param[idx])

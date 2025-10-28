@@ -1708,9 +1708,36 @@ class Equilibrium(IOAble, Optimizable):
         """Profile: Pressure (Pa) profile."""
         return self._pressure
 
+    def _has_kinetic(self):
+        has_kinetic = False
+        for prof in [
+            "_electron_density",
+            "_electron_temperature",
+            "_ion_temperature",
+            "_atomic_number",
+        ]:
+            has_kinetic = has_kinetic or (getattr(self, prof) is not None)
+        return has_kinetic
+
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
+        if self._pressure is None:
+            return
+        warnif(
+            self._has_kinetic,
+            UserWarning,
+            "Setting pressure profile on an equilibrium "
+            + "with fixed kinetic profiles, removing existing kinetic"
+            " profiles.",
+        )
+        for prof in [
+            "_electron_density",
+            "_electron_temperature",
+            "_ion_temperature",
+            "_atomic_number",
+        ]:
+            setattr(self, prof, None)
 
     @optimizable_parameter
     @property
@@ -1759,6 +1786,16 @@ class Equilibrium(IOAble, Optimizable):
     @electron_temperature.setter
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
+        if self._electron_temperature is None:
+            return
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Setting kinetic profile on an equilibrium "
+            + "with fixed kinetic profiles, removing existing pressure"
+            " profile.",
+        )
+        self._pressure = None
 
     @optimizable_parameter
     @property
@@ -1787,6 +1824,16 @@ class Equilibrium(IOAble, Optimizable):
     @electron_density.setter
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
+        if self._electron_density is None:
+            return
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Setting kinetic profile on an equilibrium "
+            + "with fixed kinetic profiles, removing existing pressure"
+            " profile.",
+        )
+        self._pressure = None
 
     @optimizable_parameter
     @property
@@ -1815,6 +1862,16 @@ class Equilibrium(IOAble, Optimizable):
     @ion_temperature.setter
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
+        if self._ion_temperature is None:
+            return
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Setting kinetic profile on an equilibrium "
+            + "with fixed kinetic profiles, removing existing pressure"
+            " profile.",
+        )
+        self._pressure = None
 
     @optimizable_parameter
     @property
@@ -1841,6 +1898,16 @@ class Equilibrium(IOAble, Optimizable):
     @atomic_number.setter
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
+        if self._atomic_number is None:
+            return
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Setting kinetic profile on an equilibrium "
+            + "with fixed kinetic profiles, removing existing pressure"
+            " profile.",
+        )
+        self._pressure = None
 
     @optimizable_parameter
     @property

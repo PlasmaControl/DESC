@@ -16,12 +16,20 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    rpz2xyz_vec,
+    setdefault,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Surface
 
@@ -75,7 +83,7 @@ class FourierRZToroidalSurface(Surface):
         "_Mz",
         "_Nz",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -869,10 +877,10 @@ class FourierRZToroidalSurface(Surface):
             dictionary containing  the following data, in the cylindrical basis:
                 ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
                     the base_surface evaluated at the input ``grid``
-                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
                     the base_surface evaluated at the input ``grid``
                 ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
-                    position vectors on the offset surface, corresponding to the
+                    coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
         info : tuple
@@ -991,7 +999,7 @@ class FourierRZToroidalSurface(Surface):
             else jnp.zeros_like(Rmid)
         )
         axis = FourierRZCurve.from_values(
-            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
         )
         return axis
 
@@ -1055,7 +1063,11 @@ class ZernikeRZToroidalSection(Surface):
         "_Nz",
     ]
 
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + [
+        "_spectral_indexing",
+        "_R_basis",
+        "_Z_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -1375,5 +1387,5 @@ class ZernikeRZToroidalSection(Surface):
 
         grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
-        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis

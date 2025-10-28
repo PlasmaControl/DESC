@@ -9,10 +9,12 @@ from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
@@ -82,6 +84,35 @@ def test_map_coordinates():
 
 
 @pytest.mark.unit
+def test_map_clebsch_coordinates():
+    """Test root finding for (rho,alpha,zeta)."""
+    eq = get("NCSX")
+    assert eq.NFP > 1
+    rho = np.linspace(0.5, 1, 2)
+    alpha = np.linspace(0, 2 * np.pi, 3)
+    zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
+
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    out = eq.map_coordinates(
+        grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        lmbda = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+        )["L"]
+    assert lmbda.basis.NFP == eq.NFP
+    np.testing.assert_allclose(
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+    )
+    np.testing.assert_allclose(
+        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        grid.meshgrid_reshape(out[:, 1], "raz"),
+    )
+
+
+@pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
@@ -119,33 +150,6 @@ def test_map_coordinates_derivative():
         assert ~np.any(np.isnan(j2))
         np.testing.assert_allclose(j1, j2, atol=1e-12)
 
-    # Check map_coordinates with full_output is still runs without errors
-    # this time _map_clebsch_coordinates is called inside map_coordinates
-    inbasis2 = ["rho", "alpha", "zeta"]
-    in_data = eq.compute(inbasis2, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
-
-    @jax.jit
-    def foo(params, in_coords):
-        out, (_, _) = eq.map_coordinates(
-            in_coords,
-            inbasis2,
-            ("rho", "theta", "zeta"),
-            np.array([rho, theta, zeta]).T,
-            params,
-            period=(2 * np.pi, 2 * np.pi, np.inf),
-            maxiter=40,
-            full_output=True,
-        )
-        return out
-
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
-    for j1, j2 in zip(J1.values(), J2.values()):
-        assert ~np.any(np.isnan(j1))
-        assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
-
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -179,14 +183,12 @@ def test_map_coordinates_derivative():
 def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
     eq = get("DSHAPE_CURRENT")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=2e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
 
 
 @pytest.mark.slow
@@ -459,3 +461,17 @@ def test_assigning_profile_iota_current():
     with pytest.warns(UserWarning, match="existing toroidal"):
         eq.iota = PowerSeriesProfile()
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_eq_optimize_default_constraints_warning(DummyStellarator):
+    """Tests default constraints warning for eq.optimize."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

@@ -1,19 +1,20 @@
-jax >= 0.4.24, != 0.4.36, <= 0.6.0
+jax >= 0.4.29, != 0.4.36, != 0.5.1, != 0.5.2, != 0.6.0, <= 0.6.2
 colorama <= 0.4.6
-diffrax >= 0.4.1, <= 0.7.0
-h5py >= 3.0.0, <= 3.13.0
-interpax >= 0.3.3, <= 0.3.8
-matplotlib >= 3.7.3, <= 3.10.3
+diffrax >= 0.6.0, <= 0.7.0
+h5py >= 3.0.0, <= 3.15.1
+interpax >= 0.3.3, <= 0.3.10
+jax-finufft >= 1.1.0
+matplotlib >= 3.7.3, <= 3.10.7
 mpmath >= 1.0.0, <= 1.3.0
-netcdf4 >= 1.5.4, <= 1.7.2
-numpy >= 1.20.0, <= 2.2.5
+netcdf4 >= 1.5.4, <= 1.7.3
+numpy >= 1.20.0, <= 2.2.6
 nvgpu <= 0.10.0
-orthax <= 0.2.4
-plotly >= 5.16, <= 6.0.1
-psutil <= 7.0.0
+orthax <= 0.2.5
+plotly >= 5.16, <= 6.3.1
+psutil <= 7.1.1
 pylatexenc >= 2.0, <= 2.10
-quadax >= 0.2.2, <= 0.2.8
-scikit-image <= 0.25.1
+quadax >= 0.2.2, <= 0.2.9
+scikit-image <= 0.25.2
 scipy >= 1.7.0, <= 1.15.3
-termcolor <= 3.1.0
 sympy
+termcolor <= 3.1.0

@@ -120,8 +120,16 @@ def sgd(
     step_norm = jnp.inf
     df_norm = jnp.inf
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 40)
+        print(f"{'Alpha':<15}: {alpha:.3e}")
+        print(f"{'Beta':<15}: {beta:.3e}")
+        print("-" * 40, "\n")
+
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
 
@@ -156,13 +164,12 @@ def sgd(
         f = fnew
 
         allx.append(x)
+        iteration += 1
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
         if callback(jnp.copy(x), *args):
             success, message = False, STATUS_MESSAGES["callback"]
-
-        iteration += 1
 
     result = OptimizeResult(
         x=x,

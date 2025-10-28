@@ -152,7 +152,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
 @jit
 def trust_region_step_exact_svd(
-    f, u, s, v, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
+    f, u, s, v, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -225,7 +225,7 @@ def trust_region_step_exact_svd(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(suf) / trust_radius
         alpha_lower = 0.0
-        alpha = setdefault(initial_alpha, 0.0)
+        alpha = initial_alpha
         alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
 
         _, phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
@@ -263,7 +263,7 @@ def trust_region_step_exact_svd(
 
 @jit
 def trust_region_step_exact_cho(
-    g, B, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+    g, B, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -310,9 +310,7 @@ def trust_region_step_exact_cho(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(g) / trust_radius
         alpha_lower = 0.0
-        # the final alpha value is very small. So, starting from 0
-        # is faster for root finding
-        alpha = setdefault(initial_alpha, alpha_lower)
+        alpha = initial_alpha
         alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
         # algorithm 4.3 from Nocedal & Wright
@@ -359,7 +357,7 @@ def trust_region_step_exact_cho(
 
 @jit
 def trust_region_step_exact_qr(
-    p_newton, f, J, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+    p_newton, f, J, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -411,9 +409,7 @@ def trust_region_step_exact_qr(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
         alpha_lower = 0.0
-        # the final alpha value is very small. So, starting from 0
-        # is faster for root finding
-        alpha = setdefault(initial_alpha, alpha_lower)
+        alpha = initial_alpha
         alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
 

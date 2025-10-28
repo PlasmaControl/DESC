@@ -549,41 +549,31 @@ def get_combined_constraint_objectives(
         assert set(objective.things) == set(linear_constraint.things), (
             inconsistent_things_error_msg
             + f"objective+constraints expected things {set(objective.things)}, \n"
-            f"linear constraints expected things {set(
-            linear_constraint.things
-        )} "
+            f"linear constraints expected things {set(linear_constraint.things)} "
         )
         assert set(objective.things) == set(nonlinear_constraint.things), (
             inconsistent_things_error_msg
             + f"objective+constraints expected things {set(objective.things)}, \n"
-            f"nonlinear constraints expected things {set(
-            nonlinear_constraint.things
-        )} "
+            f"nonlinear constraints expected things {set(nonlinear_constraint.things)}"
         )
     elif linear_constraint is not None:
         objective, linear_constraint = combine_args(objective, linear_constraint)
         assert set(objective.things) == set(linear_constraint.things), (
             inconsistent_things_error_msg
             + f"objective+constraints expected things {set(objective.things)}, \n"
-            f"linear constraints expected things {set(
-            linear_constraint.things
-        )} "
+            f"linear constraints expected things {set(linear_constraint.things)}"
         )
     elif nonlinear_constraint is not None:
         objective, nonlinear_constraint = combine_args(objective, nonlinear_constraint)
         assert set(objective.things) == set(nonlinear_constraint.things), (
             inconsistent_things_error_msg
             + f"objective+constraints expected things {set(objective.things)}, \n"
-            f"nonlinear constraints expected things {set(
-            nonlinear_constraint.things
-        )} "
+            f"nonlinear constraints expected things {set(nonlinear_constraint.things)}"
         )
     assert set(objective.things) == set(things), (
         inconsistent_things_error_msg
         + f"objective+constraints expected things {set(objective.things)}, \n"
-        f"optimizer got things {set(
-            things
-        )} "
+        f"optimizer got things {set(things)}"
     )
 
     # wrap to handle linear constraints

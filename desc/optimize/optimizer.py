@@ -511,6 +511,7 @@ def _maybe_wrap_nonlinear_constraints(
     if wrapper is not None and wrapper.lower() in ["prox", "proximal", "findif"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
+        findif_options = options.pop("findif_options", {})
         free_boundary_options = options.pop("free_boundary_options", {})
         if np.any([hasattr(c, "_free_boundary") for c in nonlinear_constraints]):
             # finite difference wrapper around free boundary solves
@@ -542,6 +543,7 @@ def _maybe_wrap_nonlinear_constraints(
                 solve_options=solve_options,
                 free_boundary_options=free_boundary_options,
                 eq=eq,
+                findif_options=findif_options,
             )
 
         else:  # usual proximal projection for _equilibrium type constraint

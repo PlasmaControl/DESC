@@ -1412,7 +1412,8 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
                 "ProximalProjection can only handle equality constraints, "
                 + f"got bounds for constraint {con}",
             )
-        self._abs_step = 1e-3
+        self._abs_step = findif_options.pop("abs_step", 1e-3)
+        self._rel_step = findif_options.pop("rel_step", 0.0)
         self._objective = objective
         self._constraint = constraint
         self._constraint_fb = constraint_fb
@@ -1906,7 +1907,7 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
             # as it already does update eq
             jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
             jac.append(jac_col)
-        jac = jnp.hstack(jac) @ self._Z_coils_profiles_etc
+        jac = jnp.atleast_2d(jac).T
         return f0.T @ jac
 
     def hess(self, x, constants=None):
@@ -2059,7 +2060,12 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
                 step = vi * (self._abs_step)
                 # and should be able to just call compute_scald_error
                 # as it already does update eq
-                jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
+                jac_col = (
+                    self.compute_scaled_error(
+                        x + step + self._rel_step * jnp.mean(jnp.abs(vi * x))
+                    )
+                    - f0
+                ) / (self._abs_step + self._rel_step * jnp.mean(jnp.abs(vi * x)))
                 jac.append(jac_col)
             jac = jnp.atleast_2d(jac)
             return jac
@@ -2069,7 +2075,12 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
             step = vi * (self._abs_step)
             # and should be able to just call compute_scald_error
             # as it already does update eq
-            jac_col = (self.compute_scaled_error(x + step) - f0) / self._abs_step
+            jac_col = (
+                self.compute_scaled_error(
+                    x + step + self._rel_step * jnp.mean(jnp.abs(vi * x))
+                )
+                - f0
+            ) / (self._abs_step + self._rel_step * jnp.mean(jnp.abs(vi * x)))
             return jac_col
 
     def jvp_unscaled(self, v, x, constants=None):

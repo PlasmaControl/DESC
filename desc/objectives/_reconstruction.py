@@ -122,6 +122,8 @@ class FluxLoop(_Objective):
         "_coils_fixed",
         "_sheet_data_keys",
         "_compute_A_or_B_from_CurrentPotentialField",
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
     ]
 
     def __init__(
@@ -854,7 +856,7 @@ class PointBMeasurement(_Objective):
         if basis == "rpz":
             pass
         elif basis == "xyz":
-            if directions:
+            if self._use_directions:
                 # convert directions to rpz
                 directions = xyz2rpz_vec(
                     directions, x=measurement_coords[:, 0], y=measurement_coords[:, 1]

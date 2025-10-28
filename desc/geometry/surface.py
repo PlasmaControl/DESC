@@ -83,7 +83,7 @@ class FourierRZToroidalSurface(Surface):
         "_Mz",
         "_Nz",
     ]
-    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis", "_W_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -230,6 +230,7 @@ class FourierRZToroidalSurface(Surface):
                 setattr(self, attribute, None)
         if self.W_basis is None:
             self._W_basis = self.Z_basis.copy()
+            self._W_basis.change_resolution(0, 0)
         if self.W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
 
@@ -486,12 +487,12 @@ class FourierRZToroidalSurface(Surface):
 
         # RG: I'll try to decipher this encryption
         surf = cls(
-            inputs["surface"][:, 3],
-            inputs["surface"][:, 4],
-            inputs["surface"][:, 1:3].astype(int),
-            inputs["surface"][:, 1:3].astype(int),
-            inputs["NFP"],
-            inputs["sym"],
+            R_lmn=inputs["surface"][:, 3],
+            Z_lmn=inputs["surface"][:, 4],
+            modes_R=inputs["surface"][:, 1:3].astype(int),
+            modes_Z=inputs["surface"][:, 1:3].astype(int),
+            NFP=inputs["NFP"],
+            sym=inputs["sym"],
             **kwargs,
         )
         return surf

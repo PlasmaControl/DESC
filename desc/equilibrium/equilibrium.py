@@ -190,6 +190,7 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
     ]
 
     @execute_on_cpu
@@ -481,6 +482,7 @@ class Equilibrium(IOAble, Optimizable):
                 setattr(self, attribute, None)
         if self.W_basis is None:
             self._W_basis = self.L_basis.copy()
+            self._W_basis.change_resolution(0, 0, 0)  # omega should default to zero res
         if self.W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
 
@@ -497,9 +499,9 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
-        self._Lz = int(self._Lz)
-        self._Mz = int(self._Mz)
-        self._Nz = int(self._Nz)
+        self._Lz = int(self.W_basis.L)
+        self._Mz = int(self.W_basis.M)
+        self._Nz = int(self.W_basis.N)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.

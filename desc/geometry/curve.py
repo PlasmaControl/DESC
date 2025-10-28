@@ -66,7 +66,13 @@ class FourierRZCurve(Curve):
         "_NFP",
     ]
 
-    _static_attrs = Curve._static_attrs + ["_sym", "_NFP", "_R_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + [
+        "_sym",
+        "_NFP",
+        "_R_basis",
+        "_Z_basis",
+        "_W_basis",
+    ]
 
     def __init__(
         self,
@@ -144,6 +150,7 @@ class FourierRZCurve(Curve):
                 setattr(self, attribute, None)
         if self.W_basis is None:
             self._W_basis = self.Z_basis.copy()
+            self._W_basis.change_resolution(0)
         if self.W_n is None:
             self._W_n = np.zeros(self.W_basis.num_modes)
 
@@ -320,12 +327,12 @@ class FourierRZCurve(Curve):
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
-            inputs["axis"][:, 1],
-            inputs["axis"][:, 2],
-            inputs["axis"][:, 0].astype(int),
-            inputs["axis"][:, 0].astype(int),
-            inputs["NFP"],
-            inputs["sym"],
+            R_n=inputs["axis"][:, 1],
+            Z_n=inputs["axis"][:, 2],
+            modes_R=inputs["axis"][:, 0].astype(int),
+            modes_Z=inputs["axis"][:, 0].astype(int),
+            NFP=inputs["NFP"],
+            sym=inputs["sym"],
             **kwargs,
         )
         return curve

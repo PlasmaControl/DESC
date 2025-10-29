@@ -33,7 +33,11 @@ class QuadcoilObjective(_Objective):
                 'of normalize and normalize_target will be overridden.')
         
 
-        self._static_attrs = _Objective._static_attrs
+        self._static_attrs = _Objective._static_attrs + [
+            '_static_attrs', 
+            '_deriv_mode',
+            '_verbose',
+        ]
 
         # ----- Superclass -----
         super().__init__(

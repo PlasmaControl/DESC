@@ -668,13 +668,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     B is perfectly PSD
     """
     a_N = data["a"]
-    B_N = params["Psi"] / (jnp.pi * a_N**2)
+    B_N = params["Psi"] / (2 * jnp.pi * a_N**2)
 
     iota = data["iota"][:, None]
 
-    psi_r = data["psi_r"][:, None] / (0.5 * a_N**2 * B_N)
+    psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
 
-    psi_rr = data["psi_rr"][:, None] / (0.5 * a_N**2 * B_N)
+    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
 
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
@@ -705,7 +705,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             D_zeta0 = n_mode_axisym * jnp.array([[0, -1], [1, 0]])
             n_zeta_max = 2
     else:
-        n_zeta_max = kwargs.get("n_zeta_max", 4)
         D_zeta0 = transforms["diffmat"].D_zeta
 
     # Get differentiation matrices
@@ -1059,7 +1058,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
         # To improve performance set exact to False
-        exact = False
+        exact = True
         if exact:
             gamma = 5 / 3
             A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))

@@ -1380,7 +1380,8 @@ def plot_fsa(  # noqa: C901
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        # sym=False to ensure the FSA is correct
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 
@@ -1941,10 +1942,13 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             map_coordinates(
                 eq,
                 t_grid.nodes,
-                ["rho", "theta_PEST", "phi"],
-                ["rho", "theta", "zeta"],
+                # TODO (#568): once generalized toroidal angle is used, change
+                # inbasis to ["rho", "theta_PEST", "phi"],
+                inbasis=["rho", "theta_PEST", "zeta"],
+                outbasis=["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
                 guess=t_grid.nodes,
+                maxiter=30,
             ),
             sort=False,
         )

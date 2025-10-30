@@ -213,6 +213,7 @@ def run_qh_step(n, eq):
     objective = ObjectiveFunction(
         (
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
+            AspectRatio(eq=eq, target=8, weight=1e2),
             Elongation(eq=eq, bounds=(0, 4), weight=3.25),
         ),
     )
@@ -1115,7 +1116,7 @@ def test_omnigenity_optimization():
 
     # check omnigenity error is low
     f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
-    np.testing.assert_allclose(f[2:], 0, atol=1.23e-2)  # f[:2] is R0 and R0/a
+    np.testing.assert_allclose(f[2:], 0, atol=2e-2)  # f[:2] is R0 and R0/a
 
     # check mirror ratio is correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))

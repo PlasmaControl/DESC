@@ -9,14 +9,13 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv
+from ..utils import parse_argname_change, safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
-    "theta": """jnp.ndarray :
+    "angle": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
+        Angle returned by ``Bounce2D.angle``.
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
@@ -89,6 +88,7 @@ _bounce_doc = {
         Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
         This parameter is intended to be used by objectives only.
         """,
+    "theta": "",
 }
 
 
@@ -96,7 +96,7 @@ def _compute(
     fun,
     fun_data,
     data,
-    theta,
+    angle,
     grid,
     num_pitch,
     surf_batch_size=1,
@@ -113,10 +113,9 @@ def _compute(
         Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
-    theta : jnp.ndarray
+    angle : jnp.ndarray
         Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
+        Angle returned by ``Bounce2D.angle``.
     grid : Grid
         Grid that can expand and compress.
     num_pitch : int
@@ -138,7 +137,7 @@ def _compute(
     for name in fun_data:
         fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
     fun_data["iota"] = grid.compress(data["iota"])
-    fun_data["theta"] = theta
+    fun_data["angle"] = angle
     fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
@@ -213,8 +212,10 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 51)
@@ -242,7 +243,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -279,7 +280,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
-            theta,
+            angle,
             grid,
             num_pitch,
             surf_batch_size,

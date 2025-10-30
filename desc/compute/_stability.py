@@ -380,7 +380,7 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     description="Normalized squared ideal ballooning growth rate",
     dim=4,
     params=[],
-    transforms={"grid": []},
+    transforms={"grid": [], "diffmat": []},
     profiles=[],
     coordinates="rtz",
     data=["c ballooning", "f ballooning", "g ballooning"],
@@ -406,19 +406,18 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     Returns
     -------
     Ideal-ballooning lambda eigenvalues
-        Shape (num rho, num alpha, num zeta0, num eigvals).
+        Shape (num_rho, num alpha, num zeta0, num eigvals).
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
     grid = transforms["grid"].source_grid
-    # toroidal step size between points along field lines is assumed uniform
-    dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
-    dz = dz[1] - dz[0]
+
+    num_zeta = grid.num_zeta
     num_zeta0 = data["c ballooning"].shape[0]
 
     def reshape(f):
         assert f.shape == (num_zeta0, grid.num_nodes)
-        f = grid.meshgrid_reshape(f.T, "raz").swapaxes(-1, -2)
+        f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
         assert f.shape == (grid.num_rho, grid.num_alpha, num_zeta0, grid.num_zeta)
         return f
 
@@ -426,15 +425,43 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    # Approximate derivative along field line with second order finite differencing.
-    # Use g on the half grid for numerical stability.
-    g_half = (g[..., 1:] + g[..., :-1]) / (2 * dz**2)
-    b_inv = jnp.reciprocal(f[..., 1:-1])
-    diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
-    diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
+    if transforms["diffmat"].D_zeta is not None:
 
-    # TODO: Issue #1750
-    w, v = eigh_tridiagonal(diag_inner, diag_outer)
+        # Check that the gradients of D_zeta are not calculated
+        D_zeta = transforms["diffmat"].D_zeta
+        W_zeta = transforms["diffmat"].W_zeta
+
+        # W_zeta is purely diagonal for all the quadratures used
+        # This will give wrong answers for a non-diagonal W_zeta
+        w = jnp.diag(W_zeta)
+
+        wg = -1 * w * g
+        A = D_zeta.T @ (wg[..., :, None] * D_zeta)
+
+        idx = jnp.arange(num_zeta)
+        A = A.at[..., idx, idx].add(w * c)
+
+        b_inv = jnp.sqrt(jnp.reciprocal(w * f))
+
+        A = (b_inv[..., :, None] * A) * b_inv[..., None, :]
+
+        # apply dirichlet BC to X
+        w, v = jnp.linalg.eigh(A[..., 1:-1, 1:-1])
+
+    else:
+        # toroidal step size between points along field lines is assumed uniform
+        dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
+        dz = dz[1] - dz[0]
+
+        # Approximate derivative along field line with second order finite differencing.
+        # Use g on the half grid for numerical stability.
+        g_half = (g[..., 1:] + g[..., :-1]) / (2 * dz**2)
+        b_inv = jnp.reciprocal(f[..., 1:-1])
+        diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
+        diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
+
+        # TODO: Issue #1750
+        w, v = eigh_tridiagonal(diag_inner, diag_outer)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
@@ -444,6 +471,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # stop_gradient prevents that.
     v = jax.lax.stop_gradient(v)
     v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
+
     assert v.shape == (
         grid.num_rho,
         grid.num_alpha,

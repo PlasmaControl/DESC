@@ -43,13 +43,17 @@ def get_deltas(things1, things2):  # noqa: C901
     """
     deltas = {}
     assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
-
+    msg = (
+        " has lower resolution. This might clip non-zero coefficients"
+        " and cause dimension issues later. "
+    )
     if "surface" in things1:
         s1 = things1.pop("surface")
         s2 = things2.pop("surface")
         if s1 is not None and s2 is not None:
             s1 = s1.copy()
             s2 = s2.copy()
+            warnif(s1.M > s2.M or s1.N > s2.N, msg="The target surface" + msg)
             s1.change_resolution(s2.L, s2.M, s2.N)
             if not jnp.allclose(s2.R_lmn, s1.R_lmn):
                 deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
@@ -62,6 +66,7 @@ def get_deltas(things1, things2):  # noqa: C901
         if a1 is not None and a2 is not None:
             a1 = a1.copy()
             a2 = a2.copy()
+            warnif(a1.N > a2.N, msg="The target axis" + msg)
             a1.change_resolution(a2.N)
             if not jnp.allclose(a2.R_n, a1.R_n):
                 deltas["Ra_n"] = a2.R_n - a1.R_n
@@ -76,9 +81,10 @@ def get_deltas(things1, things2):  # noqa: C901
                 t1 = t1.copy()
                 t2 = t2.copy()
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
-                    max_res = max(t1.basis.L, t2.basis.L)
-                    t1.change_resolution(max_res)
-                    t2.change_resolution(max_res)
+                    warnif(
+                        t1.basis.L > t2.basis.L, msg=f"The target {key} profile" + msg
+                    )
+                    t1.change_resolution(t2.basis.L)
                 if not jnp.allclose(t2.params, t1.params):
                     deltas[val] = t2.params - t1.params
 

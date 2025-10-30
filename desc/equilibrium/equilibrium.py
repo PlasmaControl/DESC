@@ -78,7 +78,8 @@ class Equilibrium(IOAble, Optimizable):
     fields, and perturbing those fields to find nearby equilibria.
 
     Note that any passed-in profiles with resolution lower than eq.L will be
-    automatically increased in resolution to match eq.L.
+    automatically increased in resolution to match eq.L. Higher resolution profiles will
+    be left untouched.
 
     Parameters
     ----------
@@ -370,13 +371,6 @@ class Equilibrium(IOAble, Optimizable):
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = self._current = None
-        with warnings.catch_warnings():
-            # to suppress resolution warnings here, as if we just
-            # initiate the profiles by default we would get the warning
-            # in the setter methods for these
-            warnings.simplefilter("ignore", category=UserWarning)
-            self.iota = parse_profile(iota, "iota")
-            self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [
@@ -390,7 +384,7 @@ class Equilibrium(IOAble, Optimizable):
             "anisotropy",
         ]:
             p = getattr(self, profile)
-            ensure_consistent_profile_eq_resolution(p, self, name=profile, warn=False)
+            ensure_consistent_profile_eq_resolution(p, self, name=profile)
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP

@@ -1622,7 +1622,7 @@ class ConcentricGrid(_Grid):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
-    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
+    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi-dna"):
         """Create grid nodes and weights.
 
         Parameters
@@ -1645,6 +1645,8 @@ class ConcentricGrid(_Grid):
                 * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
                   degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per
                   surface.
+                * ``'jacobi-dna'``: Same as ``jacobi`` but has more nodes at the
+                  innermost flux surface, so dense near axis (dna).
                 * ``'ocs'``: optimal concentric sampling to minimize the condition
                   number of the resulting transform matrix, for doing inverse transform.
 
@@ -1676,6 +1678,7 @@ class ConcentricGrid(_Grid):
             "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
             "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
             "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
+            "jacobi-dna": special.js_roots(L // 2 + 1, 2, 2)[0],
             "ocs": ocs(L),
         }
         rho = pattern.get(node_pattern)
@@ -1695,7 +1698,11 @@ class ConcentricGrid(_Grid):
 
         for iring in range(L // 2 + 1, 0, -1):
             rho_idx = -iring
-            if iring == L // 2 + 1 and rho[rho_idx] > 0:
+            if (
+                iring == L // 2 + 1
+                and rho[rho_idx] > 0
+                and node_pattern == "jacobi-dna"
+            ):
                 # make innermost ring have as many nodes as next ring
                 # unless it is a point on-axis
                 iring -= 1

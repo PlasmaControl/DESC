@@ -371,6 +371,8 @@ class Equilibrium(IOAble, Optimizable):
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = self._current = None
+        self.iota = parse_profile(iota, "iota")
+        self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [

@@ -260,6 +260,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.ShareParameters
     desc.objectives.Shear
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.SurfaceQuadraticFlux

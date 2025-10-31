@@ -44,7 +44,8 @@ def get_deltas(things1, things2):  # noqa: C901
     deltas = {}
     assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
     msg = (
-        " has lower resolution. This might clip non-zero coefficients"
+        " has lower resolution than what is being perturbed."
+        " This might clip non-zero coefficients"
         " and cause dimension issues later. "
     )
     if "surface" in things1:

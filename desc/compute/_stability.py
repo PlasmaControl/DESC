@@ -668,7 +668,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     B is perfectly PSD
     """
     a_N = data["a"]
-    B_N = params["Psi"] / (2 * jnp.pi * a_N**2)
+    B_N = params["Psi"] / (jnp.pi * a_N**2)
 
     iota = data["iota"][:, None]
 
@@ -1060,7 +1060,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # To improve performance set exact to False
         exact = True
         if exact:
-            gamma = 5 / 3
+            gamma = 1.0 / 3
             A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
             A = A.at[theta_idx, theta_idx].add(
                 C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
@@ -1345,7 +1345,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             )
             Chat = Chat / row_norm
 
-            # Orthogonal projector P = I - C^T (L_G L_G^T)⁻¹ Ĉ
+            # Orthogonal projector P = I - Ĉᵀ (L_G L_Gᵀ)⁻¹ Ĉ
             G = Chat @ Chat.T
             G = (G + G.T) / 2 + 1e-14 * jnp.eye(
                 n_total - 2 * n_theta_max * n_zeta_max

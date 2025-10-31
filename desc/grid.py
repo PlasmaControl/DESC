@@ -798,7 +798,7 @@ class Grid(_Grid):
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
     source_grid : Grid
-        Grid from which coordinates were mapped from.
+        Grid from which coordinates were mapped.
     sort : bool
         Whether to sort the nodes for use with FFT method.
     is_meshgrid : bool

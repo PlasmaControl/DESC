@@ -13,6 +13,7 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+- Adds ``AGNI``, a finite-n ideal MHD stability solver and optimizer
 
 Bug Fixes
 

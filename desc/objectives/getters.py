@@ -5,14 +5,18 @@ from desc.utils import errorif, flatten_list, get_all_instances, isposint, uniqu
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
+    FixAxisW,
     FixAxisZ,
     FixBoundaryR,
+    FixBoundaryW,
     FixBoundaryZ,
     FixCurrent,
     FixCurveRotation,
@@ -25,6 +29,7 @@ from .linear_objectives import (
     FixNearAxisLambda,
     FixNearAxisR,
     FixNearAxisZ,
+    FixOmegaGauge,
     FixPressure,
     FixPsi,
     FixSheetCurrent,
@@ -115,7 +120,12 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
 
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
-    constraints = (FixAxisR(**kwargs), FixAxisZ(**kwargs), FixPsi(**kwargs))
+    constraints = (
+        FixAxisR(**kwargs),
+        FixAxisW(**kwargs),
+        FixAxisZ(**kwargs),
+        FixPsi(**kwargs),
+    )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -144,7 +154,12 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
 
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
-    constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
+    constraints = (
+        FixBoundaryR(**kwargs),
+        FixBoundaryW(**kwargs),
+        FixBoundaryZ(**kwargs),
+        FixPsi(**kwargs),
+    )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -205,7 +220,12 @@ def get_NAE_constraints(
     kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)
-    constraints = (FixPsi(**kwargs),)
+    # TODO: should change to use FixNearAxisW if we allow omega to change the
+    # on zeta to be boozer zeta
+    constraints = (
+        FixAxisW(**kwargs),
+        FixPsi(**kwargs),
+    )
 
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
@@ -351,14 +371,23 @@ def maybe_add_self_consistency(thing, constraints):
     if {"Z_lmn", "Zb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
 
+    if {"W_lmn", "Wb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryWSelfConsistency)
+
     if {"L_lmn"} <= params:
         constraints = add_if_multiple(constraints, FixLambdaGauge)
+
+    if {"W_lmn"} <= params:
+        constraints = add_if_multiple(constraints, FixOmegaGauge)
 
     if {"R_lmn", "Ra_n"} <= params:
         constraints = add_if_multiple(constraints, AxisRSelfConsistency)
 
     if {"Z_lmn", "Za_n"} <= params:
         constraints = add_if_multiple(constraints, AxisZSelfConsistency)
+
+    if {"W_lmn", "Wa_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisWSelfConsistency)
 
     # Curve
     if {"shift"} <= params:

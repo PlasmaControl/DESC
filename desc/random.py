@@ -111,10 +111,10 @@ def random_surface(
         Z_mn[sign(Z_basis.modes[:, 1]) == sign(Z_basis.modes[:, 2])] *= -np.exp(-beta)
 
     surf = FourierRZToroidalSurface(
-        R_mn,
-        Z_mn,
-        R_basis.modes[:, 1:],
-        Z_basis.modes[:, 1:],
+        R_lmn=R_mn,
+        Z_lmn=Z_mn,
+        modes_R=R_basis.modes[:, 1:],
+        modes_Z=Z_basis.modes[:, 1:],
         NFP=NFP,
         sym=sym,
         check_orientation=False,

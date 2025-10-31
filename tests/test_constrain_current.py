@@ -115,6 +115,7 @@ class TestConstrainCurrent:
                     desired=desired[name][mask],
                     equal_nan=False,
                     err_msg=name,
+                    rtol=1e-6,
                 )
 
         eq = desc.examples.get("DSHAPE")

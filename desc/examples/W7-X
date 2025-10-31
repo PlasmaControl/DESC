@@ -6,19 +6,25 @@ NFP =  5
 Psi = -2.13300000E+00
 
 # spectral resolution
-L_rad  = 12
+L_rad = 12,16,24
 M_pol  = 12
-N_tor  = 12
-M_grid = 16
-N_grid = 16
+N_tor  =   12
+M_grid =  16
+N_grid =   16
 
 # continuation parameters
+# none are provided, so automatic continuation will be used
+bdry_ratio=1.0
 pert_order = 2
 
 
 # solver methods
 optimizer         = lsq-exact
 objective         = force
+spectral_indexing = fringe
+ftol=1e-4
+xtol= 1e-6
+maxiter=150
 
 # pressure and rotational transform profiles
 l:   0	p =   1.85596929e+05	i =  -8.56047021e-01

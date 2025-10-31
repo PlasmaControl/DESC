@@ -1,8 +1,4 @@
-"""Example script for recreating the "precise QA" configuration of Landreman and Paul.
-
-Note that this resembles their optimization process in SIMSOPT, but the final optimized
-equilibrium is slightly different from their VMEC solution.
-"""
+"""Example script for recreating the precise QA configuration of Landreman and Paul."""
 
 from desc import set_device
 
@@ -67,6 +63,7 @@ for k in range(1, eq.M + 1):
             # we could optionally set normalize=True which would compute things in
             # normalized/dimensionless units, effectively changing the weights
         ),
+        verbose=0,
     )
     # as opposed to SIMSOPT and STELLOPT where variables are assumed fixed, in DESC
     # we assume variables are free. Here we decide which ones to fix, starting with

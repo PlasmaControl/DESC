@@ -742,13 +742,15 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     Parameters
     ----------
     current : float
-        Current through the coil, in Amperes.
-    R_n, Z_n: array-like
-        fourier coefficients for R, Z
+        current through coil, in Amperes
+    R_n, Z_n, W_n: array-like
+        fourier coefficients for R, Z, omega
     modes_R : array-like
         mode numbers associated with R_n. If not given defaults to [-n:n]
     modes_Z : array-like
         mode numbers associated with Z_n, defaults to modes_R
+    modes_W : array-like
+        mode numbers associated with W_n, defaults to modes_W
     NFP : int
         number of field periods
     sym : bool
@@ -796,13 +798,17 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         current=1,
         R_n=10,
         Z_n=0,
+        W_n=0,
         modes_R=None,
         modes_Z=None,
+        modes_W=None,
         NFP=1,
         sym="auto",
         name="",
     ):
-        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
+        super().__init__(
+            current, R_n, Z_n, W_n, modes_R, modes_Z, modes_W, NFP, sym, name
+        )
 
     @classmethod
     def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):

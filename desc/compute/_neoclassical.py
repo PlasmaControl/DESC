@@ -724,10 +724,10 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     N = kwargs.get("N",0)
     nfp = kwargs.get("nfp",jnp.nan)
     KE_frac = kwargs.get("KE_frac",0.00000001)
-    p_max = kwargs.get("p_max",3)
-    q_max = kwargs.get("q_max",3)
-    res_range_min = kwargs.get("res_range_min",-3)
-    res_range_max = kwargs.get("res_range_max",3)
+    p_max = kwargs.get("p_max",5)
+    q_max = kwargs.get("q_max",5)
+    res_range_min = kwargs.get("res_range_min",-4)
+    res_range_max = kwargs.get("res_range_max",4)
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
     include_zero_res = kwargs.get("include_zero_res",True)
@@ -967,7 +967,6 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
         integral = jnp.sum(integrand * quad_weights * jacobian, axis=-1)
 
         return 1 / integral # compute normalization of bump function
-    # note the normalization of psi_da_broad is roped into the entire objective function being normalized, see _neoclassical.py in "objectives" directory
 
     # Calculate objective function
     A=bump_func_normalize(w,b,a)
@@ -985,5 +984,211 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition, 'psi_da': psi_drift_avg, 'pitch_invs': pitch_inv} # not flattening for plotting, need to flatten for optimization
+    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition, 'psi_da': psi_drift_avg, 'pitch_invs': pitch_inv, 'A':A} # not flattening for plotting, need to flatten for optimization
+    return data
+
+
+
+@register_compute_fun(
+    name="f_tr2",
+    label=(
+        "Eq. (48) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
+    ),
+    units="~", # may want to add in units in "objectives/_neoclassical.py" compute() statement for normalization
+    units_long="None",
+    description="Trapped Particle Resonance Minimizer"
+    "as defined by Eq. (48) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
+    # data=["min_tz |B|", "max_tz |B|", "gbdrift", "fieldline length"]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
+    **_bounce1D_doc,
+)
+# @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging
+def f_tr2(params, transforms, profiles, data, **kwargs):
+    
+    # Import kwargs
+    num_pitch = kwargs.get("num_pitch",1)
+    num_well = kwargs.get("num_well", None)
+    grid = transforms["grid"].source_grid
+    N = kwargs.get("N",0)
+    nfp = kwargs.get("nfp",jnp.nan)
+    KE_frac = kwargs.get("KE_frac",0.00000001)
+    p_max = kwargs.get("p_max",5)
+    q_max = kwargs.get("q_max",5)
+    res_range_min = kwargs.get("res_range_min",-4)
+    res_range_max = kwargs.get("res_range_max",4)
+    bt_filter_flag = kwargs.get("bt_filter_flag",True)
+    rt_filter_flag = kwargs.get("rt_filter_flag",True)
+    include_zero_res = kwargs.get("include_zero_res",True)
+    pitch_invs = kwargs.get("pitch_invs",None)
+
+    # Setup energies
+    m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
+    e = 1.602*10**(-19) # C
+    Z=2 # fully ionized alpha particle
+    KE = KE_frac * 5.6076*10**(-13) # J, 3.5 MeV if KE_frac=1
+    v2 = 2*KE/m_alpha # m/s
+
+    # Setup iotas
+    iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
+
+    # Setup resonances
+    def tb_zr(res_arr_set,res_arr,q_arr):
+        res_arr = res_arr.at[0].set(0)
+        q_arr = q_arr.at[0].set(1)
+        return res_arr_set+1,res_arr,q_arr
+    def fb_zr(res_arr_set,res_arr,q_arr):
+        return res_arr_set, res_arr, q_arr
+    def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
+        return res_arr_set, res_arr, q_arr
+    def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
+        res_arr = res_arr.at[res_arr_set].set(p/q)
+        res_arr = res_arr.at[res_arr_set+1].set(-p/q)
+        q_arr = q_arr.at[res_arr_set].set(q)
+        q_arr = q_arr.at[res_arr_set+1].set(q)
+        return res_arr_set+2, res_arr, q_arr
+    res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+    q_arr = jnp.full(2*p_max*q_max + 1, 0)
+    res_arr_set = 0
+    res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
+    # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
+    for p in range(1,p_max+1): # include the zero resonance
+        for q in range(1,q_max+1):
+            condition = jnp.logical_and(
+                ~jnp.isin(p/q, res_arr),
+                jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
+                )
+            res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
+
+    # Setup quadratures
+    # noqa: unused dependency
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    # Setup grid
+    grid = transforms["grid"].source_grid
+
+
+    # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
+    def alpha_drift(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, _alpha_drift = bounce.integrate(
+            [_v_tau, _poloidal_drift],
+            data["pitch_inv"],
+            data,
+            ["gbdrift"],
+            num_well=num_well,
+        )
+        _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+        count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
+        count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
+
+        return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
+    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = ( # alpha_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
+        _compute(
+            alpha_drift, 
+            {"gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs
+        )
+    ) # [rho,alpha,pitch,wells]
+    # count_nz will be 3D [rho,alpha,pitch]
+    assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
+    ado_shape = jnp.shape(alpha_drift_out)
+
+    def psi_drift(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, _psi_drift = bounce.integrate(
+            [_v_tau, _radial_drift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0"],
+            num_well=num_well,
+        )
+        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+
+        # return _psi_drift, points, v_tau, data["pitch_inv"]
+        return _psi_drift
+    # psi_drift_out, points, vtau_out, pitch_inv = (
+    psi_drift_out = ( # psi_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
+        _compute(
+            psi_drift, 
+            {"cvdrift0": data["cvdrift0"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs
+        )
+    ) 
+
+    
+    # Setup array allocations
+    num_rho = ado_shape[0]
+    num_fieldlines = ado_shape[1]
+    num_Bcrit = ado_shape[2]
+    num_wells = ado_shape[3]
+    num_KE = len(KE_frac)
+
+    tau_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch inv
+    omega_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch invs
+    obj_out = omega_arr * 0
+
+    # Setup mean and standard deviation functions
+    def jnpmean_nz(x,axis=0):
+        mask = x!=0.0
+        count = jnp.sum(mask,axis) # how many wells that are not 0
+        return jnp.sum(x,axis=axis) / count
+    def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "nan" elements in JAX numpy
+        # x is an array with size: (num_rho,num_alpha,num_pitch,num_fieldlines)
+        xbar = jnpmean_nz(x,axis=axis)
+        xbar = jnp.broadcast_to(xbar[..., None], (xbar.shape[0], xbar.shape[1], xbar.shape[2], xbar.shape[3]))
+        # xbar = jnp.transpose(xbar, (2,0,1)) # rearrange to match initial x
+        sq_diff = (x - xbar) ** 2
+        return jnp.sqrt(jnpmean_nz(sq_diff,axis=axis))
+
+
+    # Barely trapped filtering (if bt_filter_flag==True)
+    def tb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Perform barely trapped filter
+        points_0 = points[0][:][:][:][:]
+        points_1 = points[1][:][:][:][:]
+        iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
+        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
+        return jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
+    def fb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Do nothing
+        return alpha_drift_out, psi_drift_out
+    alpha_drift_out,psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out,psi_drift_out)
+
+    # Ripple-trapped filtering (if rt_filter_flag==True)
+    # Average and standard deviation per-surface and pitch inverse
+    alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch), does not include zero wells in averaging
+    alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch)
+    def tb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Perform ripple-trapped filter
+        return jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0),jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, psi_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
+    def fb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Do nothing
+        return alpha_drift_out, psi_drift_out
+    alpha_drift_out, psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std)
+
+
+
+    data["f_tr2"]
     return data

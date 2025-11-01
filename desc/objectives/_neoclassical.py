@@ -517,7 +517,7 @@ class TrappedResonance(_Objective):
             "N": N
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "f_tr1"
+        self._key = "f_tr2"
 
         super().__init__( 
             things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium

@@ -1,3 +1,4 @@
+import desc.io
 from desc.objectives import (
     TrappedResonance
 )
@@ -5,7 +6,9 @@ import numpy as np
 
 # Run objective function
 def TrappedResonanceObj(eq,rhos,pitch_invs,KE_frac,alphas,N):
-    obj = TrappedResonance(eq,rho=rhos,pitch_invs=pitch_invs,KE_frac=KE_frac,alpha=alphas,N=N)
+    eq = desc.io.load("equil_G1600_DESC_fixed.h5")
+    Psi = eq.compute("Psi")
+    obj = TrappedResonance(eq,rho=rhos,pitch_invs=pitch_invs,KE_frac=KE_frac,alpha=alphas,N=N,Psi=Psi['Psi'])
     obj.build()
     out = obj.compute(eq.params_dict) # when not flattened, this shape is (rho,pitch,energy)
 

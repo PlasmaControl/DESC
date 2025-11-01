@@ -992,12 +992,12 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="f_tr2",
     label=(
-        "Eq. (48) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
+        "Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
     ),
     units="~", # may want to add in units in "objectives/_neoclassical.py" compute() statement for normalization
     units_long="None",
     description="Trapped Particle Resonance Minimizer"
-    "as defined by Eq. (48) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
+    "as defined by Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -1031,6 +1031,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
+    Psi = kwargs.get("Psi",None)
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -1118,7 +1119,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     def psi_drift(data):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, _psi_drift = bounce.integrate(
             [_v_tau, _radial_drift],
             data["pitch_inv"],
@@ -1145,15 +1145,11 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     
     # Setup array allocations
-    num_rho = ado_shape[0]
-    num_fieldlines = ado_shape[1]
-    num_Bcrit = ado_shape[2]
-    num_wells = ado_shape[3]
-    num_KE = len(KE_frac)
-
-    tau_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch inv
-    omega_arr = jnp.zeros((ado_shape[0],ado_shape[2])) # axis=0 is rhos, axis=2 is pitch invs
-    obj_out = omega_arr * 0
+    # num_rho = ado_shape[0]
+    # num_fieldlines = ado_shape[1]
+    # num_Bcrit = ado_shape[2]
+    # num_wells = ado_shape[3]
+    # num_KE = len(KE_frac)
 
     # Setup mean and standard deviation functions
     def jnpmean_nz(x,axis=0):
@@ -1246,21 +1242,38 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     q_broad = q_arr[None,None,None,None,:] # make 4D array with q values on axis=3
     q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
 
-    # Calculate bump function (fb)
-    fb_res = jnp.where(
+    # Calculate bump function (f_b) and sum over resonances
+    f_b_res = jnp.where(
         condition,
         safediv(jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
-
+    f_b = jnp.sum(f_b_res,axis=-1)
 
     # First sum over rho
-    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
-    psi_drift_out = psi_drift_out = jnp.broadcast_to(psi_drift_out[...,None],(psi_drift_out.shape[0],psi_drift_out.shape[1],psi_drift_out.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
-    f_tr2 = rho_res * jnp.sum( fb_res * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well,res)
+    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
+    f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
 
     # Sum over Bcrit
-    f_tr2 = Bcrit_res * jnp.sum(f_tr2 * taub * Bcriti**(-2) , axis=0 ) # := (well,res)
+    f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)
+    f_tr2_out = jnp.transpose(f_tr2_out,(2,3,0,1)) # := (rho,alpha,Bcrit,well)
+    pitch_invs = jnp.broadcast_to(pitch_invs[...,None,None,None],(ado_shape[2],ado_shape[0],ado_shape[1],ado_shape[3])) # := (Bcrit,rho,alpha,well)
+    pitch_invs = jnp.transpose(pitch_invs,(1,2,0,3)) # := (rho,alpha,Bcrit,well)
+    f_tr2_out = Bcrit_res * jnp.sum(f_tr2_out * tau_arr * pitch_invs**(-2) , axis=2 ) # := (rho,alpha,well)
 
-    data["f_tr2"] = f_tr2
+    # Second sum over alpha
+    f_tr2_out = alpha_res * jnp.sum(f_tr2_out, axis=1) # := (rho,well)
+
+    # Second sum over rho
+    # epsilon = 1e-12 # for differentiability of square root at Psi=0
+    # Psi_sqrt = jnp.sqrt(Psi+epsilon) # I don't think Psi=0 ever with discretation of the rho grid in DESC
+    Psi_sqrt = jnp.sqrt(Psi)
+    Psi_sqrt = jnp.braodcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3]))
+    f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(jnp.sqrt(Psi) * f_tr2_out, axis=0) # := (well)
+
+    # Sum over wells
+    f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
+
+
+    data["f_tr2"] = f_tr2_out
     return data

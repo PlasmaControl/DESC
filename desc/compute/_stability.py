@@ -647,12 +647,13 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     axisym="bool: if the equilibrium is axisymmetric",
     n_mode_axisym="int: toroidal mode number to study",
     incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
     stable_only="bool: for testing only, materialize "
     + "and eigendecompose the stable part of the matrix",
 )
 def _AGNI(params, transforms, profiles, data, **kwargs):
     """
-    AGNI: Analysis of Global Normal-modes in Ideal MHD.
+    AGNI2: Analysis of Global Normal-modes in Ideal MHD.
 
     Based on the original source here:
     https://github.com/rahulgaur104/AGNI/tree/master
@@ -674,8 +675,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
 
-    psi_rr = data["psi_rr"][:, None] / (a_N**2 * B_N)
-
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
 
@@ -690,6 +689,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
+    gamma = kwargs.get("gamma", 0.0)
 
     # For axisymmetric equilibria n_mode_axisym will decide the toroidal
     # mode number to analyze.
@@ -775,10 +775,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # instability drive term
     F = -1 * mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
 
-    C_zeta = jnp.diag(iota * partial_z_log_sqrtg) + iota * D_zeta
-    C_rho = (
-        jnp.diag(psi_r * partial_r_log_sqrtg + psi_rr) + psi_r * D_rho
-    )  # (n_total, n_total)
+    C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
+    C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
     C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
 
     ####################
@@ -1060,22 +1058,23 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         # To improve performance set exact to False
         exact = True
         if exact:
-            gamma = 1.0 / 3
-            A = A.at[rho_idx, rho_idx].add(C_rho.T @ ((gamma * sqrtg * W * p0) * C_rho))
+            A = A.at[rho_idx, rho_idx].add(
+                (C_rho * psi_r.T).T @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+            )
             A = A.at[theta_idx, theta_idx].add(
                 C_theta.T @ ((gamma * sqrtg * W * p0) * C_theta)
             )
             A = A.at[zeta_idx, zeta_idx].add(
-                C_zeta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+                (C_zeta * iota.T).T @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
             )
             A = A.at[rho_idx, theta_idx].add(
-                C_rho.T @ ((gamma * sqrtg * W * p0) * C_theta)
+                (C_rho * psi_r.T).T @ ((gamma * sqrtg * W * p0) * C_theta)
             )
             A = A.at[rho_idx, zeta_idx].add(
-                C_rho.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+                (C_rho * psi_r.T).T @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
             )
             A = A.at[theta_idx, zeta_idx].add(
-                C_theta.T @ ((gamma * sqrtg * W * p0) * C_zeta)
+                C_theta.T @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
             )
 
     ### Instability drive term
@@ -1170,9 +1169,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         keep_2 = jnp.arange(n_total, 2 * n_total)
         keep = jnp.concatenate([keep_1, keep_2])
 
-        d_r = 1.0 / jnp.diag(D)[rho_idx]
-        d_v = 1.0 / jnp.diag(D)[theta_idx]
-        d_z = 1.0 / jnp.diag(D)[zeta_idx]
+        d_r = jnp.diag(D)[rho_idx]
+        d_v = jnp.diag(D)[theta_idx]
+        d_z = jnp.diag(D)[zeta_idx]
 
         C_zeta = C_zeta * d_z[None, :]
 
@@ -1327,11 +1326,16 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
 
             # C.shape (N, 3N)
-            C = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
+            d_r = jnp.diag(D)[rho_idx]
+            d_v = jnp.diag(D)[theta_idx]
+            d_z = jnp.diag(D)[zeta_idx]
 
-            d = jnp.diag(D)  # (3N,)
-            C_scaled = C * d[None, :]  # right-multiply by D via column scaling
+            C_zeta = (C_zeta * d_z[None, :]) * iota.T
+            C_rho = (C_rho * d_r[None, :]) * psi_r.T
+            C_theta = C_theta * d_v[None, :]
 
+            # C.shape (N, 3N)
+            C_scaled = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
             # Apply L2⁻ᵀ per node using the existing L2inv
             # Ĉ = C D L⁻ᵀ
             Linv_T = jnp.swapaxes(Linv, 1, 2)  # (N, 3, 3)

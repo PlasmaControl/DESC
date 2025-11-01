@@ -1028,6 +1028,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
     include_zero_res = kwargs.get("include_zero_res",True)
     pitch_invs = kwargs.get("pitch_invs",None)
+    alpha_res = kwargs.get("alpha_res",None)
+    rho_res = kwargs.get("rho_res",None)
+    Bcrit_res = kwargs.get("Bcrit_res",None)
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -1079,9 +1082,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    # Setup grid
+    # Setup grid and resolutions
     grid = transforms["grid"].source_grid
-
 
     # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
     def alpha_drift(data):
@@ -1182,6 +1184,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Average and standard deviation per-surface and pitch inverse
     alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch), does not include zero wells in averaging
     alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch)
+    alpha_drift_avg = jnp.broadcast_to(alpha_drift_avg[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
+    alpha_drift_std = jnp.broadcast_to(alpha_drift_std[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
+
     def tb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Perform ripple-trapped filter
         return jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0),jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, psi_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
     def fb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Do nothing
@@ -1189,6 +1194,73 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     alpha_drift_out, psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std)
 
 
+    # Sum psi_drift_out term over alpha
+    psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
 
-    data["f_tr2"]
+
+    # Omega eta calculation (currently for one energy only), average over alphas
+    tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
+    iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
+    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
+    omega_arr = alpha_res * jnp.sum(omega_arr,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
+
+    # Bump function calculation #
+
+    # Misc parameters
+    w=1 # width and amplitude parameter, recommended to keep =1
+
+    # Setting wd
+    def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
+        def body_fun(i, carry):
+            max_val, max_idx = carry
+            new_val = arr[i]
+            cond = new_val > max_val
+
+            # jnp.where chooses elementwise between two values
+            max_val = jnp.where(cond, new_val, max_val)
+            max_idx = jnp.where(cond, i, max_idx)
+            return (max_val, max_idx)
+        
+        carry_init = (arr[0], 0)
+        max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
+        return {'max_i': max_idx, 'max_num': max_val}
+    # wd takes a different value for each (Bcrit,well) combination
+    max_rhospace = jax.vmap(jax.vmap(jax.vmap(arr_max_1d, in_axes=0)))
+    wd = max_rhospace(omega_arr) # := (Bcrit,well)
+    wd = jnp.broadcast_to([None,...],(ado_shape[0],wd.shape[0],wd.shape[1])) # := (rho,Bcrit,well)
+    
+    # Setting up resonance arrays
+    res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)
+    res_broad = jnp.broadcast_to(res_broad, (ado_shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    wd = jnp.broadcast_to([...,None],(ado_shape[0],wd.shape[0],wd.shape[1],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Conditional for non-zero bump
+    a = res_broad + wd
+    b = res_broad - wd
+    y = omega_broad - res_broad
+    condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
+
+    # Create q array for division into bump function
+    q_broad = q_arr[None,None,None,None,:] # make 4D array with q values on axis=3
+    q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Calculate bump function (fb)
+    fb_res = jnp.where(
+        condition,
+        safediv(jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
+        0
+        ) # := (rho,Bcrit,well,res)
+
+
+    # First sum over rho
+    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    psi_drift_out = psi_drift_out = jnp.broadcast_to(psi_drift_out[...,None],(psi_drift_out.shape[0],psi_drift_out.shape[1],psi_drift_out.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    f_tr2 = rho_res * jnp.sum( fb_res * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well,res)
+
+    # Sum over Bcrit
+    f_tr2 = Bcrit_res * jnp.sum(f_tr2 * taub * Bcriti**(-2) , axis=0 ) # := (well,res)
+
+    data["f_tr2"] = f_tr2
     return data

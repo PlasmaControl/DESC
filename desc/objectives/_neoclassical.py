@@ -514,7 +514,10 @@ class TrappedResonance(_Objective):
             "num_well": num_well,
             "KE_frac": KE_frac,
             "pitch_invs": pitch_invs,
-            "N": N
+            "N": N,
+            "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
+            "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
+            "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1)
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"

@@ -1102,7 +1102,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
 
         return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
-    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = ( # alpha_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
+    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = ( # alpha_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in later
         _compute(
             alpha_drift, 
             {"gbdrift": data["gbdrift"]},
@@ -1112,7 +1112,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             surf_batch_size,
             pitch_invs=pitch_invs
         )
-    ) # [rho,alpha,pitch,wells]
+    )
     # count_nz will be 3D [rho,alpha,pitch]
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
@@ -1145,12 +1145,14 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     
     # Setup array allocations
-    # num_rho = ado_shape[0]
-    # num_fieldlines = ado_shape[1]
-    # num_Bcrit = ado_shape[2]
-    # num_wells = ado_shape[3]
-    # num_KE = len(KE_frac)
-
+    '''
+    num_rho = ado_shape[0]
+    num_fieldlines = ado_shape[1]
+    num_Bcrit = ado_shape[2]
+    num_wells = ado_shape[3]
+    num_KE = len(KE_frac)
+    '''
+    
     # Setup mean and standard deviation functions
     def jnpmean_nz(x,axis=0):
         mask = x!=0.0
@@ -1159,7 +1161,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "nan" elements in JAX numpy
         # x is an array with size: (num_rho,num_alpha,num_pitch,num_fieldlines)
         xbar = jnpmean_nz(x,axis=axis)
-        xbar = jnp.broadcast_to(xbar[..., None], (xbar.shape[0], xbar.shape[1], xbar.shape[2], xbar.shape[3]))
+        xbar = jnp.broadcast_to(xbar[..., None], (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
         # xbar = jnp.transpose(xbar, (2,0,1)) # rearrange to match initial x
         sq_diff = (x - xbar) ** 2
         return jnp.sqrt(jnpmean_nz(sq_diff,axis=axis))
@@ -1201,6 +1203,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
     omega_arr = alpha_res * jnp.sum(omega_arr,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
+
     # Bump function calculation #
 
     # Misc parameters
@@ -1222,14 +1225,16 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
         return {'max_i': max_idx, 'max_num': max_val}
     # wd takes a different value for each (Bcrit,well) combination
-    max_rhospace = jax.vmap(jax.vmap(jax.vmap(arr_max_1d, in_axes=0)))
+    max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
     wd = max_rhospace(omega_arr) # := (Bcrit,well)
-    wd = jnp.broadcast_to([None,...],(ado_shape[0],wd.shape[0],wd.shape[1])) # := (rho,Bcrit,well)
-    
+    wd = wd['max_num']
+    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (rho,Bcrit,well)
+    wd = jnp.transpose(wd,(2,0,1))
+
     # Setting up resonance arrays
     res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)
     res_broad = jnp.broadcast_to(res_broad, (ado_shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
-    wd = jnp.broadcast_to([...,None],(ado_shape[0],wd.shape[0],wd.shape[1],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],wd.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
     omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
 
     # Conditional for non-zero bump
@@ -1239,7 +1244,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
 
     # Create q array for division into bump function
-    q_broad = q_arr[None,None,None,None,:] # make 4D array with q values on axis=3
+    q_broad = q_arr[None,None,None,:] # make 4D array with q values on axis=3
     q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
 
     # Calculate bump function (f_b) and sum over resonances
@@ -1248,10 +1253,10 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         safediv(jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
-    f_b = jnp.sum(f_b_res,axis=-1)
+    f_b = jnp.sum(f_b_res,axis=-1) # := (rho,Bcrit,well)
 
     # First sum over rho
-    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
+    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
     f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
 
     # Sum over Bcrit
@@ -1268,8 +1273,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # epsilon = 1e-12 # for differentiability of square root at Psi=0
     # Psi_sqrt = jnp.sqrt(Psi+epsilon) # I don't think Psi=0 ever with discretation of the rho grid in DESC
     Psi_sqrt = jnp.sqrt(Psi)
-    Psi_sqrt = jnp.braodcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3]))
-    f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(jnp.sqrt(Psi) * f_tr2_out, axis=0) # := (well)
+    Psi_sqrt = jnp.broadcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3]))
+    f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(Psi_sqrt * f_tr2_out, axis=0) # := (well)
 
     # Sum over wells
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar

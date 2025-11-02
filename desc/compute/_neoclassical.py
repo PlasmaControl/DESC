@@ -994,8 +994,8 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     label=(
         "Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
     ),
-    units="~", # may want to add in units in "objectives/_neoclassical.py" compute() statement for normalization
-    units_long="None",
+    units="s^-2", # may want to add in units in "objectives/_neoclassical.py" compute() statement for normalization
+    units_long="seconds squared",
     description="Trapped Particle Resonance Minimizer"
     "as defined by Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
     dim=1,
@@ -1032,6 +1032,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
     Psi = kwargs.get("Psi",None)
+    wd_blur = kwargs.get('wd_blur',3)
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -1059,7 +1060,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         q_arr = q_arr.at[res_arr_set+1].set(q)
         return res_arr_set+2, res_arr, q_arr
     res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
-    q_arr = jnp.full(2*p_max*q_max + 1, 0)
+    q_arr = jnp.full(2*p_max*q_max + 1, 1)
     res_arr_set = 0
     res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
     # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
@@ -1227,9 +1228,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # wd takes a different value for each (Bcrit,well) combination
     max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
     wd = max_rhospace(omega_arr) # := (Bcrit,well)
-    wd = wd['max_num']
-    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (rho,Bcrit,well)
-    wd = jnp.transpose(wd,(2,0,1))
+    wd = wd_blur*wd['max_num']
+    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (Bcrit,well,rho)
+    wd = jnp.transpose(wd,(2,0,1)) # := (rho,Bcrit,well)
 
     # Setting up resonance arrays
     res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)
@@ -1273,12 +1274,12 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # epsilon = 1e-12 # for differentiability of square root at Psi=0
     # Psi_sqrt = jnp.sqrt(Psi+epsilon) # I don't think Psi=0 ever with discretation of the rho grid in DESC
     Psi_sqrt = jnp.sqrt(Psi)
-    Psi_sqrt = jnp.broadcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3]))
+    Psi_sqrt = jnp.broadcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3])) # := (rho,well)
     f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(Psi_sqrt * f_tr2_out, axis=0) # := (well)
 
     # Sum over wells
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
 
-    data["f_tr2"] = f_tr2_out
+    data["f_tr2"] = f_tr2_out # full output
     return data

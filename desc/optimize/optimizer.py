@@ -648,7 +648,7 @@ def get_combined_constraint_objectives(  # noqa: C901
         # (dim size post proximal projection)
         original_dim = objective._objective._eq.dim_x
         x_scale = np.broadcast_to(x_scale, original_dim)
-
+        x_scale_orig = x_scale.copy()
         # Project from (eq.dim_x) -> (dim size post proximal projection)
         # (remove excluded parameters from ProximalProjection)
         excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
@@ -657,6 +657,30 @@ def get_combined_constraint_objectives(  # noqa: C901
             if arg not in excluded_params:
                 included_idx.extend(objective._objective._eq.x_idx[arg])
         x_scale = x_scale[included_idx]
+        if is_findif:
+            # TODO: how should this be done? needs projection through
+            # three stages it seems, or at least a second stage now
+            # If we have ProximalProjection, get original dimension from equilibrium
+            # and project x_scale through both stages: (eq.dim_x) ->
+            # (dim size post proximal projection)
+
+            # Project from (eq.dim_x) -> (dim size post findif wrapper)
+            # (remove excluded parameters from FiniteDifferenceSingleStage)
+            excluded_params = [
+                "R_lmn",
+                "Z_lmn",
+                "L_lmn",
+                "Ra_n",
+                "Za_n",
+                "Rb_lmn",
+                "Zb_lmn",
+                "Phi_mn",
+            ]
+            included_idx = []
+            for arg in objective._objective._eq.optimizable_params:
+                if arg not in excluded_params:
+                    included_idx.extend(objective._objective._eq.x_idx[arg])
+            x_scale = x_scale_orig[included_idx]
 
     if linear_constraint is not None and not isinstance(x_scale, str):
         # need to project x_scale down to correct size

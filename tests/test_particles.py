@@ -179,11 +179,10 @@ def test_tracing_vacuum_tokamak():
     """Test particle tracing in a vacuum tokamak."""
     rmajor = 4.0
     rminor = 1.0
-    ts = np.linspace(0, 1e-7, 100)
+    ts = np.linspace(0, 1e-6, 100)
     R0 = rmajor + rminor / 2
 
     # Create a vacuum tokamak equilibrium with a FourierRZToroidalSurface
-    # TODO: replace with one of the existing vacuum tokamak
     surf = FourierRZToroidalSurface(
         R_lmn=np.array([rmajor, rminor]),
         modes_R=np.array([[0, 0], [1, 0]]),
@@ -193,7 +192,7 @@ def test_tracing_vacuum_tokamak():
     eq = Equilibrium(surface=surf, L=8, M=8, N=0, Psi=3)
     eq.solve(verbose=1)
 
-    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e6)
     model = VacuumGuidingCenterTrajectory(frame="flux")
 
     # Particle tracing compute the field on individual points as grid which
@@ -206,9 +205,6 @@ def test_tracing_vacuum_tokamak():
     # Initialize particles
     x0, args = particles.init_particles(model=model, field=eq)
     m, q, _ = args[0, :]
-    # Ensure particles stay within the surface by bounds_R (not actually
-    # needed here since the tracing time is chosen accordingly, but this
-    # is the intended use case).
     rtz, vpar = trace_particles(
         field=eq,
         initializer=particles,

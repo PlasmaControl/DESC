@@ -185,7 +185,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 "Integration in lab coordinates requires a MagneticField. If using an "
                 "Equilibrium, we recommend setting frame='flux' and converting the "
                 "output to lab coordinates only at the end by the helper function "
-                "Equilibrium.compute('x')."
+                "Equilibrium.compute('x', grid=Grid(coords, jitable=True))."
             )
 
             return self._compute_lab_coordinates(
@@ -228,10 +228,16 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         ]
 
         transforms = get_transforms(data_keys, eq, grid, jitable=True)
-        profiles = get_profiles(data_keys, eq, grid)
+        profiles = {"current": eq.current, "iota": eq.iota}
         if iota is not None:
             profiles["iota"] = iota
-        data = compute_fun(eq, data_keys, params, transforms, profiles)
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            data_keys,
+            params,
+            transforms,
+            profiles,
+        )
 
         # derivative of the guiding center position in R, phi, Z coordinates
         Rdot = vpar * data["b"] + (
@@ -650,6 +656,10 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
 class CurveParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a curve.
 
+    Sampling will done on the nodes of the grid based on the curve length represented by
+    `|x_s|*ds` at each node. Higher the length, more likely a node will be chosen to
+    spawn a particle. Multiple particles can be initialized at the same node.
+
     Parameters
     ----------
     curve : desc.geometry.Curve
@@ -666,7 +676,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : Grid
-        Grid used to discretize curve.
+        Grid used to discretize curve. Default is ``LinearGrid(N=curve.N)``
     seed : int
         Seed for rng.
     is_curve_magnetic_axis : bool
@@ -807,6 +817,10 @@ class CurveParticleInitializer(AbstractParticleInitializer):
 class SurfaceParticleInitializer(AbstractParticleInitializer):
     """Randomly sample particles starting on a surface.
 
+    Sampling will done on the nodes of the grid based on the surface area represented by
+    `|e_theta x e_zeta|` at each node. Higher the area, more likely a node will be
+    chosen to spawn a particle. Multiple particles can be initialized at the same node.
+
     Parameters
     ----------
     surface : desc.geometry.Surface
@@ -823,7 +837,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : Grid
-        Grid used to discretize curve.
+        Grid used to discretize curve. Default is `LinearGrid(M=surface.M, N=surface.N)`
     seed : int
         Seed for rng.
     is_surface_from_eq : bool
@@ -977,7 +991,7 @@ def trace_particles(
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
-    solver=Tsit5(),
+    solver=Tsit5(scan_kind="bounded"),
     adjoint=RecursiveCheckpointAdjoint(),
     chunk_size=None,
     options=None,
@@ -1020,8 +1034,8 @@ def trace_particles(
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
         ``event`` is provided.
     solver: diffrax.AbstractSolver, optional
-        diffrax Solver object to use in integration. Defaults to Tsit5(), a RK45
-        explicit solver.
+        diffrax Solver object to use in integration. Defaults to
+        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
     adjoint : diffrax.AbstractAdjoint, optional
         How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
@@ -1032,7 +1046,7 @@ def trace_particles(
     options : dict, optional
         Additional keyword arguments to pass to the field computation,
             - iota : Profile
-                Iota profile of the Equilibrium, if it does not have one.
+                Iota profile of the Equilibrium, if not already assigned.
             - source_grid: Grid
                 Source grid to use for field computation.
     throw : bool, optional

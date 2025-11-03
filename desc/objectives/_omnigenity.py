@@ -985,7 +985,7 @@ class DirectParticleTracing(_Objective):
     """Confinement metric for radial transport from direct tracing.
 
     Traces particles in flux coordinates within the equilibrium, and
-    returns a confinement metric based off of the deviation of
+    returns a confinement metric based off of the average deviation of
     the particle trajectory from its initial flux surface.
 
     Parameters
@@ -1010,7 +1010,6 @@ class DirectParticleTracing(_Objective):
         "_trace_particles",
         "_max_steps",
         "_has_iota_profile",
-        "_saveat",
         "_stepsize_controller",
         "_adjoint",
         "_event",
@@ -1029,7 +1028,6 @@ class DirectParticleTracing(_Objective):
         solver=Tsit5(),
         ts=jnp.arange(0, 1e-3, 100),
         iota_grid=None,
-        saveat=None,
         stepsize_controller=None,
         adjoint=RecursiveCheckpointAdjoint(),
         max_steps=None,
@@ -1048,7 +1046,6 @@ class DirectParticleTracing(_Objective):
         if target is None and bounds is None:
             target = 0
         self._ts = jnp.asarray(ts)
-        self._saveat = saveat if saveat is not None else SaveAt(ts=ts)
         self._adjoint = adjoint
         if max_steps is None:
             max_steps = 10
@@ -1091,8 +1088,6 @@ class DirectParticleTracing(_Objective):
             Level of output.
 
         """
-        from desc.particles import _trace_particles
-
         eq = self.things[0]
         if self._iota_grid is None:
             iota_grid = LinearGrid(
@@ -1115,9 +1110,6 @@ class DirectParticleTracing(_Objective):
             return jnp.logical_or(i < 0.0, i > 1.0)
 
         self._event = Event(default_event)
-
-        # avoid circular import
-        self._trace_particles = _trace_particles
 
         timer = Timer()
         if verbose > 0:
@@ -1151,6 +1143,8 @@ class DirectParticleTracing(_Objective):
         f : ndarray
             Average deviation in rho from initial surface, for each particle.
         """
+        from desc.particles import _trace_particles
+
         if not self._has_iota_profile:
             # compute and fit iota profile beforehand, as
             # particle trace only computes things one point at a time
@@ -1171,7 +1165,7 @@ class DirectParticleTracing(_Objective):
         else:
             iota_prof = None
 
-        rpz, _ = self._trace_particles(
+        rpz, _ = _trace_particles(
             field=self.things[0],
             y0=self._x0,
             model=self._model,
@@ -1179,7 +1173,7 @@ class DirectParticleTracing(_Objective):
             ts=self._ts,
             params=params,
             stepsize_controller=self._stepsize_controller,
-            saveat=self._saveat,
+            saveat=SaveAt(ts=self._ts),
             max_steps=self._max_steps,
             min_step_size=self._min_step_size,
             solver=self._solver,

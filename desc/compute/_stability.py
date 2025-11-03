@@ -703,7 +703,6 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             # Each componenet of xi can be written as the Fourier sum of
             # two modes in the toroidal direction
             D_zeta0 = n_mode_axisym * jnp.array([[0, -1], [1, 0]])
-            n_zeta_max = 2
     else:
         D_zeta0 = transforms["diffmat"].D_zeta
 
@@ -780,7 +779,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
 
     ####################
-    ####----Q²_ρρ----####
+    ####----Q²_ρρ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
         D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
@@ -790,7 +789,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q²_ϑϑ ----####
+    ####----Q²_ϑϑ ---###
     ####################
     # enforcing symmetry exactly
     A = A.at[theta_idx, theta_idx].add(
@@ -826,7 +825,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q²_ζζ----####
+    ####----Q²_ζζ---####
     ####################
     A = A.at[theta_idx, theta_idx].add(
         0.5
@@ -861,7 +860,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ####################
-    ####----Q²_ρϑ----####
+    ####----Q²_ρϑ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -897,7 +896,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ######################
-    ####-----Q²_ρζ-----####
+    ####-----Q²_ρζ-----###
     ######################
     A = A.at[rho_idx, rho_idx].add(
         -1
@@ -933,7 +932,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     )
 
     ##########################
-    #######-----Q²_ϑζ-----#####
+    ######-----Q²_ϑζ-----#####
     ##########################
     A = A.at[theta_idx, theta_idx].add(
         -1
@@ -1173,10 +1172,10 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         d_v = jnp.diag(D)[theta_idx]
         d_z = jnp.diag(D)[zeta_idx]
 
-        C_zeta = C_zeta * d_z[None, :]
+        C_zeta = (C_zeta * d_z[None, :]) * iota.T
 
         # TODO: convert to batched inversion for speed
-        C_rho = C_rho * d_r[None, :]
+        C_rho = (C_rho * d_r[None, :]) * psi_r.T
         C_zeta_inv_C_rho = jnp.linalg.solve(C_zeta, C_rho)
 
         C_theta = C_theta * d_v[None, :]

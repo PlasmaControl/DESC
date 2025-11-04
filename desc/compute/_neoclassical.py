@@ -1201,9 +1201,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
     # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    omega_arr = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-(nfp*iotas_omega)))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    omega_arr_test = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
     # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
-    omega_arr = alpha_res * jnp.sum(omega_arr,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
+    omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
 
     # Bump function calculation #
@@ -1288,20 +1288,20 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
 
-    data["f_tr2"] = f_tr2_out # full output
+    # data["f_tr2"] = f_tr2_out # full output
     # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    # data["f_tr2"] = {
-    #     'poinc_plot':poinc_plot,
-    #     'omega_arr':omega_arr,
-    #     'psi_drift_out':psi_drift_out,
-    #     'iotas_rho1_sum': iotas_rho1_sum,
-    #     'f_b': f_b,
-    #     'tau_arr': tau_arr,
-    #     'nfp': nfp,
-    #     'test': 'hi1',
-    #     'alpha_drift_out':alpha_drift_out,
-    #     'pitch_inv':pitch_inv
-    #     } # for plotting
+    data["f_tr2"] = {
+        'poinc_plot':poinc_plot,
+        'omega_arr':omega_arr_test,
+        'psi_drift_out':psi_drift_out,
+        'iotas_rho1_sum': iotas_rho1_sum,
+        'f_b': f_b,
+        'tau_arr': tau_arr,
+        'nfp': nfp,
+        'test': 'hi1',
+        'alpha_drift_out':alpha_drift_out,
+        'pitch_inv':pitch_inv
+        } # for plotting
     return data
 
 

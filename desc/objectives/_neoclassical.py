@@ -479,7 +479,7 @@ class TrappedResonance(_Objective):
         KE_frac=np.array([0.00000001]),
         Psi=None,
         *,
-        num_transit=2,
+        num_transit=3,
         knots_per_transit=100,
         num_quad=32,
         num_pitch=1,
@@ -522,7 +522,7 @@ class TrappedResonance(_Objective):
             "Psi": Psi
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "f_tr2"
+        self._key = "f_tr_timing"
 
         super().__init__( 
             things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium

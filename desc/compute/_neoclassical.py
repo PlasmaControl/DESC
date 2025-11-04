@@ -984,7 +984,7 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
     
     # return obj_out, which is a 1D array (each element represents a surface and pitch combination)
     # data["f_tr1"] = jnp.reshape(obj_out,num_pitch*grid.num_rho*len(KE_frac))
-    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_broad, 'condition':condition, 'psi_da': psi_drift_avg, 'pitch_invs': pitch_inv, 'A':A} # not flattening for plotting, need to flatten for optimization
+    data["f_tr1"] = {'res':res_broad,'obj_test':obj_out_test,'obj':obj_out, 'omega': omega_arr, 'condition':condition, 'psi_da': psi_drift_avg, 'pitch_invs': pitch_inv, 'A':A} # not flattening for plotting, need to flatten for optimization
     return data
 
 
@@ -1014,12 +1014,12 @@ def f_tr1(params, transforms, profiles, data, **kwargs):
 def f_tr2(params, transforms, profiles, data, **kwargs):
     
     # Import kwargs
-    num_pitch = kwargs.get("num_pitch",1)
+    num_pitch = kwargs.get("num_pitch",None)
     num_well = kwargs.get("num_well", None)
     grid = transforms["grid"].source_grid
     N = kwargs.get("N",0)
-    nfp = kwargs.get("nfp",jnp.nan)
-    KE_frac = kwargs.get("KE_frac",0.00000001)
+    nfp = kwargs.get("nfp",None)
+    KE_frac = kwargs.get("KE_frac",None)
     p_max = kwargs.get("p_max",5)
     q_max = kwargs.get("q_max",5)
     res_range_min = kwargs.get("res_range_min",-4)
@@ -1200,7 +1200,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Omega eta calculation (currently for one energy only), average over alphas
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
-    omega_arr = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    omega_arr = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-(nfp*iotas_omega)))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
     # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
     omega_arr = alpha_res * jnp.sum(omega_arr,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
@@ -1260,6 +1261,12 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
     f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
 
+    # Plotting code, not necessary for optimization
+    plot_poinc=True
+    if plot_poinc:
+        poinc_plot = f_b * psi_drift_out / iotas_rho1_sum # := (rho,Bcrit,well)
+
+
     # Sum over Bcrit
     f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)
     f_tr2_out = jnp.transpose(f_tr2_out,(2,3,0,1)) # := (rho,alpha,Bcrit,well)
@@ -1282,4 +1289,336 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
 
     data["f_tr2"] = f_tr2_out # full output
+    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # data["f_tr2"] = {
+    #     'poinc_plot':poinc_plot,
+    #     'omega_arr':omega_arr,
+    #     'psi_drift_out':psi_drift_out,
+    #     'iotas_rho1_sum': iotas_rho1_sum,
+    #     'f_b': f_b,
+    #     'tau_arr': tau_arr,
+    #     'nfp': nfp,
+    #     'test': 'hi1',
+    #     'alpha_drift_out':alpha_drift_out,
+    #     'pitch_inv':pitch_inv
+    #     } # for plotting
+    return data
+
+
+
+
+@register_compute_fun(
+    name="f_tr_timing",
+    label=(
+        "Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
+    ),
+    units="s^-2", # may want to add in units in "objectives/_neoclassical.py" compute() statement for normalization
+    units_long="seconds squared",
+    description="Trapped Particle Resonance Minimizer"
+    "as defined by Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
+    # data=["min_tz |B|", "max_tz |B|", "gbdrift", "fieldline length"]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
+    **_bounce1D_doc,
+)
+# @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging
+def f_tr_timing(params, transforms, profiles, data, **kwargs):
+    
+    # Import kwargs
+    num_pitch = kwargs.get("num_pitch",None)
+    num_well = kwargs.get("num_well", None)
+    grid = transforms["grid"].source_grid
+    N = kwargs.get("N",0)
+    nfp = kwargs.get("nfp",None)
+    KE_frac = kwargs.get("KE_frac",None)
+    p_max = kwargs.get("p_max",5)
+    q_max = kwargs.get("q_max",5)
+    res_range_min = kwargs.get("res_range_min",-4)
+    res_range_max = kwargs.get("res_range_max",4)
+    bt_filter_flag = kwargs.get("bt_filter_flag",True)
+    rt_filter_flag = kwargs.get("rt_filter_flag",True)
+    include_zero_res = kwargs.get("include_zero_res",True)
+    pitch_invs = kwargs.get("pitch_invs",None)
+    alpha_res = kwargs.get("alpha_res",None)
+    rho_res = kwargs.get("rho_res",None)
+    Bcrit_res = kwargs.get("Bcrit_res",None)
+    Psi = kwargs.get("Psi",None)
+    wd_blur = kwargs.get('wd_blur',3)
+
+    # Setup energies
+    m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
+    e = 1.602*10**(-19) # C
+    Z=2 # fully ionized alpha particle
+    KE = KE_frac * 5.6076*10**(-13) # J, 3.5 MeV if KE_frac=1
+    v2 = 2*KE/m_alpha # m/s
+
+    # Setup iotas
+    iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
+
+    # Setup resonances
+    '''    def tb_zr(res_arr_set,res_arr,q_arr):
+        res_arr = res_arr.at[0].set(0)
+        q_arr = q_arr.at[0].set(1)
+        return res_arr_set+1,res_arr,q_arr
+    def fb_zr(res_arr_set,res_arr,q_arr):
+        return res_arr_set, res_arr, q_arr
+    def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
+        return res_arr_set, res_arr, q_arr
+    def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
+        res_arr = res_arr.at[res_arr_set].set(p/q)
+        res_arr = res_arr.at[res_arr_set+1].set(-p/q)
+        q_arr = q_arr.at[res_arr_set].set(q)
+        q_arr = q_arr.at[res_arr_set+1].set(q)
+        return res_arr_set+2, res_arr, q_arr
+    res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+    q_arr = jnp.full(2*p_max*q_max + 1, 1)
+    res_arr_set = 0
+    res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
+    # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
+    for p in range(1,p_max+1): # include the zero resonance
+        for q in range(1,q_max+1):
+            condition = jnp.logical_and(
+                ~jnp.isin(p/q, res_arr),
+                jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
+                )
+            res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
+    '''
+    # Setup quadratures
+    # noqa: unused dependency
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    # Setup grid and resolutions
+    grid = transforms["grid"].source_grid
+
+    # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
+    def alpha_drift(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, _alpha_drift = bounce.integrate(
+            [_v_tau, _poloidal_drift],
+            data["pitch_inv"],
+            data,
+            ["gbdrift"],
+            num_well=num_well,
+        )
+        _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+        count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
+        count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
+
+        return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
+    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = ( # alpha_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in later
+        _compute(
+            alpha_drift, 
+            {"gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs
+        )
+    )
+    # count_nz will be 3D [rho,alpha,pitch]
+    assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
+    ado_shape = jnp.shape(alpha_drift_out)
+    '''
+    def psi_drift(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        v_tau, _psi_drift = bounce.integrate(
+            [_v_tau, _radial_drift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0"],
+            num_well=num_well,
+        )
+        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+
+        # return _psi_drift, points, v_tau, data["pitch_inv"]
+        return _psi_drift
+    # psi_drift_out, points, vtau_out, pitch_inv = (
+    psi_drift_out = ( # psi_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
+        _compute(
+            psi_drift, 
+            {"cvdrift0": data["cvdrift0"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs
+        )
+    ) '''
+
+    
+    # Setup array allocations
+    '''
+    num_rho = ado_shape[0]
+    num_fieldlines = ado_shape[1]
+    num_Bcrit = ado_shape[2]
+    num_wells = ado_shape[3]
+    num_KE = len(KE_frac)
+    '''
+    
+    # Setup mean and standard deviation functions
+    def jnpmean_nz(x,axis=0):
+        mask = x!=0.0
+        count = jnp.sum(mask,axis) # how many wells that are not 0
+        return jnp.sum(x,axis=axis) / count
+    def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "nan" elements in JAX numpy
+        # x is an array with size: (num_rho,num_alpha,num_pitch,num_fieldlines)
+        xbar = jnpmean_nz(x,axis=axis)
+        xbar = jnp.broadcast_to(xbar[..., None], (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
+        # xbar = jnp.transpose(xbar, (2,0,1)) # rearrange to match initial x
+        sq_diff = (x - xbar) ** 2
+        return jnp.sqrt(jnpmean_nz(sq_diff,axis=axis))
+
+    '''
+    # Barely trapped filtering (if bt_filter_flag==True)
+    def tb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Perform barely trapped filter
+        points_0 = points[0][:][:][:][:]
+        points_1 = points[1][:][:][:][:]
+        iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
+        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
+        return jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
+    def fb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Do nothing
+        return alpha_drift_out, psi_drift_out
+    alpha_drift_out,psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out,psi_drift_out)
+    '''
+    # Ripple-trapped filtering (if rt_filter_flag==True)
+    # Average and standard deviation per-surface and pitch inverse
+    alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch), does not include zero wells in averaging
+    alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch)
+    alpha_drift_avg = jnp.broadcast_to(alpha_drift_avg[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
+    alpha_drift_std = jnp.broadcast_to(alpha_drift_std[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
+
+    # def tb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Perform ripple-trapped filter
+    #     return jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0),jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, psi_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
+    # def fb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Do nothing
+    #     return alpha_drift_out, psi_drift_out
+    # alpha_drift_out, psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std)
+
+
+    # Sum psi_drift_out term over alpha
+    # psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
+
+
+    # Omega eta calculation (currently for one energy only), average over alphas
+    tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
+    iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
+    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    omega_arr = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-(nfp*iotas_omega)))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
+    # omega_arr = alpha_res * jnp.sum(omega_arr,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
+
+    '''
+    # Bump function calculation #
+
+    # Misc parameters
+    w=1 # width and amplitude parameter, recommended to keep =1
+
+    # Setting wd
+    def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
+        def body_fun(i, carry):
+            max_val, max_idx = carry
+            new_val = arr[i]
+            cond = new_val > max_val
+
+            # jnp.where chooses elementwise between two values
+            max_val = jnp.where(cond, new_val, max_val)
+            max_idx = jnp.where(cond, i, max_idx)
+            return (max_val, max_idx)
+        
+        carry_init = (arr[0], 0)
+        max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
+        return {'max_i': max_idx, 'max_num': max_val}
+    # wd takes a different value for each (Bcrit,well) combination
+    max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
+    wd = max_rhospace(omega_arr) # := (Bcrit,well)
+    wd = wd_blur*wd['max_num']
+    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (Bcrit,well,rho)
+    wd = jnp.transpose(wd,(2,0,1)) # := (rho,Bcrit,well)
+
+    # Setting up resonance arrays
+    res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)
+    res_broad = jnp.broadcast_to(res_broad, (ado_shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],wd.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+    omega_broad = jnp.broadcast_to(omega_arr[...,None], (omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],res_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Conditional for non-zero bump
+    a = res_broad + wd
+    b = res_broad - wd
+    y = omega_broad - res_broad
+    condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
+
+    # Create q array for division into bump function
+    q_broad = q_arr[None,None,None,:] # make 4D array with q values on axis=3
+    q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Calculate bump function (f_b) and sum over resonances
+    f_b_res = jnp.where(
+        condition,
+        safediv(jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
+        0
+        ) # := (rho,Bcrit,well,res)
+    f_b = jnp.sum(f_b_res,axis=-1) # := (rho,Bcrit,well)
+
+    # First sum over rho
+    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
+    f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
+
+    # Plotting code, not necessary for optimization
+    plot_poinc=True
+    if plot_poinc:
+        poinc_plot = f_b * psi_drift_out / iotas_rho1_sum # := (rho,Bcrit,well)
+
+
+    # Sum over Bcrit
+    f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)
+    f_tr2_out = jnp.transpose(f_tr2_out,(2,3,0,1)) # := (rho,alpha,Bcrit,well)
+    pitch_invs = jnp.broadcast_to(pitch_invs[...,None,None,None],(ado_shape[2],ado_shape[0],ado_shape[1],ado_shape[3])) # := (Bcrit,rho,alpha,well)
+    pitch_invs = jnp.transpose(pitch_invs,(1,2,0,3)) # := (rho,alpha,Bcrit,well)
+    f_tr2_out = Bcrit_res * jnp.sum(f_tr2_out * tau_arr * pitch_invs**(-2) , axis=2 ) # := (rho,alpha,well)
+
+    # Second sum over alpha
+    f_tr2_out = alpha_res * jnp.sum(f_tr2_out, axis=1) # := (rho,well)
+
+    # Second sum over rho
+    # epsilon = 1e-12 # for differentiability of square root at Psi=0
+    # Psi_sqrt = jnp.sqrt(Psi+epsilon) # I don't think Psi=0 ever with discretation of the rho grid in DESC
+    Psi_sqrt = jnp.sqrt(Psi)
+    Psi_sqrt = jnp.broadcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3])) # := (rho,well)
+    f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(Psi_sqrt * f_tr2_out, axis=0) # := (well)
+
+    # Sum over wells
+    f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
+
+
+    data["f_tr2"] = f_tr2_out # full output
+    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # data["f_tr2"] = {
+    #     'poinc_plot':poinc_plot,
+    #     'omega_arr':omega_arr,
+    #     'psi_drift_out':psi_drift_out,
+    #     'iotas_rho1_sum': iotas_rho1_sum,
+    #     'f_b': f_b,
+    #     'tau_arr': tau_arr,
+    #     'nfp': nfp,
+    #     'test': 'hi1',
+    #     'alpha_drift_out':alpha_drift_out,
+    #     'pitch_inv':pitch_inv
+    #     } # for plotting'''
+    data['f_tr_timing'] = omega_arr
     return data

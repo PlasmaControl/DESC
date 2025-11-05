@@ -697,7 +697,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     incompressible = kwargs.get("incompressible", False)
 
     def _cT(x):
-        if jnp.iscomplex(x):
+        if x.dtype == jnp.complex128:
             return jnp.conjugate(jnp.transpose(x))
         else:
             return jnp.transpose(x)

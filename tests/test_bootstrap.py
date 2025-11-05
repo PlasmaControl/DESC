@@ -1564,7 +1564,8 @@ def test_bootstrap_optimization_comparison_qa():
         PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
     )
     eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
-    eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
+    with pytest.warns(UserWarning, match="not an even power series"):
+        eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
     eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3, ftol=1e-3)
     eq1 = eq0.copy()
     eq2 = eq0.copy()

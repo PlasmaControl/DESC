@@ -22,7 +22,7 @@ Bug Fixes
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 - Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
 - ``ConcentricGrid`` now has more than one node at the innermost rho value by default, which should make the iota calculation that occurs for  the``ForceBalance`` objective with default ``ConcentricGrid`` more accurate for current-constrained equilibria. The new default node pattern is called `jacobi-dna`, and the old behavior can be obtained by using `node_pattern="jacobi"`.
-
+- Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
 
 Backend
 

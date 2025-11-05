@@ -1040,6 +1040,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         transforms=None,
         compute_A_or_B="B",
         chunk_size=None,
+        **kwargs,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1109,6 +1110,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
                 source_grid=g,
                 transforms=tr,
                 chunk_size=chunk_size,
+                **kwargs,
             )
         return AB
 
@@ -1120,6 +1122,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        **kwargs,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1155,6 +1158,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             transforms,
             compute_A_or_B="B",
             chunk_size=chunk_size,
+            **kwargs,
         )
 
     def compute_magnetic_vector_potential(

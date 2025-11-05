@@ -689,7 +689,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     n0 = 1e2
 
     axisym = kwargs.get("axisym", False)
-    gamma = kwargs.get("gamma", 0.0)
+
+    # Large gamma is an alternate way to impose incompressibility
+    gamma = kwargs.get("gamma", 10.0)
 
     # For axisymmetric equilibria n_mode_axisym will decide the toroidal
     # mode number to analyze.

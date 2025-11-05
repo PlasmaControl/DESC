@@ -653,7 +653,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 )
 def _AGNI(params, transforms, profiles, data, **kwargs):
     """
-    AGNI2: Analysis of Global Normal-modes in Ideal MHD.
+    AGNI: Analysis of Global Normal-modes in Ideal MHD.
 
     Based on the original source here:
     https://github.com/rahulgaur104/AGNI/tree/master
@@ -697,10 +697,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     incompressible = kwargs.get("incompressible", False)
 
     def _cT(x):
-        if x.dtype == jnp.complex128:
-            return jnp.conjugate(jnp.transpose(x))
-        else:
-            return jnp.transpose(x)
+        return jnp.conjugate(jnp.transpose(x))
 
     if axisym:
         if n_mode_axisym == 0 and incompressible:
@@ -1169,260 +1166,138 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         return big
 
-    if axisym and incompressible:
+    # TODO: B_blocks will always be real for axisym=True, complex data type
+    # is used to avoid trivial dtype-related errors. Fix later!
+    if axisym:
+        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
+        I3 = jnp.tile(jnp.eye(3, dtype=jnp.complex128), (n_total, 1, 1))
+    else:
+        B_blocks = jnp.zeros((n_total, 3, 3))
+        I3 = jnp.tile(jnp.eye(3), (n_total, 1, 1))
 
-        # store indices needed to apply dirichlet BC to ξ^ρ
-        keep_1 = jnp.arange(
-            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
-        )
-        keep_2 = jnp.arange(n_total, 2 * n_total)
-        keep = jnp.concatenate([keep_1, keep_2])
+    B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B[rho_idx, rho_idx]))
+    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(B[theta_idx, theta_idx]))
+    B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B[zeta_idx, zeta_idx]))
 
+    B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B[rho_idx, theta_idx]))
+    B_blocks = B_blocks.at[:, 1, 0].set(jnp.diag(B[theta_idx, rho_idx]))
+
+    B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B[rho_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 0, 2].set(jnp.diag(B[zeta_idx, rho_idx]))
+
+    B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B[theta_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 2, 1].set(jnp.diag(B[zeta_idx, theta_idx]))
+
+    L = jnp.linalg.cholesky(B_blocks)  # (N,3,3)
+
+    Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
+
+    # components to node permutations
+    p = component_to_node_permutn(n_total)
+    A2 = A[p][:, p]
+    A2u = Au[p][:, p]
+
+    # L^-1 A L^-T
+    A2 = A2.reshape(n_total, 3, n_total, 3)
+    A2 = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2, Linv)
+    A2 = A2.reshape(3 * n_total, 3 * n_total)
+
+    A2u = A2u.reshape(n_total, 3, n_total, 3)
+    A2u = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2u, Linv)
+    A2u = A2u.reshape(3 * n_total, 3 * n_total)
+
+    # node to component permutation
+    pinv = jnp.empty_like(p)
+    pinv = pinv.at[p].set(jnp.arange(3 * n_total))
+
+    A2 = A2[pinv][:, pinv]
+    A2u = A2u[pinv][:, pinv]
+
+    # store indices needed to apply dirichlet BC to ξ^ρ
+    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    if incompressible:  # Only enforce incompressibility here
+        # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
+
+        ## Assemble L_full from blocks of L (only for comparison)
+        # --no-verify Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx)
+        # --no-verify L_test = jnp.linalg.cholesky(B)
+        ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
+
+        # C.shape (N, 3N)
         d_r = jnp.diag(D)[rho_idx]
         d_v = jnp.diag(D)[theta_idx]
         d_z = jnp.diag(D)[zeta_idx]
 
         C_zeta = (C_zeta * d_z[None, :]) * iota.T
-
-        # TODO: convert to batched inversion for speed
         C_rho = (C_rho * d_r[None, :]) * psi_r.T
-        C_zeta_inv_C_rho = jnp.linalg.solve(C_zeta, C_rho)
-
         C_theta = C_theta * d_v[None, :]
-        C_zeta_inv_C_theta = jnp.linalg.solve(C_zeta, C_theta)
 
-        ## ξ^ζ = −((C_ζ D⁻¹)⁻¹ C_ρ D⁻¹ ξₛ^ρ + (C_ζ D⁻¹)⁻¹ C_θ D⁻¹ ξₛ^θ)
+        # C.shape (N, 3N)
+        C_scaled = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
 
-        # Impose incompressibility
-        A = A.at[rho_idx, rho_idx].add(
-            -1
-            * (
-                A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
-                + _cT(A[rho_idx, zeta_idx] @ C_zeta_inv_C_rho)
-            )
-            + _cT(C_zeta_inv_C_rho) @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
+        # Apply L2⁻ᵀ per node using the existing L2inv
+        # Ĉ = C D L⁻ᵀ
+        Linv_T = jnp.swapaxes(Linv, 1, 2)  # (N, 3, 3)
+        C_node = C_scaled[:, p].reshape(n_total, n_total, 3)
+        Chat_node = jnp.einsum("mil, ilk -> mik", C_node, Linv_T)
+        Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
+
+        Chat = Chat[keep_1][:, keep]
+        row_norm = jnp.clip(
+            jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf
         )
+        Chat = Chat / row_norm
 
-        A = A.at[rho_idx, theta_idx].add(
-            -1
-            * (
-                A[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + _cT(C_zeta_inv_C_rho) @ A[zeta_idx, theta_idx]
-            )
-            + _cT(C_zeta_inv_C_rho) @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
-        )
-
-        A = A.at[theta_idx, theta_idx].add(
-            -1
-            * (
-                A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + _cT(A[theta_idx, zeta_idx] @ C_zeta_inv_C_theta)
-            )
-            + _cT(C_zeta_inv_C_theta) @ A[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
-        )
-
-        # Fill out the lower part using symmetry
-        A = A.at[theta_idx, rho_idx].set(_cT(A[rho_idx, theta_idx]))
-
-        # A2u only has a non-zero rho-rho component
-        Au = Au.at[rho_idx, rho_idx].add(
-            _cT(C_zeta_inv_C_rho) @ Au[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
-        )
-
-        B = B.at[rho_idx, rho_idx].add(
-            -1
-            * (
-                B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho
-                + _cT(B[rho_idx, zeta_idx] @ C_zeta_inv_C_rho)
-            )
-            + _cT(C_zeta_inv_C_rho) @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_rho
-        )
-
-        B = B.at[rho_idx, theta_idx].add(
-            -1
-            * (
-                B[rho_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + _cT(C_zeta_inv_C_rho) @ B[zeta_idx, theta_idx]
-            )
-            + _cT(C_zeta_inv_C_rho) @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
-        )
-
-        B = B.at[theta_idx, theta_idx].add(
-            -1
-            * (
-                B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta
-                + _cT(B[theta_idx, zeta_idx] @ C_zeta_inv_C_theta)
-            )
-            + _cT(C_zeta_inv_C_theta) @ B[zeta_idx, zeta_idx] @ C_zeta_inv_C_theta
-        )
-
-        # Fill out the lower part using symmetry
-        B = B.at[theta_idx, rho_idx].set(_cT(B[rho_idx, theta_idx]))
+        # Orthogonal projector P = I - Ĉᵀ (L_G L_Gᵀ)⁻¹ Ĉ
+        G = Chat @ _cT(Chat)
+        G = (G + _cT(G)) / 2 + 1e-14 * jnp.eye(
+            n_total - 2 * n_theta_max * n_zeta_max
+        )  # Gram matrix w ridge
 
         # The will become one of the most expensive parts
-        L = jnp.linalg.cholesky(B)
+        L_G = jnp.linalg.cholesky(G)
 
-        # Even though B in general can be complex, for an axisymmertric case
-        # it is still, even after imposing incompressibility.
+        Y = jax.lax.linalg.triangular_solve(L_G, Chat, left_side=True, lower=True)
+        S = jax.lax.linalg.triangular_solve(_cT(L_G), Y, left_side=True, lower=False)
+        CTS = _cT(Chat) @ S  # = C^T (L_G L_G^T)⁻¹ Ĉ
 
-        ## (L⁻¹ A L⁻ᵀ)
-        A_LTinv = jax.lax.linalg.triangular_solve(
-            _cT(L), A, left_side=False, lower=False
-        )
-        Ahat = jax.lax.linalg.triangular_solve(L, A_LTinv, left_side=True, lower=True)
+        ## applying the boundary condition first
+        ## BCs before projection ≠ projection before BCs
+        A2_bc = A2[jnp.ix_(keep, keep)]
+        A2u_bc = A2u[jnp.ix_(keep, keep)]
 
-        # (L⁻¹ Aᵤ L⁻ᵀ)
-        Au_LTinv = jax.lax.linalg.triangular_solve(
-            _cT(L), Au, left_side=False, lower=False
-        )
-        Auhat = jax.lax.linalg.triangular_solve(L, Au_LTinv, left_side=True, lower=True)
+        ## Projected operator A_proj = P A P without forming P
+        A2_proj = A2_bc - A2_bc @ CTS - CTS @ A2_bc + CTS @ A2_bc @ CTS
+        A2_proj = (A2_proj + _cT(A2_proj)) / 2
 
-        Ahat = Ahat.at[jnp.diag_indices_from(Ahat)].add(1e-11)
+        A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-10)
 
-        A2 = Ahat[jnp.ix_(keep, keep)] + Auhat[jnp.ix0(keep, keep)]
+        A2u_proj = A2u_bc - A2u_bc @ CTS - CTS @ A2u_bc + CTS @ A2u_bc @ CTS
+        A2u_proj = (A2u_proj + _cT(A2u_proj)) / 2
 
-        w, v = jnp.linalg.eigh((A2 + _cT(A2)) / 2)
+        A3_proj = A2u_proj + A2_proj
 
-    else:  # if non-axisymmetric or compressible or both
-        # TODO: B_blocks will always be real for axisym=True, complex data type
-        # is used to avoid trivial dtype-related errors. Fix later!
-        if axisym:
-            B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
-            I3 = jnp.tile(jnp.eye(3, dtype=jnp.complex128), (n_total, 1, 1))
-        else:
-            B_blocks = jnp.zeros((n_total, 3, 3))
-            I3 = jnp.tile(jnp.eye(3), (n_total, 1, 1))
+        w, v = jnp.linalg.eigh((A3_proj + _cT(A3_proj)) / 2)
 
-        B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B[rho_idx, rho_idx]))
-        B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(B[theta_idx, theta_idx]))
-        B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B[zeta_idx, zeta_idx]))
+        # Small for modes far from marginality
+        print(jnp.max(jnp.abs(Chat @ v[:, 0])))
 
-        B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B[rho_idx, theta_idx]))
-        B_blocks = B_blocks.at[:, 1, 0].set(jnp.diag(B[theta_idx, rho_idx]))
+        # --no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
+        # --no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
+        # --no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
+        # --no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
 
-        B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B[rho_idx, zeta_idx]))
-        B_blocks = B_blocks.at[:, 0, 2].set(jnp.diag(B[zeta_idx, rho_idx]))
+    else:
+        ## Shift the diagonal of A to ensure positive definiteness
+        ## The estimate must be accurate. If A is diagonally dominant
+        ## use Gerhsgorin theorem to estimate the lowest eigenvalue
+        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-10)
 
-        B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B[theta_idx, zeta_idx]))
-        B_blocks = B_blocks.at[:, 2, 1].set(jnp.diag(B[zeta_idx, theta_idx]))
-
-        L = jnp.linalg.cholesky(B_blocks)  # (N,3,3)
-
-        Linv = jax.lax.linalg.triangular_solve(
-            L, I3, left_side=True, lower=True
-        )  # (N,3,3)
-
-        # components to node permutations
-        p = component_to_node_permutn(n_total)
-        A2 = A[p][:, p]
-        A2u = Au[p][:, p]
-
-        # L^-1 A L^-T
-        A2 = A2.reshape(n_total, 3, n_total, 3)
-        A2 = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2, Linv)
-        A2 = A2.reshape(3 * n_total, 3 * n_total)
-
-        A2u = A2u.reshape(n_total, 3, n_total, 3)
-        A2u = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A2u, Linv)
-        A2u = A2u.reshape(3 * n_total, 3 * n_total)
-
-        # node to component permutation
-        pinv = jnp.empty_like(p)
-        pinv = pinv.at[p].set(jnp.arange(3 * n_total))
-
-        A2 = A2[pinv][:, pinv]
-        A2u = A2u[pinv][:, pinv]
-
-        # store indices needed to apply dirichlet BC to ξ^ρ
-        keep_1 = jnp.arange(
-            n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max
-        )
-        keep_2 = jnp.arange(n_total, 3 * n_total)
-        keep = jnp.concatenate([keep_1, keep_2])
-
-        if incompressible:  # Only enforce incompressibility here
-            # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
-
-            ## Assemble L_full from blocks of L (only for comparison)
-            # --no-verify Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx)
-            # --no-verify L_test = jnp.linalg.cholesky(B)
-            ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
-
-            # C.shape (N, 3N)
-            d_r = jnp.diag(D)[rho_idx]
-            d_v = jnp.diag(D)[theta_idx]
-            d_z = jnp.diag(D)[zeta_idx]
-
-            C_zeta = (C_zeta * d_z[None, :]) * iota.T
-            C_rho = (C_rho * d_r[None, :]) * psi_r.T
-            C_theta = C_theta * d_v[None, :]
-
-            # C.shape (N, 3N)
-            C_scaled = jnp.concatenate([C_rho, C_theta, C_zeta], axis=1)
-            # Apply L2⁻ᵀ per node using the existing L2inv
-            # Ĉ = C D L⁻ᵀ
-            Linv_T = jnp.swapaxes(Linv, 1, 2)  # (N, 3, 3)
-            C_node = C_scaled[:, p].reshape(n_total, n_total, 3)
-            Chat_node = jnp.einsum("mil, ilk -> mik", C_node, Linv_T)
-            Chat = Chat_node.reshape(n_total, 3 * n_total)[:, pinv]
-
-            Chat = Chat[keep_1][:, keep]
-            row_norm = jnp.clip(
-                jnp.linalg.norm(Chat, axis=1, keepdims=True), 1e-300, jnp.inf
-            )
-            Chat = Chat / row_norm
-
-            # Orthogonal projector P = I - Ĉᵀ (L_G L_Gᵀ)⁻¹ Ĉ
-            G = Chat @ Chat.T
-            G = (G + G.T) / 2 + 1e-14 * jnp.eye(
-                n_total - 2 * n_theta_max * n_zeta_max
-            )  # Gram matrix w ridge
-
-            # The will become one of the most expensive parts
-            L_G = jnp.linalg.cholesky(G)
-
-            Y = jax.lax.linalg.triangular_solve(L_G, Chat, left_side=True, lower=True)
-            S = jax.lax.linalg.triangular_solve(L_G.T, Y, left_side=True, lower=False)
-            CTS = Chat.T @ S  # = C^T (L_G L_G^T)⁻¹ Ĉ
-
-            ## applying the boundary condition first
-            ## BCs before projection ≠ projection before BCs
-            A2_bc = A2[jnp.ix_(keep, keep)]
-            A2u_bc = A2u[jnp.ix_(keep, keep)]
-
-            ## Projected operator A_proj = P A P without forming P
-            A2_proj = A2_bc - A2_bc @ CTS - CTS @ A2_bc + CTS @ A2_bc @ CTS
-            A2_proj = (A2_proj + A2_proj.T) / 2
-
-            A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-9)
-
-            # --no-verify w0, v0 = jnp.linalg.eigh((A2_proj + A2_proj.T) / 2)
-            # --no-verify print(w0)
-
-            A2u_proj = A2u_bc - A2u_bc @ CTS - CTS @ A2u_bc + CTS @ A2u_bc @ CTS
-            A2u_proj = (A2u_proj + A2u_proj.T) / 2
-
-            A3_proj = A2u_proj + A2_proj
-
-            w, v = jnp.linalg.eigh((A3_proj + A3_proj.T) / 2)
-
-            # Small for modes far from marginality
-            print(Chat @ v[:, 0])
-
-            # --no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
-            # --no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
-            # --no-verify       "idem=", float(jnp.linalg.norm(P@P - P)),
-            # --no-verify        "CP=", float(jnp.linalg.norm(Chat @ P)))
-
-        else:
-            ## Shift the diagonal of A to ensure positive definiteness
-            ## The estimate must be accurate. If A is diagonally dominant
-            ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-            A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-10)
-
-            A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
-
-            w, v = jnp.linalg.eigh((A3 + _cT(A3)) / 2)
+        A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
+        w, v = jnp.linalg.eigh((A3 + _cT(A3)) / 2)
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v

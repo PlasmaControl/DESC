@@ -13,11 +13,12 @@ jobs:
       fail-fast: false
       matrix:
         jax-version:
-          [0.5.0, 0.5.3, 0.6.1, 0.6.2, 0.7.0, 0.7.1, 0.7.2, 0.8.0]
+          [0.5.0, 0.5.3, 0.6.1, 0.6.2, 0.7.0, 0.7.2, 0.8.0]
           # 0.4.x versions are not tested because they fail with jax-finufft
           # 0.5.1 and 0.5.2 installations are broken, see jax#26781
           # 0.6.0 has a bug with jax.grad, see jax#28144
-          # 0.7.0 and 0.7.1 have performance issues, see diffrax#680
+          # 0.7.0 have performance issues but we still support it, see diffrax#680
+          # 0.7.1 fails with equinox, see equinox#1081
         group: [1, 2]
     steps:
       - uses: actions/checkout@v5

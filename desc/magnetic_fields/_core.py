@@ -3169,3 +3169,543 @@ class OmnigenousField(Optimizable, IOAble):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
+
+
+class OmnigenousFieldOOPS(Optimizable, IOAble):
+    """A magnetic field contour with perfect omnigenity (but is not necessarily analytic).
+    This field only stands for contours of constant |B|.
+    Focused on single surface evaluation, not full field evaluation.
+
+    Uses parameterization from Liu et. al. [1]_
+
+    Parameters
+    ----------
+    S_len: int
+        Number of S-parameters, which are control the shape of contours.
+    D_len: int
+        Number of D-parameters, which are control the distance between contours.
+    NFP: int
+        Number of field periods.
+    helicity: tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
+    S_list: ndarray, optional
+        S-parameters describing the shape of contours. These values are a flattened 1D
+        array of shape (S_len,). If not supplied, `S_list` defaults to zero for all modes.
+    D_list: ndarray, optional
+        D-parameters describing the distance between contours. These values are a flattened 1D
+        array of shape (D_len,). If not supplied, `D_list` defaults to 1 for first mode.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+    Only compliments same OmnigenousField Mapping used in Liu et. al. [1]_
+
+    References
+    ----------
+    .. [1] Hengqian Liu., Guodong Yu., et al. "Optimizing omnigenity like quasisymmetry for stellarators."
+       arxiv:2502.09350 (2025)
+    """
+
+    _io_attrs_ = [
+        "_S_len",
+        "_D_len",
+        "_NFP",
+        "_helicity",
+        "_S_list",
+        "_D_list",
+    ]
+
+    _static_attrs = Optimizable._static_attrs + [
+        "_S_len",
+        "_D_len",
+        "_NFP",
+        "_helicity",
+    ]
+
+    def __init__(
+        self,
+        S_len=1,
+        D_len=1,
+        NFP=1,
+        helicity=(0, 1),
+        S_list=None,
+        D_list=None,
+    ):
+        self._S_len = int(S_len)
+        self._D_len = int(D_len)
+        self._NFP = int(NFP)
+        self.helicity = helicity
+        if S_list is None:
+            self._S_list = np.zeros(self.S_len)
+        else:
+            assert len(S_list) == self.S_len
+            self._S_list = S_list
+        if D_list is None:
+            self._D_list = np.zeros(self.D_len)
+            self._D_list[0] = 1.0
+        else:
+            assert len(D_list) == self.D_len
+            self._D_list = D_list
+
+    def change_resolution(
+        self,
+        S_len=None,
+        D_len=None,
+        NFP=None,
+    ):
+        """Set the spectral resolution of field parameters.
+
+        Parameters
+        ----------
+        S_len : int
+            Number of S-parameters, which are control the shape of contours.
+        D_len : int
+            Number of D-parameters, which are control the distance between contours.
+        NFP : int
+            Number of field periods.
+
+        """
+
+        old_S_len = self.S_len
+        old_D_len = self.D_len
+
+        self._NFP = setdefault(NFP, self.NFP)
+        self._S_len = setdefault(S_len, self.S_len)
+        self._D_len = setdefault(D_len, self.D_len)
+
+        # change S parameters
+        S_old = self.S_list
+        S_new = np.zeros(self.S_len)
+        for i in range(self.S_len):
+            if i < old_S_len:
+                S_new[i] = S_old[i]
+            else:
+                S_new[i] = 0.0
+        self._S_list = S_new
+        # change D parameters
+        D_old = self.D_list
+        D_new = np.zeros(self.D_len)
+        for i in range(self.D_len):
+            if i < old_D_len:
+                D_new[i] = D_old[i]
+            else:
+                D_new[i] = 1.0 if i == 0 else 0.0
+        self._D_list = D_new
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(theta=16, N=16, NFP=self.NFP, sym=False)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def S_len(self):
+        """int: Number of S-parameters, which are control the shape of contours."""
+        return self._S_len
+
+    @property
+    def D_len(self):
+        """int: Number of D-parameters, which are control the distance between contours."""
+        return self._D_len
+
+    @optimizable_parameter
+    @property
+    def S_list(self):
+        """ndarray: S-parameters describing the shape of contours."""
+        return self._S_list
+
+    @S_list.setter
+    def S_list(self, S_list):
+        assert len(S_list) == self.S_len
+        self._S_list = S_list
+
+    @optimizable_parameter
+    @property
+    def D_list(self):
+        """ndarray: D-parameters describing the distance between contours."""
+        return self._D_list
+
+    @D_list.setter
+    def D_list(self, D_list):
+        assert len(D_list) == self.D_len
+        self._D_list = D_list
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity
+
+
+class OmnigenousFieldLCForm(Optimizable, IOAble):
+    """A magnetic field contour with perfect omnigenity (but is not necessarily analytic).
+    This field only stands for contours of constant |B|.
+    Focused on single surface evaluation, not full field evaluation.
+
+    Uses Mapping method from Landreman et. al. [1]_, parameterization defined by user. Suitable for
+    OmnigenityHarmonics method, just like in OOPS[2]_
+
+    Parameters
+    ----------
+    S_len: int
+        Number of S-parameters, which are control the shape of contours. See details in [1].
+    D_len: int
+        Number of D-parameters, which are control the distance between contours. See details in [1].
+    NFP: int
+        Number of field periods.
+    helicity: tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (0, 1). Not need multiple NFP.
+    S_list: ndarray, optional
+        S-parameters describing the shape of contours. These values are a flattened 1D
+        array of shape (S_len,). If not supplied, `S_list` defaults to zero for all modes.
+    D_list: ndarray, optional
+        D-parameters describing the distance between contours. These values are a flattened 1D
+        array of shape (D_len,). If not supplied, `D_list` defaults to zero for all modes.
+    S_func: callable
+        Function defined by user, `S(x2d,y2d,S_list)`, user determines how to use S_list.\n
+        Symmetry of s(x, y):
+            - s is 2π-periodic in y (its Fourier series contains only sin(n y) terms).
+            - s is odd in y: s(x, -y) = -s(x, y).
+            - s(0, y) = 0 for all y.
+
+    D_func: callable
+        Function defined by user, `D(x2d,y2d,D_list)`, user determines how to use D_list.\n
+        Constraints on D(x):
+            - D is defined on the closed interval x ∈ [0, π].
+            - Boundary conditions: D(0) = π and D(π) = 0.
+            - The bounce (poloidal) angle between mirror points on the same |B| contour is
+            Δζ(η) = 2 D(η).
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+    IOAble API can't save the S_func and D_func.
+
+    References
+    ----------
+    .. [1] M. Landreman and P. J. Catto, Omnigenity as generalized quasisymmetrya), Physics of Plasmas 19, 056103 (2012).
+    .. [2] Hengqian Liu., Guodong Yu., et al. "Optimizing omnigenity like quasisymmetry for stellarators."
+       arxiv:2502.09350 (2025)
+    """
+
+    _io_attrs_ = [
+        "_S_len",
+        "_D_len",
+        "_NFP",
+        "_helicity",
+        "_S_list",
+        "_D_list",
+    ]  # TODO: add S_func and D_func to IOAble
+    _static_attrs = Optimizable._static_attrs + [
+        "_S_len",
+        "_D_len",
+        "_NFP",
+        "_helicity",
+        "_S_func",
+        "_D_func",
+    ]
+
+    def __init__(
+        self,
+        S_len=1,
+        D_len=1,
+        NFP=1,
+        helicity=(0, 1),
+        S_list=None,
+        D_list=None,
+        S_func=None,
+        D_func=None,
+    ):
+        self._S_len = int(S_len)
+        self._D_len = int(D_len)
+        self._NFP = int(NFP)
+        self.helicity = helicity
+        if S_func is None:
+            raise NotImplementedError("S_func must be provided.")
+        else:
+            self._S_func = S_func
+        if D_func is None:
+            raise NotImplementedError("D_func must be provided.")
+        else:
+            self._D_func = D_func
+        if S_list is None:
+            self._S_list = np.zeros(self.S_len)
+        else:
+            assert len(S_list) == self.S_len
+            self._S_list = S_list
+        if D_list is None:
+            self._D_list = np.zeros(self.D_len)
+            self._D_list[0] = 1.0
+        else:
+            assert len(D_list) == self.D_len
+            self._D_list = D_list
+
+    def change_resolution(
+        self,
+        S_len=None,
+        D_len=None,
+        NFP=None,
+    ):
+        """Set the spectral resolution of field parameters.
+
+        Parameters
+        ----------
+        S_len : int
+            Number of S-parameters, which are control the shape of contours.
+        D_len : int
+            Number of D-parameters, which are control the distance between contours.
+        NFP : int
+            Number of field periods.
+
+        """
+
+        old_S_len = self.S_len
+        old_D_len = self.D_len
+
+        self._NFP = setdefault(NFP, self.NFP)
+        self._S_len = setdefault(S_len, self.S_len)
+        self._D_len = setdefault(D_len, self.D_len)
+
+        # change S parameters
+        S_old = self.S_list
+        S_new = np.zeros(self.S_len)
+        for i in range(self.S_len):
+            if i < old_S_len:
+                S_new[i] = S_old[i]
+            else:
+                S_new[i] = 0.0
+        self._S_list = S_new
+        # change D parameters
+        D_old = self.D_list
+        D_new = np.zeros(self.D_len)
+        for i in range(self.D_len):
+            if i < old_D_len:
+                D_new[i] = D_old[i]
+            else:
+                D_new[i] = 1.0 if i == 0 else 0.0
+        self._D_list = D_new
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(theta=16, N=16, NFP=self.NFP, sym=False)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            S_func=kwargs.pop("S_func", self._S_func),
+            D_func=kwargs.pop("D_func", self._D_func),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def S_len(self):
+        """int: Number of S-parameters, which are control the shape of contours."""
+        return self._S_len
+
+    @property
+    def D_len(self):
+        """int: Number of D-parameters, which are control the distance between contours."""
+        return self._D_len
+
+    @property
+    def S_func(self):
+        """function: S-parameters describing the shape of contours."""
+        return self._S_func
+
+    @S_func.setter
+    def S_func(self, S_func):
+        self._S_func = S_func
+
+    @property
+    def D_func(self):
+        """function: D-parameters describing the distance between contours."""
+        return self._D_func
+
+    @D_func.setter
+    def D_func(self, D_func):
+        self._D_func = D_func
+
+    @optimizable_parameter
+    @property
+    def S_list(self):
+        """ndarray: S-parameters describing the shape of contours."""
+        return self._S_list
+
+    @S_list.setter
+    def S_list(self, S_list):
+        assert len(S_list) == self.S_len
+        self._S_list = S_list
+
+    @optimizable_parameter
+    @property
+    def D_list(self):
+        """ndarray: D-parameters describing the distance between contours."""
+        return self._D_list
+
+    @D_list.setter
+    def D_list(self, D_list):
+        assert len(D_list) == self.D_len
+        self._D_list = D_list
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity

@@ -13,6 +13,13 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+- Adds `OmnigenityHarmonics` Objectiver function and `OmnigenousField` type
+    - New OmnigenousField Types: Two new parameterizations for omnigenous fields have been added in magnetic_field/_core.py:
+        - `OmnigenousFieldOOPS`: The example mapping used in the OOPS paper Liu et al.
+        - `OmnigenousFieldLCForm`: The mapping form proposed by Landreman et al. , referred to here as the "LCForm".
+    - New `OmnigenityHarmonics` Objective: A new objective, `OmnigenityHarmonics`, has been added to `objectives/_omnigenity.py`. This objective enables the direct optimization of `OmnigenousField`, `OmnigenousFieldOOPS`, and `OmnigenousFieldLCForm` in spectral space.
+    - New Plotting Functions: To support visualization of these new field types, `plot_boozer_surface` recognizes different OmnigenousField input types.
+    - Tutorials have been created for using the `OmnigenityHarmonics` objective and for visualizing `OmnigenousFieldOOPS` and `OmnigenousFieldLCForm`.
 
 Bug Fixes
 

@@ -3072,7 +3072,7 @@ def plot_boozer_surface(
 
     """
     eq_switch = True
-    if hasattr(thing, "_x_lmn"):
+    if hasattr(thing, "_x_lmn") or hasattr(thing, "_S_len"):
         eq_switch = False  # thing is an OmnigenousField, not an Equilibrium
 
     # default grids
@@ -3125,17 +3125,34 @@ def plot_boozer_surface(
     else:  # OmnigenousField
         iota = kwargs.pop("iota", None)
         errorif(iota is None, msg="iota must be supplied for OmnigenousField")
+        # determine which OmnigenousField
+        if hasattr(thing, "S_len"):
+            if hasattr(thing, "S_func") or kwargs.get("S_func"):
+                S_func = (
+                    thing.S_func if hasattr(thing, "S_func") else kwargs.pop("S_func")
+                )
+                D_func = (
+                    thing.D_func if hasattr(thing, "D_func") else kwargs.pop("D_func")
+                )
+                data_keys = ["theta_B_LCForm", "zeta_B_LCForm", "|B|_LCForm"]
+            else:
+                data_keys = ["theta_B_OOPS", "zeta_B_OOPS", "|B|_OOPS"]
+        else:
+            data_keys = ["theta_B", "zeta_B", "|B|"]
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                ["theta_B", "zeta_B", "|B|"],
+                data_keys,
                 grid=grid_plot,
                 helicity=thing.helicity,
                 iota=iota,
+                S_func=S_func if "S_func" in locals() else None,
+                D_func=D_func if "D_func" in locals() else None,
             )
-        B = data["|B|"]
-        theta_B = np.mod(data["theta_B"], 2 * np.pi)
-        zeta_B = np.mod(data["zeta_B"], 2 * np.pi / thing.NFP)
+        B = data[data_keys[2]]
+        theta_B = np.mod(data[data_keys[0]].flatten(order="F"), 2 * np.pi)
+        zeta_B = np.mod(data[data_keys[1]].flatten(order="F"), 2 * np.pi / thing.NFP)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)

@@ -29,6 +29,8 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    OmnigenousFieldOOPS,
+    OmnigenousFieldLCForm,
 )
 from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
 
@@ -86,6 +88,16 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
             AssertionError,
             msg=f"Parameterization: {p}. Name: {name}. Residual {res}",
         )
+
+
+def _OmnigenousFieldLCForm_S_func(x2d, y2d, S_list):
+    S = S_list[0] * x2d * np.sin(y2d + S_list[1] * np.sin(y2d))
+    return S
+
+
+def _OmnigenousFieldLCForm_D_func(x2d, D_list):
+    D = (np.pi ** (D_list[0] - 1)) ** (1 / D_list[0]) * (np.pi - x2d) ** (1 / D_list[0])
+    return D
 
 
 @pytest.mark.unit
@@ -164,6 +176,24 @@ def test_compute_everything():
             B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
             x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
         ),
+        "desc.magnetic_fields._core.OmnigenousFieldOOPS": OmnigenousFieldOOPS(
+            S_len=2,
+            D_len=2,
+            NFP=2,
+            helicity=(0, 1),
+            S_list=[0.35, 0.1],
+            D_list=[1, 0.1],
+        ),
+        "desc.magnetic_fields._core.OmnigenousFieldLCForm": OmnigenousFieldLCForm(
+            S_len=2,
+            D_len=1,
+            NFP=2,
+            helicity=(0, 1),
+            S_list=[0.35, 0.4],
+            D_list=[0],
+            S_func=_OmnigenousFieldLCForm_S_func,
+            D_func=_OmnigenousFieldLCForm_D_func,
+        ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
             R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
@@ -213,6 +243,13 @@ def test_compute_everything():
         sym=False,
         axis=True,
     )
+    fieldgrid_single = LinearGrid(
+        rho=1.0,
+        theta=10,
+        zeta=12,
+        NFP=things["desc.magnetic_fields._core.OmnigenousFieldOOPS"].NFP,
+        sym=False,
+    )
     grid = {
         "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
@@ -221,6 +258,8 @@ def test_compute_everything():
         "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
+        "desc.magnetic_fields._core.OmnigenousFieldOOPS": {"grid": fieldgrid_single},
+        "desc.magnetic_fields._core.OmnigenousFieldLCForm": {"grid": fieldgrid_single},
     }
 
     with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
@@ -230,7 +269,11 @@ def test_compute_everything():
     error_rpz = False
 
     # some things can't compute "phi" and therefore can't convert to XYZ basis
-    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
+    no_xyz_things = [
+        "desc.magnetic_fields._core.OmnigenousField",
+        "desc.magnetic_fields._core.OmnigenousFieldLCForm",
+        "desc.magnetic_fields._core.OmnigenousFieldOOPS",
+    ]
 
     with warnings.catch_warnings():
         # Max resolution of master_compute_data_rpz.pkl limited by GitHub file

@@ -61,7 +61,9 @@ class QuadcoilObjective(_Objective):
         self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
     
-    def compute(self, params_eq, params_qf, constants=None):
+    def compute(self, *all_params, constants=None):
+        params_eq = all_params[0]
+        params_qf = all_params[1]
         qf = self.things[1]
         qp = qf.params_to_qp(params_eq, params_qf)
         dofs = qf.params_to_dofs(params_qf)

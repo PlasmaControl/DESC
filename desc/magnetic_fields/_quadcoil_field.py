@@ -131,6 +131,8 @@ class QuadcoilField(FourierCurrentPotentialField):
         N_Phi=None,
         name="",
         check_orientation=True,
+        smoothing='approx',
+        smoothing_params={'lse_epsilon': 1e-3},
     ):
         # Checking if constraints and objective inputs are legal
         _input_checking(
@@ -311,12 +313,16 @@ class QuadcoilField(FourierCurrentPotentialField):
             objective_name=objective_name, 
             objective_unit=objective_unit,
             objective_weight=objective_weight, 
+            smoothing=smoothing,
+            smoothing_params=smoothing_params,
         )
         g_cons_list, h_cons_list, aux_dofs_cons = _parse_constraints(
             constraint_name=constraint_name,
             constraint_type=constraint_type,
             constraint_unit=constraint_unit,
             constraint_value=constraint_value,
+            smoothing=smoothing,
+            smoothing_params=smoothing_params,
         )
         # Merging constraints and aux dofs from different sources
         g_list = g_obj_list + g_cons_list

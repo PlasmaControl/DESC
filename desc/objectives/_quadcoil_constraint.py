@@ -2,6 +2,7 @@ from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.backend import jnp
 from jax import eval_shape
 import jax
+from jax import disable_jit
 
 class QuadcoilConstraint(_Objective):
     """
@@ -20,8 +21,8 @@ class QuadcoilConstraint(_Objective):
     def __init__(
         self,
         qf,
-        target=0,
-        bounds=None,
+        target=None, # None,
+        bounds=(-jnp.inf, 0.),
         weight=1.,
         normalize=None,
         normalize_target=None,
@@ -34,13 +35,11 @@ class QuadcoilConstraint(_Objective):
                 '(See the API for QuadcoilField) Any non-default values '
                 'of normalize and normalize_target will be overridden.')
         
-        self._static_attrs = _Objective._static_attrs
-        # self._g_quadcoil = qf._g_quadcoil
-        # self._h_quadcoil = qf._h_quadcoil
-        # self._static_attrs = [
-        #     '_g_quadcoil',
-        #     '_h_quadcoil',
-        # ]
+        self._static_attrs = _Objective._static_attrs + [
+            '_static_attrs', 
+            '_deriv_mode',
+            '_verbose',
+        ]
 
         # ----- Superclass -----
         super().__init__(
@@ -60,6 +59,7 @@ class QuadcoilConstraint(_Objective):
         # QuadcoilField.
         eq = self.things[0]
         qf = self.things[1]
+        # 1:00 issue is between here
         # dim_f = size of the output vector returned by self.compute.
         # We now count the total number of scalar constraints in the 
         # problem.
@@ -74,10 +74,25 @@ class QuadcoilConstraint(_Objective):
             qf.params_to_dofs(qf.params_dict)
         ).size
         self._dim_f = dim_g + dim_h
+        # 1:00 issue is between here
+
+        # params_eq = eq.params_dict
+        # params_qf = qf.params_dict
+        # qp = qf.params_to_qp(params_eq, params_qf)
+        # dofs = qf.params_to_dofs(params_qf)
+        # g_dummy = qf._g_quadcoil(qp, dofs)
+        # h_dummy = qf._h_quadcoil(qp, dofs)
+        # self._dim_f = g_dummy.size + h_dummy.size
+        # 14:02: using 1 constraints is fast but 2177 isn't 
+        # is it just inefficient for high constraint #?
+        # self._dim_f = 2000# 2177 # TESTING
         super().build(use_jit=use_jit, verbose=verbose)
     
-    def compute(self, params_eq, params_qf, constants=None):
+    def compute(self, *all_params, constants=None):
+        params_eq = all_params[0]
+        params_qf = all_params[1]
         qf = self.things[1]
+        # All logics are packcaged into quadcoilfields
         qp = qf.params_to_qp(params_eq, params_qf)
         dofs = qf.params_to_dofs(params_qf)
         g_vals = qf._g_quadcoil(qp, dofs)

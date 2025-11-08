@@ -7,7 +7,6 @@ import time
 
 # Run objective function
 def TrappedResonanceObj(rhos,pitch_invs,KE_frac,alphas,N,eq=None):
-    time1 = time.time()
     eq = desc.io.load("equil_G1600_DESC_fixed.h5")
     eq_periodicity = (np.inf,np.inf,np.inf) # periodicity in zeta for these equilibrium to make rtz grid
     grid = eq._get_rtz_grid( # returns rho, theta, zeta coordinate grid
@@ -24,5 +23,4 @@ def TrappedResonanceObj(rhos,pitch_invs,KE_frac,alphas,N,eq=None):
 
     # Save objective function values to the firm3d directory for plotting with Poincare plots
     # np.savetxt('/Users/paullab/codes/firm3d_fork_10132025/firm3d/examples/trapped_map/obj_DESC.txt',out['obj'][:,0,0]) # value at all surfaces and one pitch (and one energy)
-    time2 = time.time()
-    return time2-time1,len(rhos),len(alphas)
+    return out

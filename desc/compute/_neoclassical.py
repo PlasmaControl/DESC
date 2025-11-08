@@ -1017,7 +1017,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     num_pitch = kwargs.get("num_pitch",None)
     num_well = kwargs.get("num_well", None)
     grid = transforms["grid"].source_grid
-    N = kwargs.get("N",0)
+    N = kwargs.get("N",0) # default is QA, N=0
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
     p_max = kwargs.get("p_max",5)
@@ -1288,20 +1288,20 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
 
-    # data["f_tr2"] = f_tr2_out # full output
-    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    data["f_tr2"] = {
-        'poinc_plot':poinc_plot,
-        'omega_arr':omega_arr_test,
-        'psi_drift_out':psi_drift_out,
-        'iotas_rho1_sum': iotas_rho1_sum,
-        'f_b': f_b,
-        'tau_arr': tau_arr,
-        'nfp': nfp,
-        'test': 'hi1',
-        'alpha_drift_out':alpha_drift_out,
-        'pitch_inv':pitch_inv
-        } # for plotting
+    data["f_tr2"] = f_tr2_out # full output
+    # data["f_tr2"] = {
+    #     'poinc_plot':poinc_plot,
+    #     'omega_arr':omega_arr_test,
+    #     'psi_drift_out':psi_drift_out,
+    #     'iotas_rho1_sum': iotas_rho1_sum,
+    #     'f_b': f_b,
+    #     'tau_arr': tau_arr,
+    #     'nfp': nfp,
+    #     'alpha_drift_out':alpha_drift_out,
+    #     'pitch_inv':pitch_inv,
+    #     'f_tr2_out':f_tr2_out,
+    #     'iotas': iotas
+    #     } # for plotting
     return data
 
 

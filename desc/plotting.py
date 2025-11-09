@@ -52,6 +52,7 @@ __all__ = [
     "plot_logo",
     "plot_qs_error",
     "plot_section",
+    "plot_scalar",
     "plot_surfaces",
     "plot_field_lines",
     "poincare_plot",
@@ -1585,6 +1586,7 @@ def plot_section(
     cols = np.ceil(nphi / rows).astype(int)
 
     data, _ = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
+
     if normalize:
         norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
@@ -1681,6 +1683,201 @@ def plot_section(
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
+
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
+
+
+# RG: Maybe merge in plot_section at some point?
+def plot_scalar(
+    eq, component="rho", ax=None, grid=None, diffmat=None, return_data=False, **kwargs
+):
+    """
+    Plot stability-related quantities on R–Z cross-sections at fixed toroidal angle.
+
+    This is a lightweight variant of :func:`plot_section` for cases where you:
+      * already know how to obtain a scalar from ``eq.compute`` on a 3D grid
+        (possibly non-uniform), and
+      * only want the scalar field inside the boundary plus the boundary curve
+        itself (no flux-surface contours).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        DESC equilibrium object.
+    component : str, optional
+        Label used to pick which scalar to plot. By default this is treated as
+        the ``name`` passed to ``eq.compute``. If you have custom logic
+        (e.g. building a scalar from ``"finite-n eigenfunction"``), put that in
+        the block where ``scalar`` is computed. Can be generalized to physical
+        quantities later.
+    ax : matplotlib.axes.Axes or ndarray of Axes, optional
+        Axes to draw into. If ``None``, a panel of subplots is created,
+        one per toroidal angle.
+    grid : Grid, optional
+        3D grid in (rho, theta, zeta) on which the scalar is defined.
+        If ``None``, a default grid similar to :func:`plot_section` is used.
+        Non-uniform ``rho`` is fine.
+    diffmat : DiffMat, optional
+        Passed through to ``eq.compute`` if your scalar needs it.
+    **kwargs :
+        Additional options (all optional):
+
+        name : str
+            Overrides ``component`` as the key passed to ``eq.compute``.
+        phi, nphi, nzeta :
+            Same semantics as in :func:`plot_section`. If an int is given,
+            that many equally spaced angles in [0, 2π/NFP) are used.
+        figsize : (float, float)
+            Figure size, passed to :func:`matplotlib.pyplot.subplots`.
+        cmap : str or Colormap
+            Colormap for the scalar (default ``"jet"`` for consistency
+            with existing DESC plots).
+        levels : int or sequence
+            Contour levels. If omitted, 64 levels spanning the data range
+            are used.
+        filled : bool
+            If True (default), use ``contourf``; otherwise use ``contour``.
+        log : bool
+            If True, plot ``|scalar|`` with a log-normalized colormap.
+        title_fontsize, xlabel_fontsize, ylabel_fontsize : float
+            Font sizes for title and axis labels.
+        cbar_ticksize : float
+            Font size for colorbar tick labels.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    ax  : numpy.ndarray or matplotlib.axes.Axes
+        Axes with one panel per toroidal cross-section.
+    """
+    phi = np.unique(grid.nodes[:, 2])
+    nphi = phi.size
+    nr, nz = grid.num_rho, grid.num_zeta
+
+    # RG: For some reason grid.num_theta_PEST throws attribute error
+    # leading to the following line. Fix later!
+    nt = int(grid.num_nodes / (grid.num_rho * grid.num_zeta))
+
+    rows = np.floor(np.sqrt(nphi)).astype(int)
+    cols = np.ceil(nphi / rows).astype(int)
+
+    name = "finite-n eigenfunction"
+    data = eq.compute(
+        name,
+        grid=grid,
+        diffmat=diffmat,
+        incompressible=kwargs.pop("incompressible", False),
+        axisym=kwargs.pop("axisym", False),
+        n_mode_axisym=kwargs.pop("n_mode_axisym", 1),
+        gamma=kwargs.pop("gamma", 1),
+    )
+
+    # For axisym=True, the eigenfunction is complex
+    # Need to include both if we wish to plot at multiple phis
+    if component == "rho":
+        idx0 = (nr - 2) * nt * nz
+        xi_sup_rho0 = np.reshape(data[name][:idx0, 0].real, (nr - 2, nt, nz))
+        xi_sup_rho = np.concatenate(
+            (np.zeros((1, nt, nz)), xi_sup_rho0, np.zeros((1, nt, nz))), axis=0
+        )
+        psi_r = np.reshape(data["psi_r"], (nr, nt, nz))
+        data = xi_sup_rho * psi_r
+    elif component == "theta":
+        idx0 = (nr - 2) * nt * nz
+        idx1 = idx0 + nr * nt * nz
+        xi_sup_theta = np.reshape(
+            data["finite-n eigenfunction"][idx0:idx1, 0].real, (nr, nt, nz)
+        )
+        data = xi_sup_theta
+    else:
+        idx0 = (nr - 2) * nt * nz
+        idx1 = idx0 + nr * nt * nz
+        xi_sup_zeta = np.reshape(
+            data["finite-n eigenfunction"][idx1:, 0].real, (nr, nt, nz)
+        )
+        data = xi_sup_zeta
+
+    # adding theta = 2pi point which should be the same as theta = 0 point
+    data = np.concatenate((data, data[:, 0:1, :]), axis=1)
+
+    figw = 5 * cols
+    figh = 5 * rows
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=kwargs.pop("figsize", (figw, figh)),
+        equal=True,
+    )
+    ax = np.atleast_1d(ax).flatten()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
+
+    R = coords["R"].reshape((nr, nt, nz))
+    Z = coords["Z"].reshape((nr, nt, nz))
+
+    R = np.transpose(R, axes=(1, 0, 2))
+    Z = np.transpose(Z, axes=(1, 0, 2))
+
+    R = np.concatenate((R, R[0:1, :, :]), axis=0)
+    Z = np.concatenate((Z, Z[0:1, :, :]), axis=0)
+
+    # Must find a better way do this!
+    nt = nt + 1
+
+    data = np.transpose(data, axes=(1, 0, 2))
+    op = "contour" + ("f" if kwargs.pop("fill", True) else "")
+    contourf_kwargs = {}
+
+    contourf_kwargs["norm"] = matplotlib.colors.Normalize()
+    contourf_kwargs["levels"] = kwargs.pop(
+        "levels", np.linspace(data.min(), data.max(), 100)
+    )
+
+    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
+    contourf_kwargs["extend"] = "both"
+    # --no-verify title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    assert (
+        len(kwargs) == 0
+    ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    data_index_p = data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    units = (
+        f"$(${data_index_p[name]['units']}$)" if data_index_p[name]["units"] else "$"
+    )
+    for i in range(nphi):
+        divider = make_axes_locatable(ax[i])
+
+        cntr = getattr(ax[i], op)(
+            R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
+        )
+        cax = divider.append_axes("right", **cax_kwargs)
+        cbar = fig.colorbar(cntr, cax=cax)
+        cbar.update_ticks()
+
+        ax[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+        ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
+        ax[i].tick_params(labelbottom=True, labelleft=True)
+
+        ax[i].set_title(
+            "$"
+            + data_index_p[name]["label"]
+            + units
+            + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
+                eq.NFP * phi[i] / (2 * np.pi)
+            )
+        )
+    _set_tight_layout(fig)
+
+    plot_data = {"R": R, "Z": Z, name: data}
 
     if return_data:
         return fig, ax, plot_data
@@ -2941,6 +3138,7 @@ def plot_boozer_modes(  # noqa: C901
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     plot_op = ax.semilogy if log else ax.plot
+
     B_mn = np.abs(B_mn) if log else B_mn
 
     if max_only:

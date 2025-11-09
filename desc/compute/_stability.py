@@ -1275,7 +1275,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A2_proj = A2_bc - A2_bc @ CTS - CTS @ A2_bc + CTS @ A2_bc @ CTS
         A2_proj = (A2_proj + _cT(A2_proj)) / 2
 
-        A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-10)
+        A2_proj = A2_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-12)
 
         A2u_proj = A2u_bc - A2u_bc @ CTS - CTS @ A2u_bc + CTS @ A2u_bc @ CTS
         A2u_proj = (A2u_proj + _cT(A2u_proj)) / 2
@@ -1296,7 +1296,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         ## Shift the diagonal of A to ensure positive definiteness
         ## The estimate must be accurate. If A is diagonally dominant
         ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-10)
+        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-12)
 
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
         w, v = jnp.linalg.eigh((A3 + _cT(A3)) / 2)
@@ -1305,3 +1305,34 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     data["finite-n eigenfunction"] = v
 
     return data
+
+
+@register_compute_fun(
+    name="finite-n eigenfunction",
+    label="\\xi",
+    units="~",
+    units_long="None",
+    description="Finite-n eigenfunction",
+    dim=5,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    stable_only="bool: for testing only, materialize "
+    + "and eigendecompose the stable part of the matrix",
+)
+def _AGNI_eigenfunction(params, transforms, profiles, data, **kwargs):
+    """Eigenfunctions of finite-n stability solver.
+
+    Returns
+    -------
+    Finite-n lambda eigenfunctions
+        Shape (num_eigenvalues, num rho, num theta, num zeta, 3).
+
+    """
+    return data  # noqa: unused dependency

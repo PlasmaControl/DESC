@@ -652,8 +652,6 @@ class InputReader:
             # apply current ratio
             if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:
                 inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
-            else:
-                del inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
                 inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1.0

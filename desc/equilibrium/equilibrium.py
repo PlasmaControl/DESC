@@ -2197,6 +2197,7 @@ class Equilibrium(IOAble, Optimizable):
         unused_keys = [
             "pres_ratio",
             "bdry_ratio",
+            "curr_ratio",
             "pert_order",
             "ftol",
             "xtol",

@@ -1788,16 +1788,12 @@ def plot_scalar(
     elif component == "theta":
         idx0 = (nr - 2) * nt * nz
         idx1 = idx0 + nr * nt * nz
-        xi_sup_theta = np.reshape(
-            data["finite-n eigenfunction"][idx0:idx1, 0].real, (nr, nt, nz)
-        )
+        xi_sup_theta = np.reshape(data[name][idx0:idx1, 0].real, (nr, nt, nz))
         data = xi_sup_theta
     else:
         idx0 = (nr - 2) * nt * nz
         idx1 = idx0 + nr * nt * nz
-        xi_sup_zeta = np.reshape(
-            data["finite-n eigenfunction"][idx1:, 0].real, (nr, nt, nz)
-        )
+        xi_sup_zeta = np.reshape(data[name][idx1:, 0].real, (nr, nt, nz))
         data = xi_sup_zeta
 
     # adding theta = 2pi point which should be the same as theta = 0 point
@@ -1841,7 +1837,6 @@ def plot_scalar(
 
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
-    # --no-verify title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1849,10 +1844,6 @@ def plot_scalar(
     ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
-    data_index_p = data_index["desc.equilibrium.equilibrium.Equilibrium"]
-    units = (
-        f"$(${data_index_p[name]['units']}$)" if data_index_p[name]["units"] else "$"
-    )
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
@@ -1869,8 +1860,7 @@ def plot_scalar(
 
         ax[i].set_title(
             "$"
-            + data_index_p[name]["label"]
-            + units
+            + name
             + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
             )

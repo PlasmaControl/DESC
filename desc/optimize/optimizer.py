@@ -137,11 +137,13 @@ class Optimizer(IOAble):
             the same order. If set to ``'auto'``, the scale is iteratively updated
             using the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``.
-            ``ess_alpha`` is the decay rate of the scaling, and ``ess_type`` is the type
-            of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
-            Default is ``'Linf'`` and ``ess_alpha`` is 1.2. ``ess_min_value`` is the
-            minimum allowed scale value. Default is 1e-7.
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type`` 
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of 
+            the scaling, and ``ess_type`` is the type of scaling, which can be 
+            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the 
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling 
+            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7`` 
+            (minimum allowed scale value).
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -214,6 +216,7 @@ class Optimizer(IOAble):
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
         from desc.objectives import QuadraticFlux
+        from desc.geometry import FourierRZToroidalSurface
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
@@ -229,15 +232,14 @@ class Optimizer(IOAble):
                 )
             # save these for later
             eq_params_init = eq.params_dict.copy()
-
+            options = {} if options is None else options
             if isinstance(x_scale, str) and x_scale == "ess":
-                options = {} if options is None else options
                 ess_alpha = options.pop("ess_alpha", 1.2)
                 ess_type = options.pop("ess_type", "Linf")
                 ess_min_value = options.pop("ess_min_value", 1e-7)
                 x_scales = []
                 for t in things:
-                    if isinstance(t, Equilibrium):
+                    if isinstance(t, (Equilibrium, FourierRZToroidalSurface)):
                         t_scale = _create_exponential_spectral_scale(
                             eq=t,
                             alpha=ess_alpha,
@@ -248,9 +250,7 @@ class Optimizer(IOAble):
                         t_scale = np.ones(t.dim_x)
                     x_scales.append(t_scale)
                 x_scale = np.concatenate(x_scales)
-        options = {} if options is None else options
         timer = Timer()
-        options = {} if options is None else options
         _, method = _parse_method(self.method)
 
         timer.start("Initializing the optimization")
@@ -627,20 +627,19 @@ def get_combined_constraint_objectives(  # noqa: C901
             nonlinear_constraint.build(verbose=verbose)
 
     if is_prox and not isinstance(x_scale, str):
-        # If we have ProximalProjection, get original dimension from equilibrium
-        # and project x_scale through both stages: (eq.dim_x) ->
-        # (dim size post proximal projection)
-        original_dim = objective._objective._eq.dim_x
-        x_scale = np.broadcast_to(x_scale, original_dim)
-
-        # Project from (eq.dim_x) -> (dim size post proximal projection)
-        # (remove excluded parameters from ProximalProjection)
+        # If we have ProximalProjection, project x_scale through both stages:
+        # (eq.dim_x) -> (dim size post proximal projection)
+        prox_obj = objective if isinstance(objective, ProximalProjection) else objective._objective
+        # Split x_scale by things to handle multiple things (eq + coils, etc.)
+        x_scale = np.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
+        # Project equilibrium part: remove excluded parameters
         excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
         included_idx = []
-        for arg in objective._objective._eq.optimizable_params:
+        for arg in prox_obj._eq.optimizable_params:
             if arg not in excluded_params:
-                included_idx.extend(objective._objective._eq.x_idx[arg])
-        x_scale = x_scale[included_idx]
+                included_idx.extend(prox_obj._eq.x_idx[arg])
+        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][included_idx]
+        x_scale = np.concatenate(x_scale)
 
     if linear_constraint is not None and not isinstance(x_scale, str):
         # need to project x_scale down to correct size
@@ -717,8 +716,8 @@ def _create_exponential_spectral_scale(
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium object to create scaling for
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or Surface object to create scaling for
     alpha : float, optional
         Decay rate of the scaling. Default is 1.2
     scale_type : str, optional
@@ -735,12 +734,25 @@ def _create_exponential_spectral_scale(
     ndarray
         Array of scale values for each parameter
     """
+    from desc.equilibrium import Equilibrium
+    from desc.geometry import FourierRZToroidalSurface
+
     # Initialize x_scale array
     x_scale = np.ones(eq.dim_x)
 
     # Get R and Z modes (m,n pairs)
-    R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
-    Z_modes = np.abs(eq.surface.Z_basis.modes[:, 1:])
+    if isinstance(eq, Equilibrium):
+        R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
+        Z_modes = np.abs(eq.surface.Z_basis.modes[:, 1:])
+        R_param = "Rb_lmn"
+        Z_param = "Zb_lmn"
+    elif isinstance(eq, FourierRZToroidalSurface):
+        R_modes = np.abs(eq.R_basis.modes[:, 1:])
+        Z_modes = np.abs(eq.Z_basis.modes[:, 1:])
+        R_param = "R_lmn"
+        Z_param = "Z_lmn"
+    else:
+        raise TypeError(f"Unsupported type: {type(eq)}")
 
     # Calculate mode scales based on scale_type
     def get_mode_scales(modes):
@@ -755,9 +767,9 @@ def _create_exponential_spectral_scale(
     R_scales = get_mode_scales(R_modes)
     Z_scales = get_mode_scales(Z_modes)
 
-    # Apply scaling to R and Z boundary coefficients
-    x_scale[eq.x_idx["Rb_lmn"]] = R_scales
-    x_scale[eq.x_idx["Zb_lmn"]] = Z_scales
+    # Apply scaling to R and Z coefficients
+    x_scale[eq.x_idx[R_param]] = R_scales
+    x_scale[eq.x_idx[Z_param]] = Z_scales
 
     return x_scale
 

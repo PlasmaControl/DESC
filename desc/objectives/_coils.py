@@ -48,15 +48,14 @@ class _CoilObjective(_Objective):
         Upper and lower bounds for the coil objective.
         If used, should consist of a tuple (-,-), with
         each entry a float or list satisfying requirements
-        of "target". Cannot be used with "target."
+        of target. Cannot be used with target.
     weight: float, list, optional
         Weight for the coil objective during optimization.
         If a list, must have the same structure as coil.
     indices: bool, list, optional
-        Boolean indicating whether particular coils in a CoilSet
-        should be optimized according to the objective. Default
-        is to optimize all coils. If a list, must have the same structure
-        as coil.
+        Boolean or list of Booleans indicating coils in the CoilSet
+        to be targeted by the objective. Default is True, which includes
+        every coil. If a list, must have the same structure as coil.
 
     Subclasses must define a static attribute "_broadcast_input." Equals
     "Coil" if the objective returns a single scalar per coil, and "Node"

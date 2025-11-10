@@ -119,22 +119,22 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     elif isinstance(surface, (np.ndarray, jnp.ndarray)):
         if np.all(surface[:, 0] == 0):
             surface = FourierRZToroidalSurface(
-                surface[:, 3],
-                surface[:, 4],
-                surface[:, 1:3].astype(int),
-                surface[:, 1:3].astype(int),
-                NFP,
-                sym,
+                R_lmn=surface[:, 3],
+                Z_lmn=surface[:, 4],
+                modes_R=surface[:, 1:3].astype(int),
+                modes_Z=surface[:, 1:3].astype(int),
+                NFP=NFP,
+                sym=sym,
                 check_orientation=False,
             )
         elif np.all(surface[:, 2] == 0):
             surface = ZernikeRZToroidalSection(
-                surface[:, 3],
-                surface[:, 4],
-                surface[:, :2].astype(int),
-                surface[:, :2].astype(int),
-                spectral_indexing,
-                sym,
+                R_lmn=surface[:, 3],
+                Z_lmn=surface[:, 4],
+                modes_R=surface[:, :2].astype(int),
+                modes_Z=surface[:, :2].astype(int),
+                spectral_indexing=spectral_indexing,
+                sym=sym,
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")

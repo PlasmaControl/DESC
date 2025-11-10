@@ -2072,7 +2072,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_generic_with_kwargs(self):
         """Test GenericObjective with keyword arguments. Related to issue #1224."""
-        eq = desc.examples.get("reactor_QA")
+        eq = desc.examples.get("reactor_QA", "all")
 
         def fusion_gain(grid, data):
             p_out = data["P_fusion"]
@@ -2113,7 +2113,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_things_per_objective_idx(self):
         """Test things_per_objective_idx. Related to GH Issue #1602."""
-        eq = desc.examples.get("reactor_QA")
+        eq = desc.examples.get("reactor_QA", "all")
         coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
         grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0

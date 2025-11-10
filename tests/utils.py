@@ -24,41 +24,53 @@ def compute_coords(equil, Nr=10, Nt=8, Nz=None):
     rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+    _r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+    coords = equil.map_coordinates(
+        _r_grid.nodes,
+        inbasis=("rho", "theta", "phi"),
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        guess=_r_grid.nodes,
+    )
+    assert not np.any(np.isnan(coords))
+    r_grid = Grid(coords)
 
     # straight field-line angles to plot
     tr = np.linspace(0, 1, num_rho)
     tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
     tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+    _t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+    coords = equil.map_coordinates(
+        _t_grid.nodes,
+        inbasis=("rho", "theta_PEST", "phi"),
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        guess=_t_grid.nodes,
+    )
+    assert not np.any(np.isnan(coords))
+    t_grid = Grid(coords)
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates
 
-    # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(
-        equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
-    )
     r_coords = equil.compute(["R", "Z"], grid=r_grid)
-    v_coords = equil.compute(["R", "Z"], grid=v_grid)
+    v_coords = equil.compute(["R", "Z"], grid=t_grid)
 
     # rho contours
     Rr1 = r_coords["R"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        (_r_grid.num_theta, _r_grid.num_rho, _r_grid.num_zeta), order="F"
     )
     Rr1 = np.swapaxes(Rr1, 0, 1)
     Zr1 = r_coords["Z"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        (_r_grid.num_theta, _r_grid.num_rho, _r_grid.num_zeta), order="F"
     )
     Zr1 = np.swapaxes(Zr1, 0, 1)
 
     # vartheta contours
     Rv1 = v_coords["R"].reshape(
-        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        (_t_grid.num_theta, _t_grid.num_rho, _t_grid.num_zeta), order="F"
     )
     Rv1 = np.swapaxes(Rv1, 0, 1)
     Zv1 = v_coords["Z"].reshape(
-        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        (_t_grid.num_theta, _t_grid.num_rho, _t_grid.num_zeta), order="F"
     )
     Zv1 = np.swapaxes(Zv1, 0, 1)
 

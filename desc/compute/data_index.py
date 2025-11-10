@@ -58,7 +58,7 @@ def register_compute_fun(  # noqa: C901
     transforms,
     profiles,
     coordinates,
-    data,
+    data=[],
     axis_limit_data=None,
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",

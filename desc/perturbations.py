@@ -8,8 +8,10 @@ from desc.backend import jnp, put, use_jax
 from desc.compute import profile_names
 from desc.objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
     get_fixed_boundary_constraints,
@@ -60,6 +62,8 @@ def get_deltas(things1, things2):  # noqa: C901
                 deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
             if not jnp.allclose(s2.Z_lmn, s1.Z_lmn):
                 deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
+            if not jnp.allclose(s2.W_lmn, s1.W_lmn):
+                deltas["Wb_lmn"] = s2.W_lmn - s1.W_lmn
 
     if "axis" in things1:
         a1 = things1.pop("axis")
@@ -73,6 +77,8 @@ def get_deltas(things1, things2):  # noqa: C901
                 deltas["Ra_n"] = a2.R_n - a1.R_n
             if not jnp.allclose(a2.Z_n, a1.Z_n):
                 deltas["Za_n"] = a2.Z_n - a1.Z_n
+            if not jnp.allclose(a2.W_n, a1.W_n):
+                deltas["Wa_n"] = a2.W_n - a1.W_n
 
     for key, val in profile_names.items():
         if key in things1:
@@ -255,6 +261,12 @@ def perturb(  # noqa: C901
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
+    if "Wb_lmn" in deltas.keys():
+        con = get_instance(constraints, BoundaryWSelfConsistency)
+        A = con.jac_unscaled(xz)[0]["W_lmn"]
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Wb_lmn"]
+        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["W_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
         A = con.jac_unscaled(xz)[0]["R_lmn"]
@@ -267,11 +279,17 @@ def perturb(  # noqa: C901
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Za_n"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
+    if "Wa_n" in deltas.keys():
+        con = get_instance(constraints, AxisWSelfConsistency)
+        A = con.jac_unscaled(xz)[0]["W_lmn"]
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Wa_n"]
+        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["W_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [
         arg
         for arg in eq.optimizable_params
-        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
+        if arg not in ["Ra_n", "Za_n", "Wa_n", "Rb_lmn", "Zb_lmn", "Wb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(
@@ -309,6 +327,11 @@ def perturb(  # noqa: C901
                     w,
                     eq.x_idx["L_lmn"],
                     (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+                )
+                w = put(
+                    w,
+                    eq.x_idx["W_lmn"],
+                    (abs(eq.W_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
             weight = w
         weight = jnp.atleast_1d(jnp.asarray(weight))
@@ -464,11 +487,13 @@ def optimal_perturb(  # noqa: C901
     dR=False,
     dZ=False,
     dL=False,
+    dW=False,
     dp=False,
     di=False,
     dPsi=False,
     dRb=False,
     dZb=False,
+    dWb=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
@@ -486,9 +511,10 @@ def optimal_perturb(  # noqa: C901
         Objective function to satisfy.
     objective_g : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
+    dR, dZ, dL, dW, dp, di, dPsi, dRb, dZb, dWb : ndarray or bool, optional
         Array of indices of modes to include in the perturbations of R, Z, lambda,
-        pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
+        omega, pressure, rotational transform, total magnetic flux, R, Z, and omega
+        on the boundary.
         Setting to True (False) includes (excludes) all modes.
     subspace : ndarray, optional
         Transform matrix to give a subspace from the full parameter space.
@@ -541,11 +567,13 @@ def optimal_perturb(  # noqa: C901
         "R_lmn": dR,
         "Z_lmn": dZ,
         "L_lmn": dL,
+        "W_lmn": dW,
         "p_l": dp,
         "i_l": di,
         "Psi": dPsi,
         "Rb_lmn": dRb,
         "Zb_lmn": dZb,
+        "Wb_lmn": dWb,
     }
     deltas = {}
     for name, arg in argmap.items():
@@ -628,6 +656,12 @@ def optimal_perturb(  # noqa: C901
             Ainv = jnp.linalg.pinv(A)
             dxdZb = jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv
             dxdc.append(dxdZb)
+        if arg == "Wb_lmn":
+            con = get_instance(constraints, BoundaryWSelfConsistency)
+            A = con.jac_unscaled(xz)[0]["W_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dxdWb = jnp.eye(eq.dim_x)[:, eq.x_idx["W_lmn"]] @ Ainv
+            dxdc.append(dxdWb)
     dxdc = jnp.hstack(dxdc)
 
     # 1st order

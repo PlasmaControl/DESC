@@ -156,12 +156,17 @@ class Equilibrium(IOAble, Optimizable):
         "_L",
         "_M",
         "_N",
+        "_Lz",
+        "_Mz",
+        "_Nz",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
+        "_W_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -194,6 +199,7 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
     ]
 
     @execute_on_cpu
@@ -207,6 +213,9 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        Lz=0,
+        Mz=0,
+        Nz=0,
         pressure=None,
         iota=None,
         current=None,
@@ -229,6 +238,10 @@ class Equilibrium(IOAble, Optimizable):
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
         self._Psi = jnp.float64(float(Psi))
+
+        self._Lz = Lz
+        self._Mz = Mz
+        self._Nz = Nz
 
         errorif(
             spectral_indexing
@@ -281,6 +294,11 @@ class Equilibrium(IOAble, Optimizable):
         M_grid = check_nonnegint(M_grid, "M_grid")
         N_grid = check_nonnegint(N_grid, "N_grid")
 
+        # resolution
+        Lz = check_nonnegint(Lz, "Lz")
+        Mz = check_nonnegint(Mz, "Mz")
+        Nz = check_nonnegint(Nz, "Nz")
+
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
         self._L = int(
@@ -296,8 +314,28 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
-        self._axis.change_resolution(self.N, sym=self.sym)
+        self._Nz = int(setdefault(Nz, self.surface._Nz))
+        self._Mz = int(setdefault(Mz, self.surface._Mz))
+        self._Lz = int(
+            setdefault(
+                Lz,
+                self.Mz if (self.spectral_indexing == "ansi") else 2 * self.Mz,
+            )
+        )
+
+        # RG: NFP, sym, Mz, Nz passed as kwargs, order is sacrosanct
+        self._surface.change_resolution(
+            self.L,
+            self.M,
+            self.N,
+            NFP=self._surface.NFP if hasattr(self._surface, "NFP") else self.NFP,
+            sym=self.sym,
+            Mz=self.Mz,
+            Nz=self.Nz,
+        )
+
+        # RG: If you must specify NFP here, specify the NFP of the axis
+        self._axis.change_resolution(self.N, sym=self.sym, Nz=self.Nz)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -324,7 +362,16 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-
+        # RG: This is just the basis and doesn't determine the grid on
+        # which omega is evaluated
+        self._W_basis = FourierZernikeBasis(
+            L=self.Lz,
+            M=self.Mz,
+            N=self.Nz,
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
         # profiles
         self._pressure = None
         self._iota = None
@@ -408,12 +455,14 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
+        self._W_lmn = np.zeros(self.W_basis.num_modes)
 
         if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
             assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+            self.W_lmn = kwargs.pop("W_lmn", jnp.zeros(self.W_basis.num_modes))
         else:
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
@@ -435,6 +484,11 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self.W_basis is None:
+            self._W_basis = self.L_basis.copy()
+            self._W_basis.change_resolution(0, 0, 0)  # omega should default to zero res
+        if self.W_lmn is None:
+            self._W_lmn = np.zeros(self.W_basis.num_modes)
 
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
@@ -449,6 +503,9 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
+        self._Lz = int(self.W_basis.L)
+        self._Mz = int(self.W_basis.M)
+        self._Nz = int(self.W_basis.N)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -460,6 +517,7 @@ class Equilibrium(IOAble, Optimizable):
             "R_lmn",
             "Z_lmn",
             "L_lmn",
+            "W_lmn",
             "p_l",
             "i_l",
             "c_l",
@@ -471,8 +529,10 @@ class Equilibrium(IOAble, Optimizable):
             "a_lmn",
             "Ra_n",
             "Za_n",
+            "Wa_n",
             "Rb_lmn",
             "Zb_lmn",
+            "Wb_lmn",
             "I",
             "G",
             "Phi_mn",
@@ -486,10 +546,10 @@ class Equilibrium(IOAble, Optimizable):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
-            )
-        )
+            + f" (L={self.L}, M={self.M}, N={self.N}, Lz={self.Lz}, Mz={self.Mz},\
+                    Nz={self.Nz}, NFP={self.NFP}, sym={self.sym},\
+                    spectral_indexing={self.spectral_indexing})"
+        )  # RG: not sure if this change is needed
 
     def set_initial_guess(self, *args, ensure_nested=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
@@ -571,6 +631,9 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        Lz=0,
+        Mz=0,
+        Nz=0,
         NFP=None,
         sym=None,
     ):
@@ -605,15 +668,21 @@ class Equilibrium(IOAble, Optimizable):
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
+        self._Lz = int(setdefault(Lz, self.Lz))
+        self._Mz = int(setdefault(Mz, self.Mz))
+        self._Nz = int(setdefault(Nz, self.Nz))
+
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
+
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
+        old_modes_W = self.W_basis.modes
 
         self.R_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
@@ -623,6 +692,13 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.W_basis.change_resolution(
+            self.Lz,
+            self.Mz,
+            self.Nz,
+            NFP=self.NFP,
+            sym="sin" if self.sym else self.sym,
         )
 
         for profile in [
@@ -640,13 +716,20 @@ class Equilibrium(IOAble, Optimizable):
                 p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym=self.sym,
+            Mz=self.Mz,
+            Nz=self.Nz,
         )
-        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nz=self.Nz)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._W_lmn = copy_coeffs(self.W_lmn, old_modes_W, self.W_basis.modes)
 
     @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):
@@ -683,6 +766,7 @@ class Equilibrium(IOAble, Optimizable):
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AW = np.zeros((surface.W_basis.num_modes, self.W_basis.num_modes))
 
             Js = []
             zernikeR = zernike_radial(
@@ -718,19 +802,44 @@ class Equilibrium(IOAble, Optimizable):
             # setting the value to the whole row.
             AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
 
+            Js = []
+            zernikeW = zernike_radial(
+                rho, self.W_basis.modes[:, 0], self.W_basis.modes[:, 1]
+            )
+            for i, (l, m, n) in enumerate(self.W_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.W_basis.modes[:, 1] == m,
+                        surface.W_basis.modes[:, 2] == n,
+                    )
+                )
+                Js.append(j.flatten())
+
+            Js = np.array(Js)
+            if Js.size == 0:  # RG: If Js empty, Wb should be empty too
+                Wb = np.array([])
+            else:
+                # Broadcasting at once is faster. We need to use np.arange to avoid
+                # setting the value to the whole row.
+                AW[Js[:, 0], np.arange(self.W_basis.num_modes)] = zernikeW
+                Wb = AW @ self.W_lmn
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
+
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+            surface.W_lmn = Wb
             return surface
 
-        if zeta is not None:
+        if zeta is not None:  # RG: Not sure if this needs zeta or phi (zeta-omega)
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
             surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AW = np.zeros((surface.W_basis.num_modes, self.W_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -749,10 +858,23 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = fourier(zeta, n, self.NFP)
+
+            for i, (l, m, n) in enumerate(self.W_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.W_basis.modes[:, 0] == l,
+                        surface.W_basis.modes[:, 1] == m,
+                    )
+                )
+                AW[j, i] = fourier(zeta, n, self.NFP)
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+
+            Wb = AW @ self.W_lmn
+            surface.W_lmn = Wb
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
@@ -803,12 +925,15 @@ class Equilibrium(IOAble, Optimizable):
         """
         # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
         sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        sign_lz = np.atleast_2d(((np.arange(0, self.Lz + 1, 2) / 2) % 2) * -2 + 1).T
         # indices where m=0
         idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
         idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
+        idx0_W = np.where(self.W_basis.modes[:, 1] == 0)[0]
         # indices where l=0 & m=0
         idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_W = np.where((self.W_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         # this reshaping assumes the FourierZernike bases are sorted
         R_n = np.sum(
             sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
@@ -824,7 +949,18 @@ class Equilibrium(IOAble, Optimizable):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        if len(idx00_W):
+            W_n = np.sum(
+                sign_lz * np.reshape(self.W_lmn[idx0_W], (-1, idx00_W.size), order="F"),
+                axis=0,
+            )
+            modes_W = self.W_basis.modes[idx00_W, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            W_n = 0
+            modes_W = 0
+        axis = FourierRZCurve(
+            R_n, Z_n, W_n, modes_R, modes_Z, modes_W, NFP=self.NFP, sym=self.sym
+        )
         return axis
 
     def compute(  # noqa: C901
@@ -1408,7 +1544,9 @@ class Equilibrium(IOAble, Optimizable):
         return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
+    def is_nested(
+        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, W_lmn=None, msg=None
+    ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordinate Jacobian (sqrt(g)) sign.
@@ -1424,8 +1562,9 @@ class Equilibrium(IOAble, Optimizable):
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn, L_lmn : ndarray, optional
-            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+            spectral coefficients for R and Z, lambda, omega. Defaults to eq.R_lmn,
+            eq.Z_lmn etc.
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1435,7 +1574,7 @@ class Equilibrium(IOAble, Optimizable):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, W_lmn, msg)
 
     def to_sfl(
         self,
@@ -1508,7 +1647,7 @@ class Equilibrium(IOAble, Optimizable):
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N)
+        new.change_resolution(self.L, self.M, self.N, Mz=self.Mz, Nz=self.Nz)  # RG
         self._surface = new
 
     @property
@@ -1523,7 +1662,7 @@ class Equilibrium(IOAble, Optimizable):
         ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
         assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
-        new.change_resolution(self.N)
+        new.change_resolution(self.N, Nz=self.Nz)  # RG: Adding Nz here
         self._axis = new
 
     @property
@@ -1570,6 +1709,21 @@ class Equilibrium(IOAble, Optimizable):
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
+
+    @property
+    def Lz(self):
+        """int: Maximum radial mode number for omega."""
+        return self._Lz
+
+    @property
+    def Mz(self):
+        """int: Maximum poloidal fourier mode number for omega."""
+        return self._Mz
+
+    @property
+    def Nz(self):
+        """int: Maximum toroidal fourier mode number for omega."""
+        return self._Nz
 
     @optimizable_parameter
     @property
@@ -1624,6 +1778,22 @@ class Equilibrium(IOAble, Optimizable):
 
     @optimizable_parameter
     @property
+    def W_lmn(self):
+        """ndarray: Spectral coefficients of omega."""
+        return self._W_lmn
+
+    @W_lmn.setter
+    def W_lmn(self, W_lmn):
+        errorif(
+            W_lmn.size != self._W_lmn.size,
+            ValueError,
+            "W_lmn should have the same size as W_basis, "
+            + f"got {len(W_lmn)} for basis with {self.W_basis.num_modes} modes",
+        )
+        self._W_lmn = W_lmn
+
+    @optimizable_parameter
+    @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
         return self.surface.R_lmn
@@ -1641,6 +1811,16 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def Wb_lmn(self):
+        """ndarray: Spectral coefficients of omega at the boundary."""
+        return self.surface.W_lmn
+
+    @Wb_lmn.setter
+    def Wb_lmn(self, Wb_lmn):
+        self.surface.W_lmn = Wb_lmn
 
     @optimizable_parameter
     @property
@@ -1706,6 +1886,16 @@ class Equilibrium(IOAble, Optimizable):
     @Za_n.setter
     def Za_n(self, Za_n):
         self.axis.Z_n = Za_n
+
+    @optimizable_parameter
+    @property
+    def Wa_n(self):
+        """ndarray: W coefficients for axis Fourier series."""
+        return self.axis.W_n
+
+    @Wa_n.setter
+    def Wa_n(self, Wa_n):
+        self.axis.W_n = Wa_n
 
     @property
     def pressure(self):
@@ -1980,6 +2170,11 @@ class Equilibrium(IOAble, Optimizable):
         return self._L_basis
 
     @property
+    def W_basis(self):
+        """FourierZernikeBasis: Spectral basis for omega."""
+        return self._W_basis
+
+    @property
     def L_grid(self):
         """int: Radial resolution of grid in real space."""
         return self._L_grid
@@ -2016,6 +2211,9 @@ class Equilibrium(IOAble, Optimizable):
             "L": self.L,
             "M": self.M,
             "N": self.N,
+            "Lz": self.Lz,
+            "Mz": self.Mz,
+            "Nz": self.Nz,
             "L_grid": self.L_grid,
             "M_grid": self.M_grid,
             "N_grid": self.N_grid,
@@ -2025,6 +2223,11 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        print(
+            "Spectral resolution omega (Lz,Mz,Nz)=({},{},{})".format(
+                self.Lz, self.Mz, self.Nz
+            )
+        )
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid

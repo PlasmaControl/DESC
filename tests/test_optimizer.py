@@ -753,13 +753,16 @@ def test_solve_with_x_scale():
             (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
             (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
             (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.W_basis.modes[:, :2]).sum(axis=1) + 1),
             jnp.ones(
                 eq.p_l.size
                 + eq.c_l.size
                 + eq.Ra_n.size
                 + eq.Za_n.size
+                + eq.Wa_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.Wb_lmn.size
                 + 1
             ),
         ]

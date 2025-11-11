@@ -92,8 +92,6 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     )
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
-    # We ignore the bounce points of particles only assigned to a class that are
-    # trapped outside this snapshot of the field line.
     z1 = (dB_dz <= 0) & mask
     z2 = (dB_dz >= 0) & _in_epigraph_and(mask, dB_dz)
 

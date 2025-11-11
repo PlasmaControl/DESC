@@ -108,11 +108,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
         https://doi.org/10.1063/1.873749.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
-        https://arxiv.org/abs/2412.01724.
-
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
@@ -234,11 +229,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         https://doi.org/10.1063/1.2912456.
         Equation 61.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
-        https://arxiv.org/abs/2412.01724.
-
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
     metric γ_c quantifies whether the contours of the second adiabatic invariant
@@ -340,11 +330,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         stellarators. Equation 16.
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
         https://doi.org/10.1088/1741-4326/ac2994.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
-        https://arxiv.org/abs/2412.01724.
 
     This expression has a secular term that drives the result to zero as the number
     of toroidal transits increases if the secular term is not averaged out from the

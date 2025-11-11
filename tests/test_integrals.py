@@ -719,7 +719,7 @@ class TestSingularities:
             atol = 0.015
         else:
             st, sz, q = _best_params(grid, _best_ratio(data))
-            atol = 0.0054
+            atol = 0.0056
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface

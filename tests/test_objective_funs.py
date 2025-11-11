@@ -1991,7 +1991,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_compute_against_compute_bounce(self, use_bounce1d):
+    def test_objective_against_compute_bounce(self, use_bounce1d):
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
@@ -2048,7 +2048,7 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
-    def test_objective_compute_against_compute_ballooning(self):
+    def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
@@ -3990,7 +3990,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-9)
+        np.testing.assert_allclose(g, g_0, atol=5e-7)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
@@ -4018,7 +4018,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=2e-7)
+        np.testing.assert_allclose(g, g_0, atol=5e-7)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)

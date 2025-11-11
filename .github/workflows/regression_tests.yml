@@ -110,7 +110,7 @@ jobs:
 
       - name: save coverage file and plot comparison results
         if: always() && env.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: regression_test_artifact-${{ matrix.python-version }}-${{ matrix.group }}
           path: |

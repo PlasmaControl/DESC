@@ -253,18 +253,19 @@ def _fixed_point_potential(
     )
     if Phi_0 is None:
         Phi_0 = jnp.ones(potential_grid.num_nodes)
-    return fixed_point(
+    out = fixed_point(
         _iteration_operator,
         Phi_0,
         (boundary_condition, potential_data, source_data, interpolator, chunk_size),
         xtol,
         maxiter,
-        method="anderson",
+        method="simple",
         scalar=True,
         full_output=full_output,
         anderson_m=8,
         anderson_beta=1.0,
     )
+    return out
 
 
 @register_compute_fun(
@@ -400,7 +401,9 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             **apply(kwargs, subset=_doc),
         )
         if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
+            data["Phi (periodic)"], (err, data["num iter"], _, _) = data[
+                "Phi (periodic)"
+            ]
             data["Phi error"] = jnp.abs(err).max()
 
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])

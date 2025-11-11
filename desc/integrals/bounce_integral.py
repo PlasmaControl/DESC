@@ -156,21 +156,12 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Notes
-    -----
-    Magnetic field line, defined by B = ∇ψ × ∇α, is found in flux coordinates (ρ,θ,ζ).
-      θ : ρ, α, ζ ↦ α + δ(ρ,α,ζ)
-    Compute bounce points.
-      λ B(ζₖ) = 1
-    Interpolate smooth periodic parts of integrand with FFTs.
-      G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
-    Perform quadrature with NUFFTs after removing singularities.
-      Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
-
-    If the map G is multivalued at a physical location, then it is still
-    permissible if separable into periodic and secular parts.
-    In that case, supply the periodic part, which will be interpolated
-    with FFTs, and use the provided coordinate ζ ∈ ℝ to compose G.
+    Refrences
+    ---------
+    Spectrally accurate, reverse-mode differentiable bounce-averaging
+    algorithm and its applications.
+    Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+    https://arxiv.org/abs/2412.01724.
 
     Examples
     --------
@@ -1047,8 +1038,8 @@ class Bounce2D(Bounce):
         angle = angle[l]
         X, Y = angle.shape
         if name == "delta":
-            xlabel = kwargs.get("xlabel", r"$\zeta$")
-            ylabel = kwargs.get("ylabel", r"$\alpha$")
+            xlabel = kwargs.get("xlabel", r"$y$")
+            ylabel = kwargs.get("ylabel", r"$x$")
             title = kwargs.get(
                 "title",
                 r"$\mathcal{F}_{\text{Fourier-Chebyshev}}$ "
@@ -1061,8 +1052,8 @@ class Bounce2D(Bounce):
             )
 
         elif name == "lambda":
-            xlabel = kwargs.get("xlabel", r"$\zeta \times \text{NFP}$")
-            ylabel = kwargs.get("xlabel", r"$\vartheta$")
+            xlabel = kwargs.get("xlabel", r"$y$")
+            ylabel = kwargs.get("xlabel", r"$x$")
             title = kwargs.get(
                 "title",
                 r"$\mathcal{F}_{\text{Fourier}}$ "

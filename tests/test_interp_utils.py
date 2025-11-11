@@ -472,7 +472,7 @@ class TestStreams:
         c = TestStreams.theta_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
 
         fig, ax = plt.subplots()
-        ax.set(ylabel=r"$\alpha$", xlabel=r"$\zeta$")
+        ax.set(ylabel=r"$x$", xlabel=r"$y$")
         ax.set_title(
             r"$\mathcal{F}_{\text{Chebyshev}}$ $\theta(\alpha, \zeta)$ " + name, pad=20
         )

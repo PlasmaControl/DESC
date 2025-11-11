@@ -595,12 +595,10 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
     if angle.ndim == 2:
         alpha = alpha.squeeze(1)
 
-    # Computing exp(inθ) implicitly mods argument within 2π from 0. This is
-    # advertised by FINUFFT to reduce speed. We mod explicitly here so
-    # that XLA or FINUFFT does less modding on many more points later.
+    # Mod early for speed and conditioning
+    # (since this avoids modding on more points later and keeps θ bounded).
     alpha %= 2 * jnp.pi
 
-    # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
     domain = (0, 2 * jnp.pi)
     delta = FourierChebyshevSeries(angle, domain).compute_cheb(alpha).swapaxes(0, -3)
     alpha = alpha.swapaxes(0, -2)

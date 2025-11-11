@@ -237,6 +237,7 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         warnings.filterwarnings("ignore", category=UserWarning, message="Redl")
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         for p in things:
 

@@ -996,7 +996,7 @@ class Bounce2D(Bounce):
             "title",
             rf"Poloidal angle $\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
         )
-        kwargs.setdefault("vlabel", r"$\theta$")
+        kwargs.setdefault("vlabel", r"$\theta \text{ mod } (2 \pi)$")
         return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
 
     @staticmethod

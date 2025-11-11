@@ -42,9 +42,9 @@ def test_effective_ripple_2D(nufft_eps):
 
     assert np.isfinite(data["effective ripple 3/2"]).all()
     eps_32 = grid.compress(data["effective ripple 3/2"])
-    # TODO: Compute at higher boozer resolution once Neo works again.
-    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
-    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+    # NEO file generated from DESC equlibrium on 2025-10-23 17:47:07.280264.
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.W7-X")
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.1)
 
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
@@ -75,8 +75,8 @@ def test_effective_ripple_1D():
         err_msg="Bug in source grid logic in eq.compute.",
     )
     eps_32 = grid.compress(data["old effective ripple 3/2"])
-    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
-    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.W7-X")
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.1)
 
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
@@ -170,7 +170,7 @@ class NeoIO:
         self,
         theta_n=200,
         phi_n=200,
-        num_pitch=50,
+        num_pitch=150,
         multra=1,
         acc_req=0.01,
         nbins=100,

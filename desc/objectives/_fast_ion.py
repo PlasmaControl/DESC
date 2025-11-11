@@ -43,7 +43,7 @@ class GammaC(_Objective):
         https://doi.org/10.1063/1.2912456.
         Equation 61.
 
-    [1] A model for the fast evaluation of prompt losses of energetic ions in
+    [2] A model for the fast evaluation of prompt losses of energetic ions in
         stellarators. Equation 16.
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
         https://doi.org/10.1088/1741-4326/ac2994.

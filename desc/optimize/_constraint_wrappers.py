@@ -1312,7 +1312,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
+    sf += sf[-1]
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
     return vtf.T @ (sfi * (uf.T @ Fc))
 
@@ -1598,8 +1598,8 @@ class FiniteDifferenceSingleStage(ObjectiveFunction):
         # calc it here then update the linear constraint projection, I guess, or
         # calc it once and apply to the lin con proj for bdry error
         self._eq.optimize(
-            objective=self._eq_fb_objective_wrapped,
-            constraints=None,
+            objective=self._eq_fb_objective,
+            constraints=self._fb_linear_constraints,
             **self._free_boundary_options,
         )
         self._x_old = self.x(self.things)

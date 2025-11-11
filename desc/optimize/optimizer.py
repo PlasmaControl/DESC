@@ -676,6 +676,8 @@ def get_combined_constraint_objectives(  # noqa: C901
                 "Zb_lmn",
                 "Phi_mn",
             ]
+            # TODO: how to deal with other things in the optimization,
+            #  not just the eq boundary? not even sure if rn it will work correctly?
             included_idx = []
             for arg in objective._objective._eq.optimizable_params:
                 if arg not in excluded_params:

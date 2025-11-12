@@ -2110,7 +2110,6 @@ def test_coilset_geometry_optimization():
                 eq=surf,
                 coil=coils,
                 target=offset,
-                plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=False,
                 coils_fixed=True,

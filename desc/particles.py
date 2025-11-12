@@ -1106,18 +1106,18 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    if not params:
+    if not params and not isinstance(field, dict):
         params = field.params_dict
     if not options:
         options = {}
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
-        if isinstance(field, Equilibrium):
+        if isinstance(field, Equilibrium) or isinstance(field, dict):
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_event(t, y, args, **kwargs):
-        if isinstance(field, Equilibrium):
+        if isinstance(field, Equilibrium) or isinstance(field, dict):
             i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
             j = jnp.arctan2(y[1], y[0])
         else:
@@ -1363,7 +1363,6 @@ class FourierChebyshevField(IOAble):
             zl = jax.scipy.fft.dct(z, axis=1, norm=None)
             zl = zl.at[:, 0, :].divide(2)
             zl /= self.L
-            # FFT coeffs are also unnormalized, need to divide by M
             zlm = jnp.fft.fft(zl, axis=2, norm=None)
             zlmn = jnp.fft.fft(zlm, axis=0, norm=None)
             return zlmn
@@ -1375,50 +1374,24 @@ class FourierChebyshevField(IOAble):
             self.transforms,
             profiles,
         )
-        Br = data_raw["B"][:, 0]
-        Bp = data_raw["B"][:, 1]
-        Bz = data_raw["B"][:, 2]
-
-        gBr = data_raw["grad(|B|)"][:, 0]
-        gBp = data_raw["grad(|B|)"][:, 1]
-        gBz = data_raw["grad(|B|)"][:, 2]
-
-        err = data_raw["e^rho"][:, 0]
-        erp = data_raw["e^rho"][:, 1]
-        erz = data_raw["e^rho"][:, 2]
-
-        etr = data_raw["e^theta"][:, 0] * self.grid.nodes[:, 0]
-        etp = data_raw["e^theta"][:, 1] * self.grid.nodes[:, 0]
-        etz = data_raw["e^theta"][:, 2] * self.grid.nodes[:, 0]
-
-        ezr = data_raw["e^zeta"][:, 0]
-        ezp = data_raw["e^zeta"][:, 1]
-        ezz = data_raw["e^zeta"][:, 2]
-
-        def reshape(arr):
-            return arr.reshape(self.N_fft, self.L, self.M_fft)
-
-        Br, Bp, Bz, gBr, gBp, gBz, err, erp, erz, etr, etp, etz, ezr, ezp, ezz = map(
-            reshape,
-            (Br, Bp, Bz, gBr, gBp, gBz, err, erp, erz, etr, etp, etz, ezr, ezp, ezz),
-        )
-
+        rho = self.grid.nodes[:, 0]
+        L, M, N = self.L, self.M_fft, self.N_fft
         data_raw_shaped = {
-            "Br": Br,
-            "Bp": Bp,
-            "Bz": Bz,
-            "gBr": gBr,
-            "gBp": gBp,
-            "gBz": gBz,
-            "er_r": err,
-            "er_p": erp,
-            "er_z": erz,
-            "et_r": etr,
-            "et_p": etp,
-            "et_z": etz,
-            "ez_r": ezr,
-            "ez_p": ezp,
-            "ez_z": ezz,
+            "Br": data_raw["B"][:, 0].reshape(N, L, M),
+            "Bp": data_raw["B"][:, 1].reshape(N, L, M),
+            "Bz": data_raw["B"][:, 2].reshape(N, L, M),
+            "gBr": data_raw["grad(|B|)"][:, 0].reshape(N, L, M),
+            "gBp": data_raw["grad(|B|)"][:, 1].reshape(N, L, M),
+            "gBz": data_raw["grad(|B|)"][:, 2].reshape(N, L, M),
+            "er_r": data_raw["e^rho"][:, 0].reshape(N, L, M),
+            "er_p": data_raw["e^rho"][:, 1].reshape(N, L, M),
+            "er_z": data_raw["e^rho"][:, 2].reshape(N, L, M),
+            "et_r": (data_raw["e^theta"][:, 0] * rho).reshape(N, L, M),
+            "et_p": (data_raw["e^theta"][:, 1] * rho).reshape(N, L, M),
+            "et_z": (data_raw["e^theta"][:, 2] * rho).reshape(N, L, M),
+            "ez_r": data_raw["e^zeta"][:, 0].reshape(N, L, M),
+            "ez_p": data_raw["e^zeta"][:, 1].reshape(N, L, M),
+            "ez_z": data_raw["e^zeta"][:, 2].reshape(N, L, M),
         }
         data = {}
         for key, val in data_raw_shaped.items():
@@ -1476,6 +1449,7 @@ class FourierChebyshevField(IOAble):
 
             return f_lmn_real
 
+        # Magnetic Field B
         Br = interpolate(fit_data["Br_real"], fit_data["Br_imag"])
         Bp = interpolate(fit_data["Bp_real"], fit_data["Bp_imag"])
         Bz = interpolate(fit_data["Bz_real"], fit_data["Bz_imag"])
@@ -1483,11 +1457,13 @@ class FourierChebyshevField(IOAble):
         magB = jnp.linalg.norm(B)
         b = B / magB
 
+        # grad(|B|)
         gBr = interpolate(fit_data["gBr_real"], fit_data["gBr_imag"])
         gBp = interpolate(fit_data["gBp_real"], fit_data["gBp_imag"])
         gBz = interpolate(fit_data["gBz_real"], fit_data["gBz_imag"])
         gradB = jnp.array([gBr, gBp, gBz])
 
+        # e^rho
         er_r = interpolate(fit_data["er_r_real"], fit_data["er_r_imag"])
         er_p = interpolate(fit_data["er_p_real"], fit_data["er_p_imag"])
         er_z = interpolate(fit_data["er_z_real"], fit_data["er_z_imag"])
@@ -1499,6 +1475,7 @@ class FourierChebyshevField(IOAble):
         et_z = interpolate(fit_data["et_z_real"], fit_data["et_z_imag"])
         et_x_rho = jnp.array([et_r, et_p, et_z])
 
+        # e^zeta
         ez_r = interpolate(fit_data["ez_r_real"], fit_data["ez_r_imag"])
         ez_p = interpolate(fit_data["ez_p_real"], fit_data["ez_p_imag"])
         ez_z = interpolate(fit_data["ez_z_real"], fit_data["ez_z_imag"])

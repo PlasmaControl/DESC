@@ -462,8 +462,8 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             source_grid for the magnetic field computation, if using a MagneticField
             object, can be passed as a keyword argument.
             If you are trying to initialize particles in lab coordinates for a
-            MagneticField with flux coordinates, you must pass the Equilibrium
-            as keyword argument "eq" in kwargs.
+            MagneticField from inputs in flux coordinates, you must pass the
+            Equilibrium as keyword argument "eq" in kwargs.
 
         Returns
         -------
@@ -483,8 +483,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             x = x
             if field.iota is None:
@@ -763,8 +762,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
             # this is not the best guess, but most likely scenario for this class
@@ -926,8 +924,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             # eq and surface might not have the same theta definition, so we will do a
             # root finding to find the correct theta and zeta coordinates from R, phi, Z

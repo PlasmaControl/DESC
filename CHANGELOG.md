@@ -4,6 +4,8 @@ Changelog
 New Features
 
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
+- Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
@@ -29,12 +31,14 @@ Bug Fixes
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 - Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
+- Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
 
 
 Backend
 -------
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
+- ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
 - Minimum JAX version bumped up to ``0.4.29``
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
 
@@ -43,7 +47,6 @@ Performance Improvements
 
 - [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
 - [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
-
 
 v0.15.0
 -------

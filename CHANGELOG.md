@@ -2,7 +2,12 @@ Changelog
 =========
 
 New Features
-
+------------
+- Automatically-differentiable, non-singular Laplace BIE solver.
+- Improved performance and accuracy of FFT interpolation in singular integrals
+  ([1](https://github.com/f0uriest/interpax/pull/116), [2](https://github.com/f0uriest/interpax/pull/117)).
+  This is useful for free surface optimization.
+- [Plumbing for new magnetic field API](https://github.com/PlasmaControl/DESC/issues/1807).
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 - Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
@@ -30,6 +35,7 @@ Backend
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
 - Minimum JAX version bumped up to ``0.4.29``
+- New fixed point iteration methods.
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
 
 

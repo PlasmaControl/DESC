@@ -21,11 +21,10 @@ Bug Fixes
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 - Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
+- ``ConcentricGrid`` now has more than one node at the innermost rho value by default, which should make the iota calculation that occurs for  the``ForceBalance`` objective with default ``ConcentricGrid`` more accurate for current-constrained equilibria. The new default node pattern is called `jacobi-dna`, and the old behavior can be obtained by using `node_pattern="jacobi"`.
 - Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
 
-
 Backend
--------
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.

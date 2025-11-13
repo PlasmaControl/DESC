@@ -1033,9 +1033,9 @@ def trace_particles(
         diffrax Solver object to use in integration. Defaults to
         `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
     adjoint : diffrax.AbstractAdjoint, optional
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
+        use `diffrax.ForwardMode()`.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1050,8 +1050,10 @@ def trace_particles(
         for the points where the integration failed. Defaults to True.
     return_aux : bool, optional
         Whether to return auxiliary information from the integrator. If True, will
-        return a tuple (x, v, aux) where aux consists ``stats`` and ``result`` from
-        ``diffrax.diffeqsolve``. Defaults to False.
+        return a tuple (x, v, aux) where aux consists `ts`, `stats` and `result`
+        from `diffrax.diffeqsolve`. Defaults to False. `ts` may become useful if
+        `SaveAt(steps=True)` is used (see `_trace_particles`). Note that `x`, `v` and
+        `ts` will be padded with NaNs to `max_steps` size in that case.
 
     Returns
     -------
@@ -1143,11 +1145,11 @@ def _trace_particles(
     ----------
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of ``initializer.init_particles``.
+        The first output of `initializer.init_particles`.
     model_args : array-like
         Additional arguments needed by the model, such as mass, charge, and
         magnetic moment (mv⊥²/2|B|) of each particle. The second output of
-        ``initializer.init_particles``.
+        `initializer.init_particles`.
     stepsize_controller : diffrax.AbstractStepsizeController
         Stepsize controller to use for the integration.
     saveat : diffrax.SaveAt
@@ -1202,7 +1204,7 @@ def _trace_particles(
     if not return_aux:
         return x, v
     else:
-        return x, v, (out.stats, out.result)
+        return x, v, (out.ts, out.stats, out.result)
 
 
 def _intfun_wrapper(
@@ -1224,7 +1226,7 @@ def _intfun_wrapper(
 ):
     """Wrapper for the integration function for vectorized inputs.
 
-    Defining a lambda function inside the ``_trace_particles`` function leads
+    Defining a lambda function inside the `_trace_particles` function leads
     to recompilations, so instead we define the wrapper here.
     """
     return diffeqsolve(

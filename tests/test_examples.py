@@ -2099,10 +2099,15 @@ def test_coilset_geometry_optimization():
 
     #### optimize surface with fixed coils ####
     # optimizing for target coil-plasma distance only
+    surf.change_resolution(
+        M=4, N=16
+    )  # change surf res so that the default grid resolution is actually reasonable
+    ind_M1_R = surf.R_basis.get_idx(M=1, N=0)
+    ind_Mneg1_Z = surf.Z_basis.get_idx(M=-1, N=0)
 
     def circle_constraint(params):
         """Constrain cross section of surface to be a circle."""
-        return params["R_lmn"][1:] + jnp.flip(params["Z_lmn"])
+        return params["R_lmn"][ind_M1_R] + params["Z_lmn"][ind_Mneg1_Z]
 
     objective = ObjectiveFunction(
         (
@@ -2110,7 +2115,6 @@ def test_coilset_geometry_optimization():
                 eq=surf,
                 coil=coils,
                 target=offset,
-                plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=False,
                 coils_fixed=True,
@@ -2118,8 +2122,13 @@ def test_coilset_geometry_optimization():
         )
     )
     # only 1 free optimization variable is surface minor radius
+    inds_to_fixR = np.arange(surf.R_lmn.size)
+    inds_to_fixR = np.delete(inds_to_fixR, [ind_M1_R])
+    inds_to_fixZ = np.arange(surf.Z_lmn.size)
+    inds_to_fixZ = np.delete(inds_to_fixZ, [ind_Mneg1_Z])
+
     constraints = (
-        FixParameters(surf, {"R_lmn": np.array([0, 2])}),
+        FixParameters(surf, {"R_lmn": inds_to_fixR, "Z_lmn": inds_to_fixZ}),
         LinearObjectiveFromUser(circle_constraint, surf),
     )
     optimizer = Optimizer("scipy-trf")

@@ -177,12 +177,12 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 return self._compute_flux_coordinates(
                     x, eq_or_field, params, m, q, mu, **kwargs
                 )
-            elif isinstance(eq_or_field, dict):
+            elif isinstance(eq_or_field, FourierChebyshevField):
                 return self._compute_flux_coordinates_with_fit(x, eq_or_field, m, q, mu)
 
-            assert isinstance(eq_or_field, (Equilibrium, dict)), (
+            assert isinstance(eq_or_field, (Equilibrium, FourierChebyshevField)), (
                 "Integration in flux coordinates requires either Equilibrium "
-                "or dictionary with fitted data."
+                "or FourierChebyshevField with fitted data."
             )
 
         elif self.frame == "lab":
@@ -262,7 +262,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
-    def _compute_flux_coordinates_with_fit(self, x, data, m, q, mu):
+    def _compute_flux_coordinates_with_fit(self, x, field, m, q, mu):
         """ODE equation for vacuum guiding center in flux coordinates.
 
         A Fourier-Chebyshev fit for each component of the 3D magnetic field B, gradient
@@ -276,9 +276,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         # compute functions are not correct for very small rho
         rho = jnp.where(rho < 1e-6, 1e-6, rho)
 
-        b, magB, gradB, er, et_x_rho, ez = FourierChebyshevField.evaluate(
-            rho, theta, zeta, data
-        )
+        b, magB, gradB, er, et_x_rho, ez = field.evaluate(rho, theta, zeta)
 
         Rdot = vpar * b + (
             (m / q / magB**2) * ((mu * magB / m) + vpar**2) * cross(b, gradB)
@@ -1199,7 +1197,7 @@ def _trace_particles(
         Custom event function to stop integration.
     """
     # convert cartesian-like for integration in flux coordinates
-    if isinstance(field, Equilibrium) or isinstance(field, dict):
+    if isinstance(field, (Equilibrium, FourierChebyshevField)):
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
@@ -1235,7 +1233,7 @@ def _trace_particles(
     v = yt[:, :, 3:]
 
     # convert back to flux coordinates
-    if isinstance(field, Equilibrium) or isinstance(field, dict):
+    if isinstance(field, (Equilibrium, FourierChebyshevField)):
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
@@ -1401,29 +1399,31 @@ class FourierChebyshevField(IOAble):
         data["M"] = self.M_fft
         data["N"] = self.N_fft
 
-        return data
+        self.params_dict = data
 
-    @staticmethod
-    def evaluate(rho, theta, zeta, fit_data):
+    def evaluate(self, rho, theta, zeta, params=None):
         """Evaluate the Fourier-Chebyshev series at a point.
 
         Parameters
         ----------
         rho, theta, zeta : float
             Radial, poloidal and toroidal coordinates to evaluate.
-        fit_data : dict
+        params : dict
             The spectral coefficients obtained from `FourierChebyshevField.fit()`
-            which is returned as a dictionary.
+            which is stored as `self.params`.
         """
-        r0p = 1 - 2 * rho
-        Tl = jnp.cos(fit_data["l"] * jnp.arccos(r0p))
-        m_theta = fit_data["m"] * theta
-        expm_real = jnp.cos(m_theta) / fit_data["M"]
-        expm_imag = jnp.sin(m_theta) / fit_data["M"]
+        if params is None:
+            params = self.params_dict
 
-        n_zeta = fit_data["n"] * zeta
-        expn_real = jnp.cos(n_zeta) / fit_data["N"]
-        expn_imag = jnp.sin(n_zeta) / fit_data["N"]
+        r0p = 1 - 2 * rho
+        Tl = jnp.cos(params["l"] * jnp.arccos(r0p))
+        m_theta = params["m"] * theta
+        expm_real = jnp.cos(m_theta) / params["M"]
+        expm_imag = jnp.sin(m_theta) / params["M"]
+
+        n_zeta = params["n"] * zeta
+        expn_real = jnp.cos(n_zeta) / params["N"]
+        expn_imag = jnp.sin(n_zeta) / params["N"]
 
         def interpolate(cf_real, cf_imag):
             """Evaluate the Fourier-Chebyshev series at current point.
@@ -1445,35 +1445,35 @@ class FourierChebyshevField(IOAble):
             return f_lmn_real
 
         # Magnetic Field B
-        Br = interpolate(fit_data["Br_real"], fit_data["Br_imag"])
-        Bp = interpolate(fit_data["Bp_real"], fit_data["Bp_imag"])
-        Bz = interpolate(fit_data["Bz_real"], fit_data["Bz_imag"])
+        Br = interpolate(params["Br_real"], params["Br_imag"])
+        Bp = interpolate(params["Bp_real"], params["Bp_imag"])
+        Bz = interpolate(params["Bz_real"], params["Bz_imag"])
         B = jnp.array([Br, Bp, Bz])
         magB = jnp.linalg.norm(B)
         b = B / magB
 
         # grad(|B|)
-        gBr = interpolate(fit_data["gBr_real"], fit_data["gBr_imag"])
-        gBp = interpolate(fit_data["gBp_real"], fit_data["gBp_imag"])
-        gBz = interpolate(fit_data["gBz_real"], fit_data["gBz_imag"])
+        gBr = interpolate(params["gBr_real"], params["gBr_imag"])
+        gBp = interpolate(params["gBp_real"], params["gBp_imag"])
+        gBz = interpolate(params["gBz_real"], params["gBz_imag"])
         gradB = jnp.array([gBr, gBp, gBz])
 
         # e^rho
-        er_r = interpolate(fit_data["er_r_real"], fit_data["er_r_imag"])
-        er_p = interpolate(fit_data["er_p_real"], fit_data["er_p_imag"])
-        er_z = interpolate(fit_data["er_z_real"], fit_data["er_z_imag"])
+        er_r = interpolate(params["er_r_real"], params["er_r_imag"])
+        er_p = interpolate(params["er_p_real"], params["er_p_imag"])
+        er_z = interpolate(params["er_z_real"], params["er_z_imag"])
         er = jnp.array([er_r, er_p, er_z])
 
         # e^theta doesn't behave well, we use the fit to e^theta*rho
-        et_r = interpolate(fit_data["et_r_real"], fit_data["et_r_imag"])
-        et_p = interpolate(fit_data["et_p_real"], fit_data["et_p_imag"])
-        et_z = interpolate(fit_data["et_z_real"], fit_data["et_z_imag"])
+        et_r = interpolate(params["et_r_real"], params["et_r_imag"])
+        et_p = interpolate(params["et_p_real"], params["et_p_imag"])
+        et_z = interpolate(params["et_z_real"], params["et_z_imag"])
         et_x_rho = jnp.array([et_r, et_p, et_z])
 
         # e^zeta
-        ez_r = interpolate(fit_data["ez_r_real"], fit_data["ez_r_imag"])
-        ez_p = interpolate(fit_data["ez_p_real"], fit_data["ez_p_imag"])
-        ez_z = interpolate(fit_data["ez_z_real"], fit_data["ez_z_imag"])
+        ez_r = interpolate(params["ez_r_real"], params["ez_r_imag"])
+        ez_p = interpolate(params["ez_p_real"], params["ez_p_imag"])
+        ez_z = interpolate(params["ez_z_real"], params["ez_z_imag"])
         ez = jnp.array([ez_r, ez_p, ez_z])
 
         return b, magB, gradB, er, et_x_rho, ez

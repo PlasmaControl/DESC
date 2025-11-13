@@ -1087,7 +1087,9 @@ def trace_particles(
         k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
-    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    stepsize_controller = PIDController(
+        rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
+    )
     max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size * 10))
 
     y0, model_args = initializer.init_particles(model, field)

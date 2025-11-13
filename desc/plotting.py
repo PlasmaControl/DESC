@@ -1718,7 +1718,6 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``NR``: int, number of equispaced rho point to use in plotting the vartheta
           contours
         * ``NT``: int, number of equispaced theta points to use in plotting the rho
@@ -1739,6 +1738,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``legend``: bool, whether to show legend or not, False by default
 
     Returns
@@ -1778,10 +1778,11 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
-    label = kwargs.pop("label", "")
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    label = kwargs.pop("label", "")
+    legend = kwargs.pop("legend", False)
 
     assert (
         len(kwargs) == 0
@@ -1916,8 +1917,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
-        if label is not None and i == 0 and kwargs.pop("legend", False):
-            ax[i].legend()
+        if label is not None and i == 0 and legend:
+            ax[i].legend(loc="best")
 
     _set_tight_layout(fig)
 

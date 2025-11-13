@@ -21,8 +21,8 @@ Bug Fixes
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 - Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
+- [Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid](https://github.com/PlasmaControl/DESC/pull/2013)
 - Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
-
 
 Backend
 -------

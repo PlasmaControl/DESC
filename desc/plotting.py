@@ -1782,7 +1782,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     label = kwargs.pop("label", "")
-    legend = kwargs.pop("legend", False)
+    legend = kwargs.pop("legend", False if label == "" else True)
 
     assert (
         len(kwargs) == 0

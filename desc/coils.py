@@ -561,7 +561,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new X,Y,Z representation.
+            Fourier resolution of the new X,Y,Z representation. Simple geometry can have
+            N~3-4, while optimized modular coils often require N~8-10. For stage 2
+            optimization, compute time scales ~N^3 and memory ~N^2. For single stage
+            the coils are usually much less expensive than the equilibrium so are not
+            a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -636,7 +640,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new R,Z representation.
+            Fourier resolution of the new R,Z representation. Simple geometry can have
+            N~3-4, while optimized modular coils often require N~8-10. For stage 2
+            optimization, compute time scales ~N^3 and memory ~N^2. For single stage
+            the coils are usually much less expensive than the equilibrium so are not
+            a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
             If an integer, uses that many equally spaced points.
@@ -672,7 +680,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierPlanarCoil representation.
+            Fourier resolution of the new FourierPlanarCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
             If an integer, uses that many equally spaced points.
@@ -705,7 +717,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierXYCoil representation.
+            Fourier resolution of the new FourierXYCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
@@ -738,6 +754,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
+
+    Simple geometry can have N~3-4, while optimized modular coils often require N~8-10.
+    For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For single
+    stage the coils are usually much less expensive than the equilibrium so are not a
+    main driver of time or memory usage.
 
     Parameters
     ----------
@@ -816,7 +837,11 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             coordinates to fit a FourierRZCurve object with each column
             corresponding to xyz or rpz depending on the basis argument.
         N : int
-            Fourier resolution of the new R,Z representation.
+            Fourier resolution of the new R,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
@@ -850,6 +875,11 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
+
+    Simple geometry can have N~3-4, while optimized modular coils often require N~8-10.
+    For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For single
+    stage the coils are usually much less expensive than the equilibrium so are not a
+    main driver of time or memory usage.
 
     Parameters
     ----------
@@ -921,8 +951,11 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         coords: ndarray
             Coordinates to fit a FourierXYZCoil object with.
         N : int
-            Fourier resolution of the new X,Y,Z representation.
-            default is 10
+            Fourier resolution of the new X,Y,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage. Default is 10
         s : ndarray
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -956,6 +989,11 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and a Fourier series defining the radius from the center as a function of the polar
     angle theta.
+
+    Simple geometry can have N~3-4, while optimized modular coils often require N~8-10.
+    For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For single
+    stage the coils are usually much less expensive than the equilibrium so are not a
+    main driver of time or memory usage.
 
     Parameters
     ----------
@@ -1036,7 +1074,11 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             Coordinates to fit a FourierPlanarCurve object with each column
             corresponding to xyz or rpz depending on the basis argument.
         N : int
-            Fourier resolution of the new r representation.
+            Fourier resolution of the new r representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -1066,6 +1108,11 @@ class FourierXYCoil(_Coil, FourierXYCurve):
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and Fourier series defining the X and Y coordinates in the plane as a function of
     an arbitrary angle s.
+
+    Simple geometry can have N~3-4, while optimized modular coils often require N~8-10.
+    For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For single
+    stage the coils are usually much less expensive than the equilibrium so are not a
+    main driver of time or memory usage.
 
     Parameters
     ----------
@@ -1116,7 +1163,11 @@ class FourierXYCoil(_Coil, FourierXYCurve):
             Coordinates to fit a FourierXYCurve object with each column
             corresponding to xyz or rpz depending on the basis argument.
         N : int
-            Fourier resolution of the new X & Y representation.
+            Fourier resolution of the new X & Y representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         s : ndarray or "arclength"
             Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -2352,7 +2403,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierPlanarCoil representation.
+            Fourier resolution of the new FourierPlanarCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
             If an integer, uses that many equally spaced points.
@@ -2391,7 +2446,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierXYCoil representation.
+            Fourier resolution of the new FourierXYCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
@@ -2433,7 +2492,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new R,Z representation.
+            Fourier resolution of the new R,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
             If an integer, uses that many equally spaced points.
@@ -2468,7 +2531,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new X,Y,Z representation.
+            Fourier resolution of the new X,Y,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -2972,7 +3039,11 @@ class MixedCoilSet(CoilSet):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierPlanarCoil representation.
+            Fourier resolution of the new FourierPlanarCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
             If an integer, uses that many equally spaced points.
@@ -3010,7 +3081,11 @@ class MixedCoilSet(CoilSet):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new FourierXYCoil representation.
+            Fourier resolution of the new FourierXYCoil representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
@@ -3051,7 +3126,11 @@ class MixedCoilSet(CoilSet):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new R,Z representation.
+            Fourier resolution of the new R,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
             If an integer, uses that many equally spaced points.
@@ -3085,7 +3164,11 @@ class MixedCoilSet(CoilSet):
         Parameters
         ----------
         N : int
-            Fourier resolution of the new X,Y,Z representation.
+            Fourier resolution of the new X,Y,Z representation. Simple
+            geometry can have N~3-4, while optimized modular coils often require N~8-10.
+            For stage 2 optimization, compute time scales ~N^3 and memory ~N^2. For
+            single stage the coils are usually much less expensive than the equilibrium
+            so are not a main driver of time or memory usage.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.

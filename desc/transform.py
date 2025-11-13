@@ -483,7 +483,7 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             Ainv = self.matrices["pinv"]
             c = jnp.matmul(Ainv, x)
         elif self.method == "direct2":
@@ -533,7 +533,7 @@ class Transform(IOAble):
                 )
             )
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -720,7 +720,10 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+
+        Transform compute method.
+        """
         return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter

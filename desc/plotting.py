@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+from diffrax import RESULTS
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
@@ -30,6 +31,7 @@ from desc.utils import (
     only1,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -50,6 +52,7 @@ __all__ = [
     "plot_logo",
     "plot_qs_error",
     "plot_section",
+    "plot_scalar",
     "plot_surfaces",
     "plot_field_lines",
     "poincare_plot",
@@ -502,7 +505,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
+def plot_1d(  # noqa : C901
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+):
     """Plot 1D profiles.
 
     Parameters
@@ -515,6 +520,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -556,6 +563,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     # If the quantity is a flux surface function, call plot_fsa.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
@@ -571,6 +584,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=default_L,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -584,6 +598,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=rho,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
@@ -602,6 +617,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     data, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 1D
     if len(plot_axes) != 1:
@@ -644,11 +663,24 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+    if normalize:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data
@@ -917,11 +949,12 @@ def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
     return ijk
 
 
-def plot_3d(
+def plot_3d(  # noqa : C901
     eq,
     name,
     grid=None,
     log=False,
+    normalize=None,
     fig=None,
     return_data=False,
     **kwargs,
@@ -938,6 +971,8 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -998,6 +1033,12 @@ def plot_3d(
         fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
@@ -1033,6 +1074,10 @@ def plot_3d(
             chunk_size=kwargs.pop("chunk_size", None),
             B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     errorif(
         len(kwargs) != 0,
@@ -1070,7 +1115,6 @@ def plot_3d(
             ticktext=[f"{l:.0e}" for l in levels],
             tickvals=ticks,
         )
-
     else:
         cbar = dict(
             title=LatexNodes2Text().latex_to_text(label),
@@ -1079,6 +1123,14 @@ def plot_3d(
         )
         cmin = None
         cmax = None
+
+    if normalize:
+        parameterization = _parse_parameterization(eq)
+        label = "{} / {}".format(
+            "$" + data_index[parameterization][name]["label"] + "$",
+            "$" + data_index[parameterization][normalize]["label"] + "$",
+        )
+        cbar["title"] = LatexNodes2Text().latex_to_text(label)
 
     meshdata = go.Mesh3d(
         x=X.flatten(),
@@ -1151,6 +1203,11 @@ def plot_3d(
         font=dict(family="Times"),
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
+
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, plot_data
@@ -1274,7 +1331,8 @@ def plot_fsa(  # noqa: C901
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        # sym=False to ensure the FSA is correct
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 
@@ -1530,6 +1588,7 @@ def plot_section(
     cols = np.ceil(nphi / rows).astype(int)
 
     data, _ = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
+
     if normalize:
         norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
@@ -1626,6 +1685,191 @@ def plot_section(
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
+
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
+
+
+# RG: Maybe merge in plot_section at some point?
+def plot_scalar(
+    eq, component="rho", ax=None, grid=None, diffmat=None, return_data=False, **kwargs
+):
+    """
+    Plot stability-related quantities on R–Z cross-sections at fixed toroidal angle.
+
+    This is a lightweight variant of :func:`plot_section` for cases where you:
+      * already know how to obtain a scalar from ``eq.compute`` on a 3D grid
+        (possibly non-uniform), and
+      * only want the scalar field inside the boundary plus the boundary curve
+        itself (no flux-surface contours).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        DESC equilibrium object.
+    component : str, optional
+        Label used to pick which scalar to plot. By default this is treated as
+        the ``name`` passed to ``eq.compute``. If you have custom logic
+        (e.g. building a scalar from ``"finite-n eigenfunction"``), put that in
+        the block where ``scalar`` is computed. Can be generalized to physical
+        quantities later.
+    ax : matplotlib.axes.Axes or ndarray of Axes, optional
+        Axes to draw into. If ``None``, a panel of subplots is created,
+        one per toroidal angle.
+    grid : Grid, optional
+        3D grid in (rho, theta, zeta) on which the scalar is defined.
+        If ``None``, a default grid similar to :func:`plot_section` is used.
+        Non-uniform ``rho`` is fine.
+    diffmat : DiffMat, optional
+        Passed through to ``eq.compute`` if your scalar needs it.
+    **kwargs :
+        Additional options (all optional):
+
+        name : str
+            Overrides ``component`` as the key passed to ``eq.compute``.
+        phi, nphi, nzeta :
+            Same semantics as in :func:`plot_section`. If an int is given,
+            that many equally spaced angles in [0, 2π/NFP) are used.
+        figsize : (float, float)
+            Figure size, passed to :func:`matplotlib.pyplot.subplots`.
+        cmap : str or Colormap
+            Colormap for the scalar (default ``"jet"`` for consistency
+            with existing DESC plots).
+        levels : int or sequence
+            Contour levels. If omitted, 64 levels spanning the data range
+            are used.
+        filled : bool
+            If True (default), use ``contourf``; otherwise use ``contour``.
+        log : bool
+            If True, plot ``|scalar|`` with a log-normalized colormap.
+        title_fontsize, xlabel_fontsize, ylabel_fontsize : float
+            Font sizes for title and axis labels.
+        cbar_ticksize : float
+            Font size for colorbar tick labels.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    ax  : numpy.ndarray or matplotlib.axes.Axes
+        Axes with one panel per toroidal cross-section.
+    """
+    phi = np.unique(grid.nodes[:, 2])
+    nphi = phi.size
+    nr, nz = grid.num_rho, grid.num_zeta
+
+    # RG: For some reason grid.num_theta_PEST throws attribute error
+    # leading to the following line. Fix later!
+    nt = int(grid.num_nodes / (grid.num_rho * grid.num_zeta))
+
+    rows = np.floor(np.sqrt(nphi)).astype(int)
+    cols = np.ceil(nphi / rows).astype(int)
+
+    name = "finite-n eigenfunction"
+    data = eq.compute(
+        name,
+        grid=grid,
+        diffmat=diffmat,
+        incompressible=kwargs.pop("incompressible", False),
+        axisym=kwargs.pop("axisym", False),
+        n_mode_axisym=kwargs.pop("n_mode_axisym", 1),
+        gamma=kwargs.pop("gamma", 1),
+    )
+
+    # For axisym=True, the eigenfunction is complex
+    # Need to include both if we wish to plot at multiple phis
+    if component == "rho":
+        idx0 = (nr - 2) * nt * nz
+        xi_sup_rho0 = np.reshape(data[name][:idx0, 0].real, (nr - 2, nt, nz))
+        xi_sup_rho = np.concatenate(
+            (np.zeros((1, nt, nz)), xi_sup_rho0, np.zeros((1, nt, nz))), axis=0
+        )
+        psi_r = np.reshape(data["psi_r"], (nr, nt, nz))
+        data = xi_sup_rho * psi_r
+    elif component == "theta":
+        idx0 = (nr - 2) * nt * nz
+        idx1 = idx0 + nr * nt * nz
+        xi_sup_theta = np.reshape(data[name][idx0:idx1, 0].real, (nr, nt, nz))
+        data = xi_sup_theta
+    else:
+        idx0 = (nr - 2) * nt * nz
+        idx1 = idx0 + nr * nt * nz
+        xi_sup_zeta = np.reshape(data[name][idx1:, 0].real, (nr, nt, nz))
+        data = xi_sup_zeta
+
+    # adding theta = 2pi point which should be the same as theta = 0 point
+    data = np.concatenate((data, data[:, 0:1, :]), axis=1)
+
+    figw = 5 * cols
+    figh = 5 * rows
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=kwargs.pop("figsize", (figw, figh)),
+        equal=True,
+    )
+    ax = np.atleast_1d(ax).flatten()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
+
+    R = coords["R"].reshape((nr, nt, nz))
+    Z = coords["Z"].reshape((nr, nt, nz))
+
+    R = np.transpose(R, axes=(1, 0, 2))
+    Z = np.transpose(Z, axes=(1, 0, 2))
+
+    R = np.concatenate((R, R[0:1, :, :]), axis=0)
+    Z = np.concatenate((Z, Z[0:1, :, :]), axis=0)
+
+    # Must find a better way do this!
+    nt = nt + 1
+
+    data = np.transpose(data, axes=(1, 0, 2))
+    op = "contour" + ("f" if kwargs.pop("fill", True) else "")
+    contourf_kwargs = {}
+
+    contourf_kwargs["norm"] = matplotlib.colors.Normalize()
+    contourf_kwargs["levels"] = kwargs.pop(
+        "levels", np.linspace(data.min(), data.max(), 100)
+    )
+
+    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
+    contourf_kwargs["extend"] = "both"
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    assert (
+        len(kwargs) == 0
+    ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+    for i in range(nphi):
+        divider = make_axes_locatable(ax[i])
+
+        cntr = getattr(ax[i], op)(
+            R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
+        )
+        cax = divider.append_axes("right", **cax_kwargs)
+        cbar = fig.colorbar(cntr, cax=cax)
+        cbar.update_ticks()
+
+        ax[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+        ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
+        ax[i].tick_params(labelbottom=True, labelleft=True)
+
+        ax[i].set_title(
+            "$"
+            + name
+            + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
+                eq.NFP * phi[i] / (2 * np.pi)
+            )
+        )
+    _set_tight_layout(fig)
+
+    plot_data = {"R": R, "Z": Z, name: data}
 
     if return_data:
         return fig, ax, plot_data
@@ -1786,10 +2030,13 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             map_coordinates(
                 eq,
                 t_grid.nodes,
-                ["rho", "theta_PEST", "phi"],
-                ["rho", "theta", "zeta"],
+                # TODO (#568): once generalized toroidal angle is used, change
+                # inbasis to ["rho", "theta_PEST", "phi"],
+                inbasis=["rho", "theta_PEST", "zeta"],
+                outbasis=["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
                 guess=t_grid.nodes,
+                maxiter=30,
             ),
             sort=False,
         )
@@ -1923,7 +2170,7 @@ def poincare_plot(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -1964,6 +2211,10 @@ def poincare_plot(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", colorblind_colors[0])
@@ -1990,14 +2241,30 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
         source_grid=grid,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -2863,6 +3130,7 @@ def plot_boozer_modes(  # noqa: C901
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     plot_op = ax.semilogy if log else ax.plot
+
     B_mn = np.abs(B_mn) if log else B_mn
 
     if max_only:
@@ -3895,7 +4163,7 @@ def plot_field_lines(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -3932,6 +4200,10 @@ def plot_field_lines(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -3961,13 +4233,29 @@ def plot_field_lines(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))
@@ -4300,10 +4588,10 @@ def plot_gammac(
         Default: 0.5
     alphas : array_like, optional
         Fieldline label values (toroidal angle).
-        Default: np.linspace(0, 2π, 32, endpoint=True)
+        Default: np.linspace(0, 2π, 25, endpoint=True)
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
-        Default: 16
+        Default: 28
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -4341,24 +4629,22 @@ def plot_gammac(
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rho is None:
-        rho = np.array([0.5], dtype=float)
-    else:
-        rho = np.asarray(rho, dtype=float).ravel()
-        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
-
+    rho = (
+        np.array([0.5], dtype=float)
+        if rho is None
+        else np.asarray(rho, dtype=float).ravel()
+    )
+    errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
-
-    if num_pitch is None:
-        num_pitch = 16
+    num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
-    X = kwargs.pop("X", 16)
-    Y = kwargs.pop("Y", 32)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 64)
     Y_B = kwargs.pop("Y_B", Y * 2)
-    num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_quad = kwargs.pop("num_quad", 32)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
@@ -4388,7 +4674,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch = np.linspace(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)
@@ -4431,11 +4717,19 @@ def plot_gammac(
 
     return fig, ax
 
-## test 
+
+## test
 from desc.integrals.bounce_integral import Bounce2D
 
+
 def plot_adiabatic_invariant(
-    eq, rhos=None, alphas=None, num_pitch=None, pitch_idx=-1, mode="single-surface",return_data=False
+    eq,
+    rhos=None,
+    alphas=None,
+    num_pitch=None,
+    pitch_idx=-1,
+    mode="single-surface",
+    return_data=False,
 ):
     """Plot the second adiabatic invariant J_|| (parallel action).
 
@@ -4555,7 +4849,12 @@ def plot_adiabatic_invariant(
         if return_data:
             data = {
                 "J": data_full,
-                "extent": [inv_pitch.min(), inv_pitch.max(), alphas.min(), alphas.max()]            
+                "extent": [
+                    inv_pitch.min(),
+                    inv_pitch.max(),
+                    alphas.min(),
+                    alphas.max(),
+                ],
             }
             return fig, ax, data
 
@@ -4578,7 +4877,7 @@ def plot_adiabatic_invariant(
         plt.xlabel(r"$\rho \cos(\alpha)$", fontsize=24)
         plt.ylabel(r"$\rho \sin(\alpha)$", fontsize=24)
         plt.title(r"$J_{\parallel}$", fontsize=26)
-        
+
         if return_data:
             data = {
                 "J": data_full,

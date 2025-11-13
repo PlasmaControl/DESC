@@ -5,6 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.diffmat_utils import DiffMat
 from desc.grid import LinearGrid
 from desc.utils import ResolutionWarning, Timer, setdefault, warnif
 
@@ -376,6 +377,9 @@ class BallooningStability(_Objective):
     Neigvals : int
         Number of top eigenvalues to select.
         Default is 1.
+    diffmat: DiffMat
+        DiffMat object.
+        Default is an object containing None.
     lambda0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
@@ -395,6 +399,7 @@ class BallooningStability(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_iota_keys",
         "_Neigvals",
+        "_diffmat",
         "_nturns",
         "_nzetaperturn",
         "_add_lcfs",
@@ -420,6 +425,7 @@ class BallooningStability(_Objective):
         nzetaperturn=200,
         zeta0=None,
         Neigvals=1,
+        diffmat=DiffMat(),
         lambda0=0.0,
         w0=1.0,
         w1=10.0,
@@ -432,6 +438,7 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._Neigvals = Neigvals
+        self._diffmat = diffmat
         self._lambda0 = lambda0
         self._w0 = w0
         self._w1 = w1
@@ -489,6 +496,7 @@ class BallooningStability(_Objective):
             self._iota_keys + ["ideal ballooning lambda"], eq, iota_grid
         )
         self._constants = {
+            "diffmat": self._diffmat,
             "lambda0": self._lambda0,
             "w0": self._w0,
             "w1": self._w1,
@@ -563,7 +571,11 @@ class BallooningStability(_Objective):
             ["ideal ballooning lambda"],
             params,
             transforms=get_transforms(
-                ["ideal ballooning lambda"], eq, grid, jitable=True
+                ["ideal ballooning lambda"],
+                eq,
+                grid,
+                diffmat=constants["diffmat"],
+                jitable=True,
             ),
             profiles=constants["profiles"],
             data=data,

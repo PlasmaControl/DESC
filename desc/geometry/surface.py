@@ -117,7 +117,7 @@ class ChebyshevRZToroidalSurface(Surface):
         self._rho = float(rho)
         self._name = name
         self._mirror = bool(mirror)
-        #self._length = float(length) if length is not None else None
+        # self._length = float(length) if length is not None else None
 
         # For Chebyshev n >= 0 only, no stellarator symmetry in (m,n) pairs
         self._sym = False
@@ -142,12 +142,12 @@ class ChebyshevRZToroidalSurface(Surface):
         self._check_orientation = bool(check_orientation)
 
         if self.mirror:
-                if length == None:
-                    self.length = (
-                        self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
-                    )
-                else:
-                    self.length = length
+            if length == None:
+                self.length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self.length = length
         else:
             self.length = None
 
@@ -1231,7 +1231,7 @@ class FourierRZToroidalSurface(Surface):
             else jnp.zeros_like(Rmid)
         )
         axis = FourierRZCurve.from_values(
-            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
         )
         return axis
 
@@ -1543,5 +1543,5 @@ class ZernikeRZToroidalSection(Surface):
 
         grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
-        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis

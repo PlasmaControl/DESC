@@ -526,13 +526,18 @@ class TestTransform:
         assert t.method == "direct1"
 
     @pytest.mark.unit
-    def test_fit_direct1(self):
-        """Test fitting with direct1 method."""
+    def test_fit_direct1_and_jitable(self):
+        """Test fitting with direct1 and jitable method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
         transform = Transform(grid, basis, method="direct1", build_pinv=True)
         np.random.seed(0)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+        # also test jitable which is the same as direct1
+        transform = Transform(grid, basis, method="jitable", build_pinv=True)
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)

@@ -376,8 +376,7 @@ if use_jax:  # noqa: C901
                 return state[0]
 
         def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
+            return y / g(1.0)
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(

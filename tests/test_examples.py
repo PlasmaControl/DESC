@@ -22,6 +22,7 @@ from desc.coils import (
     _Coil,
 )
 from desc.continuation import solve_continuation_automatic
+from desc.diffmat_utils import DiffMat
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
@@ -2313,7 +2314,8 @@ def test_ballooning_stability_opt():
     N0 = 2 * nturns * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * nturns, jnp.pi * nturns, N0)
     grid = Grid.create_meshgrid([surfaces, alpha, zeta], coordinates="raz")
-    data = eq.compute("ideal ballooning lambda", grid=grid)
+    diffmat = DiffMat()
+    data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
     lam2_initial = data["ideal ballooning lambda"].max((-1, -2, -3))
 
     k = 2  # modes to unfix
@@ -2337,6 +2339,7 @@ def test_ballooning_stability_opt():
         weight=1.0e2,
         w0=0.1,
         w1=10,
+        diffmat=diffmat,
     )
     # aspect ratio of the original HELIOTRON is 10.48
     aspect_ratio = AspectRatio(eq=eq, bounds=(0, 12))
@@ -2358,7 +2361,7 @@ def test_ballooning_stability_opt():
         verbose=3,
         options={"initial_trust_ratio": 2e-3},
     )
-    data = eq.compute("ideal ballooning lambda", grid=grid)
+    data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
     lam2_optimized = data["ideal ballooning lambda"].max((-1, -2, -3))
     assert (lam2_initial - lam2_optimized) >= 1.8e-2
 

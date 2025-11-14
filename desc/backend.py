@@ -93,6 +93,7 @@ if use_jax:  # noqa: C901
         tree_flatten,
         tree_leaves,
         tree_map,
+        tree_map_with_path,
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
@@ -605,6 +606,10 @@ else:  # pragma: no cover
 
     def tree_map(*args, **kwargs):
         """Map pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_map_with_path(*args, **kwargs):
+        """Map pytree with path for numpy backend."""
         raise NotImplementedError
 
     def tree_structure(*args, **kwargs):

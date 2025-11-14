@@ -30,6 +30,7 @@ from ._constraint_wrappers import (
     FiniteDifferenceSingleStage,
     LinearConstraintProjection,
     ProximalProjection,
+    ProximalProjectionFreeBoundary
 )
 
 
@@ -52,7 +53,7 @@ class Optimizer(IOAble):
     """
 
     _io_attrs_ = ["_method"]
-    _wrappers = [None, "prox", "proximal", "findif"]
+    _wrappers = [None, "prox", "proximal", "findif","freeproj"]
 
     def __init__(self, method):
         self.method = method
@@ -297,7 +298,7 @@ class Optimizer(IOAble):
 
         if isinstance(
             objective,
-            (ProximalProjection, FiniteDifferenceSingleStage),
+            (ProximalProjection, FiniteDifferenceSingleStage, ProximalProjectionFreeBoundary),
         ):
             # reset eq params to initial
             if eq is not None:
@@ -471,12 +472,12 @@ def _maybe_wrap_nonlinear_constraints(
             )
         )
         wrapper = "proximal"
-    if wrapper is not None and wrapper.lower() in ["prox", "proximal", "findif"]:
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal", "findif","freeproj"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
         free_boundary_options = options.pop("free_boundary_options", {})
         if np.any([hasattr(c, "_free_boundary") for c in nonlinear_constraints]):
-            # finite difference wrapper around free boundary solves
+            #  wrapper around free boundary solves
             for i in range(len(nonlinear_constraints)):
                 if hasattr(nonlinear_constraints[i], "_equilibrium"):
                     if nonlinear_constraints[i]._equilibrium:
@@ -493,19 +494,29 @@ def _maybe_wrap_nonlinear_constraints(
             errorif(
                 len(nonlinear_constraints),
                 ValueError,
-                "FiniteDifferenceSingleStage can only handle Equilibrium and "
+                "free bdry wrappers can only handle Equilibrium and "
                 f" Free Boundary objectives, got {nonlinear_constraints}",
             )
-
-            objective = objective = FiniteDifferenceSingleStage(
-                objective,
-                constraint=_combine_constraints((eq_obj,)),
-                constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
-                perturb_options=perturb_options,
-                solve_options=solve_options,
-                free_boundary_options=free_boundary_options,
-                eq=eq,
-            )
+            if wrapper.lower() in ["findif"]:
+                objective = objective = FiniteDifferenceSingleStage(
+                    objective,
+                    constraint=_combine_constraints((eq_obj,)),
+                    constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
+                    perturb_options=perturb_options,
+                    solve_options=solve_options,
+                    free_boundary_options=free_boundary_options,
+                    eq=eq,
+                )
+            elif wrapper.lower() == "freeproj":
+                objective = objective = ProximalProjectionFreeBoundary(
+                    objective,
+                    constraint=_combine_constraints((eq_obj,)),
+                    constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
+                    perturb_options=perturb_options,
+                    solve_options=solve_options,
+                    free_boundary_options=free_boundary_options,
+                    eq=eq,
+                )
 
         else:  # usual proximal projection for _equilibrium type constraint
             objective = ProximalProjection(
@@ -546,7 +557,7 @@ def get_combined_constraint_objectives(
         objective,
         (
             ProximalProjection,
-            FiniteDifferenceSingleStage,
+            FiniteDifferenceSingleStage,ProximalProjectionFreeBoundary
         ),
     )
     for t in things:

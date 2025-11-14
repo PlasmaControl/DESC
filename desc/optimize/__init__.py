@@ -4,7 +4,7 @@ from . import _desc_wrappers, _scipy_wrappers
 from ._constraint_wrappers import (
     FiniteDifferenceSingleStage,
     LinearConstraintProjection,
-    ProximalProjection,
+    ProximalProjection,ProximalProjectionFreeBoundary
 )
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag

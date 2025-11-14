@@ -68,7 +68,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 + " but not included in objective.",
             )
 
-    from desc.optimize import FiniteDifferenceSingleStage, ProximalProjection
+    from desc.optimize import FiniteDifferenceSingleStage, ProximalProjection,ProximalProjectionFreeBoundary
 
     # particular solution to Ax=b
     xp = jnp.zeros(objective.dim_x)
@@ -93,7 +93,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
-    elif isinstance(objective, (FiniteDifferenceSingleStage)):
+    elif isinstance(objective, (FiniteDifferenceSingleStage, ProximalProjectionFreeBoundary)):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"
         # ,"Zb_lmn","Rb_lmn"]
         c = 0

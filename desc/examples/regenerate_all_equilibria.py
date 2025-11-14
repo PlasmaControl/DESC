@@ -59,7 +59,8 @@ for fname in names:
         "desc",
         fname,
         "-vv",
-        f"-o {os.path.join(output_path, fname + '_output.h5')}",
+        "-o",
+        f"{os.path.join(output_path, fname + '_output.h5')}",
     ]
     if args.gpu:
         cargs += ["-g"]

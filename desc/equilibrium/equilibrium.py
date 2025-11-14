@@ -2209,6 +2209,7 @@ class Equilibrium(IOAble, Optimizable):
         unused_keys = [
             "pres_ratio",
             "bdry_ratio",
+            "curr_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -2220,7 +2221,7 @@ class Equilibrium(IOAble, Optimizable):
             "output_path",
             "verbose",
         ]
-        [inputs.pop(key) for key in unused_keys]
+        [inputs.pop(key, None) for key in unused_keys]
         inputs.update(kwargs)
         return cls(**inputs)
 

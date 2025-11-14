@@ -531,13 +531,13 @@ def _map_poloidal_coordinates(
     )
 
     # Root finding for θₖ such that θₖ + (λ−ιω)(ρ,θₖ,ζ) - ε = 0.
-    def rootfun(θ, varepsilon, q_m):
-        q = (jnp.exp(1j * modes * θ) * q_m).real.sum()
-        return θ + q - varepsilon
+    def rootfun(t, varepsilon, q_m):
+        q = (jnp.exp(1j * modes * t) * q_m).real.sum()
+        return t + q - varepsilon
 
-    def jacfun(θ, varepsilon, q_m):
-        dq_dθ = ((1j * jnp.exp(1j * modes * θ) * q_m).real * modes).sum()
-        return 1 + dq_dθ
+    def jacfun(t, varepsilon, q_m):
+        dq_dt = ((1j * jnp.exp(1j * modes * t) * q_m).real * modes).sum()
+        return 1 + dq_dt
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
     def vecroot(guess, varepsilon, q_m):
@@ -566,16 +566,16 @@ def _map_poloidal_coordinates(
         elif inbasis[1] == "vartheta":
             varepsilon = poloidal - iota * omega
 
-    θ = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
+    t = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
 
     if outbasis[1] == "theta":
-        return θ
+        return t
     if outbasis[1] == "lambda":
         vartheta = varepsilon + iota * omega
-        return θ - vartheta
+        return t - vartheta
     if outbasis[1] == "delta":
         alpha = varepsilon - iota * zeta
-        return θ - alpha
+        return t - alpha
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

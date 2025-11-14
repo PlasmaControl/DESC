@@ -2604,6 +2604,7 @@ def plot_comparison(
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
+            legend=False,
             title_fontsize=title_fontsize,
             xlabel_fontsize=xlabel_fontsize,
             ylabel_fontsize=ylabel_fontsize,

@@ -1301,7 +1301,7 @@ class FourierChebyshevField(IOAble):
         Maximum order of the Fourier series to be used in the toroidal direction.
     """
 
-    _static_attrs = ["L", "M", "N", "data_keys"]
+    _static_attrs = ["L", "M", "N", "M_fft", "N_fft", "data_keys"]
 
     def __init__(self, L, M, N):
         self.L = L
@@ -1351,15 +1351,6 @@ class FourierChebyshevField(IOAble):
             profile must be given.
 
         """
-
-        def get_fc_coeffs(z):
-            zl = jax.scipy.fft.dct(z, axis=1, norm=None)
-            zl = zl.at[:, 0, :].divide(2)
-            zl /= self.L
-            zlm = jnp.fft.fft(zl, axis=2, norm=None)
-            zlmn = jnp.fft.fft(zlm, axis=0, norm=None)
-            return zlmn
-
         data_raw = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self.data_keys,
@@ -1369,29 +1360,58 @@ class FourierChebyshevField(IOAble):
         )
         rho = self.grid.nodes[:, 0]
         L, M, N = self.L, self.M_fft, self.N_fft
-        data_raw_shaped = {
-            "Br": data_raw["B"][:, 0].reshape(N, L, M),
-            "Bp": data_raw["B"][:, 1].reshape(N, L, M),
-            "Bz": data_raw["B"][:, 2].reshape(N, L, M),
-            "gBr": data_raw["grad(|B|)"][:, 0].reshape(N, L, M),
-            "gBp": data_raw["grad(|B|)"][:, 1].reshape(N, L, M),
-            "gBz": data_raw["grad(|B|)"][:, 2].reshape(N, L, M),
-            "er_r": data_raw["e^rho"][:, 0].reshape(N, L, M),
-            "er_p": data_raw["e^rho"][:, 1].reshape(N, L, M),
-            "er_z": data_raw["e^rho"][:, 2].reshape(N, L, M),
-            "et_r": (data_raw["e^theta"][:, 0] * rho).reshape(N, L, M),
-            "et_p": (data_raw["e^theta"][:, 1] * rho).reshape(N, L, M),
-            "et_z": (data_raw["e^theta"][:, 2] * rho).reshape(N, L, M),
-            "ez_r": data_raw["e^zeta"][:, 0].reshape(N, L, M),
-            "ez_p": data_raw["e^zeta"][:, 1].reshape(N, L, M),
-            "ez_z": data_raw["e^zeta"][:, 2].reshape(N, L, M),
-        }
+        keys = [
+            "Br",
+            "Bp",
+            "Bz",
+            "gBr",
+            "gBp",
+            "gBz",
+            "er_r",
+            "er_p",
+            "er_z",
+            "et_r",
+            "et_p",
+            "et_z",
+            "ez_r",
+            "ez_p",
+            "ez_z",
+        ]
+        # stack data to perform 15 transforms in batch
+        stacked_data = jnp.stack(
+            [
+                data_raw["B"][:, 0].reshape(N, L, M),
+                data_raw["B"][:, 1].reshape(N, L, M),
+                data_raw["B"][:, 2].reshape(N, L, M),
+                data_raw["grad(|B|)"][:, 0].reshape(N, L, M),
+                data_raw["grad(|B|)"][:, 1].reshape(N, L, M),
+                data_raw["grad(|B|)"][:, 2].reshape(N, L, M),
+                data_raw["e^rho"][:, 0].reshape(N, L, M),
+                data_raw["e^rho"][:, 1].reshape(N, L, M),
+                data_raw["e^rho"][:, 2].reshape(N, L, M),
+                (data_raw["e^theta"][:, 0] * rho).reshape(N, L, M),
+                (data_raw["e^theta"][:, 1] * rho).reshape(N, L, M),
+                (data_raw["e^theta"][:, 2] * rho).reshape(N, L, M),
+                data_raw["e^zeta"][:, 0].reshape(N, L, M),
+                data_raw["e^zeta"][:, 1].reshape(N, L, M),
+                data_raw["e^zeta"][:, 2].reshape(N, L, M),
+            ]
+        )
+        coefs = jax.scipy.fft.dct(stacked_data, axis=2, norm=None)
+        # handle the 0-th Chebyshev coefficient and normalization
+        coefs = coefs.at[:, :, 0, :].divide(2)
+        coefs /= self.L
+
+        coefs = jnp.fft.fft(coefs, axis=3, norm=None)
+        coefs = jnp.fft.fft(coefs, axis=1, norm=None)
+
         data = {}
-        for key, val in data_raw_shaped.items():
-            coef = get_fc_coeffs(val)
-            # diffrax doesn't like complex numbers
-            data[key + "_real"] = coef.real
-            data[key + "_imag"] = coef.imag
+        coefs_real = coefs.real
+        coefs_imag = coefs.imag
+
+        for i, key in enumerate(keys):
+            data[key + "_real"] = coefs_real[i]
+            data[key + "_imag"] = coefs_imag[i]
 
         data["l"] = self.l
         data["m"] = self.m
@@ -1415,6 +1435,7 @@ class FourierChebyshevField(IOAble):
         if params is None:
             params = self.params_dict
 
+        # the cosine transforms reverses the order
         r0p = 1 - 2 * rho
         Tl = jnp.cos(params["l"] * jnp.arccos(r0p))
         m_theta = params["m"] * theta
@@ -1425,55 +1446,75 @@ class FourierChebyshevField(IOAble):
         expn_real = jnp.cos(n_zeta) / params["N"]
         expn_imag = jnp.sin(n_zeta) / params["N"]
 
-        def interpolate(cf_real, cf_imag):
-            """Evaluate the Fourier-Chebyshev series at current point.
+        # The new shape for these arrays will be (k, n, l, m) where k=15
+        cf_real_all = jnp.stack(
+            [
+                params["Br_real"],
+                params["Bp_real"],
+                params["Bz_real"],
+                params["gBr_real"],
+                params["gBp_real"],
+                params["gBz_real"],
+                params["er_r_real"],
+                params["er_p_real"],
+                params["er_z_real"],
+                params["et_r_real"],
+                params["et_p_real"],
+                params["et_z_real"],
+                params["ez_r_real"],
+                params["ez_p_real"],
+                params["ez_z_real"],
+            ]
+        )
 
-            Diffrax doesn't like complex numbers, so we operate with reals.
-            """
-            f_l_real = jnp.einsum("nlm,l->nm", cf_real, Tl)
-            f_l_imag = jnp.einsum("nlm,l->nm", cf_imag, Tl)
-            f_lm_real = jnp.einsum("nm,m->n", f_l_real, expm_real) - jnp.einsum(
-                "nm,m->n", f_l_imag, expm_imag
-            )
-            f_lm_imag = jnp.einsum("nm,m->n", f_l_real, expm_imag) + jnp.einsum(
-                "nm,m->n", f_l_imag, expm_real
-            )
-            f_lmn_real = jnp.einsum("n,n->", f_lm_real, expn_real) - jnp.einsum(
-                "n,n->", f_lm_imag, expn_imag
-            )
+        cf_imag_all = jnp.stack(
+            [
+                params["Br_imag"],
+                params["Bp_imag"],
+                params["Bz_imag"],
+                params["gBr_imag"],
+                params["gBp_imag"],
+                params["gBz_imag"],
+                params["er_r_imag"],
+                params["er_p_imag"],
+                params["er_z_imag"],
+                params["et_r_imag"],
+                params["et_p_imag"],
+                params["et_z_imag"],
+                params["ez_r_imag"],
+                params["ez_p_imag"],
+                params["ez_z_imag"],
+            ]
+        )
 
-            return f_lmn_real
+        # "knlm,l->knm" contracts the 'l' dimension for all 'k' batches at once
+        f_l_real = jnp.einsum("knlm,l->knm", cf_real_all, Tl)
+        f_l_imag = jnp.einsum("knlm,l->knm", cf_imag_all, Tl)
+
+        # "knm,m->kn" contracts the 'm' dimension for all 'k' batches
+        f_lm_real = jnp.einsum("knm,m->kn", f_l_real, expm_real) - jnp.einsum(
+            "knm,m->kn", f_l_imag, expm_imag
+        )
+        f_lm_imag = jnp.einsum("knm,m->kn", f_l_real, expm_imag) + jnp.einsum(
+            "knm,m->kn", f_l_imag, expm_real
+        )
+
+        # "kn,n->k" contracts the 'n' dimension, leaving just the batch dimension
+        results = jnp.einsum("kn,n->k", f_lm_real, expn_real) - jnp.einsum(
+            "kn,n->k", f_lm_imag, expn_imag
+        )
 
         # Magnetic Field B
-        Br = interpolate(params["Br_real"], params["Br_imag"])
-        Bp = interpolate(params["Bp_real"], params["Bp_imag"])
-        Bz = interpolate(params["Bz_real"], params["Bz_imag"])
-        B = jnp.array([Br, Bp, Bz])
+        B = results[0:3]
         magB = jnp.linalg.norm(B)
         b = B / magB
-
         # grad(|B|)
-        gBr = interpolate(params["gBr_real"], params["gBr_imag"])
-        gBp = interpolate(params["gBp_real"], params["gBp_imag"])
-        gBz = interpolate(params["gBz_real"], params["gBz_imag"])
-        gradB = jnp.array([gBr, gBp, gBz])
-
+        gradB = results[3:6]
         # e^rho
-        er_r = interpolate(params["er_r_real"], params["er_r_imag"])
-        er_p = interpolate(params["er_p_real"], params["er_p_imag"])
-        er_z = interpolate(params["er_z_real"], params["er_z_imag"])
-        er = jnp.array([er_r, er_p, er_z])
-
-        # e^theta doesn't behave well, we use the fit to e^theta*rho
-        et_r = interpolate(params["et_r_real"], params["et_r_imag"])
-        et_p = interpolate(params["et_p_real"], params["et_p_imag"])
-        et_z = interpolate(params["et_z_real"], params["et_z_imag"])
-        et_x_rho = jnp.array([et_r, et_p, et_z])
-
+        er = results[6:9]
+        # e^theta*rho
+        et_x_rho = results[9:12]
         # e^zeta
-        ez_r = interpolate(params["ez_r_real"], params["ez_r_imag"])
-        ez_p = interpolate(params["ez_p_real"], params["ez_p_imag"])
-        ez_z = interpolate(params["ez_z_real"], params["ez_z_imag"])
-        ez = jnp.array([ez_r, ez_p, ez_z])
+        ez = results[12:15]
 
         return b, magB, gradB, er, et_x_rho, ez

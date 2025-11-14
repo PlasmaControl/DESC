@@ -646,7 +646,9 @@ def plot_1d(  # noqa : C901
     )
 
     if normalize:
-        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        norm_data, _ = _compute(
+            eq, normalize, grid, compute_kwargs=compute_kwargs, reshape=False
+        )
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 1D

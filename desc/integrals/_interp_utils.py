@@ -67,7 +67,7 @@ def cheb_pts(n, domain=(-1, 1), lobatto=False):
 
 
 def fourier_pts(n, domain=(0, 2 * jnp.pi)):
-    """Get ``n`` Fourier points in [0, 2π)."""
+    """Get ``n`` Fourier points in domain."""
     return jnp.linspace(domain[0], domain[1], n, endpoint=False)
 
 

@@ -4,7 +4,9 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.backend import jnp
+from desc.backend import tree_broadcast as jax_tree_broadcast
+from desc.backend import tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -38,7 +40,26 @@ class _CoilObjective(_Objective):
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
         If a list, must have the same structure as coil.
+    target : float, list, optional
+        Target values for the coil objective.
+        If a float, target is applied to all coils.
+        If a list, must have the same structure as coil.
+    bounds : tuple, optional
+        Upper and lower bounds for the coil objective.
+        If used, should consist of a tuple (-,-), with
+        each entry a float or list satisfying requirements
+        of target. Cannot be used with target.
+    weight: float, list, optional
+        Weight for the coil objective during optimization.
+        If a list, must have the same structure as coil.
+    indices: bool, list, optional
+        Boolean or list of Booleans indicating coils in the CoilSet
+        to be targeted by the objective. Default is True, which includes
+        every coil. If a list, must have the same structure as coil.
 
+    Subclasses must define a static attribute "_broadcast_input." Equals
+    "Coil" if the objective returns a single scalar per coil, and "Node"
+    if it returns a scalar at every grid point.
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
@@ -52,6 +73,7 @@ class _CoilObjective(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -61,6 +83,10 @@ class _CoilObjective(_Objective):
         self._grid = grid
         self._data_keys = data_keys
         self._normalize = normalize
+
+        indices = tree_map(lambda x: int(x), indices)
+        self._mask = indices
+
         super().__init__(
             things=[coil],
             target=target,
@@ -101,6 +127,36 @@ class _CoilObjective(_Objective):
             else:
                 return coilset  # single coil
 
+        def _build_params_tree(x):
+            """Nested lists showing structure of individual CoilSets and Grids."""
+            # Local import to avoid circular import
+            from desc.coils import CoilSet, MixedCoilSet, _Coil
+
+            def expand(t, idx=0):
+                if isinstance(t, MixedCoilSet):
+                    return expand(t.coils, idx)
+                if isinstance(t, CoilSet):
+                    return (
+                        len(t.coils),
+                        [grid[idx].num_nodes] * len(t.coils),
+                        idx + len(t.coils),
+                    )
+                if isinstance(t, _Coil):
+                    return 1, grid[idx].num_nodes, idx + 1
+                if isinstance(t, list):
+                    l_coils = []
+                    l_nodes = []
+                    idx_curr = idx
+                    for i in range(len(t)):
+                        a_coils, a_nodes, idx_curr = expand(t[i], idx_curr)
+                        l_coils += [a_coils]
+                        l_nodes += [a_nodes]
+                    return l_coils, l_nodes, idx_curr
+                return t, idx
+
+            tree = expand(x)
+            return {"coils": tree[0], "nodes": tree[1]}
+
         coil = self.things[0]
         grid = self._grid
 
@@ -137,6 +193,7 @@ class _CoilObjective(_Objective):
             "Only use toroidal resolution for coil grids.",
         )
 
+        self._coilset_tree = _build_params_tree(coil)
         self._dim_f = np.sum([g.num_nodes for g in grid])
         quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])
 
@@ -144,6 +201,17 @@ class _CoilObjective(_Objective):
         grid = tree_unflatten(structure, grid)
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
+
+        # broadcast various arrays
+        if self._bounds:
+            self._bounds = (
+                self._coilset_broadcast(self._bounds[0]),
+                self._coilset_broadcast(self._bounds[1]),
+            )
+        elif self._target:
+            self._target = self._coilset_broadcast(self._target)
+        self._mask = self._coilset_broadcast(self._mask)
+        self._weight = self._coilset_broadcast(self._weight)
 
         timer = Timer()
         if verbose > 0:
@@ -194,8 +262,67 @@ class _CoilObjective(_Objective):
             transforms=constants["transforms"],
             grid=self._grid,
         )
-
         return data
+
+    @_Objective.bounds.setter
+    def bounds(self, bounds):
+        assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
+        if bounds:
+            self._bounds = (
+                self._coilset_broadcast(bounds[0]),
+                self._coilset_broadcast(bounds[1]),
+            )
+        self._check_dimensions()
+
+    @_Objective.target.setter
+    def target(self, target):
+        self._target = self._coilset_broadcast(target) if target is not None else target
+        self._check_dimensions()
+
+    @_Objective.weight.setter
+    def weight(self, weight):
+        assert np.all(np.asarray(tree_leaves(weight)) > 0)
+        self._weight = self._coilset_broadcast(weight)
+        self._check_dimensions()
+
+    @property
+    def mask(self):
+        """int/bool or list[int/bool]: Mask marking coils subject to optimization."""
+        return self._mask
+
+    @mask.setter
+    def mask(self, mask):
+        assert all(isinstance(a, bool) for a in tree_leaves(mask)) or all(
+            (a == 0) or (a == 1) for a in tree_leaves(mask)
+        )
+        mask = tree_map(lambda x: int(x), mask)
+        self._mask = self._coilset_broadcast(mask)
+
+    def _coilset_broadcast(self, x):
+        """Expand an array in accordance with the attribute _broadcast_input.
+
+        Parameters
+        ----------
+        x : float or list[float]
+            Must be broadcastable to the structure of self._things[0].
+
+        Returns
+        -------
+        arr: float or list[float]
+            Float inputs are returned unchanged, and list inputs are
+            expanded to size self._dim_f.
+        """
+        # No need to broadcast if input is a scalar
+        arr_flat = tree_leaves(x)
+        if len(arr_flat) == 1:
+            return arr_flat[0]
+
+        tree_nodes = self._coilset_tree["nodes"]
+        arr = jax_tree_broadcast(x, tree_nodes)
+        if self._broadcast_input == "Node":
+            arr = tree_map(lambda a, b: [a] * b, arr, tree_nodes)
+        arr, _ = tree_flatten(arr)
+        return jnp.array(arr)
 
 
 class CoilLength(_CoilObjective):
@@ -220,6 +347,7 @@ class CoilLength(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
     _print_value_fmt = "Coil length: "
+    _broadcast_input = "Coil"
 
     def __init__(
         self,
@@ -229,6 +357,7 @@ class CoilLength(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -246,6 +375,7 @@ class CoilLength(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -324,6 +454,7 @@ class CoilCurvature(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil curvature: "
+    _broadcast_input = "Node"
 
     def __init__(
         self,
@@ -333,6 +464,7 @@ class CoilCurvature(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -350,6 +482,7 @@ class CoilCurvature(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -423,6 +556,7 @@ class CoilTorsion(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil torsion: "
+    _broadcast_input = "Node"
 
     def __init__(
         self,
@@ -432,6 +566,7 @@ class CoilTorsion(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -449,6 +584,7 @@ class CoilTorsion(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -522,6 +658,7 @@ class CoilCurrentLength(CoilLength):
     _scalar = False
     _units = "(A*m)"
     _print_value_fmt = "Coil current length: "
+    _broadcast_input = "Coil"
 
     def __init__(
         self,
@@ -531,6 +668,7 @@ class CoilCurrentLength(CoilLength):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -547,6 +685,7 @@ class CoilCurrentLength(CoilLength):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -630,6 +769,7 @@ class CoilIntegratedCurvature(_CoilObjective):
     _scalar = False  # not always a scalar, if a coilset is passed in
     _units = "(dimensionless)"
     _print_value_fmt = "Integrated curvature: "
+    _broadcast_input = "Coil"
 
     def __init__(
         self,
@@ -639,6 +779,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -655,6 +796,7 @@ class CoilIntegratedCurvature(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,
@@ -1306,6 +1448,7 @@ class CoilArclengthVariance(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m^2)"
     _print_value_fmt = "Coil Arclength Variance: "
+    _broadcast_input = "Coil"
 
     def __init__(
         self,
@@ -1315,6 +1458,7 @@ class CoilArclengthVariance(_CoilObjective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
@@ -1331,6 +1475,7 @@ class CoilArclengthVariance(_CoilObjective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            indices=indices,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             grid=grid,

@@ -1020,8 +1020,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
+        default_M = 2 * eq.M if not hasattr(eq, "_M_grid") else eq.M_grid
+        default_N = 2 * eq.N if not hasattr(eq, "_M_grid") else eq.N_grid
         plasma_grid = self._plasma_grid or LinearGrid(
-            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            M=default_M, N=default_N, NFP=eq.NFP
         )
         coil_grid = self._coil_grid or None
         warnif(

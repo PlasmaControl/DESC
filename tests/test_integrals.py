@@ -1519,7 +1519,7 @@ class TestBounce2D:
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
-            theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
+            angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,
             nufft_eps=nufft_eps,
@@ -1551,15 +1551,15 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
+        angle = Bounce2D.angle(eq, X=16, Y=64, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
-            theta,
+            angle,
             alpha=alpha,
             num_transit=2,
             check=True,
-            spline=False,
+            spline=False,  # not recommended in general
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1603,14 +1603,14 @@ class TestBounce2D:
         _, _ = bounce.plot_theta(l, m, show=False)
 
         self._not_part_of_tutorial_test(
-            bounce, pitch_inv, points, num, data, grid, theta, alpha
+            bounce, pitch_inv, points, num, data, grid, angle, alpha
         )
 
         return fig
 
     @staticmethod
     def _not_part_of_tutorial_test(
-        bounce, pitch_inv, points, num, data, grid, theta, alpha
+        bounce, pitch_inv, points, num, data, grid, angle, alpha
     ):
         np.testing.assert_allclose(
             bounce.compute_fieldline_length(),
@@ -1623,7 +1623,7 @@ class TestBounce2D:
                 352.15451128,
                 440.10036239,
             ],
-            rtol=1e-2,
+            rtol=5e-3,
         )
 
         # check for consistency with different options
@@ -1647,7 +1647,7 @@ class TestBounce2D:
         )
 
         bounce = Bounce2D(
-            grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
+            grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
         )
         bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
         l, m = 1, 0
@@ -1688,7 +1688,7 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid,
             grid_data,
-            Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
+            Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
             num_transit=3,

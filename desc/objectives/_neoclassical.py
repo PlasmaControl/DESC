@@ -2,7 +2,6 @@
 
 import warnings
 
-import numpy as np
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
@@ -42,10 +41,15 @@ class EffectiveRipple(_Objective):
 
     References
     ----------
-    https://doi.org/10.1063/1.873749.
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    [1] Evaluation of 1/ν neoclassical transport in stellarators.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+        https://doi.org/10.1063/1.873749.
+
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
+        algorithm and its applications.
+        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        https://arxiv.org/abs/2412.01724.
 
     Notes
     -----
@@ -77,7 +81,7 @@ class EffectiveRipple(_Objective):
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
         to approximate B with cubic splines.
-    alpha : np.ndarray
+    alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
         Default is single field line. To compute a surface average
@@ -162,7 +166,7 @@ class EffectiveRipple(_Objective):
         X=16,
         Y=32,
         Y_B=None,
-        alpha=np.array([0.0]),
+        alpha=jnp.array([0.0]),
         num_transit=20,
         num_well=None,
         num_quad=32,
@@ -195,7 +199,7 @@ class EffectiveRipple(_Objective):
             "quad_weights": 1.0,
             "alpha": alpha,
             "X": fourier_pts(X),
-            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
+            "Y": cheb_pts(Y, (0, 2 * jnp.pi))[::-1],
         }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
@@ -296,12 +300,13 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        theta = eq._map_clebsch_coordinates(
-            iota=constants["transforms"]["grid"].compress(data["iota"]),
-            alpha=constants["X"],
-            zeta=constants["Y"],
-            L_lmn=params["L_lmn"],
-            lmbda=constants["lambda"],
+        delta = eq._map_poloidal_coordinates(
+            constants["transforms"]["grid"].compress(data["iota"]),
+            constants["X"],
+            constants["Y"],
+            params["L_lmn"],
+            constants["lambda"],
+            outbasis=("rho", "delta", "zeta"),
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-7,
         )[..., ::-1]
@@ -313,7 +318,7 @@ class EffectiveRipple(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            theta=theta,
+            angle=delta,
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
@@ -328,8 +333,8 @@ class EffectiveRipple(_Objective):
         num_quad = self._hyperparam.pop("num_quad")
         self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
-        self._constants["Y"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
+        self._constants["Y"] = jnp.linspace(
+            0, 2 * jnp.pi * num_transit, Y_B * num_transit
         )
         self._keys_1dr = [
             "iota",
@@ -373,8 +378,6 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],

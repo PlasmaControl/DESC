@@ -13,7 +13,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..utils import cross, dot, safediv
+from ..utils import cross, dot, parse_argname_change, safediv
 from ._neoclassical import _bounce_doc, _compute
 from .data_index import register_compute_fun
 
@@ -107,11 +107,16 @@ def _drift2(data, B, pitch):
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
+    [1] Poloidal motion of trapped particle orbits in real-space coordinates.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+        Phys. Plasmas 1 May 2008; 15 (5): 052501.
+        https://doi.org/10.1063/1.2912456.
+        Equation 61.
+
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
+        algorithm and its applications.
+        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        https://arxiv.org/abs/2412.01724.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -125,8 +130,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -155,7 +162,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -215,7 +222,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     }
     grid = transforms["grid"]
     data["Gamma_c"] = _compute(
-        Gamma_c, fun_data, data, theta, grid, num_pitch, surf_batch_size
+        Gamma_c, fun_data, data, angle, grid, num_pitch, surf_batch_size
     )
     return data
 
@@ -289,8 +296,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -316,7 +325,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -366,7 +375,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         gamma_c0,
         fun_data,
         data,
-        theta,
+        angle,
         grid,
         num_pitch,
         surf_batch_size,
@@ -420,10 +429,15 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
+    [1] A model for the fast evaluation of prompt losses of energetic ions in
+        stellarators. Equation 16.
+        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+        https://doi.org/10.1088/1741-4326/ac2994.
+
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
+        algorithm and its applications.
+        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        https://arxiv.org/abs/2412.01724.
 
     This expression has a secular term that drives the result to zero as the number
     of toroidal transits increases if the secular term is not averaged out from the
@@ -433,8 +447,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     transits.
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
@@ -463,7 +479,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -505,7 +521,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
         data,
-        theta,
+        angle,
         grid,
         num_pitch,
         surf_batch_size,

@@ -771,8 +771,8 @@ class FourierRZToroidalSurface(Surface):
         else:
             zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
-        zetas = np.asarray(zetas)
-        nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        zetas = jnp.asarray(zetas)
+        nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
         n, x, x_offsets = n_and_r_jax(nodes)
 
         data = {}
@@ -1146,3 +1146,114 @@ class ZernikeRZToroidalSection(Surface):
         data = self.compute(["R", "Z"], grid=grid)
         axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis
+
+
+def _constant_offset_surface(
+    base_surface, offset, grid, M, N, full_output=False, params=None
+):
+    """Create a FourierRZSurface with constant offset from the base surface (self).
+
+    Implementation of algorithm described in Appendix B of
+    "An improved current potential method for fast computation of
+    stellarator coil shapes", Landreman (2017)
+    https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+    NOTE: Must have the toroidal angle as the cylindrical toroidal angle
+    in order for this algorithm to work properly
+
+    NOTE: this function lacks the checks of the constant_offset_surface
+    so that it is jittable/differentiable
+
+    Parameters
+    ----------
+    base_surface : FourierRZToroidalSurface
+        Surface from which the constant offset surface will be found.
+    offset : float
+        constant offset (in m) of the desired surface from the input surface
+        offset will be in the normal direction to the surface.
+    grid : Grid, optional
+        Grid object of the points on the given surface to evaluate the
+        offset points at, from which the offset surface will be created by fitting
+        offset points with the basis defined by the given M and N.
+        If None, defaults to a LinearGrid with M and N and NFP equal to the
+        base_surface.M and base_surface.N and base_surface.NFP
+    M : int, optional
+        Poloidal resolution of the basis used to fit the offset points
+        to create the resulting constant offset surface, by default equal
+        to base_surface.M
+    N : int, optional
+        Toroidal resolution of the basis used to fit the offset points
+        to create the resulting constant offset surface, by default equal
+        to base_surface.N
+    full_output : bool, optional
+        If True, also return a dict of useful data about the surfaces and a
+        tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+
+    Returns
+    -------
+    offset_surface : FourierRZToroidalSurface
+        FourierRZToroidalSurface, created from fitting points offset from the input
+        surface by the given constant offset.
+    data : dict
+        dictionary containing  the following data, in the cylindrical basis:
+            ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
+                the base_surface evaluated at the input ``grid``
+            ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
+                the base_surface evaluated at the input ``grid``
+            ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
+                coordinates on the offset surface, corresponding to the
+                ``x`` points on the base_surface (i.e. the points to which the
+                offset surface was fit)
+    info : tuple
+        2 element tuple containing residuals and number of iterations
+        for each point. Only returned if ``full_output`` is True
+
+    """
+    if params is None:
+        params = base_surface.params_dict
+
+    def n_and_r_jax(nodes):
+        data = base_surface.compute(
+            ["X", "Y", "Z", "n_rho"],
+            grid=Grid(nodes, jitable=True, sort=False),
+            method="jitable",
+            params=params,
+        )
+
+        phi = nodes[:, 2]
+        re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+        n = data["n_rho"]
+        n = rpz2xyz_vec(n, phi=phi)
+        r_offset = re + offset * n
+        return n, re, r_offset
+
+    def fun_jax(zeta_hat, theta, zeta):
+        nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
+        n, r, r_offset = n_and_r_jax(nodes)
+        return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root_scalar(
+                fun_jax, x0, jac=None, args=p, full_output=full_output
+            )
+        )
+    )
+    if full_output:
+        zetas, (res, niter) = vecroot(
+            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        )
+    else:
+        zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+
+    zetas = jnp.asarray(zetas)
+    nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+    n, x, x_offsets = n_and_r_jax(nodes)
+
+    data = {}
+    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
+    data["x"] = xyz2rpz(x)
+    data["x_offset_surface"] = xyz2rpz(x_offsets)
+
+    return data["x_offset_surface"]

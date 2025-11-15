@@ -493,10 +493,12 @@ class VolumeOffset(_Objective):
         grid=None,
         name="volume",
         jac_chunk_size=None,
+        offset=0.1,
     ):
         if target is None and bounds is None:
             target = 1
         self._grid = grid
+        self._offset = offset
         super().__init__(
             things=eq,
             target=target,
@@ -598,7 +600,7 @@ class VolumeOffset(_Objective):
 
         x_offset_surf = _constant_offset_surface(
             surf,
-            offset=0.2,
+            offset=self._offset,
             M=surf.M,
             N=surf.N,
             grid=constants["transforms"]["grid"],

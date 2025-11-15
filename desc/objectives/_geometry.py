@@ -5,7 +5,8 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.geometry.surface import _constant_offset_surface
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -446,6 +447,190 @@ class Volume(_Objective):
             self.things[0],
             self._data_keys,
             params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return data["V"]
+
+
+class VolumeOffset(_Objective):
+    """Compute offset surface volume.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+    offset : float, optional
+        surface offset in meters.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
+
+    _scalar = True
+    _units = "(m^3)"
+    _print_value_fmt = "Offset surface volume: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="volume",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            # if not an Equilibrium, is a Surface,
+            # has no radial resolution so just need
+            # the surface points
+            grid = LinearGrid(
+                rho=1.0,
+                M=eq.M * 2,
+                N=eq.N * 2,
+                NFP=eq.NFP,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = 1
+        self._data_keys = ["V"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq.surface, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq.surface, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
+        from desc.objectives import BoundaryRSelfConsistency, BoundaryZSelfConsistency
+
+        obj_bdryR = BoundaryRSelfConsistency(eq=self.things[0])
+        obj_bdryZ = BoundaryZSelfConsistency(eq=self.things[0])
+        obj_bdryR.build()
+        obj_bdryZ.build()
+        self.constants["A_Rlmn_to_Rb"] = obj_bdryR._A
+        self.constants["A_Zlmn_to_Zb"] = obj_bdryZ._A
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute offset surface volume.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        V : float
+            Plasma volume (m^3).
+
+        """
+        if constants is None:
+            constants = self.constants
+        surf = self.things[0].surface
+        # assign eq Rb and Zb to surf dict so JAX knows
+        # to trace the derivs wrt Rb etc when surf_params is passed
+        # find eq Rb Zb by computing R_lmn at rho=1 so that AD knows how
+        # to connect deriv back to R_lmn
+        surf_params = surf.params_dict
+        surf_params["R_lmn"] = jnp.dot(self.constants["A_Rlmn_to_Rb"], params["R_lmn"])
+        surf_params["Z_lmn"] = jnp.dot(self.constants["A_Zlmn_to_Zb"], params["Z_lmn"])
+
+        x_offset_surf = _constant_offset_surface(
+            surf,
+            offset=0.2,
+            M=surf.M,
+            N=surf.N,
+            grid=constants["transforms"]["grid"],
+            params=surf_params,
+        )
+        offset_zetas = x_offset_surf[:, 1]
+        offset_rtz_nodes = jnp.vstack(
+            [
+                jnp.ones_like(offset_zetas),
+                constants["transforms"]["grid"].nodes[:, 1],
+                offset_zetas,
+            ]
+        ).T
+        # make transform to fit
+        t = get_transforms(
+            obj=surf,
+            keys=["R", "Z"],
+            grid=Grid(offset_rtz_nodes, jitable=True),
+            jitable=True,
+            build_pinv=True,
+        )
+        t["R"].build_pinv()
+        t["Z"].build_pinv()
+
+        surf_params2 = surf_params.copy()
+        surf_params2["R_lmn"] = t["R"].fit(x_offset_surf[:, 0])
+        surf_params2["Z_lmn"] = t["Z"].fit(x_offset_surf[:, 2])
+
+        data = compute_fun(
+            surf,
+            self._data_keys,
+            params=surf_params2,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )

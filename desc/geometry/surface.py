@@ -1179,13 +1179,9 @@ class ZernikeRZToroidalSection(Surface):
 
 
 def _constant_offset_surface(
-    base_surface,
-    offset,
-    grid,
-    transforms=None,
-    params=None,
+    base_surface, offset, grid, M, N, full_output=False, params=None
 ):
-    """Create a FourierRZToroidalSurface with constant offset from the base surface.
+    """Create a FourierRZSurface with constant offset from the base surface (self).
 
     Implementation of algorithm described in Appendix B of
     "An improved current potential method for fast computation of
@@ -1206,27 +1202,29 @@ def _constant_offset_surface(
         constant offset (in m) of the desired surface from the input surface
         offset will be in the normal direction to the surface.
     grid : Grid, optional
-        Grid object of the points on the offset surface to evaluate the
+        Grid object of the points on the given surface to evaluate the
         offset points at, from which the offset surface will be created by fitting
         offset points with the basis defined by the given M and N.
-        If None, defaults to a LinearGrid with M and N and NFP equal to twice the
-        base_surface.M and base_surface.N and NFP equal to base_surface.NFP
-    transforms: dict, optional
-        Transforms to use to fit the offset surface's R and Z, respectively. If None,
-        new transforms will be created using the given surface's M and N.
-        If given, should contain the keys ["R"] and ["Z"], with the pinv matrices
-        already built, and the corresponding grid should match the input grid.
-    params : dict, optional
-        dictionary of parameters to use when computing data from the base_surface.
-        If None, uses base_surface.params_dict, however the resulting computation
-        will not be differentiable with respect to the base_surface parameters
-        (since the JAX AD inside of an objective traces the params dictionaries
-        that are passed to their compute methods)
+        If None, defaults to a LinearGrid with M and N and NFP equal to the
+        base_surface.M and base_surface.N and base_surface.NFP
+    M : int, optional
+        Poloidal resolution of the basis used to fit the offset points
+        to create the resulting constant offset surface, by default equal
+        to base_surface.M
+    N : int, optional
+        Toroidal resolution of the basis used to fit the offset points
+        to create the resulting constant offset surface, by default equal
+        to base_surface.N
+    full_output : bool, optional
+        If True, also return a dict of useful data about the surfaces and a
+        tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
 
     Returns
     -------
-    R_lmn, Z_lmn : array-like
-        coefficients describing the offset surface geometry
+    offset_surface : FourierRZToroidalSurface
+        FourierRZToroidalSurface, created from fitting points offset from the input
+        surface by the given constant offset.
     data : dict
         dictionary containing  the following data, in the cylindrical basis:
             ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
@@ -1237,10 +1235,9 @@ def _constant_offset_surface(
                 coordinates on the offset surface, corresponding to the
                 ``x`` points on the base_surface (i.e. the points to which the
                 offset surface was fit)
-        as well as the transforms used to fit R and Z.
     info : tuple
         2 element tuple containing residuals and number of iterations
-        for each point.
+        for each point. Only returned if ``full_output`` is True
 
     """
     if params is None:
@@ -1264,48 +1261,29 @@ def _constant_offset_surface(
     def fun_jax(zeta_hat, theta, zeta):
         nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
         n, r, r_offset = n_and_r_jax(nodes)
-        # add 2pi to the arctan2<0 so it matches our convention of
-        # zeta being btwn 0 and 2pi
-        zeta_offset = jnp.arctan2(r_offset[0, 1], r_offset[0, 0])
-        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - zeta
+        return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
     vecroot = jit(
         vmap(
             lambda x0, *p: root_scalar(
-                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-12, maxiter=100
+                fun_jax, x0, jac=None, args=p, full_output=full_output
             )
         )
     )
-    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+    if full_output:
+        zetas, (res, niter) = vecroot(
+            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        )
+    else:
+        zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
     zetas = jnp.asarray(zetas)
     nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
     n, x, x_offsets = n_and_r_jax(nodes)
 
     data = {}
-    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 2])
+    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 
-    if transforms is None:
-        # NOTE: we are assuming here that the rootfind was successful for every point,
-        # so that the zeta=arctan(y/x) of the offset surface point are the same as
-        # the grid nodes' zeta values. If this is not the case, the fitting
-        # will be incorrect.
-        transforms = get_transforms(
-            obj=base_surface,
-            keys=["R", "Z"],
-            grid=grid,
-            # this is more robust than letting method become fft if
-            # jitable=False, and will also work within jitted functions
-            jitable=True,
-        )
-        transforms["R"].build_pinv()
-        transforms["Z"].build_pinv()
-
-    R_lmn = transforms["R"].fit(data["x_offset_surface"][:, 0])
-    Z_lmn = transforms["Z"].fit(data["x_offset_surface"][:, 2])
-
-    data["transforms"] = transforms
-
-    return R_lmn, Z_lmn, data, (res, niter)
+    return data["x_offset_surface"]

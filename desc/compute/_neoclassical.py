@@ -92,65 +92,6 @@ _bounce_doc = {
 }
 
 
-def _compute(
-    fun,
-    fun_data,
-    data,
-    angle,
-    grid,
-    num_pitch,
-    surf_batch_size=1,
-    simp=False,
-    expand_out=True,
-):
-    """Compute Bounce2D integral quantity with ``fun``.
-
-    Parameters
-    ----------
-    fun : callable
-        Function to compute.
-    fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``. This dict will be modified.
-    data : dict[str, jnp.ndarray]
-        DESC data dict.
-    angle : jnp.ndarray
-        Shape (num rho, X, Y).
-        Angle returned by ``Bounce2D.angle``.
-    grid : Grid
-        Grid that can expand and compress.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate.
-    surf_batch_size : int
-        Number of flux surfaces with which to compute simultaneously.
-        Default is ``1``.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
-    expand_out : bool
-        Whether to expand output to full grid so that the first dimension
-        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
-        Default is True.
-
-    """
-    for name in Bounce2D.required_names:
-        fun_data[name] = data[name]
-    fun_data.pop("iota", None)
-    for name in fun_data:
-        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
-    fun_data["iota"] = grid.compress(data["iota"])
-    fun_data["angle"] = angle
-    fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
-        grid.compress(data["min_tz |B|"]),
-        grid.compress(data["max_tz |B|"]),
-        num_pitch,
-        simp=simp,
-    )
-    out = batch_map(fun, fun_data, surf_batch_size)
-    if expand_out:
-        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-        return grid.expand(out)
-    return out
-
-
 def _dH_ripple(data, B, pitch):
     """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
     return (
@@ -282,7 +223,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
-        _compute(
+        Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
@@ -290,7 +231,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            simp=True,
+            expand_out=True,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * (jnp.pi / (8 * 2**0.5))

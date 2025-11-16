@@ -14,7 +14,7 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from ..utils import cross, dot, parse_argname_change, safediv
-from ._neoclassical import _bounce_doc, _compute
+from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
@@ -221,8 +221,16 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
     grid = transforms["grid"]
-    data["Gamma_c"] = _compute(
-        Gamma_c, fun_data, data, angle, grid, num_pitch, surf_batch_size
+    data["Gamma_c"] = Bounce2D.batch(
+        Gamma_c,
+        fun_data,
+        data,
+        angle,
+        grid,
+        num_pitch,
+        surf_batch_size,
+        simp=False,
+        expand_out=True,
     )
     return data
 
@@ -371,15 +379,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
     grid = transforms["grid"]
-    data["gamma_c"] = _compute(
-        gamma_c0,
-        fun_data,
-        data,
-        angle,
-        grid,
-        num_pitch,
-        surf_batch_size,
-        expand_out=False,
+    data["gamma_c"] = Bounce2D.batch(
+        gamma_c0, fun_data, data, angle, grid, num_pitch, surf_batch_size, simp=False
     )
     return data
 
@@ -513,7 +514,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
     grid = transforms["grid"]
 
-    data["Gamma_c Velasco"] = _compute(
+    data["Gamma_c Velasco"] = Bounce2D.batch(
         Gamma_c,
         {
             "cvdrift0": data["cvdrift0"],
@@ -525,5 +526,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
+        simp=False,
+        expand_out=True,
     )
     return data

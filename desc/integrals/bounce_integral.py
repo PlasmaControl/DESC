@@ -64,10 +64,27 @@ from desc.utils import (
 
 
 class Bounce(IOAble, ABC):
-    """Abstract class for bounce integrals."""
+    """Abstract class for bounce integrals.
+
+    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
+
+    * dℓ parametrizes the distance along the field line in meters.
+    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
+    * λ is a constant defining the integral proportional to the magnetic moment
+      over energy.
+    * B is the norm of the magnetic field.
+
+    For a particle with fixed λ, bounce points are defined to be the location on the
+    field line such that the particle's velocity parallel to the magnetic field is zero.
+    The bounce integral is defined up to a sign. We choose the sign that corresponds to
+    the particle's guiding center trajectory traveling in the direction of increasing
+    field-line-following coordinate ζ.
+
+    """
 
     @staticmethod
-    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=True):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -79,7 +96,9 @@ class Bounce(IOAble, ABC):
         num_pitch : int
             Number of values.
         simp : bool
-            Whether to use an open Simpson rule instead of uniform weights.
+            Whether the pitch angles should be chosen for use with open Simpson rule
+            instead of uniform weights for quadrature over velocity coordinate.
+            Default is True.
 
         Returns
         -------
@@ -141,21 +160,6 @@ default_quad = get_quadrature(
 class Bounce2D(Bounce):
     """Computes bounce integrals using pseudo-spectral methods.
 
-    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
-
-    * dℓ parametrizes the distance along the field line in meters.
-    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
-    * λ is a constant defining the integral proportional to the magnetic moment
-      over energy.
-    * B is the norm of the magnetic field.
-
-    For a particle with fixed λ, bounce points are defined to be the location on the
-    field line such that the particle's velocity parallel to the magnetic field is zero.
-    The bounce integral is defined up to a sign. We choose the sign that corresponds to
-    the particle's guiding center trajectory traveling in the direction of increasing
-    field-line-following coordinate ζ.
-
     Refrences
     ---------
     Spectrally accurate, reverse-mode differentiable bounce-averaging
@@ -170,15 +174,12 @@ class Bounce2D(Bounce):
     See Also
     --------
     Bounce1D
-        ``Bounce1D`` uses one-dimensional splines for the same task.
-        ``Bounce2D`` solves the dominant cost of optimization objectives in DESC
-        relying on ``Bounce1D``: Computing a dense optimization-step dependent
-        grid along field lines and interpolating 3D FourierZernike series to this grid.
-        The function approximation done here requires FourierZernike series on a
-        smaller fixed grid and uses FFTs to compute the map between coordinate systems.
-        2D interpolation enables tracing the field line for more toroidal transits.
-        Performance will improve significantly by resolving GitHub issue ``1303``:
-        Patch for differentiable code with dynamic shapes.
+        Some comments comparing ``Bounce1D`` to ``Bounce2D`` are given below.
+        ``Bounce1D`` uses lower order accurate, one-dimensional splines.
+        ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
+        moving grid interpolation problem and avoids recomputing 3D Fourier-Zernike
+        series on a time-dependent grid. Note that performance will improve
+        significantly by resolving GitHub issue ``1303``.
 
     Parameters
     ----------
@@ -318,6 +319,87 @@ class Bounce2D(Bounce):
                 self._modes_ζ,
                 self._NFP,
             )
+
+    @staticmethod
+    def batch(
+        fun,
+        fun_data,
+        desc_data,
+        angle,
+        grid,
+        num_pitch,
+        surf_batch_size=1,
+        simp=True,
+        expand_out=False,
+    ):
+        """Compute function ``fun`` over phase space in batches.
+
+        This is a utility method to compute some function of bounce integrals
+        over the phase space efficiently. You may want to also JIT compile your
+        code which calls this utility method.
+
+        Examples
+        --------
+        * ``desc/compute/_neoclassical.py::_epsilon_32``
+        * ``desc/compute/_fast_ion.py::_little_gamma_c_Nemov``
+
+        Parameters
+        ----------
+        fun : callable
+            A function  which takes a single argument ``fun_data`` and computes
+            bounce integrals assuming ``fun_data`` holds all required quantities
+            to construct a ``Bounce2D`` operator as well as call its methods with
+            the flag ``is_fourier=True``.
+        fun_data : dict[str, jnp.ndarray]
+            Data to reshape, interpolate, and pass to ``fun``.
+            The structure of the data should match the structure
+            returned by the registered compute functions in ``desc.compute``.
+            Note this dictionary will be modified.
+        desc_data : dict[str, jnp.ndarray]
+            Data dictionary with the same structure as the data returned by the
+            functions in ``desc.compute``.
+        angle : jnp.ndarray
+            Shape (num rho, X, Y).
+            Angle returned by ``Bounce2D.angle``.
+        grid : Grid
+            Grid on which ``fun_data`` and ``desc_data`` were computed.
+        num_pitch : int
+            Number of pitch angles to add to ``fun_data`` for use in the computation.
+        surf_batch_size : int
+            Number of flux surfaces with which to compute simultaneously.
+            Default is ``1``.
+        simp : bool
+            Whether the pitch angles should be chosen for use with open Simpson rule
+            instead of uniform weights for quadrature over velocity coordinate.
+            Default is True.
+        expand_out : bool
+            Whether to expand output to full grid so that the first dimension
+            has size ``grid.num_nodes`` instead of ``grid.num_rho``.
+            Default is False.
+
+        Returns
+        -------
+        The output ``fun(fun_data)``.
+
+        """
+        for name in Bounce2D.required_names:
+            fun_data[name] = desc_data[name]
+        fun_data.pop("iota", None)
+        for name in fun_data:
+            fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
+        fun_data["iota"] = grid.compress(desc_data["iota"])
+        fun_data["angle"] = angle
+        fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce.get_pitch_inv_quad(
+            grid.compress(desc_data["min_tz |B|"]),
+            grid.compress(desc_data["max_tz |B|"]),
+            num_pitch,
+            simp=simp,
+        )
+        out = batch_map(fun, fun_data, surf_batch_size)
+        if expand_out:
+            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
+            return grid.expand(out)
+        return out
 
     @staticmethod
     def reshape(grid, f):
@@ -1085,21 +1167,6 @@ class Bounce2D(Bounce):
 class Bounce1D(Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
-    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
-
-    * dℓ parametrizes the distance along the field line in meters.
-    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
-    * λ is a constant defining the integral proportional to the magnetic moment
-      over energy.
-    * B is the norm of the magnetic field.
-
-    For a particle with fixed λ, bounce points are defined to be the location on the
-    field line such that the particle's velocity parallel to the magnetic field is zero.
-    The bounce integral is defined up to a sign. We choose the sign that corresponds to
-    the particle's guiding center trajectory traveling in the direction of increasing
-    field-line-following coordinate ζ.
-
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
@@ -1199,6 +1266,79 @@ class Bounce1D(Bounce):
             (0, 1),
             (-1, -2),
         )
+
+    @staticmethod
+    def batch(
+        fun,
+        fun_data,
+        desc_data,
+        grid,
+        num_pitch,
+        surf_batch_size=1,
+        simp=True,
+        expand_out=False,
+    ):
+        """Compute function ``fun`` over phase space in batches.
+
+        This is a utility method to compute some function of bounce integrals
+        over the phase space efficiently. You may want to also JIT compile your
+        code which calls this utility method.
+
+        Examples
+        --------
+        * ``desc/compute/_old.py::_epsilon_32_1D``
+        * ``desc/compute/_old.py::_Gamma_c_1D``
+
+        Parameters
+        ----------
+        fun : callable
+            A function  which takes a single argument ``fun_data`` and computes
+            bounce integrals assuming ``fun_data`` holds all required quantities
+            to construct a ``Bounce1D`` operator as well as call its methods.
+        fun_data : dict[str, jnp.ndarray]
+            Data to reshape, interpolate, and pass to ``fun``.
+            The structure of the data should match the structure
+            returned by the registered compute functions in ``desc.compute``.
+            Note this dictionary will be modified.
+        desc_data : dict[str, jnp.ndarray]
+            Data dictionary with the same structure as the data returned by the
+            functions in ``desc.compute``.
+        grid : Grid
+            Grid on which ``fun_data`` and ``desc_data`` were computed.
+        num_pitch : int
+            Number of pitch angles to add to ``fun_data`` for use in the computation.
+        surf_batch_size : int
+            Number of flux surfaces with which to compute simultaneously.
+            Default is ``1``.
+        simp : bool
+            Whether the pitch angles should be chosen for use with open Simpson rule
+            instead of uniform weights for quadrature over velocity coordinate.
+            Default is True.
+        expand_out : bool
+            Whether to expand output to full grid so that the first dimension
+            has size ``grid.num_nodes`` instead of ``grid.num_rho``.
+            Default is False.
+
+        Returns
+        -------
+        The output ``fun(fun_data)``.
+
+        """
+        for name in Bounce1D.required_names:
+            fun_data[name] = desc_data[name]
+        for name in fun_data:
+            fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
+        fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce.get_pitch_inv_quad(
+            grid.compress(desc_data["min_tz |B|"]),
+            grid.compress(desc_data["max_tz |B|"]),
+            num_pitch,
+            simp=simp,
+        )
+        out = batch_map(fun, fun_data, surf_batch_size)
+        if expand_out:
+            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
+            return grid.expand(out)
+        return out
 
     @staticmethod
     def reshape(grid, f):

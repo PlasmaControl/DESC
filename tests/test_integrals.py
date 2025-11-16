@@ -1135,6 +1135,7 @@ class TestBounce:
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
+            simp=False,
         )
         points = bounce.points(pitch_inv)
 
@@ -1342,7 +1343,9 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
+        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
+            0
+        ][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1565,6 +1568,7 @@ class TestBounce2D:
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
+            simp=False,
         )
         points = bounce.points(pitch_inv)
 

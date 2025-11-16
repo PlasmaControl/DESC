@@ -1294,7 +1294,8 @@ class Bounce1D(Bounce):
         fun : callable
             A function  which takes a single argument ``fun_data`` and computes
             bounce integrals assuming ``fun_data`` holds all required quantities
-            to construct a ``Bounce1D`` operator as well as call its methods.
+            to construct a ``Bounce1D`` operator with the flag ``is_reshaped=True``
+            as well as call its methods.
         fun_data : dict[str, jnp.ndarray]
             Data to reshape, interpolate, and pass to ``fun``.
             The structure of the data should match the structure

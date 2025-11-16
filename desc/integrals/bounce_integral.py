@@ -1134,6 +1134,7 @@ class Bounce2D(Bounce):
             )
 
         elif name == "lambda":
+            assert OMEGA_IS_0
             title = kwargs.get(
                 "title",
                 "Projection of "
@@ -1146,7 +1147,7 @@ class Bounce2D(Bounce):
                 jnp.fft.fftshift(jnp.fft.fftfreq(Y, 1 / Y).astype(int)),
             )
 
-            c = Bounce2D.fourier(angle.T).squeeze(0).T
+            c = Bounce2D.fourier(-angle.T).squeeze(0).T
             c = jnp.fft.fftshift(c, -1)
 
         c = jnp.abs(c)

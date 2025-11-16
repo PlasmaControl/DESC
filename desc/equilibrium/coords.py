@@ -473,7 +473,7 @@ def _map_poloidal_coordinates(
     the tensor product of the values ``iota``, ``poloidal``, and ``zeta``.
 
     If ``varepsilon`` is given, then the input coordinate grid is taken to be the
-    meshgrid of values ε = α − ι ζ stored in that array.
+    meshgrid of values ε = α + ι ζ stored in that array.
 
     Parameters
     ----------
@@ -492,7 +492,7 @@ def _map_poloidal_coordinates(
         Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ.
     varepsilon : jnp.ndarray
         Shape should broadcast with shape (num ρ, num poloidal, num ζ).
-        Optional meshgrid of values ε = α − ι ζ.
+        Optional meshgrid of values ε = α + ι ζ.
         This meshgrid need not be a tensor-product grid.
         See the description in the docstring header for more information.
     inbasis : str
@@ -572,7 +572,7 @@ def _map_poloidal_coordinates(
         return t
     if outbasis[1] == "lambda":
         vartheta = varepsilon + iota * omega
-        return t - vartheta
+        return vartheta - t
     if outbasis[1] == "delta":
         alpha = varepsilon - iota * zeta
         return t - alpha

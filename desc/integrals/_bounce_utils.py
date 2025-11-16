@@ -112,10 +112,10 @@ def _set_default_plot_kwargs(kwargs, l=None, m=None):
     vlabel = r"$\vert B \vert$"
     default_title = (
         rf"Intersects $\zeta$ in epigraph$(${vlabel}$)$ "
-        + rf"s.t. {vlabel}$(\zeta) = 1/\lambda$"
+        + rf"s.t. $\lambda${vlabel}$(\zeta) = 1$"
     )
     if l is not None and m is not None:
-        default_title += rf" on field line $\rho(l={l})$, $\alpha(m={m})$"
+        default_title += rf" on field line $(\rho_{{l={l}}}, \alpha_{{m={m}}})$"
     kwargs.setdefault("title", default_title)
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
@@ -175,7 +175,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z2=_z2,
                     k=pitch_inv[idx],
                     title=title
-                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
+                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$",
                     **kwargs,
                 )
 
@@ -196,7 +196,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z2=z2[lm],
                     k=pitch_inv[lm],
                     title=title
-                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
+                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$",
                     **kwargs,
                 )
             )
@@ -273,7 +273,7 @@ def _plot_check_interp(zeta, V, name=""):
         ax.set_ylabel(name)
         ax.set_title(
             f"Interpolation of {name} to quadrature points"
-            + rf" on field line $\rho(l={idx[0]})$, $\alpha(m={idx[1]})$"
+            + rf" on field line $(\rho_{{l={idx[0]}}}, \alpha_{{m={idx[1]}}})$"
         )
         for i in marked:
             ax.plot(zeta[(*idx, i)], V[(*idx, i)], marker="o")
@@ -371,6 +371,7 @@ def plot_ppoly(
         k=k,
         k_transparency=k_transparency,
         klabel=klabel,
+        hlabel=hlabel,
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)

@@ -878,6 +878,7 @@ class PiecewiseChebyshevSeries(IOAble):
             k=k,
             k_transparency=k_transparency,
             klabel=klabel,
+            hlabel=hlabel,
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
@@ -899,7 +900,7 @@ def _add2legend(legend, lines):
             legend[label] = line
 
 
-def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
+def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, hlabel):
     """Plot intersects on ``ax``."""
     if k is None:
         return
@@ -927,7 +928,7 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
                 jnp.full_like(_z1, k[i]),
                 marker="v",
                 color="tab:red",
-                label=r"$z_1$",
+                label=hlabel + r"$_1(w)$",
             ),
         )
         _add2legend(
@@ -937,6 +938,6 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
                 jnp.full_like(_z2, k[i]),
                 marker="^",
                 color="tab:green",
-                label=r"$z_2$",
+                label=hlabel + r"$_2(w)$",
             ),
         )

@@ -1076,7 +1076,8 @@ class Bounce2D(Bounce):
             theta = PiecewiseChebyshevSeries(theta.cheb[m], theta.domain)
         kwargs.setdefault(
             "title",
-            rf"Poloidal angle $\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
+            rf"$\theta \text{{ mod }} (2 \pi)$ "
+            rf"on field line $(\rho_{{l={l}}}, \alpha_{{m={m}}})$",
         )
         kwargs.setdefault("vlabel", r"$\theta \text{ mod } (2 \pi)$")
         return theta.plot1d(theta.cheb, **_set_default_plot_kwargs(kwargs, l, m))
@@ -1120,12 +1121,11 @@ class Bounce2D(Bounce):
         angle = angle[l]
         X, Y = angle.shape
         if name == "delta":
-            xlabel = kwargs.get("xlabel", r"$y$")
-            ylabel = kwargs.get("ylabel", r"$x$")
             title = kwargs.get(
                 "title",
-                r"$\mathcal{F}_{\text{Fourier-Chebyshev}}$ "
-                rf"$\delta(\rho(l={l}), \alpha, \zeta)$",
+                r"Projection of $\alpha, \zeta \mapsto \theta - \alpha$ "
+                r"onto $\{e^{i x \alpha} T_y(\zeta)\}_{\text{Fourier-Chebyshev}}$ "
+                rf"on $\rho_{{l={l}}}$",
             )
 
             c = FourierChebyshevSeries(angle, (0, 2 * jnp.pi))._c
@@ -1134,12 +1134,12 @@ class Bounce2D(Bounce):
             )
 
         elif name == "lambda":
-            xlabel = kwargs.get("xlabel", r"$y$")
-            ylabel = kwargs.get("xlabel", r"$x$")
             title = kwargs.get(
                 "title",
-                r"$\mathcal{F}_{\text{Fourier}}$ "
-                rf"$\Lambda(\rho(l={l}), \vartheta, \zeta \times \text{{NFP}})$",
+                "Projection of "
+                r"$\vartheta, \zeta \mapsto \theta - \alpha - \iota \zeta$ onto "
+                r"$\{e^{i x \alpha} e^{i y N_{\text{FP}} \zeta} \}_{\text{Fourier}}$ "
+                rf"on $\rho_{{l={l}}}$",
             )
             ax.set_xticks(
                 jnp.arange(Y),
@@ -1151,7 +1151,7 @@ class Bounce2D(Bounce):
 
         c = jnp.abs(c)
 
-        ax.set(xlabel=xlabel, ylabel=ylabel)
+        ax.set(xlabel=kwargs.get("xlabel", r"$y$"), ylabel=kwargs.get("ylabel", r"$x$"))
         ax.set_title(title, pad=kwargs.get("pad", 20))
         plt.matshow(c, norm=norm, **kwargs)
         cbar = plt.colorbar(orientation="horizontal")

@@ -474,7 +474,9 @@ class TestStreams:
         fig, ax = plt.subplots()
         ax.set(ylabel=r"$x$", xlabel=r"$y$")
         ax.set_title(
-            r"$\mathcal{F}_{\text{Chebyshev}}$ $\theta(\alpha, \zeta)$ " + name, pad=20
+            r"Projection of $\alpha, \zeta \mapsto \theta$ "
+            r"onto $\{T_x(\alpha) T_y(\zeta)\}_{\text{Chebyshev}}$",
+            pad=20,
         )
         plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")
         cbar = plt.colorbar(orientation="horizontal")

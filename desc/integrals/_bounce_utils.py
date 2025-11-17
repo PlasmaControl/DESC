@@ -618,7 +618,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, n_modes.size, m_modes.size).
+        Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f``.
@@ -690,7 +690,7 @@ def fast_cubic_spline(
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, n_modes.size, m_modes.size).
+        Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
@@ -730,6 +730,8 @@ def fast_cubic_spline(
     assert theta.cheb.ndim >= 3
     lines = theta.cheb.shape[:-2]
 
+    if f.shape[-2] == 1:
+        NFP = Y
     num_ζ = (Y + NFP - 1) // NFP
     Y = num_ζ * NFP
     x = jnp.linspace(-1, 1, Y, endpoint=False)
@@ -765,7 +767,8 @@ def fast_cubic_spline(
         *lines, theta.X, NFP, num_ζ
     )
 
-    if nufft_eps < 1e-14:
+    if nufft_eps < 1e-14 or f.shape[-1] < 16:
+        # second condition for GPU
         f = irfft_mmt(θ, f[..., None, None, None, :, :], num_θ, _modes=modes_θ)
     else:
         if len(lines) > 1:

@@ -262,7 +262,7 @@ class GammaC(_Objective):
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["_vander"] = _get_vander(self, x)
+        self._constants["_vander"] = _get_vander(self, x, self._grid.num_zeta)
         self._constants["fieldline quad"] = (x, w)
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparam.pop("num_quad")),

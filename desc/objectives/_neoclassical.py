@@ -247,7 +247,7 @@ class EffectiveRipple(_Objective):
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["_vander"] = _get_vander(self, x)
+        self._constants["_vander"] = _get_vander(self, x, self._grid.num_zeta)
         self._constants["fieldline quad"] = (x, w)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._constants["profiles"] = get_profiles(
@@ -407,9 +407,12 @@ class EffectiveRipple(_Objective):
         return grid.compress(data["old effective ripple"])
 
 
-def _get_vander(obj, x):
+def _get_vander(obj, x, num_zeta):
     eq = obj.things[0]
-    Y_B = ((obj._hyperparam["Y_B"] + eq.NFP - 1) // eq.NFP) * eq.NFP
+    Y_B = obj._hyperparam["Y_B"]
+    NFP = eq.NFP if (num_zeta > 1) else Y_B
+    num_zeta_Nfp = (Y_B + NFP - 1) // NFP
+    Y_B = num_zeta_Nfp * NFP
     return {
         "dct cfl": _vander_dct_cfl(x, obj._constants["Y"].size),
         "dft cfl": _vander_dft_cfl(x, obj._grid),

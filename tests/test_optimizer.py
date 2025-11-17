@@ -1539,3 +1539,101 @@ def test_optimize_three_coil_at_once():
         np.testing.assert_allclose(c.shift, shift0)
         np.testing.assert_allclose(c.rotmat, rotmat0)
         np.testing.assert_allclose(c.compute("length")["length"], 13)
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_with_proximal():
+    """Test exponential spectral scaling (ESS) with ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        ForceBalance(eq=eq),  # triggers ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
+        copy=True,
+        options={
+            "perturb_options": {"verbose": 0, "order": 1},
+            "solve_options": {"verbose": 0, "maxiter": 2},
+        },
+    )
+    
+    assert out["success"] is not None
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_without_proximal():
+    """Test exponential spectral scaling (ESS) without ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        # No ForceBalance, so no ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
+        copy=True,
+    )
+    
+    assert out["success"] is not None

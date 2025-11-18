@@ -1682,7 +1682,7 @@ class TestBounce2D:
 
         eq = things["eq"]
         grid = LinearGrid(
-            rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
+            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
         names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)

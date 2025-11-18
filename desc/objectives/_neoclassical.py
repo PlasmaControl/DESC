@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.integrals._bounce_utils import truncate_rule
 from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
 from desc.utils import parse_argname_change, setdefault, warnif
 
@@ -413,12 +414,11 @@ def _get_vander(obj, x, num_zeta):
     NFP = eq.NFP if (num_zeta > 1) else Y_B
     num_zeta_Nfp = (Y_B + NFP - 1) // NFP
     Y_B = num_zeta_Nfp * NFP
+    Y = truncate_rule(obj._constants["Y"].size)
     return {
-        "dct cfl": _vander_dct_cfl(x, obj._constants["Y"].size),
+        "dct cfl": _vander_dct_cfl(x, Y),
         "dft cfl": _vander_dft_cfl(x, obj._grid),
-        "dct spline": _vander_dct_cfl(
-            jnp.linspace(-1, 1, Y_B, endpoint=False), obj._constants["Y"].size
-        ),
+        "dct spline": _vander_dct_cfl(jnp.linspace(-1, 1, Y_B, endpoint=False), Y),
     }
 
 

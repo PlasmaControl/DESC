@@ -1493,7 +1493,7 @@ class TestBounce:
             ).sum()
 
         pitch = 1.0
-        analytic_approximation_of_gradient = 651.8
+        analytic_approximation_of_gradient = 650
         np.testing.assert_allclose(
             grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=2.5e-3
         )
@@ -1554,7 +1554,7 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        angle = Bounce2D.angle(eq, X=16, Y=64, rho=rho)
+        angle = Bounce2D.angle(eq, X=16, Y=90, rho=rho)
         bounce = Bounce2D(
             grid,
             data,

@@ -1084,7 +1084,15 @@ class Bounce2D(Bounce):
 
     @staticmethod
     def plot_angle_spectrum(
-        angle, l, *, name="delta", norm=LogNorm(1e-7), y_tick_count=None, **kwargs
+        angle,
+        l,
+        *,
+        name="delta",
+        truncate=0,
+        norm=LogNorm(1e-7),
+        h_ax_numticks=None,
+        v_ax_numticks=None,
+        **kwargs,
     ):
         """Plot frequency spectrum of the given stream map.
 
@@ -1098,14 +1106,21 @@ class Bounce2D(Bounce):
         name : str
             Name of stream angle. Must be either ``"delta"`` or ``"lambda"``.
             Default is ``"delta"``.
+        truncate : int
+            Index at which to truncate any Chebyshev series.
+            This will remove aliasing error at the shortest wavelengths where the signal
+            to noise ratio is lowest. The default value is zero which is interpreted as
+            no truncation.
         norm : str
             The normalization method used for the color scale.
             See https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.imshow.html.
             Default is logarithmic scale with cutoff at ``1e-7``.
-        y_tick_count : int
-            If given, labels at most ``y_tick_count`` marks on the vertical axis.
+        h_ax_numticks : int
+            If given, labels at most ``h_ax_numticks`` marks on the horizontal axis.
+        v_ax_numticks : int
+            If given, labels at most ``v_ax_numticks`` marks on the vertical axis.
         kwargs
-            Keyword arguments into ``matplotlib.pyplot.imshow``.
+            Keyword arguments to pass to ``matplotlib``.
 
         Returns
         -------
@@ -1121,21 +1136,21 @@ class Bounce2D(Bounce):
         angle = angle[l]
         X, Y = angle.shape
         if name == "delta":
-            title = kwargs.get(
+            title = kwargs.pop(
                 "title",
                 r"Projection of $\alpha, \zeta \mapsto \theta - \alpha$ "
                 r"onto $\{e^{i x \alpha} T_y(\zeta)\}_{\text{Fourier-Chebyshev}}$ "
                 rf"on $\rho_{{l={l}}}$",
             )
 
-            c = FourierChebyshevSeries(angle, (0, 2 * jnp.pi))._c
+            c = FourierChebyshevSeries(angle, (0, 2 * jnp.pi), truncate=truncate)._c
             c = cheb_from_dct(
                 c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2
             )
 
         elif name == "lambda":
             assert OMEGA_IS_0
-            title = kwargs.get(
+            title = kwargs.pop(
                 "title",
                 "Projection of "
                 r"$\vartheta, \zeta \mapsto \theta - \alpha - \iota \zeta$ onto "
@@ -1152,14 +1167,16 @@ class Bounce2D(Bounce):
 
         c = jnp.abs(c)
 
-        ax.set(xlabel=kwargs.get("xlabel", r"$y$"), ylabel=kwargs.get("ylabel", r"$x$"))
-        ax.set_title(title, pad=kwargs.get("pad", 20))
+        ax.set(xlabel=kwargs.pop("xlabel", r"$y$"), ylabel=kwargs.pop("ylabel", r"$x$"))
+        ax.set_title(title, pad=kwargs.pop("pad", 20))
         plt.matshow(c, norm=norm, **kwargs)
         cbar = plt.colorbar(orientation="horizontal")
         cbar.ax.invert_xaxis()
 
-        if y_tick_count is not None:
-            ax.yaxis.set_major_locator(MaxNLocator(y_tick_count, integer=True))
+        if h_ax_numticks is not None:
+            ax.xaxis.set_major_locator(MaxNLocator(h_ax_numticks, integer=True))
+        if v_ax_numticks is not None:
+            ax.yaxis.set_major_locator(MaxNLocator(v_ax_numticks, integer=True))
 
         plt.tight_layout()
         return fig

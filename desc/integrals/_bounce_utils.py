@@ -494,6 +494,11 @@ def get_alphas(alpha, iota, num_transit):
     return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
 
 
+def truncate_rule(Y):
+    """Truncation rule to reduce spectral aliasing."""
+    return max(1, 7 * Y // 8)
+
+
 def theta_on_fieldlines(angle, iota, alpha, num_transit):
     """Parameterize θ on field lines α.
 
@@ -518,7 +523,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
         θ over one toroidal transit. ``theta.cheb`` broadcasts with
-        shape (num ρ, num α, num transit, Y).
+        shape (num ρ, num α, num transit, max(1,7Y//8)).
 
     Notes
     -----
@@ -598,12 +603,15 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
     # (since this avoids modding on more points later and keeps θ bounded).
     alpha %= 2 * jnp.pi
 
-    domain = (0, 2 * jnp.pi)
-    delta = FourierChebyshevSeries(angle, domain).compute_cheb(alpha).swapaxes(0, -3)
+    d = (0, 2 * jnp.pi)
+    Y = truncate_rule(angle.shape[-1])
+    delta = (
+        FourierChebyshevSeries(angle, d, truncate=Y).compute_cheb(alpha).swapaxes(0, -3)
+    )
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)
-    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit, angle.shape[-1])
-    return PiecewiseChebyshevSeries(delta, domain)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit, Y)
+    return PiecewiseChebyshevSeries(delta, d)
 
 
 def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=None):

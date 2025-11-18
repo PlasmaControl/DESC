@@ -118,6 +118,11 @@ class FourierChebyshevSeries(IOAble):
     lobatto : bool
         Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
         instead of the interior roots grid for Chebyshev points.
+    truncate : int
+        Index at which to truncate the Chebyshev series.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
 
     Attributes
     ----------
@@ -128,16 +133,17 @@ class FourierChebyshevSeries(IOAble):
 
     """
 
-    def __init__(self, f, domain=(-1, 1), lobatto=False):
+    def __init__(self, f, domain=(-1, 1), lobatto=False, truncate=0):
         """Interpolate Fourier-Chebyshev series to ``f``."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-        self.X = f.shape[-2]
-        self.Y = f.shape[-1]
         self.domain = domain
         self.lobatto = lobatto
+        self.X = f.shape[-2]
+        Y = f.shape[-1]
+        self.Y = truncate if (0 < truncate < Y) else Y
         self._c = rfft(
-            dct(f, type=2 - lobatto, axis=-1) / (self.Y - lobatto),
+            dct(f, type=2 - lobatto, axis=-1)[..., : self.Y] / (Y - lobatto),
             axis=-2,
             norm="forward",
         )
@@ -282,6 +288,16 @@ class ChebyshevSeries(IOAble):
     lobatto : bool
         Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
         instead of the interior roots grid for Chebyshev points.
+    truncate_x: int
+        Index at which to truncate the Chebyshev series in x coordinate.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
+    truncate_y: int
+        Index at which to truncate the Chebyshev series in y coordinate.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
 
     Attributes
     ----------
@@ -292,18 +308,28 @@ class ChebyshevSeries(IOAble):
 
     """
 
-    def __init__(self, f, domain_x=(-1, 1), domain_y=(-1, 1), lobatto=False):
+    def __init__(
+        self,
+        f,
+        domain_x=(-1, 1),
+        domain_y=(-1, 1),
+        lobatto=False,
+        truncate_x=0,
+        truncate_y=0,
+    ):
         """Interpolate Chebyshev-Chebyshev series to ``f``."""
         errorif(domain_x[0] > domain_x[-1], msg="Got inverted x domain.")
         errorif(domain_y[0] > domain_y[-1], msg="Got inverted y domain.")
         errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-        self.X = f.shape[-2]
-        self.Y = f.shape[-1]
         self.domain_x = domain_x
         self.domain_y = domain_y
         self.lobatto = lobatto
-        self._c = dctn(f, type=2 - lobatto, axes=(-2, -1)) / (
-            (self.X - lobatto) * (self.Y - lobatto)
+        X = f.shape[-2]
+        Y = f.shape[-1]
+        self.X = truncate_x if (0 < truncate_x < X) else X
+        self.Y = truncate_y if (0 < truncate_y < Y) else Y
+        self._c = dctn(f, type=2 - lobatto, axes=(-2, -1))[..., : self.X, : self.Y] / (
+            (X - lobatto) * (Y - lobatto)
         )
 
     @staticmethod

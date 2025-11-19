@@ -11,7 +11,7 @@ from qic import Qic
 from qsc import Qsc
 from scipy.constants import mu_0
 
-from desc.backend import jnp, tree_leaves
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -2305,7 +2305,22 @@ def test_coil_individual_targets_optimization(DummyMixedCoilSet):
     obj = CoilLength(coilset, target=target, weight=weight, indices=indices)
     obj_fun = ObjectiveFunction(obj)
     obj_fun.build()
-    length_init = obj.compute(None)
+    mask = obj._mask
+    num_coils = len(mask)
+    grad = obj_fun.grad(obj_fun.x())
+
+    # Collects the gradient of the objective with respect to the coils marked "False"
+    coil_list = obj._coilset_tree["coils"]
+    dim_x = [a.dim_x for a in obj_fun.things[0].coils]
+    dim_x = tree_map(lambda a, b: [int(a / b)] * b, dim_x, coil_list)
+    dim_x, _ = tree_flatten(dim_x)
+    cum_dim_x = [0] + list(np.cumsum(dim_x))
+    unoptimized_grad = [
+        _
+        for i in range(num_coils)
+        for _ in grad[cum_dim_x[i] : cum_dim_x[i + 1]]
+        if not mask[i]
+    ]
 
     optimizer = Optimizer("lsq-exact")
 
@@ -2318,11 +2333,14 @@ def test_coil_individual_targets_optimization(DummyMixedCoilSet):
         copy=False,
     )
     length_fin = obj.compute(None)
-    length_ref = np.array(
-        [obj._target[i] if obj._mask[i] else length_init[i] for i in range(0, 6)]
+
+    # Differences between lengths of *optimized* coils and their targets
+    length_error = np.array(
+        [np.abs(length_fin[i] - obj._target[i]) for i in range(num_coils) if mask[i]]
     )
 
-    np.testing.assert_allclose(length_fin, length_ref, rtol=1e-4)
+    np.testing.assert_allclose(length_error, 0.0, atol=1e-4)
+    np.testing.assert_allclose(unoptimized_grad, 0.0, atol=1e-4)
 
 
 @pytest.mark.regression

@@ -488,9 +488,9 @@ def get_alphas(alpha, iota, num_transit):
     alpha = alpha[:, None, None]
     iota = iota[:, None]
     # Select the next branch such that ϑ is continuous.
-    #      αᵢ = ϑ − ιϕᵢ
-    #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
-    # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
+    #      αᵢ = ϑ − ιϕ(ϑ, ζᵢ)
+    #    αᵢ₊₁ = ϑ − ιϕ(ϑ, ζᵢ₊₁)
+    # αᵢ₊₁−αᵢ = ι(ϕ(ϑ, ζᵢ)-ϕ(ϑ, ζᵢ₊₁)) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
     return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
 
 

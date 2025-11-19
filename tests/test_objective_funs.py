@@ -3140,12 +3140,11 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 8
-        kwargs["Y"] = 16
+        kwargs["Y"] = 22
         kwargs["num_transit"] = 4
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 16
         kwargs["num_quad"] = 16
-        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 

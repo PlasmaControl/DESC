@@ -173,13 +173,18 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         model_args, eq_or_field, params, kwargs = args
         m, q, mu = model_args
         if self.frame == "flux":
-            assert isinstance(
-                eq_or_field, Equilibrium
-            ), "Integration in flux coordinates requires an Equilibrium."
+            if isinstance(eq_or_field, Equilibrium):
+                return self._compute_flux_coordinates(
+                    x, eq_or_field, params, m, q, mu, **kwargs
+                )
+            elif isinstance(eq_or_field, FourierChebyshevField):
+                return self._compute_flux_coordinates_with_fit(x, eq_or_field, m, q, mu)
 
-            return self._compute_flux_coordinates(
-                x, eq_or_field, params, m, q, mu, **kwargs
+            assert isinstance(eq_or_field, (Equilibrium, FourierChebyshevField)), (
+                "Integration in flux coordinates requires either Equilibrium "
+                "or FourierChebyshevField with fitted data."
             )
+
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
@@ -252,6 +257,40 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         # get the derivative for cartesian-like coordinates
         xpdot = rhodot * jnp.cos(theta) - rho * thetadot * jnp.sin(theta)
         ypdot = rhodot * jnp.sin(theta) + rho * thetadot * jnp.cos(theta)
+        # derivative the parallel velocity
+        vpardot = -mu / m * dot(data["b"], data["grad(|B|)"])
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
+
+    def _compute_flux_coordinates_with_fit(self, x, field, m, q, mu):
+        """ODE equation for vacuum guiding center in flux coordinates.
+
+        A Fourier-Chebyshev fit for each component of the 3D magnetic field B, gradient
+        of the magnetic field strength and the basis vectors must be given as real and
+        imaginary parts. Basis vector e^theta is not well around the axis and blows up,
+        instead we use e^theta*rho which results in better fit.
+        """
+        xp, yp, zeta, vpar = x
+        rho = jnp.sqrt(xp**2 + yp**2)
+        theta = jnp.arctan2(yp, xp)
+        # compute functions are not correct for very small rho
+        rho = jnp.where(rho < 1e-6, 1e-6, rho)
+
+        data = field.evaluate(rho, theta, zeta)
+
+        Rdot = vpar * data["b"] + (
+            (m / q / data["|B|"] ** 2)
+            * ((mu * data["|B|"] / m) + vpar**2)
+            * cross(data["b"], data["grad(|B|)"])
+        )
+        # take dot product for rho, theta and zeta coordinates
+        rhodot = dot(Rdot, data["e^rho"])
+        thetadot_x_rho = dot(Rdot, data["e^theta*rho"])
+        zetadot = dot(Rdot, data["e^zeta"])
+
+        # get the derivative for cartesian-like coordinates
+        xpdot = rhodot * jnp.cos(theta) - thetadot_x_rho * jnp.sin(theta)
+        ypdot = rhodot * jnp.sin(theta) + thetadot_x_rho * jnp.cos(theta)
         # derivative the parallel velocity
         vpardot = -mu / m * dot(data["b"], data["grad(|B|)"])
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
@@ -1065,18 +1104,18 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    if not params:
+    if not params and not isinstance(field, dict):
         params = field.params_dict
     if not options:
         options = {}
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
-        if isinstance(field, Equilibrium):
+        if isinstance(field, Equilibrium) or isinstance(field, dict):
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_event(t, y, args, **kwargs):
-        if isinstance(field, Equilibrium):
+        if isinstance(field, Equilibrium) or isinstance(field, dict):
             i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
             j = jnp.arctan2(y[1], y[0])
         else:
@@ -1160,7 +1199,7 @@ def _trace_particles(
         Custom event function to stop integration.
     """
     # convert cartesian-like for integration in flux coordinates
-    if isinstance(field, Equilibrium):
+    if isinstance(field, (Equilibrium, FourierChebyshevField)):
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
@@ -1196,7 +1235,7 @@ def _trace_particles(
     v = yt[:, :, 3:]
 
     # convert back to flux coordinates
-    if isinstance(field, Equilibrium):
+    if isinstance(field, (Equilibrium, FourierChebyshevField)):
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
@@ -1246,3 +1285,185 @@ def _intfun_wrapper(
         event=event,
         throw=throw,
     )
+
+
+class FourierChebyshevField(IOAble):
+    """Convenience class for fitting and evaluating fields.
+
+    This class is intended to be used during particle tracing to reduce overhead
+    of creating transforms.
+
+    Parameters
+    ----------
+    L : int
+        Maximum order of the Chebyshev polynomial to be used in the radial direction.
+    M : int
+        Maximum order of the Fourier series to be used in the poloidal direction.
+    N : int
+        Maximum order of the Fourier series to be used in the toroidal direction.
+    """
+
+    _static_attrs = ["L", "M", "N", "M_fft", "N_fft", "data_keys"]
+
+    def __init__(self, L, M, N):
+        self.L = L
+        self.M = M
+        self.N = N
+
+    def build(self, eq):
+        """Build the constants for fit.
+
+        During optimization, equilibrium field changes, however, the same transforms
+        can be used to get the fit faster. This method creates the grid and transforms
+        to be used during the fitting procedure.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to be used to get transforms.
+
+        """
+        self.data_keys = ["B", "grad(|B|)", "e^rho", "e^theta*rho", "e^zeta"]
+        self.l = jnp.arange(self.L)
+        self.M_fft = 2 * self.M + 1
+        self.N_fft = 2 * self.N + 1
+        self.m = jnp.fft.fftfreq(self.M_fft) * self.M_fft
+        self.n = jnp.fft.fftfreq(self.N_fft) * self.N_fft
+        x = jnp.cos(jnp.pi * (2 * self.l + 1) / (2 * self.L))
+        rho = (x + 1) / 2
+        self.grid = LinearGrid(rho=rho, M=self.M, N=self.N, sym=False, NFP=1)
+        self.transforms = get_transforms(self.data_keys, eq, self.grid, jitable=True)
+
+    def fit(self, params, profiles):
+        """Fit a Fourier-Chebyshev series to an equilibrium field.
+
+        First computes the magnetic field, its gradient and basis vectors at
+        the grid created in build. Then, finds the spectral coefficients to
+        each component of the computed vectors. Since e^theta doesn't behave
+        well around axis, the fit is computed for e^theta*rho (which is what actually
+        required by the guiding center equations).
+
+        Parameters
+        ----------
+        params : dict
+            Equilibriums `params_dict` which contains the parameters that define
+            the equiliubrium.
+        profiles : dict of Profiles
+            Profiles necessary to compute magnetic field. Either iota or current
+            profile must be given.
+
+        """
+        data_raw = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.data_keys,
+            params,
+            self.transforms,
+            profiles,
+        )
+        L, M, N = self.L, self.M_fft, self.N_fft
+        keys = [key + i for key in self.data_keys for i in ["_r", "_p", "_z"]]
+        # stack data to perform 15 transforms in batch
+        stacked_data = jnp.stack(
+            [
+                data_raw[key][:, i].reshape(N, L, M)
+                for key in self.data_keys
+                for i in [0, 1, 2]
+            ]
+        )
+        coefs = jax.scipy.fft.dct(stacked_data, axis=2, norm=None)
+        # handle the 0-th Chebyshev coefficient and normalization
+        coefs = coefs.at[:, :, 0, :].divide(2)
+        coefs /= self.L
+
+        coefs = jnp.fft.fft(coefs, axis=3, norm=None)
+        coefs = jnp.fft.fft(coefs, axis=1, norm=None)
+
+        data = {}
+        coefs_real = coefs.real
+        coefs_imag = coefs.imag
+
+        for i, key in enumerate(keys):
+            data[key + "_real"] = coefs_real[i]
+            data[key + "_imag"] = coefs_imag[i]
+
+        data["l"] = self.l
+        data["m"] = self.m
+        data["n"] = self.n
+        data["M"] = self.M_fft
+        data["N"] = self.N_fft
+
+        self.params_dict = data
+
+    def evaluate(self, rho, theta, zeta, params=None):
+        """Evaluate the Fourier-Chebyshev series at a point.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float
+            Radial, poloidal and toroidal coordinates to evaluate.
+        params : dict
+            The spectral coefficients obtained from `FourierChebyshevField.fit()`
+            which is stored as `self.params`.
+        """
+        if params is None:
+            params = self.params_dict
+
+        # the cosine transforms reverses the order
+        r0p = 1 - 2 * rho
+        Tl = jnp.cos(params["l"] * jnp.arccos(r0p))
+        m_theta = params["m"] * theta
+        expm_real = jnp.cos(m_theta) / params["M"]
+        expm_imag = jnp.sin(m_theta) / params["M"]
+
+        n_zeta = params["n"] * zeta
+        expn_real = jnp.cos(n_zeta) / params["N"]
+        expn_imag = jnp.sin(n_zeta) / params["N"]
+
+        # The new shape for these arrays will be (k, n, l, m) where k=15
+        cf_real_all = jnp.stack(
+            [
+                params[key + i + "_real"]
+                for key in self.data_keys
+                for i in ["_r", "_p", "_z"]
+            ]
+        )
+        cf_imag_all = jnp.stack(
+            [
+                params[key + i + "_imag"]
+                for key in self.data_keys
+                for i in ["_r", "_p", "_z"]
+            ]
+        )
+
+        # "knlm,l->knm" contracts the 'l' dimension for all 'k' batches at once
+        f_l_real = jnp.einsum("knlm,l->knm", cf_real_all, Tl)
+        f_l_imag = jnp.einsum("knlm,l->knm", cf_imag_all, Tl)
+
+        # "knm,m->kn" contracts the 'm' dimension for all 'k' batches
+        f_lm_real = jnp.einsum("knm,m->kn", f_l_real, expm_real) - jnp.einsum(
+            "knm,m->kn", f_l_imag, expm_imag
+        )
+        f_lm_imag = jnp.einsum("knm,m->kn", f_l_real, expm_imag) + jnp.einsum(
+            "knm,m->kn", f_l_imag, expm_real
+        )
+
+        # "kn,n->k" contracts the 'n' dimension, leaving just the batch dimension
+        results = jnp.einsum("kn,n->k", f_lm_real, expn_real) - jnp.einsum(
+            "kn,n->k", f_lm_imag, expn_imag
+        )
+
+        out = {}
+        # Magnetic Field B
+        B = results[0:3]
+        out["|B|"] = jnp.linalg.norm(B)
+        out["b"] = B / out["|B|"]
+        # grad(|B|)
+        out["grad(|B|)"] = results[3:6]
+        # e^rho
+        out["e^rho"] = results[6:9]
+        # e^theta*rho
+        out["e^theta*rho"] = results[9:12]
+        # e^zeta
+        out["e^zeta"] = results[12:15]
+
+        return out

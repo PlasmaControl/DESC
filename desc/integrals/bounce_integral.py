@@ -833,6 +833,7 @@ class Bounce2D(Bounce):
     def _nufft(self, ζ, data, eps):
         shape = ζ.shape
         ζ = flatten_mat(ζ, 3)
+        # TODO(#1922) or use a nufft to evaluate θ here.
         θ = flatten_mat(self._theta.eval1d(ζ))
         ζ = flatten_mat(ζ)
         c = nufft2d2r(

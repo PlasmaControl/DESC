@@ -400,14 +400,11 @@ def _map_PEST_coordinates(
 def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
-    TODO(#1243) Do proper partial summation once the DESC
-    basis are improved to store the padded tensor product modes.
-    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+    TODO(#1207, #1243) Do proper partial summation.
     The partial summation implemented here has a totally unnecessary FourierZernike
-    spectral to real transform and unnecessary N^2 FFT's of size N. Still the
-    performance improvement is significant. To avoid the transform and FFTs,
-    I suggest padding the FourierZernike basis modes to make the partial summation
-    trivial. Then this computation will likely take microseconds.
+    spectral to real transform and unnecessary N^2 FFT's of size N.
+    Store the padded tensor product modes would make code simpler.
+    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
 
     Parameters
     ----------

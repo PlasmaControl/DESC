@@ -276,21 +276,23 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         # compute functions are not correct for very small rho
         rho = jnp.where(rho < 1e-6, 1e-6, rho)
 
-        b, magB, gradB, er, et_x_rho, ez = field.evaluate(rho, theta, zeta)
+        data = field.evaluate(rho, theta, zeta)
 
-        Rdot = vpar * b + (
-            (m / q / magB**2) * ((mu * magB / m) + vpar**2) * cross(b, gradB)
+        Rdot = vpar * data["b"] + (
+            (m / q / data["|B|"] ** 2)
+            * ((mu * data["|B|"] / m) + vpar**2)
+            * cross(data["b"], data["grad(|B|)"])
         )
         # take dot product for rho, theta and zeta coordinates
-        rhodot = dot(Rdot, er)
-        thetadot_x_rho = dot(Rdot, et_x_rho)
-        zetadot = dot(Rdot, ez)
+        rhodot = dot(Rdot, data["e^rho"])
+        thetadot_x_rho = dot(Rdot, data["e^theta*rho"])
+        zetadot = dot(Rdot, data["e^zeta"])
 
         # get the derivative for cartesian-like coordinates
         xpdot = rhodot * jnp.cos(theta) - thetadot_x_rho * jnp.sin(theta)
         ypdot = rhodot * jnp.sin(theta) + thetadot_x_rho * jnp.cos(theta)
         # derivative the parallel velocity
-        vpardot = -mu / m * dot(b, gradB)
+        vpardot = -mu / m * dot(data["b"], data["grad(|B|)"])
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
@@ -1321,7 +1323,7 @@ class FourierChebyshevField(IOAble):
             Equilibrium to be used to get transforms.
 
         """
-        self.data_keys = ["B", "grad(|B|)", "e^rho", "e^theta", "e^zeta"]
+        self.data_keys = ["B", "grad(|B|)", "e^rho", "e^theta*rho", "e^zeta"]
         self.l = jnp.arange(self.L)
         self.M_fft = 2 * self.M + 1
         self.N_fft = 2 * self.N + 1
@@ -1358,43 +1360,14 @@ class FourierChebyshevField(IOAble):
             self.transforms,
             profiles,
         )
-        rho = self.grid.nodes[:, 0]
         L, M, N = self.L, self.M_fft, self.N_fft
-        keys = [
-            "Br",
-            "Bp",
-            "Bz",
-            "gBr",
-            "gBp",
-            "gBz",
-            "er_r",
-            "er_p",
-            "er_z",
-            "et_r",
-            "et_p",
-            "et_z",
-            "ez_r",
-            "ez_p",
-            "ez_z",
-        ]
+        keys = [key + i for key in self.data_keys for i in ["_r", "_p", "_z"]]
         # stack data to perform 15 transforms in batch
         stacked_data = jnp.stack(
             [
-                data_raw["B"][:, 0].reshape(N, L, M),
-                data_raw["B"][:, 1].reshape(N, L, M),
-                data_raw["B"][:, 2].reshape(N, L, M),
-                data_raw["grad(|B|)"][:, 0].reshape(N, L, M),
-                data_raw["grad(|B|)"][:, 1].reshape(N, L, M),
-                data_raw["grad(|B|)"][:, 2].reshape(N, L, M),
-                data_raw["e^rho"][:, 0].reshape(N, L, M),
-                data_raw["e^rho"][:, 1].reshape(N, L, M),
-                data_raw["e^rho"][:, 2].reshape(N, L, M),
-                (data_raw["e^theta"][:, 0] * rho).reshape(N, L, M),
-                (data_raw["e^theta"][:, 1] * rho).reshape(N, L, M),
-                (data_raw["e^theta"][:, 2] * rho).reshape(N, L, M),
-                data_raw["e^zeta"][:, 0].reshape(N, L, M),
-                data_raw["e^zeta"][:, 1].reshape(N, L, M),
-                data_raw["e^zeta"][:, 2].reshape(N, L, M),
+                data_raw[key][:, i].reshape(N, L, M)
+                for key in self.data_keys
+                for i in [0, 1, 2]
             ]
         )
         coefs = jax.scipy.fft.dct(stacked_data, axis=2, norm=None)
@@ -1449,41 +1422,16 @@ class FourierChebyshevField(IOAble):
         # The new shape for these arrays will be (k, n, l, m) where k=15
         cf_real_all = jnp.stack(
             [
-                params["Br_real"],
-                params["Bp_real"],
-                params["Bz_real"],
-                params["gBr_real"],
-                params["gBp_real"],
-                params["gBz_real"],
-                params["er_r_real"],
-                params["er_p_real"],
-                params["er_z_real"],
-                params["et_r_real"],
-                params["et_p_real"],
-                params["et_z_real"],
-                params["ez_r_real"],
-                params["ez_p_real"],
-                params["ez_z_real"],
+                params[key + i + "_real"]
+                for key in self.data_keys
+                for i in ["_r", "_p", "_z"]
             ]
         )
-
         cf_imag_all = jnp.stack(
             [
-                params["Br_imag"],
-                params["Bp_imag"],
-                params["Bz_imag"],
-                params["gBr_imag"],
-                params["gBp_imag"],
-                params["gBz_imag"],
-                params["er_r_imag"],
-                params["er_p_imag"],
-                params["er_z_imag"],
-                params["et_r_imag"],
-                params["et_p_imag"],
-                params["et_z_imag"],
-                params["ez_r_imag"],
-                params["ez_p_imag"],
-                params["ez_z_imag"],
+                params[key + i + "_imag"]
+                for key in self.data_keys
+                for i in ["_r", "_p", "_z"]
             ]
         )
 
@@ -1504,17 +1452,18 @@ class FourierChebyshevField(IOAble):
             "kn,n->k", f_lm_imag, expn_imag
         )
 
+        out = {}
         # Magnetic Field B
         B = results[0:3]
-        magB = jnp.linalg.norm(B)
-        b = B / magB
+        out["|B|"] = jnp.linalg.norm(B)
+        out["b"] = B / out["|B|"]
         # grad(|B|)
-        gradB = results[3:6]
+        out["grad(|B|)"] = results[3:6]
         # e^rho
-        er = results[6:9]
+        out["e^rho"] = results[6:9]
         # e^theta*rho
-        et_x_rho = results[9:12]
+        out["e^theta*rho"] = results[9:12]
         # e^zeta
-        ez = results[12:15]
+        out["e^zeta"] = results[12:15]
 
-        return b, magB, gradB, er, et_x_rho, ez
+        return out

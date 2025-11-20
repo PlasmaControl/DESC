@@ -400,7 +400,7 @@ def _map_PEST_coordinates(
 def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
-    TODO(#1207, #1243) Do proper partial summation.
+    TODO(#2017, #1243) Do proper partial summation.
     The partial summation implemented here has a totally unnecessary FourierZernike
     spectral to real transform and unnecessary N^2 FFT's of size N.
     Store the padded tensor product modes would make code simpler.

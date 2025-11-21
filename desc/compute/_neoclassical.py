@@ -9,14 +9,13 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv
+from ..utils import parse_argname_change, safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
-    "theta": """jnp.ndarray :
+    "angle": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
+        Angle returned by ``Bounce2D.angle``.
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
@@ -89,67 +88,8 @@ _bounce_doc = {
         Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
         This parameter is intended to be used by objectives only.
         """,
+    "theta": "",
 }
-
-
-def _compute(
-    fun,
-    fun_data,
-    data,
-    theta,
-    grid,
-    num_pitch,
-    surf_batch_size=1,
-    simp=False,
-    expand_out=True,
-):
-    """Compute Bounce2D integral quantity with ``fun``.
-
-    Parameters
-    ----------
-    fun : callable
-        Function to compute.
-    fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``. This dict will be modified.
-    data : dict[str, jnp.ndarray]
-        DESC data dict.
-    theta : jnp.ndarray
-        Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
-    grid : Grid
-        Grid that can expand and compress.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate.
-    surf_batch_size : int
-        Number of flux surfaces with which to compute simultaneously.
-        Default is ``1``.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
-    expand_out : bool
-        Whether to expand output to full grid so that the first dimension
-        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
-        Default is True.
-
-    """
-    for name in Bounce2D.required_names:
-        fun_data[name] = data[name]
-    fun_data.pop("iota", None)
-    for name in fun_data:
-        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
-    fun_data["iota"] = grid.compress(data["iota"])
-    fun_data["theta"] = theta
-    fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
-        grid.compress(data["min_tz |B|"]),
-        grid.compress(data["max_tz |B|"]),
-        num_pitch,
-        simp=simp,
-    )
-    out = batch_map(fun, fun_data, surf_batch_size)
-    if expand_out:
-        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-        return grid.expand(out)
-    return out
 
 
 def _dH_ripple(data, B, pitch):
@@ -207,14 +147,22 @@ def _dI_ripple(data, B, pitch):
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    https://doi.org/10.1063/1.873749.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    [1] Evaluation of 1/ν neoclassical transport in stellarators.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+        https://doi.org/10.1063/1.873749.
+
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
+        algorithm and its applications.
+        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        https://arxiv.org/abs/2412.01724.
+
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
+    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 51)
@@ -242,7 +190,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -275,15 +223,15 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
-        _compute(
+        Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
-            theta,
+            angle,
             grid,
             num_pitch,
             surf_batch_size,
-            simp=True,
+            expand_out=True,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * (jnp.pi / (8 * 2**0.5))

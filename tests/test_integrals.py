@@ -1135,6 +1135,7 @@ class TestBounce:
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
+            simp=False,
         )
         points = bounce.points(pitch_inv)
 
@@ -1342,7 +1343,9 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
+        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
+            0
+        ][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1490,7 +1493,7 @@ class TestBounce:
             ).sum()
 
         pitch = 1.0
-        analytic_approximation_of_gradient = 651.8
+        analytic_approximation_of_gradient = 650
         np.testing.assert_allclose(
             grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=2.5e-3
         )
@@ -1519,7 +1522,7 @@ class TestBounce2D:
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
-            theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
+            angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,
             nufft_eps=nufft_eps,
@@ -1551,20 +1554,21 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
+        angle = Bounce2D.angle(eq, X=16, Y=90, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
-            theta,
+            angle,
             alpha=alpha,
             num_transit=2,
             check=True,
-            spline=False,
+            spline=False,  # not recommended in general
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
+            simp=False,
         )
         points = bounce.points(pitch_inv)
 
@@ -1603,14 +1607,14 @@ class TestBounce2D:
         _, _ = bounce.plot_theta(l, m, show=False)
 
         self._not_part_of_tutorial_test(
-            bounce, pitch_inv, points, num, data, grid, theta, alpha
+            bounce, pitch_inv, points, num, data, grid, angle, alpha
         )
 
         return fig
 
     @staticmethod
     def _not_part_of_tutorial_test(
-        bounce, pitch_inv, points, num, data, grid, theta, alpha
+        bounce, pitch_inv, points, num, data, grid, angle, alpha
     ):
         np.testing.assert_allclose(
             bounce.compute_fieldline_length(),
@@ -1623,7 +1627,7 @@ class TestBounce2D:
                 352.15451128,
                 440.10036239,
             ],
-            rtol=1e-2,
+            rtol=5e-3,
         )
 
         # check for consistency with different options
@@ -1647,7 +1651,7 @@ class TestBounce2D:
         )
 
         bounce = Bounce2D(
-            grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
+            grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
         )
         bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
         l, m = 1, 0
@@ -1678,7 +1682,7 @@ class TestBounce2D:
 
         eq = things["eq"]
         grid = LinearGrid(
-            rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
+            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
         names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
@@ -1688,7 +1692,7 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid,
             grid_data,
-            Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
+            Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
             num_transit=3,

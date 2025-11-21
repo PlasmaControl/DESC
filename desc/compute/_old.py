@@ -9,7 +9,6 @@ from orthax.legendre import leggauss
 
 from desc.backend import jit, jnp
 
-from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -29,43 +28,6 @@ _bounce1D_doc = {
     "surf_batch_size": _bounce_doc["surf_batch_size"],
     "quad": _bounce_doc["quad"],
 }
-
-
-def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False):
-    """Compute Bounce1D integral quantity with ``fun``.
-
-    Parameters
-    ----------
-    fun : callable
-        Function to compute.
-    fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``. This dict will be modified.
-    data : dict[str, jnp.ndarray]
-        DESC data dict.
-    grid : Grid
-        Grid that can expand and compress.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate.
-    surf_batch_size : int
-        Number of flux surfaces with which to compute simultaneously.
-        Default is ``1``.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
-
-    """
-    for name in Bounce1D.required_names:
-        fun_data[name] = data[name]
-    for name in fun_data:
-        fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
-    fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce1D.get_pitch_inv_quad(
-        grid.compress(data["min_tz |B|"]),
-        grid.compress(data["max_tz |B|"]),
-        num_pitch,
-        simp=simp,
-    )
-    out = batch_map(fun, fun_data, surf_batch_size)
-    assert out.ndim == 1
-    return grid.expand(out)
 
 
 @register_compute_fun(
@@ -103,10 +65,11 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    https://doi.org/10.1063/1.873749.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    [1] Evaluation of 1/ν neoclassical transport in stellarators.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+        https://doi.org/10.1063/1.873749.
+
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
@@ -139,14 +102,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
     B0 = data["max_tz |B|"]
     data["old effective ripple 3/2"] = (
-        _compute(
+        Bounce1D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
             grid,
             num_pitch,
             surf_batch_size,
-            simp=True,
+            expand_out=True,
         )
         / data["fieldline length"]
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
@@ -222,11 +185,11 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
 def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
+    [1] Poloidal motion of trapped particle orbits in real-space coordinates.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+        Phys. Plasmas 1 May 2008; 15 (5): 052501.
+        https://doi.org/10.1063/1.2912456.
+        Equation 61.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -287,7 +250,16 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     }
     grid = transforms["grid"].source_grid
     data["old Gamma_c"] = (
-        _compute(Gamma_c, fun_data, data, grid, num_pitch, surf_batch_size)
+        Bounce1D.batch(
+            Gamma_c,
+            fun_data,
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            simp=False,
+            expand_out=True,
+        )
         / data["fieldline length"]
     )
     return data
@@ -325,10 +297,10 @@ def _poloidal_drift(data, B, pitch):
 def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
+    [1] A model for the fast evaluation of prompt losses of energetic ions in
+        stellarators. Equation 16.
+        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+        https://doi.org/10.1088/1741-4326/ac2994.
 
     This expression has a secular term that drives the result to zero as the number
     of toroidal transits increases if the secular term is not averaged out from the
@@ -370,13 +342,15 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
 
     grid = transforms["grid"].source_grid
     data["old Gamma_c Velasco"] = (
-        _compute(
+        Bounce1D.batch(
             Gamma_c,
             {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
             data,
             grid,
             num_pitch,
             surf_batch_size,
+            simp=False,
+            expand_out=True,
         )
         / data["fieldline length"]
     )

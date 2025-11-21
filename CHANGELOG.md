@@ -1,6 +1,21 @@
 Changelog
 =========
 
+v0.16.1
+-------
+
+New Features
+
+- Method to plot Fourier spectrum of stream map in field line coordinates in ``Bounce2D``.
+- Utility method to compute integrals over phase space in batches is now added to the public API.
+
+Bug Fixes
+
+- [Improves convergence of stream map in ``Bounce2D``](https://github.com/PlasmaControl/DESC/pull/1919).
+
+v0.16.0
+-------
+
 New Features
 
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.

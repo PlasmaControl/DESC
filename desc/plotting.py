@@ -4519,7 +4519,7 @@ def plot_gammac(
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X, Y, rho),
+        angle=Bounce2D.angle(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,
@@ -4532,7 +4532,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch, simp=False)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

@@ -66,9 +66,9 @@ def cheb_pts(n, domain=(-1, 1), lobatto=False):
     return bijection_from_disc(y, domain[0], domain[-1])
 
 
-def fourier_pts(n):
-    """Get ``n`` Fourier points in [0, 2π)."""
-    return 2 * jnp.pi * jnp.arange(n) / n
+def fourier_pts(n, domain=(0, 2 * jnp.pi)):
+    """Get ``n`` Fourier points in domain."""
+    return jnp.linspace(domain[0], domain[1], n, endpoint=False)
 
 
 def interp_rfft(x, f, domain=(0, 2 * jnp.pi), axis=-1):

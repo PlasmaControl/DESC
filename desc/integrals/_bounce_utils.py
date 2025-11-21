@@ -775,7 +775,7 @@ def fast_cubic_spline(
         *lines, theta.X, NFP, num_ζ
     )
 
-    if nufft_eps < 1e-14 or f.shape[-1] < 16:
+    if nufft_eps < 1e-14 or f.shape[-1] < 14:
         # second condition for GPU
         f = irfft_mmt(θ, f[..., None, None, None, :, :], num_θ, _modes=modes_θ)
     else:

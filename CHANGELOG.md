@@ -3,10 +3,6 @@ Changelog
 
 New Features
 
-- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
-- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
-- Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
-- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:
@@ -17,6 +13,18 @@ New Features
     - Implemented particle trajectory models are:
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
+
+
+v0.16.0
+-------
+
+New Features
+
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
+- Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Adds new linear objective `ShareParameters` which can enforce that the chosen parameters of two or more objects of the same type remain identical during an optimization. Potentially useful for flexible stellarator optimization, where one has two coilsets with the same geometry but differing currents, and attempts to optimize for two different stellarator equilibria.
 - Changes related to ``field_line_integrate``:
     - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
     - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
@@ -31,7 +39,10 @@ Bug Fixes
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
 - Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
+- [Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid](https://github.com/PlasmaControl/DESC/pull/2013)
 - Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
+- Allow ``desc.vmec.VMECIO.load`` to load wout files that lack ``lrfp__logical__``, like those outputted by VMEC++. This change assumes that those output files don't have poloidal flux label.
+- Fixes a bug that had prevented passing the ``legend`` kwarg to ``desc.plotting.plot_surfaces``.
 
 
 Backend

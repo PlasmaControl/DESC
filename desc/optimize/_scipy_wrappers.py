@@ -103,8 +103,10 @@ def _optimize_scipy_minimize(  # noqa: C901
     options.setdefault("maxiter", stoptol["maxiter"])
     options.setdefault("disp", False)
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
-    # TODO: don't call hess here if hessian=False
-    if isinstance(x_scale, str) and x_scale == "auto":  # and hessian?
+    # don't call hess if the method is approximating the hessian, since we probably
+    # are avoiding it due to it being expensive
+    use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
+    if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
         H = hess(x0)
         scale, _ = compute_hess_scale(H)
     else:
@@ -162,9 +164,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
-    hess_wrapped = (
-        None if method in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"] else hess_wrapped
-    )
+    hess_wrapped = None if use_hessian else hess_wrapped
 
     def callback(xs):
         x1 = xs * scale

@@ -164,7 +164,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
-    hess_wrapped = None if use_hessian else hess_wrapped
+    hess_wrapped = None if not use_hessian else hess_wrapped
 
     def callback(xs):
         x1 = xs * scale

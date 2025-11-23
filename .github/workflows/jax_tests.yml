@@ -12,29 +12,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jax-version: [0.4.24, 0.4.25, 0.4.26, 0.4.27, 0.4.28, 0.4.29,
-                      0.4.30, 0.4.31, 0.4.33, 0.4.34, 0.4.35, 0.4.37,
-                      0.4.38, 0.5.0, 0.5.1, 0.5.2, 0.5.3, 0.6.0]
-                      # 0.4.32 is not available on PyPI
-                      # earlier jax versions are not compatible with other
-                      # dependencies as of 2024-10-04
-                      # 0.4.36 has a bug that causes tests to fail
+        jax-version:
+          [0.5.0, 0.5.3, 0.6.1, 0.6.2, 0.7.0, 0.7.2]
+          # 0.4.x versions are not tested because they fail with jax-finufft
+          # 0.5.1 and 0.5.2 installations are broken, see jax#26781
+          # 0.6.0 has a bug with jax.grad, see jax#28144
+          # 0.7.0 have performance issues but we still support it, see diffrax#680
+          # 0.7.1 fails with equinox, see equinox#1081
         group: [1, 2]
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Upgrade pip
         run: |
           python -m pip install --upgrade pip
       - name: Install dependencies with given JAX version
         run: |
-          sed -i '/jax/d' ./requirements.txt
+          sed -i '1{/^jax/d}' requirements.txt
           sed -i '1i\jax[cpu] == ${{ matrix.jax-version }}' ./requirements.txt
           cat ./requirements.txt
           pip install -r ./devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
       - name: Verify dependencies
         run: |
           python --version
@@ -44,7 +45,7 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -m unit \
+          python -m pytest -v -m unit \
             --durations=0 \
             --mpl \
             --maxfail=1 \

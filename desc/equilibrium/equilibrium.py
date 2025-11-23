@@ -39,7 +39,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -61,7 +61,12 @@ from .coords import (
     to_sfl,
 )
 from .initial_guess import set_initial_guess
-from .utils import parse_axis, parse_profile, parse_surface
+from .utils import (
+    ensure_consistent_profile_eq_resolution,
+    parse_axis,
+    parse_profile,
+    parse_surface,
+)
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -71,6 +76,10 @@ class Equilibrium(IOAble, Optimizable):
     and profile inputs. It can compute additional information, such as the magnetic
     field and plasma currents, as well as "solving" itself by finding the equilibrium
     fields, and perturbing those fields to find nearby equilibria.
+
+    Note that any passed-in profiles with resolution lower than eq.L will be
+    automatically increased in resolution to match eq.L. Higher resolution profiles will
+    be left untouched.
 
     Parameters
     ----------
@@ -215,11 +224,11 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         errorif(
-            not isinstance(Psi, numbers.Real),
+            not isinstance(float(Psi), numbers.Real),
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(float(Psi))
 
         errorif(
             spectral_indexing
@@ -377,12 +386,7 @@ class Equilibrium(IOAble, Optimizable):
             "anisotropy",
         ]:
             p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
-            warnif(
-                isinstance(p, PowerSeriesProfile) and p.sym != "even",
-                msg=f"{profile} profile is not an even power series.",
-            )
+            ensure_consistent_profile_eq_resolution(p, self, name=profile)
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -1443,42 +1447,52 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         rcond=None,
         copy=False,
+        tol=1e-9,
     ):
-        """Transform this equilibrium to use straight field line coordinates.
+        """Transform this equilibrium to use straight field line PEST coordinates.
 
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
+        The flux surfaces of the returned equilibrium usually differ from the original
+        by 1% when the default resolution parameters are used.
 
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+            Radial resolution to use for SFL equilibrium.
+            Default is ``3*eq.L``.
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+            Poloidal resolution to use for SFL equilibrium.
+            Default is ``4*eq.M``.
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+            toroidal resolution to use for SFL equilibrium.
+            Default is ``3*eq.N``.
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 2*L
+            Radial grid resolution to use for fit to Zernike series.
+            Default is ``1.5*L``.
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 2*M
+            Poloidal grid resolution to use for fit to Zernike series.
+            Default is ``1.5*M``.
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 2*N
+            Toroidal grid resolution to use for fit to Fourier series.
+            Default is ``N``.
         rcond : float, optional
-            cutoff for small singular values in least squares fit.
+            Cutoff for small singular values in the least squares fit.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
+        tol : float
+            Tolerance for coordinate mapping.
+            Default is ``1e-9``.
 
         Returns
         -------
-        eq_sfl : Equilibrium
+        eq_PEST : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
 
     @property
     def surface(self):
@@ -1535,7 +1549,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(float(np.squeeze(Psi)))
 
     @property
     def NFP(self):
@@ -1701,6 +1715,9 @@ class Equilibrium(IOAble, Optimizable):
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
+        self._pressure = ensure_consistent_profile_eq_resolution(
+            self._pressure, self, name="pressure"
+        )
 
     @optimizable_parameter
     @property
@@ -1749,6 +1766,9 @@ class Equilibrium(IOAble, Optimizable):
     @electron_temperature.setter
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
+        self._electron_temperature = ensure_consistent_profile_eq_resolution(
+            self._electron_temperature, self, name="electron temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -1777,6 +1797,9 @@ class Equilibrium(IOAble, Optimizable):
     @electron_density.setter
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
+        self._electron_density = ensure_consistent_profile_eq_resolution(
+            self._electron_density, self, name="electron density"
+        )
 
     @optimizable_parameter
     @property
@@ -1805,6 +1828,9 @@ class Equilibrium(IOAble, Optimizable):
     @ion_temperature.setter
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
+        self._ion_temperature = ensure_consistent_profile_eq_resolution(
+            self._ion_temperature, self, name="ion temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -1831,6 +1857,9 @@ class Equilibrium(IOAble, Optimizable):
     @atomic_number.setter
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
+        self._atomic_number = ensure_consistent_profile_eq_resolution(
+            self._atomic_number, self, name="atomic number"
+        )
 
     @optimizable_parameter
     @property
@@ -1855,6 +1884,9 @@ class Equilibrium(IOAble, Optimizable):
     @iota.setter
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
+        self._iota = ensure_consistent_profile_eq_resolution(
+            self._iota, self, name="iota"
+        )
         if self.iota is None:
             return
         warnif(
@@ -1890,6 +1922,9 @@ class Equilibrium(IOAble, Optimizable):
     @current.setter
     def current(self, new):
         self._current = parse_profile(new, "current")
+        self._current = ensure_consistent_profile_eq_resolution(
+            self._current, self, name="current"
+        )
         if self.current is None:
             return
         warnif(
@@ -2162,6 +2197,7 @@ class Equilibrium(IOAble, Optimizable):
         unused_keys = [
             "pres_ratio",
             "bdry_ratio",
+            "curr_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -2173,7 +2209,7 @@ class Equilibrium(IOAble, Optimizable):
             "output_path",
             "verbose",
         ]
-        [inputs.pop(key) for key in unused_keys]
+        [inputs.pop(key, None) for key in unused_keys]
         inputs.update(kwargs)
         return cls(**inputs)
 

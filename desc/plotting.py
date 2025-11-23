@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+from diffrax import RESULTS
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
@@ -30,6 +31,7 @@ from desc.utils import (
     only1,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -264,7 +266,14 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def _compute(eq, name, grid, component=None, reshape=True):
+def _compute(
+    eq,
+    name,
+    grid,
+    component=None,
+    reshape=True,
+    compute_kwargs=None,
+):
     """Compute quantity specified by name on grid for Equilibrium eq.
 
     Parameters
@@ -277,6 +286,8 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``
 
     Returns
     -------
@@ -300,7 +311,9 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     label = data_index[parameterization][name]["label"]
 
-    data = eq.compute(name, grid=grid)[name]
+    compute_kwargs = setdefault(compute_kwargs, {})
+
+    data = eq.compute(name, grid=grid, **compute_kwargs)[name]
 
     if data_index[parameterization][name]["dim"] > 1:
         if component is None:
@@ -502,7 +515,17 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
+def plot_1d(  # noqa : C901
+    eq,
+    name,
+    grid=None,
+    log=False,
+    normalize=None,
+    ax=None,
+    return_data=False,
+    compute_kwargs=None,
+    **kwargs,
+):
     """Plot 1D profiles.
 
     Parameters
@@ -515,10 +538,14 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -556,6 +583,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     # If the quantity is a flux surface function, call plot_fsa.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
@@ -571,9 +604,11 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=default_L,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
+                compute_kwargs=compute_kwargs,
                 **kwargs,
             )
         rho = grid.nodes[:, 0]
@@ -584,9 +619,11 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 name,
                 rho=rho,
                 log=log,
+                normalize=normalize,
                 ax=ax,
                 return_data=return_data,
                 grid=grid,
+                compute_kwargs=compute_kwargs,
                 **kwargs,
             )
 
@@ -600,8 +637,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     plot_axes = _get_plot_axes(grid)
 
     data, ylabel = _compute(
-        eq, name, grid, kwargs.pop("component", None), reshape=False
+        eq,
+        name,
+        grid,
+        kwargs.pop("component", None),
+        reshape=False,
+        compute_kwargs=compute_kwargs,
     )
+
+    if normalize:
+        norm_data, _ = _compute(
+            eq, normalize, grid, compute_kwargs=compute_kwargs, reshape=False
+        )
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 1D
     if len(plot_axes) != 1:
@@ -644,11 +692,24 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+    if normalize:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data
@@ -657,7 +718,15 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
 
 def plot_2d(  # noqa : C901
-    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+    eq,
+    name,
+    grid=None,
+    log=False,
+    normalize=None,
+    ax=None,
+    return_data=False,
+    compute_kwargs=None,
+    **kwargs,
 ):
     """Plot 2D cross-sections.
 
@@ -677,6 +746,8 @@ def plot_2d(  # noqa : C901
         Axis to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -756,6 +827,7 @@ def plot_2d(  # noqa : C901
             name,
             grid,
             component=component,
+            compute_kwargs=compute_kwargs,
         )
     else:
         data, label = _compute_Bn(
@@ -771,7 +843,13 @@ def plot_2d(  # noqa : C901
     divider = make_axes_locatable(ax)
 
     if normalize:
-        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        norm_data, _ = _compute(
+            eq,
+            normalize,
+            grid,
+            reshape=False,
+            compute_kwargs=compute_kwargs,
+        )
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -915,13 +993,15 @@ def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
     return ijk
 
 
-def plot_3d(
+def plot_3d(  # noqa : C901
     eq,
     name,
     grid=None,
     log=False,
+    normalize=None,
     fig=None,
     return_data=False,
+    compute_kwargs=None,
     **kwargs,
 ):
     """Plot 3D surfaces.
@@ -936,10 +1016,14 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -996,6 +1080,12 @@ def plot_3d(
         fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
+    errorif(
+        not (isinstance(normalize, str) or normalize is None),
+        ValueError,
+        "normalize must be a string",
+    )
+
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
@@ -1021,6 +1111,7 @@ def plot_3d(
             name,
             grid,
             component=component,
+            compute_kwargs=compute_kwargs,
         )
     else:
         data, label = _compute_Bn(
@@ -1031,6 +1122,10 @@ def plot_3d(
             chunk_size=kwargs.pop("chunk_size", None),
             B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
+
+    if normalize:
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     errorif(
         len(kwargs) != 0,
@@ -1068,7 +1163,6 @@ def plot_3d(
             ticktext=[f"{l:.0e}" for l in levels],
             tickvals=ticks,
         )
-
     else:
         cbar = dict(
             title=LatexNodes2Text().latex_to_text(label),
@@ -1077,6 +1171,14 @@ def plot_3d(
         )
         cmin = None
         cmax = None
+
+    if normalize:
+        parameterization = _parse_parameterization(eq)
+        label = "{} / {}".format(
+            "$" + data_index[parameterization][name]["label"] + "$",
+            "$" + data_index[parameterization][normalize]["label"] + "$",
+        )
+        cbar["title"] = LatexNodes2Text().latex_to_text(label)
 
     meshdata = go.Mesh3d(
         x=X.flatten(),
@@ -1150,6 +1252,11 @@ def plot_3d(
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
+    if normalize:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
+
     if return_data:
         return fig, plot_data
 
@@ -1168,6 +1275,7 @@ def plot_fsa(  # noqa: C901
     ax=None,
     return_data=False,
     grid=None,
+    compute_kwargs=None,
     **kwargs,
 ):
     """Plot flux surface averages of quantities.
@@ -1206,6 +1314,8 @@ def plot_fsa(  # noqa: C901
     grid : _Grid
         Grid to compute name on. If provided, the parameters
         ``rho``, ``M``, and ``N`` are ignored.
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1272,7 +1382,8 @@ def plot_fsa(  # noqa: C901
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        # sym=False to ensure the FSA is correct
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 
@@ -1297,7 +1408,12 @@ def plot_fsa(  # noqa: C901
             # desired surface average.
             name = "<" + name + ">"
     values, ylabel = _compute(
-        eq, name, grid, kwargs.pop("component", None), reshape=False
+        eq,
+        name,
+        grid,
+        kwargs.pop("component", None),
+        reshape=False,
+        compute_kwargs=compute_kwargs,
     )
     ylabel = ylabel.split("~")
     if (
@@ -1314,7 +1430,13 @@ def plot_fsa(  # noqa: C901
     else:
         compute_surface_averages = surface_averages_map(grid, expand_out=False)
         if with_sqrt_g:  # flux surface average
-            sqrt_g = _compute(eq, "sqrt(g)", grid, reshape=False)[0]
+            sqrt_g = _compute(
+                eq,
+                "sqrt(g)",
+                grid,
+                reshape=False,
+                compute_kwargs=compute_kwargs,
+            )[0]
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
@@ -1327,7 +1449,13 @@ def plot_fsa(  # noqa: C901
             )
             values_r = next(
                 (
-                    _compute(eq, x, grid, reshape=False)[0]
+                    _compute(
+                        eq,
+                        x,
+                        grid,
+                        reshape=False,
+                        compute_kwargs=compute_kwargs,
+                    )[0]
                     for x in schemes
                     if x in data_index[p]
                 ),
@@ -1336,7 +1464,10 @@ def plot_fsa(  # noqa: C901
             if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
                 # Otherwise cannot compute axis limit in this agnostic manner.
                 sqrt_g = grid.replace_at_axis(
-                    sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
+                    sqrt_g,
+                    _compute(eq, "sqrt(g)_r", grid, reshape=False)[0],
+                    copy=True,
+                    compute_kwargs=compute_kwargs,
                 )
             averages = compute_surface_averages(values, sqrt_g=sqrt_g)
             ylabel = r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
@@ -1356,7 +1487,13 @@ def plot_fsa(  # noqa: C901
         plot_data_ylabel_key = f"<{name}>_fsa"
 
     if normalize:
-        norm_data = _compute(eq, normalize, grid, reshape=False)[0]
+        norm_data = _compute(
+            eq,
+            normalize,
+            grid,
+            reshape=False,
+            compute_kwargs=compute_kwargs,
+        )[0]
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
@@ -1398,7 +1535,15 @@ def plot_fsa(  # noqa: C901
 
 
 def plot_section(
-    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+    eq,
+    name,
+    grid=None,
+    log=False,
+    normalize=None,
+    ax=None,
+    return_data=False,
+    compute_kwargs=None,
+    **kwargs,
 ):
     """Plot Poincare sections.
 
@@ -1418,6 +1563,8 @@ def plot_section(
         Axis to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
+    compute_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1527,9 +1674,22 @@ def plot_section(
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
-    data, _ = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
+    data, _ = _compute(
+        eq,
+        name,
+        grid,
+        kwargs.pop("component", None),
+        reshape=False,
+        compute_kwargs=compute_kwargs,
+    )
     if normalize:
-        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+        norm_data, _ = _compute(
+            eq,
+            normalize,
+            grid,
+            reshape=False,
+            compute_kwargs=compute_kwargs,
+        )
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
@@ -1661,7 +1821,6 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``NR``: int, number of equispaced rho point to use in plotting the vartheta
           contours
         * ``NT``: int, number of equispaced theta points to use in plotting the rho
@@ -1682,6 +1841,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``legend``: bool, whether to show legend or not, False by default
 
     Returns
@@ -1721,10 +1881,11 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
-    label = kwargs.pop("label", "")
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    label = kwargs.pop("label", "")
+    legend = kwargs.pop("legend", False if label == "" else True)
 
     assert (
         len(kwargs) == 0
@@ -1784,10 +1945,13 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             map_coordinates(
                 eq,
                 t_grid.nodes,
-                ["rho", "theta_PEST", "phi"],
-                ["rho", "theta", "zeta"],
+                # TODO (#568): once generalized toroidal angle is used, change
+                # inbasis to ["rho", "theta_PEST", "phi"],
+                inbasis=["rho", "theta_PEST", "zeta"],
+                outbasis=["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
                 guess=t_grid.nodes,
+                maxiter=30,
             ),
             sort=False,
         )
@@ -1856,8 +2020,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
-        if label is not None and i == 0 and kwargs.pop("legend", False):
-            ax[i].legend()
+        if label is not None and i == 0 and legend:
+            ax[i].legend(loc="best")
 
     _set_tight_layout(fig)
 
@@ -1921,7 +2085,7 @@ def poincare_plot(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -1962,6 +2126,10 @@ def poincare_plot(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", colorblind_colors[0])
@@ -1988,14 +2156,30 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
         source_grid=grid,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -2523,6 +2707,7 @@ def plot_comparison(
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
+            legend=False,
             title_fontsize=title_fontsize,
             xlabel_fontsize=xlabel_fontsize,
             ylabel_fontsize=ylabel_fontsize,
@@ -3836,7 +4021,7 @@ def plot_field_lines(
           True by default.
 
         Additionally, any other keyword arguments will be passed on to
-        ``desc.magnetic_fields.field_line_integrate``
+        ``desc.magnetic_fields.field_line_integrate`` (except ``return_aux``).
 
     Returns
     -------
@@ -3873,6 +4058,10 @@ def plot_field_lines(
     for key in inspect.signature(field_line_integrate).parameters:
         if key in kwargs:
             fli_kwargs[key] = kwargs.pop(key)
+    if "options" not in fli_kwargs:
+        fli_kwargs["options"] = {"throw": False}
+    if "throw" not in fli_kwargs["options"]:
+        fli_kwargs["options"]["throw"] = False
 
     figsize = kwargs.pop("figsize", None)
     color = kwargs.pop("color", "black")
@@ -3902,13 +4091,29 @@ def plot_field_lines(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
+    fieldR, fieldZ, (_, result) = field_line_integrate(
         r0=R0,
         z0=Z0,
         phis=phis,
         field=field,
+        return_aux=True,
         **fli_kwargs,
     )
+    # result._value is 0 if integration completed successfully
+    # for a field line, and >0 if it failed or hit bounds.
+    if any(result._value > 0):
+        err0_idx = np.where(result._value > 0)[0][0]
+        # derived from https://github.com/patrick-kidger/equinox/pull/1102/files
+        # should be fixed in equinox v0.13.1
+        err0_msg = np.vectorize(lambda val: RESULTS._index_to_message[val])(
+            result._value
+        )[err0_idx]
+        warnif(
+            True,
+            UserWarning,
+            "Integration terminated early. Plotting partial results.\n"
+            f"diffrax message: {err0_msg}",
+        )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))
@@ -4241,10 +4446,10 @@ def plot_gammac(
         Default: 0.5
     alphas : array_like, optional
         Fieldline label values (toroidal angle).
-        Default: np.linspace(0, 2π, 32, endpoint=True)
+        Default: np.linspace(0, 2π, 25, endpoint=True)
     num_pitch : int, optional
         Number of pitch angle values for bounce integral calculation.
-        Default: 16
+        Default: 28
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -4282,24 +4487,22 @@ def plot_gammac(
         from desc.plotting import plot_gammac
         fig, ax = plot_gammac(eq, rho=0.5)
     """
-    if rho is None:
-        rho = np.array([0.5], dtype=float)
-    else:
-        rho = np.asarray(rho, dtype=float).ravel()
-        errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
-
+    rho = (
+        np.array([0.5], dtype=float)
+        if rho is None
+        else np.asarray(rho, dtype=float).ravel()
+    )
+    errorif(rho.size != 1, msg="rho must be a scalar or length-1 array for plot")
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 25, endpoint=True)
-
-    if num_pitch is None:
-        num_pitch = 16
+    num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
-    X = kwargs.pop("X", 16)
-    Y = kwargs.pop("Y", 32)
+    X = kwargs.pop("X", 32)
+    Y = kwargs.pop("Y", 64)
     Y_B = kwargs.pop("Y_B", Y * 2)
-    num_quad = kwargs.pop("num_quad", 20)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", 1)
+    num_quad = kwargs.pop("num_quad", 32)
+    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
 
@@ -4329,7 +4532,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch = np.linspace(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

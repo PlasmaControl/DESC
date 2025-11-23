@@ -471,7 +471,7 @@ class TestStreams:
             r"Projection of "
             r"$\alpha, \zeta \mapsto \theta$ onto "
             r"$\{T_x(\alpha / \pi - 1) T_y(N_{\text{FP}} \zeta / \pi - 1)\}$"
-            r"$_{\text{Fourier-Chebyshev}}$",
+            r"$_{\text{Chebyshev}}$",
             pad=20,
         )
         plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")

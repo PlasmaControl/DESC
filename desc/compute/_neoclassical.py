@@ -2,14 +2,11 @@
 
 from functools import partial
 
-from orthax.legendre import leggauss
-
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
-from ..integrals.quad_utils import chebgauss2
-from ..utils import parse_argname_change, safediv
+from ..utils import safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
@@ -19,7 +16,7 @@ _bounce_doc = {
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        A reference value is 100. Default is double ``Y``.
+        A reference value is 100.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -37,14 +34,14 @@ _bounce_doc = {
         """,
     "num_well": """int :
         Maximum number of wells to detect for each pitch and field line.
-        Giving ``None`` will detect all wells but due to current limitations in
+        Giving ``-1`` will detect all wells but due to current limitations in
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
         """,
@@ -69,8 +66,8 @@ _bounce_doc = {
         Used to compute the proper length of the field line ∫ dℓ / B.
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-        Default is Gauss-Legendre quadrature at resolution ``Y_B//2``
-        on each toroidal transit.
+        Default is Gauss-Legendre quadrature on each field period along
+        the field line.
         """,
     "quad": """tuple[jnp.ndarray] :
         Used to compute bounce integrals.
@@ -86,7 +83,8 @@ _bounce_doc = {
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
-        This parameter is intended to be used by objectives only.
+        This private parameter is intended to be used only by
+        developers for objectives.
         """,
     "theta": "",
 }
@@ -159,28 +157,22 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
-    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 51)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
-    quad = (
-        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
-    )
-    nufft_eps = kwargs.get("nufft_eps", 1e-6)
-    spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    grid = transforms["grid"]
+    (
+        angle,
+        Y_B,
+        alpha,
+        num_transit,
+        num_well,
+        num_pitch,
+        pitch_batch_size,
+        surf_batch_size,
+        fl_quad,
+        quad,
+        nufft_eps,
+        spline,
+        vander,
+    ) = Bounce2D._default_kwargs("deriv", grid.NFP, **kwargs)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
@@ -220,7 +212,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             axis=-1,
         ) / bounce.compute_fieldline_length(fl_quad, vander)
 
-    grid = transforms["grid"]
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         Bounce2D.batch(

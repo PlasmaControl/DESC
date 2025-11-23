@@ -22,7 +22,7 @@ def test_Gamma_c_Nemov_2D(nufft_eps):
     data = eq.compute(
         "Gamma_c",
         grid=grid,
-        angle=Bounce2D.angle(eq, X=32, Y=64, rho=rho),
+        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
@@ -46,7 +46,7 @@ def test_Gamma_c_Velasco_2D(nufft_eps):
     data = eq.compute(
         "Gamma_c Velasco",
         grid=grid,
-        angle=Bounce2D.angle(eq, X=32, Y=64, rho=rho),
+        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,

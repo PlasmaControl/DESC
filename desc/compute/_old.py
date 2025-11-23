@@ -203,7 +203,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
-    num_pitch = kwargs.get("num_pitch", 64)
+    num_pitch = kwargs.get("num_pitch", 65)
     num_well = kwargs.get("num_well", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
@@ -257,7 +257,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            simp=False,
             expand_out=True,
         )
         / data["fieldline length"]
@@ -311,7 +310,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
-    num_pitch = kwargs.get("num_pitch", 64)
+    num_pitch = kwargs.get("num_pitch", 65)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
         kwargs["quad"]
@@ -349,7 +348,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            simp=False,
             expand_out=True,
         )
         / data["fieldline length"]

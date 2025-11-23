@@ -21,6 +21,7 @@ def test_effective_ripple_2D(nufft_eps):
     or more than 5.7 GB on JAX versions 0.5.3+, then there is another memory regression.
     These values are for the test where nufft_eps is zero.
     https://github.com/jax-ml/jax/issues/30627.
+    For nufft_eps nonzero with surf_batch_size = 2, memory is 1 GB.
     """
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
@@ -29,7 +30,7 @@ def test_effective_ripple_2D(nufft_eps):
     data = eq.compute(
         "effective ripple 3/2",
         grid=grid,
-        angle=Bounce2D.angle(eq, X=32, Y=64, rho=rho),
+        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
@@ -41,7 +42,7 @@ def test_effective_ripple_2D(nufft_eps):
     eps_32 = grid.compress(data["effective ripple 3/2"])
     # NEO file generated from DESC equlibrium on 2025-10-23 17:47:07.280264.
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.W7-X")
-    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.1)
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.11)
 
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")

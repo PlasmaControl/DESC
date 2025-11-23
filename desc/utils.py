@@ -712,7 +712,7 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
 @functools.partial(
     jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
 )
-def take_mask(a, mask, /, *, size=None, fill_value=None):
+def take_mask(a, mask, /, *, size=-1, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
     Parameters
@@ -723,10 +723,10 @@ def take_mask(a, mask, /, *, size=None, fill_value=None):
         Boolean mask to index into ``a``. Should have same shape as ``a``.
     size : int
         Elements of ``a`` at the first size True indices of ``mask`` will be returned.
-        If there are fewer elements than size indicates, the returned array will be
-        padded with ``fill_value``. The size default is ``mask.size``.
+        Size is clipped to be <= ``mask.size``.
+        A negative value will be interpreted as ``mask.size``.
     fill_value : Any
-        When there are fewer than the indicated number of elements, the remaining
+        When there are fewer nonzero elements in ``mask`` than ``size``, the remaining
         elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
         the largest negative value for signed types, the largest positive value for
         unsigned types, and True for booleans.
@@ -738,7 +738,8 @@ def take_mask(a, mask, /, *, size=None, fill_value=None):
 
     """
     assert a.shape == mask.shape
-    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
+    size = mask.size if (size is None or size < 0) else min(size, mask.size)
+    idx = flatnonzero(mask, size=size, fill_value=mask.size)
     return take(
         a,
         idx,

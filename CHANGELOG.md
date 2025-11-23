@@ -6,12 +6,15 @@ v0.16.1
 
 New Features
 
-- Method to plot Fourier spectrum of stream map in field line coordinates in ``Bounce2D``.
-- Utility method to compute integrals over phase space in batches is now added to the public API.
+- Bounce integrals
+    - [Significantly improves convergence of inverse stream maps in ``Bounce2D``](https://github.com/PlasmaControl/DESC/pull/1919).
+    - Method to plot frequency spectrum of inverse stream map in field line coordinates in ``Bounce2D``.
+    - Utility method to compute integrals over plasma volume and velocity space in batches is now added to the public API.
+    - Utility methods to make adding new bounce integral objectives simpler.
+    - The resolution parameter for the field line quadrature now corresponds to the
+      resolution for integration over a single field period.
+    - Default quadrature over pitch angles in Gamma_c switched to second order method.
 
-Bug Fixes
-
-- [Improves convergence of stream map in ``Bounce2D``](https://github.com/PlasmaControl/DESC/pull/1919).
 
 v0.16.0
 -------

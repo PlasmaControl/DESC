@@ -1,17 +1,4 @@
-"""Utilities for quadratures.
-
-Notes
------
-Bounce integrals with bounce points where the derivative of B does not vanish
-have 1/2 power law singularities. However, strongly singular integrals where the
-domain of the integral ends at the local extrema of B are not integrable.
-
-Everywhere except for the extrema, an implicit Chebyshev (``chebgauss1`` or
-``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
-captures the integral because √(1−(ζ/ζᵢ)²) / √ (1−λB) ∼ k(λ, ζ) is smooth in ζ.
-The clustering of the nodes near the singularities is sufficient to estimate
-k(ζ, λ).
-"""
+"""Utilities for quadratures."""
 
 from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
@@ -220,7 +207,7 @@ def uniform(deg):
 
 
 def simpson2(deg):
-    """Open Simpson rule completed by midpoint at boundary.
+    """Simpson’s 1/3 in the interior completed by an open midpoint scheme.
 
     Parameters
     ----------

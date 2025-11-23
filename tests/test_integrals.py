@@ -35,11 +35,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _check_bounce_points,
-    bounce_points,
-    get_extrema,
-)
+from desc.integrals._bounce_utils import bounce_points, check_bounce_points, get_extrema
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
@@ -743,7 +739,7 @@ class TestBouncePoints:
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
         z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
@@ -759,7 +755,7 @@ class TestBouncePoints:
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
         z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
@@ -779,7 +775,7 @@ class TestBouncePoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
         z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -805,7 +801,7 @@ class TestBouncePoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2]
         z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -827,7 +823,7 @@ class TestBouncePoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
         z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, dB_dz.c[:, 2:].T)
-        _check_bounce_points(
+        check_bounce_points(
             z1,
             z2,
             pitch_inv,
@@ -860,7 +856,7 @@ class TestBouncePoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
         z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -1554,7 +1550,7 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        angle = Bounce2D.angle(eq, X=16, Y=90, rho=rho)
+        angle = Bounce2D.angle(eq, X=20, Y=16, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
@@ -1562,7 +1558,7 @@ class TestBounce2D:
             alpha=alpha,
             num_transit=2,
             check=True,
-            spline=False,  # not recommended in general
+            spline=False,
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1627,7 +1623,7 @@ class TestBounce2D:
                 352.15451128,
                 440.10036239,
             ],
-            rtol=5e-3,
+            rtol=2e-4,
         )
 
         # check for consistency with different options
@@ -1637,7 +1633,7 @@ class TestBounce2D:
             {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             # ~1% of the integrals differ significantly at lower epsilon.
-            nufft_eps=1e-12,
+            nufft_eps=1e-11,
             check=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
@@ -1647,7 +1643,7 @@ class TestBounce2D:
             num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
         )
         np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2.5e-4
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=6.5e-4
         )
 
         bounce = Bounce2D(

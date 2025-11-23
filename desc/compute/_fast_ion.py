@@ -2,18 +2,11 @@
 
 from functools import partial
 
-from orthax.legendre import leggauss
-
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
-from ..integrals.quad_utils import (
-    automorphism_sin,
-    get_quadrature,
-    grad_automorphism_sin,
-)
-from ..utils import cross, dot, parse_argname_change, safediv
+from ..utils import cross, dot, safediv
 from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
@@ -130,33 +123,22 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
-    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
-    nufft_eps = kwargs.get("nufft_eps", 1e-7)
-    spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    grid = transforms["grid"]
+    (
+        angle,
+        Y_B,
+        alpha,
+        num_transit,
+        num_well,
+        num_pitch,
+        pitch_batch_size,
+        surf_batch_size,
+        fl_quad,
+        quad,
+        nufft_eps,
+        spline,
+        vander,
+    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -220,7 +202,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    grid = transforms["grid"]
     data["Gamma_c"] = Bounce2D.batch(
         Gamma_c,
         fun_data,
@@ -229,7 +210,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-        simp=False,
         expand_out=True,
     )
     return data
@@ -304,30 +284,22 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
-    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
-    nufft_eps = kwargs.get("nufft_eps", 1e-7)
-    spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    grid = transforms["grid"]
+    (
+        angle,
+        Y_B,
+        alpha,
+        num_transit,
+        num_well,
+        num_pitch,
+        pitch_batch_size,
+        surf_batch_size,
+        _,
+        quad,
+        nufft_eps,
+        spline,
+        vander,
+    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -378,9 +350,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    grid = transforms["grid"]
     data["gamma_c"] = Bounce2D.batch(
-        gamma_c0, fun_data, data, angle, grid, num_pitch, surf_batch_size, simp=False
+        gamma_c0, fun_data, data, angle, grid, num_pitch, surf_batch_size
     )
     return data
 
@@ -448,33 +419,22 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     transits.
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
-    Y_B = kwargs.get("Y_B", angle.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
-    nufft_eps = kwargs.get("nufft_eps", 1e-7)
-    spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    grid = transforms["grid"]
+    (
+        angle,
+        Y_B,
+        alpha,
+        num_transit,
+        num_well,
+        num_pitch,
+        pitch_batch_size,
+        surf_batch_size,
+        fl_quad,
+        quad,
+        nufft_eps,
+        spline,
+        vander,
+    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -512,8 +472,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             axis=-1,
         ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
 
-    grid = transforms["grid"]
-
     data["Gamma_c Velasco"] = Bounce2D.batch(
         Gamma_c,
         {
@@ -526,7 +484,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-        simp=False,
         expand_out=True,
     )
     return data

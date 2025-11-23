@@ -1,6 +1,5 @@
 """Test interpolation utilities."""
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -425,28 +424,23 @@ class TestFastInterp:
 class TestStreams:
     """Test convergence of inverse stream maps."""
 
-    tol = 1e-7
+    tol = 1e-8
     norm = LogNorm(1e-7, 1e0)
-    X = 32
-    Y = lambda eq: int(32 * np.sqrt(eq.NFP))
+    X = 48
+    Y = 48
     rho = 0.6
 
     @staticmethod
     def theta_chebyshev(eq, X, Y, rho, tol):
         """Chebyshev spectrum of θ(α, ζ)."""
-        domain = (0, 2 * np.pi)
-        zeta = cheb_pts(Y, domain)[::-1]
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", "Unequal number of field periods")
-            Λ = get_transforms(
-                "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
-            )["L"]
-        assert Λ.basis.NFP == eq.NFP
+        zeta = cheb_pts(Y, (0, 2 * np.pi / eq.NFP))[::-1]
+        Λ = get_transforms(
+            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
+        )["L"]
 
         theta = eq._map_poloidal_coordinates(
             jnp.atleast_1d(eq._compute_iota_under_jit(rho)),
-            cheb_pts(X, domain),
+            cheb_pts(X, (0, 2 * np.pi)),
             zeta,
             eq.params_dict["L_lmn"],
             Λ,
@@ -455,27 +449,29 @@ class TestStreams:
             tol=tol,
         ).squeeze(0)[..., ::-1]
 
-        c = ChebyshevSeries(theta, domain, domain)._c
+        c = ChebyshevSeries(theta, (0, 2 * np.pi), (0, 2 * np.pi / eq.NFP))._c
         c = cheb_from_dct(cheb_from_dct(c, -1), -2)
         return np.abs(c)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("name", ["W7-X"])
+    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     @staticmethod
     def test_theta_chebyshev(name):
         """Plot Chebyshev spectrum of θ(α, ζ)."""
         eq = get(name)
         X = TestStreams.X
-        Y = TestStreams.Y(eq)
+        Y = TestStreams.Y
         rho = TestStreams.rho
         c = TestStreams.theta_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
 
         fig, ax = plt.subplots()
         ax.set(ylabel=r"$x$", xlabel=r"$y$")
         ax.set_title(
-            r"Projection of $\alpha, \zeta \mapsto \theta$ "
-            r"onto $\{T_x(\alpha) T_y(\zeta)\}_{\text{Chebyshev}}$",
+            r"Projection of "
+            r"$\alpha, \zeta \mapsto \theta$ onto "
+            r"$\{T_x(\alpha / \pi - 1) T_y(N_{\text{FP}} \zeta / \pi - 1)\}$"
+            r"$_{\text{Fourier-Chebyshev}}$",
             pad=20,
         )
         plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")
@@ -492,7 +488,7 @@ class TestStreams:
         """Plot Fourier-Chebyshev spectrum of δ(α, ζ)."""
         eq = get(name)
         X = TestStreams.X
-        Y = TestStreams.Y(eq)
+        Y = TestStreams.Y
         angle = Bounce2D.angle(eq, X, Y, TestStreams.rho, tol=TestStreams.tol)
         return Bounce2D.plot_angle_spectrum(angle, 0, norm=TestStreams.norm)
 
@@ -501,10 +497,10 @@ class TestStreams:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     @staticmethod
     def test_lambda_fourier_vartheta_zeta(name):
-        """Plot Fourier spectrum of Λ(ϑ, ζ × NFP)."""
+        """Plot Fourier spectrum of Λ(ϑ, ζ)."""
         eq = get(name)
         X = TestStreams.X
-        Y = TestStreams.X - 1
+        Y = TestStreams.Y
         angle = Bounce2D.angle(
             eq,
             X,

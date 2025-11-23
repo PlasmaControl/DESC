@@ -1,15 +1,11 @@
 """Objectives for neoclassical transport."""
 
-import warnings
-
-from orthax.legendre import leggauss
-
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._bounce_utils import truncate_rule
-from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
+from desc.integrals._bounce_utils import Y_B_rule
+from desc.integrals.bounce_integral import Bounce2D
 from desc.utils import parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import chebgauss2
@@ -72,15 +68,16 @@ class EffectiveRipple(_Objective):
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
-        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+        Poloidal Fourier grid resolution to interpolate the angle.
         Preferably rounded down to power of 2.
     Y : int
-        Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+        Toroidal Chebyshev grid resolution over a single field period
+        to interpolate the angle.
         Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``. Something like 100 is usually sufficient.
-        Currently, this is the number of knots per toroidal transit over
+        Something like 100 is usually sufficient.
+        This is the number of knots per toroidal transit over
         to approximate B with cubic splines.
     alpha : jnp.ndarray
         Shape (num alpha, ).
@@ -96,14 +93,14 @@ class EffectiveRipple(_Objective):
         irrational magnetic surface better, with diminishing returns.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
-        Giving ``None`` will detect all wells but due to current limitations in
+        Giving ``-1`` will detect all wells but due to current limitations in
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
 
@@ -196,17 +193,10 @@ class EffectiveRipple(_Objective):
             use_bounce1d, kwargs, "spline", "use_bounce1d"
         )
         self._grid = grid
-        self._constants = {
-            "quad_weights": 1.0,
-            "alpha": alpha,
-            "X": fourier_pts(X),
-            "Y": cheb_pts(Y, (0, 2 * jnp.pi))[::-1],
-        }
-        Y_B = setdefault(Y_B, 2 * Y)
+        self._constants = {"quad_weights": 1.0, "alpha": alpha, "X": X, "Y": Y}
         self._hyperparam = {
             "Y_B": Y_B,
             "num_transit": num_transit,
-            "num_well": setdefault(num_well, Y_B * num_transit),
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
@@ -241,35 +231,13 @@ class EffectiveRipple(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        eq = self.things[0]
-        if self._grid is None:
-            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft2
-
-        rho = self._grid.compress(self._grid.nodes[:, 0])
-        x, w = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["_vander"] = _get_vander(self, x, self._grid.num_zeta)
-        self._constants["fieldline quad"] = (x, w)
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
-        )
-        self._constants["transforms"] = get_transforms(
-            "effective ripple", eq, grid=self._grid
-        )
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", "Unequal number of field periods")
-            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
-            self._constants["lambda"] = get_transforms(
-                "lambda",
-                eq,
-                grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=self._constants["Y"]),
-            )["L"]
-        assert self._constants["lambda"].basis.NFP == eq.NFP
-
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, rho
+        Bounce2D._objective_build(
+            self,
+            get_profiles,
+            get_transforms,
+            _parse_callable_target_bounds,
+            names="effective ripple",
+            singular="deriv",
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -329,8 +297,15 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_bounce1d(self, use_jit=True, verbose=1):
+        eq = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
+
         Y_B = self._hyperparam.pop("Y_B")
+        Y_B = setdefault(Y_B, Y_B_rule(32, eq.NFP, spline=True))
         num_transit = self._hyperparam.pop("num_transit")
+        self._hyperparam.setdefault("num_well", Y_B * num_transit)
         num_quad = self._hyperparam.pop("num_quad")
         self._hyperparam.pop("nufft_eps")
         del self._constants["X"]
@@ -345,11 +320,6 @@ class EffectiveRipple(_Objective):
             "max_tz |B|",
             "R0",
         ]
-
-        eq = self.things[0]
-        if self._grid is None:
-            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         self._constants["rho"] = rho
@@ -406,27 +376,3 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
-
-
-def _get_vander(obj, x, num_zeta):
-    eq = obj.things[0]
-    Y_B = obj._hyperparam["Y_B"]
-    NFP = eq.NFP if (num_zeta > 1) else Y_B
-    num_zeta_Nfp = (Y_B + NFP - 1) // NFP
-    Y_B = num_zeta_Nfp * NFP
-    Y = truncate_rule(obj._constants["Y"].size)
-    return {
-        "dct cfl": _vander_dct_cfl(x, Y),
-        "dft cfl": _vander_dft_cfl(x, obj._grid),
-        "dct spline": _vander_dct_cfl(jnp.linspace(-1, 1, Y_B, endpoint=False), Y),
-    }
-
-
-def _vander_dft_cfl(x, grid):
-    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
-    zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
-    return jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis]
-
-
-def _vander_dct_cfl(x, Y):
-    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[:, jnp.newaxis])

@@ -1,9 +1,10 @@
 """Fast interpolation utilities.
 
+# TODO (#1388): Move to external package.
+
 Notes
 -----
-These utilities are chosen for performance on gpu among
-methods that have the best (asymptotic) algorithmic complexity.
+These utilities are chosen for performance on gpu.
 For example, we prefer to not use Horner's method.
 """
 
@@ -574,6 +575,18 @@ def interp_dct(x, f, lobatto=False, axis=-1):
     )
 
 
+def vander_chebyshev(x, Y):
+    """For points x with Chebyshev resolution Y.
+
+    Returns
+    -------
+    vander : jnp.ndarray
+        Shape (*x.shape, Y).
+
+    """
+    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[..., jnp.newaxis])
+
+
 def idct_mmt(x, a, axis=-1, vander=None):
     """Evaluate Chebyshev coefficients ``a`` at ``x`` ∈ [-1, 1].
 
@@ -599,7 +612,7 @@ def idct_mmt(x, a, axis=-1, vander=None):
 
     """
     if vander is None:
-        vander = jnp.cos(jnp.arange(a.shape[axis]) * jnp.arccos(x)[..., jnp.newaxis])
+        vander = vander_chebyshev(x, a.shape[axis])
         a = jnp.moveaxis(a, axis, -1)
         axis = -1
     # Better than Clenshaw recursion ``chebval(x,a,tensor=False)`` on GPU.
@@ -706,9 +719,6 @@ def _subtract_last(c, k):
     )
 
 
-# TODO (#1388): Move this stuff into interpax.
-
-
 def _filter_distinct(r, sentinel, eps):
     """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
     # eps needs to be low enough that close distinct roots do not get removed.
@@ -781,7 +791,6 @@ def polyroot_vec(
         and get_only_real_roots
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
-        # TODO: Differentiate through root alone with custom_linear_solve.
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient. Also consumes less memory.
         r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)

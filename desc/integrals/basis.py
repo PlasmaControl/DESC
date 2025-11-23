@@ -596,19 +596,6 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
         return idct_mmt(y, cheb)
 
-    #  The following changes would make root finding here more efficient.
-    #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-    #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-    #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-    #  Use that once to find extrema of |B| if Y_B > 64.
-    #  2. Then to find roots of bounce points use the closed formula in Boyd's
-    #  spectral methods section 19.6. Can isolate interval to search for root by
-    #  observing whether |B|-1/λ changes sign at extrema. Only need to do
-    #  evaluate Chebyshev series at quadrature points once, and can use that to
-    #  compute the integral for every λ. The integral will converge rapidly
-    #  since a low order polynomial approximates |B| well in between adjacent
-    #  extrema. 2 is a larger improvement than 1.
-
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
 
@@ -648,9 +635,6 @@ class PiecewiseChebyshevSeries(IOAble):
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        # Fast multipoint method would be better. Reduces to FFT. Cost is
-        # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
-        # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
         df_dy = jnp.sign(
             jnp.linalg.vecdot(
                 n * jnp.sin(n * jnp.arccos(y)[..., None]),

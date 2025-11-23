@@ -1,4 +1,9 @@
-"""Utilities for bounce integrals."""
+"""Utilities for bounce integrals.
+
+Note that since the filename is preceded by an underscore,
+these utilities are private, and although it is unlikely,
+their API may change without warning.
+"""
 
 import numpy as np
 from interpax import CubicSpline, PPoly
@@ -14,6 +19,7 @@ from desc.integrals._interp_utils import (
     nufft1d2r,
     polyroot_vec,
     polyval_vec,
+    vander_chebyshev,
 )
 from desc.integrals.basis import (
     FourierChebyshevSeries,
@@ -51,14 +57,14 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
         last axis enumerates the polynomials that compose a particular spline.
     num_well : int or None
         Specify to return the first ``num_well`` pairs of bounce points for each
-        pitch and field line. Default is ``None``, which will detect all wells,
-        but due to current limitations in JAX this will have worse performance.
+        pitch and field line. Choosing ``-1`` will detect all wells, but due
+        to current limitations in JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
@@ -108,7 +114,8 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     return z1, z2
 
 
-def _set_default_plot_kwargs(kwargs, l=None, m=None):
+def set_default_plot_kwargs(kwargs, l=None, m=None):
+    """Sets some plot kwargs to defaults."""
     vlabel = r"$\vert B \vert$"
     default_title = (
         rf"Intersects $\zeta$ in epigraph$(${vlabel}$)$ "
@@ -123,13 +130,13 @@ def _set_default_plot_kwargs(kwargs, l=None, m=None):
     return kwargs
 
 
-def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
+def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly.
 
     For the plotting labels of ρ(l), α(m), it is assumed that the axis that
     enumerates the index l precedes the axis that enumerates the index m.
     """
-    kwargs = _set_default_plot_kwargs(kwargs)
+    kwargs = set_default_plot_kwargs(kwargs)
     title = kwargs.pop("title")
     plots = []
 
@@ -147,7 +154,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     # do not need to broadcast to full size because
     # https://jax.readthedocs.io/en/latest/notebooks/
     # Common_Gotchas_in_JAX.html#out-of-bounds-indexing
-    pitch_inv = atleast_nd(3, _broadcast_for_bounce(pitch_inv))
+    pitch_inv = atleast_nd(3, broadcast_for_bounce(pitch_inv))
     B = atleast_nd(4, B)
 
     mask = (z1 - z2) != 0.0
@@ -203,7 +210,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     return plots
 
 
-def _check_interp(zeta, b_sup_z, B, f, result, plot=True):
+def check_interp(zeta, b_sup_z, B, f, result, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -464,7 +471,7 @@ def argmin(z1, z2, f, ext, g_ext):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_alphas(alpha, iota, num_transit):
+def get_alphas(alpha, iota, num_transit, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -477,29 +484,22 @@ def get_alphas(alpha, iota, num_transit):
         Rotational transform normalized by 2π.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP: int
+        Number of field periods.
 
     Returns
     -------
     alphas : jnp.ndarray
-        Shape (num α, num ρ, num transit).
+        Shape (num α, num ρ, num transit * NFP).
         Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
     alpha = alpha[:, None, None]
     iota = iota[:, None]
-    # Select the next branch such that ϑ is continuous.
-    #      αᵢ = ϑ − ιϕ(ϑ,ζᵢ)
-    #    αᵢ₊₁ = ϑ − ιϕ(ϑ,ζᵢ₊₁)
-    # αᵢ₊₁−αᵢ = ι(ϕ(ϑ,ζᵢ) - ϕ(ϑ,ζᵢ₊₁)) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
-    return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
 
 
-def truncate_rule(Y):
-    """Truncation rule to reduce spectral aliasing."""
-    return max(1, 7 * Y // 8)
-
-
-def theta_on_fieldlines(angle, iota, alpha, num_transit):
+def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -515,6 +515,8 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP : int
+        Number of field periods.
 
     Returns
     -------
@@ -523,13 +525,13 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
         θ over one toroidal transit. ``theta.cheb`` broadcasts with
-        shape (num ρ, num α, num transit, max(1,7Y//8)).
+        shape (num ρ, num α, num transit * NFP, max(1,7Y//8)).
 
     Notes
     -----
     To accelerate convergence, we introduce the stream variable δ such that
-    θ = α + δ. This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ. Hence, it may be
-    interpolated directly from discrete solutions θ* to the nonlinear system
+    θ = α + δ. This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ.
+    Hence, it may be interpolated directly from discrete solutions θ* to
 
     [1] θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
 
@@ -540,62 +542,46 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
         Likewise, a Chebyshev series interpolates δ(α, ζ) at fixed α.
 
     [3] The angle θ must be continuous at the branch cuts.
-        θ = αᵢ + δ(α=αᵢ, ζ=2π) = αᵢ₊₁ + δ(α=αᵢ₊₁, ζ=0)
+        θ = αᵢ + δ(α=αᵢ, ζ=k 2π/NFP) = αᵢ₊₁ + δ(α=αᵢ₊₁, ζ=0) for k ∈ ℤ.
         Hence, branch cuts in ζ where αᵢ, αᵢ₊₁ ∈ [0, 2π) introduce discontinuities of
-        αᵢ - αᵢ₊₁ = -ι 2π in δ. This is consistent with our interpolation of δ on the
-        branch (α, ζ) ∈ [0, 2π)². It is necessary to consider branch cuts in α where
-        αᵢ₊₁ ∉ [0, 2π) ∋ αᵢ as well. Observe the solutions θ* modulo 2π in [1] are
-        invariant against rotations in α by integer multiples of 2π. The periodicity
-        of δ in α ensures the θ = α + δ we compute may be discontinuous at branch cuts
-        by integer multiplies of 2π only. We intend to evaluate maps which are 2π
-        periodic in θ. Hence, θ mod 2π is simple to recover from the interpolation of
-        δ on a single branch (α, ζ) ∈ [0, 2π)².
+        αᵢ - αᵢ₊₁ = -ι ⌊ζ/NFP⌋ 2π/NFP in δ. This is consistent with our interpolation
+        of δ on the branch (α, NFP ζ) ∈ [0, 2π)². It is necessary to consider branch
+        cuts in α where αᵢ₊₁ ∉ [0, 2π) ∋ αᵢ as well. Observe the solutions θ* modulo
+        2π in [1] are invariant against rotations in α by integer multiples of 2π.
+        The periodicity of δ in α ensures the θ = α + δ we compute may be discontinuous
+        at branch cuts by integer multiplies of 2π only. We intend to evaluate maps
+        which are 2π periodic in θ. Hence, θ mod 2π is simple to recover from the
+        interpolation of δ on (α, NFP ζ) ∈ [0, 2π)².
 
     The field line label α changes discontinuously along a magnetic field line.
-    So an approximation f defined with basis functions in (α, ζ) coordinates to some map
-    F which is continuous along the magnetic field line does not guarantee continuity
-    between branch cuts of (α, ζ) ∈ [0, 2π)² until sufficient convergence of f to F.
-    If f is instead defined with basis functions in flux coordinates such as (ϑ, ζ),
-    then continuity between branch cuts of (α, ζ) ∈ [0, 2π)² is guaranteed even with
-    incomplete convergence because the parameters (ϑ, ζ) change continuously along the
-    magnetic field line.
+    So an approximation f defined with basis functions in (α, NFP ζ) coordinates to
+    some map F which is continuous along the magnetic field line does not guarantee
+    continuity between branch cuts of (α, NFP ζ) ∈ [0, 2π)² until sufficient convergence
+    of f to F. If f is instead defined with basis functions in flux coordinates such as
+    (ϑ, NFP ζ), then continuity between branch cuts of (α, NFP ζ) ∈ [0, 2π)² is
+    guaranteed even with incomplete convergence because the parameters (ϑ, ζ) change
+    continuously along the magnetic field line.
 
     This does not imply a parameterization without branch cuts is superior for
     approximation; convergence is determined by the properties of the basis and the
     domain size moreso than whether the parameters have branch cuts on the domain.
-    For example, if f is defined with basis functions in (α, ζ) coordinates, then
-    f(α=α₀, ζ) will sample the approximation to F(α=α₀, ζ) for ζ ∈ [0, 2π) even with
-    incomplete convergence. However, if f is defined with basis functions in (ϑ, ζ)
-    coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to F(α=α₀ ± ε, ζ)
-    with ε → 0 as f converges to F.
+    For example, if f is defined with basis functions in (α, NFP ζ) coordinates, then
+    f(α=α₀, ζ) will sample the approximation to F(α=α₀, ζ) for ζ ∈ [0, NFP 2π) even
+    with incomplete convergence. However, if f is defined with basis functions in
+    (ϑ, NFP ζ) coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to
+    F(α=α₀ ± ε, ζ) with ε → 0 as f converges to F.
 
     This property was mentioned because parameterizing the stream map in (α, ζ) enables
     partial summation. However, the small discontinuity due to discretization error
     between branch cuts is undesirable as it can give significant error to the singular
-    integrals whose integration boundary is near a branch cut. This is resolved by [4].
-
-    [4] To make bounce integrals more robust against discretization error in the
-        convergence of the Fourier series to δ(α, ζ=0), we short-circuit the convergence
-        by explicitly enforcing continuity of δ along field lines. This operation
-        simultaneously transforms δ into θ - α₀. It also enables computing maps which
-        are secular in θ by removing integer multiple of 2π discontinuities.
-
-        Update: No longer implementing [4] with ``PiecewiseChebyshevSeries.stitch``
-        after GitHub pull request #1919 because the convergence is rapid.
-
-    [0] The stream Λ = ϑ - θ is (2π, 2π/NFP) periodic in (ϑ, ζ).
-        Partial summation is impossible in these coordinates:
-
-        Λ : ϑ, ζ ↦ ∑ₘₙ cₘₙ exp(j [mϑ + nζ]) = ∑ₘₙ cₘₙ exp(j [mα + (m ι + n)ζ])
-
-        If the 2D Fourier spectrum of Λ is larger than the 1D Chebyshev spectrum
-        of δ, it will be better to use δ. Although the NUFFTs make parametrizing Λ
-        competitive due to limitations in JAX.
+    integrals whose integration boundary is near a branch cut. If we were using splines
+    instead of pseudo-spectral methods to interpolate then we would have to account
+    for this.
 
     """
     num_alpha = alpha.size
     # peeling off field lines
-    alpha = get_alphas(alpha, iota, num_transit)
+    alpha = get_alphas(alpha, iota, num_transit, NFP)
     if angle.ndim == 2:
         alpha = alpha.squeeze(1)
 
@@ -603,15 +589,17 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit):
     # (since this avoids modding on more points later and keeps θ bounded).
     alpha %= 2 * jnp.pi
 
-    d = (0, 2 * jnp.pi)
+    domain = (0, 2 * jnp.pi / NFP)
     Y = truncate_rule(angle.shape[-1])
     delta = (
-        FourierChebyshevSeries(angle, d, truncate=Y).compute_cheb(alpha).swapaxes(0, -3)
+        FourierChebyshevSeries(angle, domain, truncate=Y)
+        .compute_cheb(alpha)
+        .swapaxes(0, -3)
     )
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)
-    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit, Y)
-    return PiecewiseChebyshevSeries(delta, d)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+    return PiecewiseChebyshevSeries(delta, domain)
 
 
 def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=None):
@@ -624,12 +612,12 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit, theta.Y).
+        shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
-        Chebyshev spectral resolution for ``f``.
+        Chebyshev spectral resolution for ``f`` over a field period.
         Preferably power of 2.
     num_θ : int
         Fourier resolution in poloidal direction.
@@ -649,19 +637,20 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         ``f`` over one toroidal transit. ``f.cheb`` broadcasts with
-        shape (num ρ, num α, num transit, Y).
+        shape (num ρ, num α, num transit * NFP, Y).
 
     """
+    assert theta.domain == (0, 2 * jnp.pi / NFP)
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit and |𝛇| = Y.
+    # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     f = ifft_mmt(
         cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
         f,
-        (0, 2 * jnp.pi / NFP),
+        theta.domain,
         axis=-2,
         modes=modes_ζ,
         vander=vander,
@@ -696,7 +685,7 @@ def fast_cubic_spline(
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit, theta.Y).
+        shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -736,13 +725,14 @@ def fast_cubic_spline(
 
     """
     assert theta.cheb.ndim >= 3
-    lines = theta.cheb.shape[:-2]
+    assert theta.domain == (0, 2 * jnp.pi / NFP)
 
-    if f.shape[-2] == 1:
-        NFP = Y
-    num_ζ = (Y + NFP - 1) // NFP
-    Y = num_ζ * NFP
-    x = jnp.linspace(-1, 1, Y, endpoint=False)
+    lines = theta.cheb.shape[:-2]
+    num_transit = theta.X // NFP
+
+    axisymmetric = f.shape[-2] == 1
+    Y, num_ζ = round_up_rule(Y, NFP, axisymmetric)
+    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_ζ, endpoint=False)
     ζ = bijection_from_disc(x, *theta.domain)
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
@@ -762,22 +752,27 @@ def fast_cubic_spline(
         f = ifft(f, axis=-2, norm="forward")
     else:
         f = ifft_mmt(
-            ζ[:num_ζ, None],
+            ζ[:, None],
             f,
-            (0, 2 * jnp.pi / NFP),
+            theta.domain,
             axis=-2,
             modes=modes_ζ,
             vander=vander_ζ,
         )
 
     # θ at uniform ζ on field lines
-    θ = idct_mmt(x, theta.cheb[..., None, :], vander=vander_θ).reshape(
-        *lines, theta.X, NFP, num_ζ
+    θ = idct_mmt(
+        x,
+        theta.cheb.reshape(*lines, num_transit, NFP, 1, theta.Y),
+        vander=vander_θ,
     )
+    if axisymmetric:
+        θ = θ.reshape(*lines, num_transit, -1, 1)
 
     if nufft_eps < 1e-14 or f.shape[-1] < 14:
         # second condition for GPU
-        f = irfft_mmt(θ, f[..., None, None, None, :, :], num_θ, _modes=modes_θ)
+        f = f[..., None, None, None, :, :]
+        f = irfft_mmt(θ, f, num_θ, _modes=modes_θ)
     else:
         if len(lines) > 1:
             θ = θ.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_ζ, -1)
@@ -791,11 +786,11 @@ def fast_cubic_spline(
     )
     f = CubicSpline(x=ζ, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, theta.X * Y - 1, 4)
+    assert f.shape == (*lines, num_transit * Y - 1, 4)
     return f, ζ
 
 
-def _move(f, out=True):
+def move(f, out=True):
     """Use to move between the following shapes.
 
     The LHS shape enables the simplest broadcasting so it is used internally,
@@ -813,7 +808,7 @@ def _move(f, out=True):
     return jnp.moveaxis(f, s, d)
 
 
-def _mmt_for_bounce(v, c):
+def mmt_for_bounce(v, c):
     """Matrix multiplication transform.
 
     Warnings
@@ -833,7 +828,7 @@ def _mmt_for_bounce(v, c):
     return (v * c[..., None, None, None, :, :]).real.sum((-2, -1))
 
 
-def _broadcast_for_bounce(pitch_inv):
+def broadcast_for_bounce(pitch_inv):
     """Add axis if necessary.
 
     Parameters
@@ -850,3 +845,78 @@ def _broadcast_for_bounce(pitch_inv):
     if jnp.ndim(pitch_inv) == 2:
         pitch_inv = pitch_inv[:, None]
     return pitch_inv
+
+
+def truncate_rule(Y):
+    """Truncation of Chebyshev series to reduce spectral aliasing."""
+    return max(1, 7 * Y // 8)
+
+
+def round_up_rule(Y, NFP, axisymmetric=False):
+    """Round Y up to NFP multiple.
+
+    Returns
+    -------
+    Y : int
+        Number of points per toroidal transit.
+    num_ζ : int
+        Number of points per field period.
+
+    """
+    if axisymmetric:
+        assert Y % NFP == 0, "Should set NFP = 1."
+        NFP = Y
+    num_ζ = (Y + NFP - 1) // NFP
+    return num_ζ * NFP, num_ζ
+
+
+def fieldline_quad_rule(Y):
+    """Ensure field line quadrature has reasonable resolution.
+
+    Parameters
+    ----------
+    Y : int
+        Resolution of Chebyshev spectrum of angle over one field period.
+
+    Returns
+    -------
+    Y : int
+        Resolution for Gauss-Legendre quadrature over one field period.
+
+    """
+    return max(Y, 8)
+
+
+def Y_B_rule(Y, NFP, spline=True):
+    """Guess Y_B from resolution of Chebyshev spectrum of angle."""
+    return (2 * Y * int(np.sqrt(NFP))) if spline else Y
+
+
+def num_well_rule(num_transit, NFP, Y_B=None):
+    """Guess upper bound for number of wells based on spectrum.
+
+    This should be loose enough that it is equivalent to ``num_well=None``,
+    but more performant.
+    """
+    num_well = num_transit * (20 + NFP)
+    return num_well if Y_B is None else min(num_well, Y_B)
+
+
+def get_vander(grid, x, Y, Y_B, NFP):
+    """Builds Vandermonde matrices for objectives."""
+    assert isinstance(Y, int)
+    assert isinstance(Y_B, int)
+    assert isinstance(NFP, int)
+    _, num_zeta = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+    Y_trunc = truncate_rule(Y)
+
+    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
+    zeta = bijection_from_disc(x, 0, 2 * jnp.pi / grid.NFP)
+
+    return {
+        "dft cfl": jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis],
+        "dct cfl": vander_chebyshev(x, Y_trunc),
+        "dct spline": vander_chebyshev(
+            jnp.linspace(-1, 1, num_zeta, endpoint=False), Y_trunc
+        ),
+    }

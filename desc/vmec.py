@@ -95,6 +95,13 @@ class VMECIO:
                 + " while DESC is only designed for compatibility with VMEC version"
                 + " 9. Some data may not be loaded correctly."
             )
+        if "lrfp__logical__" in file.variables:
+            # guard against the wout not having it, as VMEC++ does not save
+            # all the flags that VMEC does
+            assert float(file.variables["lrfp__logical__"][0]) == 0, (
+                "DESC currently does not support poloidal flux label, "
+                "and so cannot load this VMEC wout, which has LRFP=T"
+            )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])
@@ -1508,10 +1515,13 @@ class VMECIO:
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
         f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
-        if eq.pressure is not None:
+        if eq.pressure is not None and isinstance(
+            eq.pressure, (PowerSeriesProfile, SplineProfile)
+        ):
             pressure = eq.pressure
         else:
-            # if kinetic profiles, fit pressure to power series
+            # if kinetic profiles or non-power series or spline,
+            #  fit pressure to power series
             grid = LinearGrid(L=eq.L_grid, axis=True)
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])

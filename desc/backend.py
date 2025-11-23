@@ -91,6 +91,7 @@ if use_jax:  # noqa: C901
         tree_flatten,
         tree_leaves,
         tree_map,
+        tree_map_with_path,
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
@@ -373,8 +374,7 @@ if use_jax:  # noqa: C901
                 return state[0]
 
         def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
+            return y / g(1.0)
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
@@ -604,6 +604,10 @@ else:  # pragma: no cover
 
     def tree_map(*args, **kwargs):
         """Map pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_map_with_path(*args, **kwargs):
+        """Map pytree with path for numpy backend."""
         raise NotImplementedError
 
     def tree_structure(*args, **kwargs):

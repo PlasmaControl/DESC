@@ -260,6 +260,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.ShareParameters
     desc.objectives.Shear
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.SurfaceQuadraticFlux
@@ -316,6 +317,7 @@ Plotting
     desc.plotting.plot_comparison
     desc.plotting.plot_field_lines
     desc.plotting.plot_fsa
+    desc.plotting.plot_gammac
     desc.plotting.plot_grid
     desc.plotting.plot_logo
     desc.plotting.plot_qs_error

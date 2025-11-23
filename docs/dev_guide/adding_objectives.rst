@@ -113,7 +113,7 @@ and can be adjusted as shown below.
                                 # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
         _units = "(T^4/m^2)"    # units of the output
         _print_value_fmt = "Quasi-symmetry error: "    # string with the name of the printed value, used when showing results of an optimization
-
+        _static_attrs = _Objective._static_attrs + [] # list of strings of attribute names that should be considered static by jax, eg strings and booleans or anything used for control flow.
 
 ``__init__`` method should assign the optimizable thing(s) to the ``things`` attribute, which is a list of objects
 that will be optimized. For this example, we will optimize an ``Equilibrium`` object, so we assign it to the
@@ -333,6 +333,7 @@ from above are not repeated here)
                             # _coordinates="r"
         _units = "(dimensionless)"
         _print_value_fmt = "Mirror ratio: "
+        _static_attrs = _Objective._static_attrs + [] # list of strings of attribute names that should be considered static by jax, eg strings and booleans or anything used for control flow.
 
         def __init__(
             self,
@@ -510,8 +511,6 @@ from above are not repeated here)
             mirror_ratio = (max_tz_B - min_tz_B) / (min_tz_B + max_tz_B)
 
             return mirror_ratio # return the value of the objective
-
-
 
 
 Converting to Cartesian coordinates

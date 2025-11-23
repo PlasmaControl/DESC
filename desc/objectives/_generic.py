@@ -37,7 +37,7 @@ class ExternalObjective(_Objective):
         It does not need to be JAX transformable.
     dim_f : int
         Dimension of the output of ``fun``.
-    fun_kwargs : any, optional
+    fun_kwargs : dict, optional
         Keyword arguments that are passed as inputs to ``fun``.
     vectorized : bool
         Set to False if ``fun`` takes a single Equilibrium as its positional argument.
@@ -77,7 +77,12 @@ class ExternalObjective(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "External objective value: "
-    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
+    _static_attrs = _Objective._static_attrs + [
+        "_fun",
+        "_fun_kwargs",
+        "_fun_wrapped",
+        "_vectorized",
+    ]
 
     def __init__(
         self,
@@ -233,7 +238,8 @@ class GenericObjective(_Objective):
 
     """
 
-    _static_attrs = ["_compute_kwargs"]
+    _print_value_fmt = "Generic objective value: "
+    _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "f", "_p"]
 
     def __init__(
         self,
@@ -384,6 +390,8 @@ class LinearObjectiveFromUser(_FixedObjective):
 
     """
 
+    _static_attrs = _Objective._static_attrs + ["_fun"]
+
     _scalar = False
     _linear = True
     _fixed = True
@@ -521,7 +529,13 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _static_attrs = ["_compute_kwargs"]
+    _print_value_fmt = "Custom objective value: "
+    _static_attrs = _Objective._static_attrs + [
+        "_compute_kwargs",
+        "_fun",
+        "_fun_wrapped",
+        "_p",
+    ]
 
     def __init__(
         self,

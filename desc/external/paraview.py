@@ -21,7 +21,7 @@ from desc.grid import LinearGrid
 
 
 def export_surface_to_paraview(
-    obj, grid_shape=(100, 100), keys=[], rho=1.0, filename="surface"
+    obj, res=(100, 100), keys=[], rho=1.0, filename="surface"
 ):
     """Export a constant rho surface as VTU file.
 
@@ -30,7 +30,7 @@ def export_surface_to_paraview(
     obj : Equilibrium or FourierRZToroidalSurface
         Object to be exported. Different flux surfaces of the Equilibrium
         can be exported by supplying `rho`.
-    grid_res : tuple, list
+    res : tuple, list
         The resolution used to create the mesh. Must be in the form
         (N_toroidal, N_poloidal). Default is (100, 100).
     keys : list, optional
@@ -48,7 +48,7 @@ def export_surface_to_paraview(
             f"objects but {type(obj)} is given."
         )
 
-    Nt, Np = grid_shape
+    Nt, Np = res
     grid = LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1)
 
     with warnings.catch_warnings():
@@ -93,7 +93,7 @@ def export_surface_to_paraview(
     print(f"File is saved as {filename}.vtu")
 
 
-def export_coils_to_paraview(coils, res=100, filename="coil"):
+def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
     """Export coils as VTP files.
 
     Parameters
@@ -103,6 +103,9 @@ def export_coils_to_paraview(coils, res=100, filename="coil"):
         as CoilSet or MixedCoilSet.
     res : int
         The resolution to use. Defaults to 100.
+    keys : list of str
+        Additional data to store in the file. By default, only the current
+        corresponding to each coil is stored.
     filename : str
         Name for the saved file. The file extension will be `.vtp`. If there
         are multiple coils, an index will be appended to the given name.
@@ -132,8 +135,8 @@ def export_coils_to_paraview(coils, res=100, filename="coil"):
     grid = LinearGrid(N=res, endpoint=True)
 
     for i, coil in enumerate(coils_list):
-        points = coil.compute("x", grid=grid, basis="xyz")["x"]
-        points = np.asarray(points)
+        data = coil.compute(["x"] + keys, grid=grid, basis="xyz")
+        points = np.asarray(data["x"])
         current = getattr(coil, "current", np.nan)
 
         # Create PolyData object
@@ -146,7 +149,94 @@ def export_coils_to_paraview(coils, res=100, filename="coil"):
         current_array = np.full(len(points), current)
         poly["current"] = current_array
 
+        # Additional data
+        for key in keys:
+            value = data[key]
+            if len(value) == res or value.shape == (res, 3):
+                # this will handle both 1D and 3D
+                poly[key] = value
+            else:
+                raise ValueError(
+                    f"Data {key} has an unimplemented shape ({value.shape})"
+                )
+
         # Save to VTP
         poly.save(filename + f"_{i}.vtp")
 
     print(f"Saved {len(coils_list)} coils with name format `{filename}_i.vtp`")
+
+
+def export_volume_to_paraview(eq, res=(20, 100, 100), keys=["B"], filename="volume"):
+    """Export equilibrium volume as VTU files.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to be exported.
+    res : tuple of ints, (Nr, Np, Nt)
+        The resolutions to use. Defaults to (20, 100, 100) in radial, poloidal
+        and toroidal directions, respectively.
+    keys : list of str
+        Additional data to store in the file. By default, only has the magnetic field
+        B components.
+    filename : str
+        Name for the saved file. The file extension will be `.vtu`.
+    """
+    if not isinstance(eq, Equilibrium):
+        raise ValueError(
+            "This function only support classes of type Equilibrium "
+            f"but {type(eq)} is given."
+        )
+    Nr, Np, Nt = res
+    grid = LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Unequal number of field")
+        data = eq.compute(["x"] + keys, grid=grid, basis="xyz")
+    nodes = np.asarray(data.pop("x"))
+
+    def idx(p, r, t):
+        return t * (Nr * Np) + r * Np + p
+
+    cells = []
+    celltypes = []
+
+    for t in range(Nt):
+        t1 = (t + 1) % Nt  # wrap around toroidally
+        for r in range(Nr - 1):
+            for p in range(Np):
+                p1 = (p + 1) % Np  # wrap around poloidally
+
+                # 8 nodes of the hexahedron
+                # Bottom face
+                pt0 = idx(p, r, t)
+                pt1 = idx(p1, r, t)
+                pt2 = idx(p1, r + 1, t)
+                pt3 = idx(p, r + 1, t)
+
+                # Top face (toroidal +1)
+                pt4 = idx(p, r, t1)
+                pt5 = idx(p1, r, t1)
+                pt6 = idx(p1, r + 1, t1)
+                pt7 = idx(p, r + 1, t1)
+
+                cells.extend([8, pt0, pt1, pt2, pt3, pt4, pt5, pt6, pt7])
+                celltypes.append(CellType.HEXAHEDRON)
+
+    # Convert to VTK format
+    cells = np.array(cells)
+    celltypes = np.array(celltypes, dtype=np.uint8)
+
+    mesh = pv.UnstructuredGrid(cells, celltypes, nodes)
+
+    # Additional data
+    for key in keys:
+        value = data[key]
+        if len(value) == Nr * Nt * Np or value.shape == (Nr * Nt * Np, 3):
+            # this will handle both 1D and 3D
+            mesh[key] = value
+        else:
+            raise ValueError(f"Data {key} has an unimplemented shape ({value.shape})")
+
+    mesh.save(filename + ".vtu")
+    print(f"File is saved as {filename}.vtu")

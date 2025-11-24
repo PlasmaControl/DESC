@@ -81,3 +81,16 @@ Misc Plotting Utilities
     desc.plotting.plot_basis
     desc.plotting.plot_grid
     desc.plotting.plot_logo
+
+
+Exporting Paraview Files
+------------------------
+Note that these utility functions are not regularly tested and maybe incompatible with newer version
+of Paraview. Please see the README of the `desc.external` for more details.
+
+.. autosummary::
+    :toctree: _api/external
+    :recursive:
+
+    desc.external.export_surface_to_paraview
+    desc.external.export_coils_to_paraview

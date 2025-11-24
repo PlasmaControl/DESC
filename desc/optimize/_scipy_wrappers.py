@@ -109,6 +109,8 @@ def _optimize_scipy_minimize(  # noqa: C901
     if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
         H = hess(x0)
         scale, _ = compute_hess_scale(H)
+    elif isinstance(x_scale, str):
+        scale = 1.0  # don't do any auto scaling if our optimizer does not use hessian
     else:
         scale = x_scale
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:

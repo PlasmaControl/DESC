@@ -326,7 +326,6 @@ class Bounce2D(Bounce):
                 self._num_θ,
                 self._modes_θ,
                 self._modes_ζ,
-                self._NFP,
             )
 
     @staticmethod

@@ -602,7 +602,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=None):
+def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -625,8 +625,6 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         Real FFT Fourier modes in poloidal direction.
     modes_ζ : jnp.ndarray
         FFT Fourier modes in toroidal direction.
-    NFP : int
-        Number of field periods.
     vander : jnp.ndarray
         Precomputed transform matrix.
 
@@ -640,7 +638,6 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, NFP=1, *, vander=Non
         shape (num ρ, num α, num transit * NFP, Y).
 
     """
-    assert theta.domain == (0, 2 * jnp.pi / NFP)
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
     # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
@@ -724,7 +721,6 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert theta.cheb.ndim >= 3
     assert theta.domain == (0, 2 * jnp.pi / NFP)
 
     lines = theta.cheb.shape[:-2]
@@ -907,8 +903,9 @@ def get_vander(grid, x, Y, Y_B, NFP):
     assert isinstance(Y, int)
     assert isinstance(Y_B, int)
     assert isinstance(NFP, int)
-    _, num_zeta = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+
     Y_trunc = truncate_rule(Y)
+    Y_B, num_ζ = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
 
     modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
     zeta = bijection_from_disc(x, 0, 2 * jnp.pi / grid.NFP)
@@ -917,6 +914,9 @@ def get_vander(grid, x, Y, Y_B, NFP):
         "dft cfl": jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis],
         "dct cfl": vander_chebyshev(x, Y_trunc),
         "dct spline": vander_chebyshev(
-            jnp.linspace(-1, 1, num_zeta, endpoint=False), Y_trunc
+            jnp.linspace(
+                -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_ζ, endpoint=False
+            ),
+            Y_trunc,
         ),
     }

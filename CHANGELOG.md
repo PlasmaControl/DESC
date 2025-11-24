@@ -3,11 +3,18 @@ Changelog
 
 New Features
 
+
+v0.16.0
+-------
+
+New Features
+
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 - Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
-- Changes related to ``field_line_integrate``:
+- Adds new linear objective `ShareParameters` which can enforce that the chosen parameters of two or more objects of the same type remain identical during an optimization. Potentially useful for flexible stellarator optimization, where one has two coilsets with the same geometry but differing currents, and attempts to optimize for two different stellarator equilibria.
+- Changes related to ``field_line_integrate``, see #1839:
     - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
     - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
@@ -16,25 +23,28 @@ New Features
 
 Bug Fixes
 
-- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
+- Fixes straight field line equilibrium conversion, see #1880
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
-- Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
-
+- Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see #1954
+- Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid, see #2013
+- Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
+- Allow ``desc.vmec.VMECIO.load`` to load wout files that lack ``lrfp__logical__``, like those outputted by VMEC++. This change assumes that those output files don't have poloidal flux label.
+- Fixes a bug that had prevented passing the ``legend`` kwarg to ``desc.plotting.plot_surfaces``.
 
 Backend
--------
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
-- Minimum JAX version bumped up to ``0.4.29``
+- ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
-
+- Minimum JAX version bumped up to ``0.5.0``
 
 Performance Improvements
 
-- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
-- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
+- Coordinate mapping uses partial summation, see #1826
+- Non-uniform FFTs (NUFFTS) are now used by default for computing bounce integrals, see #1834. NUFFT functionality is added through `jax-finufft` package. If the GPU installation fails, users can fall back to the older (much slower) implementation by setting `nufft_eps=0` in the computation of the related quantities.
+
 
 v0.15.0
 -------
@@ -55,7 +65,6 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
-
 
 Bug Fixes
 

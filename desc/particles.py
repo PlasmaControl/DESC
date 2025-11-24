@@ -1361,6 +1361,7 @@ class FourierChebyshevField(IOAble):
             profiles,
         )
         L, M, N = self.L, self.M_fft, self.N_fft
+        # TODO: e^zeta only has _p component, rest is 0, no need to fit
         keys = [key + i for key in self.data_keys for i in ["_r", "_p", "_z"]]
         # stack data to perform 15 transforms in batch
         stacked_data = jnp.stack(

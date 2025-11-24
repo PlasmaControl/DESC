@@ -101,9 +101,12 @@ class Bounce(IOAble, ABC):
         num_pitch : int
             Number of values.
         simp : bool
-            Whether the pitch angles should be chosen for use with open Simpson rule
-            instead of uniform weights for quadrature over velocity coordinate.
-            Default is True.
+            If ``True``, then the pitch angles are chosen so that the quadrature
+            over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
+            interior completed by an open midpoint scheme near the boundary such
+            that an accuracy of fourth order is preserved. If the integrand is not
+            sufficiently smooth then quadrature accuracy reduces to third order.
+            If ``False``, then an open midpoint scheme is returned.
 
         Returns
         -------

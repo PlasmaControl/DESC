@@ -4,13 +4,27 @@ import re
 
 import numpy as np
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
+from desc.backend import (
+    jnp,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, getsource, jaxify, parse_argname_change, setdefault
+from desc.utils import (
+    broadcast_tree,
+    errorif,
+    getsource,
+    jaxify,
+    parse_argname_change,
+    setdefault,
+)
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
@@ -694,14 +708,9 @@ class DeflationOperator(_Objective):
     things_to_deflate: list of Equilibrium
         list of objects to use in deflation operator. Should be same type
         as thing.
-    params_to_deflate_with: list of str
-        Which params to use in the deflation operator to define which part of the
-        state to deflate, defaults to list(thing.params_dict.keys()) (e.g. entire
-        state)
-        #TODO make this instead a nested list of dicts like FixParameters
     params_to_deflate_with : nested list of dicts
-        Dict keys are the names of parameters to fix (str), and dict values are the
-        indices to fix for each corresponding parameter (int array).
+        Dict keys are the names of parameters to deflate (str), and dict values are the
+        indices to deflate with for each corresponding parameter (int array).
         Use True (False) instead of an int array to fix all (none) of the indices
         for that parameter.
         Must have the same pytree structure as thing.params_dict.
@@ -716,7 +725,6 @@ class DeflationOperator(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
-    _static_attrs = _Objective._static_attrs + ["_params_to_deflate_with"]
 
     _coordinates = "rtz"
     _units = "~"
@@ -748,8 +756,6 @@ class DeflationOperator(_Objective):
         self._things_to_deflate = things_to_deflate
         self._sigma = sigma
         self._power = power
-        if params_to_deflate_with is None:
-            params_to_deflate_with = list(thing.params_dict.keys())
         self._params_to_deflate_with = params_to_deflate_with
         super().__init__(
             things=thing,
@@ -775,6 +781,21 @@ class DeflationOperator(_Objective):
             Level of output.
 
         """
+        thing = self.things[0]
+
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params_to_deflate_with = setdefault(
+            self._params_to_deflate_with, default_params
+        )
+        self._params_to_deflate_with = broadcast_tree(
+            self._params_to_deflate_with, default_params
+        )
+        self._indices = tree_leaves(self._params_to_deflate_with)
+        assert tree_structure(self._params_to_deflate_with) == tree_structure(
+            default_params
+        )
+
         self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -795,12 +816,23 @@ class DeflationOperator(_Objective):
             deflation error.
 
         """
-        keys = self._params_to_deflate_with
-
+        this_thing_params = jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params), self._indices)
+            ]
+        )
         diffs = [
-            jnp.concatenate([params[key] - thing.params_dict[key] for key in keys])
-            for thing in self._things_to_deflate
+            this_thing_params
+            - jnp.concatenate(
+                [
+                    jnp.atleast_1d(param[idx])
+                    for param, idx in zip(tree_leaves(t.params_dict), self._indices)
+                ]
+            )
+            for t in self._things_to_deflate
         ]
+
         diffs = jnp.vstack(diffs)
         deflation_parameter = jnp.prod(
             1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma

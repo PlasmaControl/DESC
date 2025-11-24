@@ -41,6 +41,14 @@ def export_surface_to_paraview(
     filename : str
         Name for the saved file. The file extension will be `.vtu`. Default name will be
         `surface.vtu`
+
+    Returns
+    -------
+    mesh : pyvista.UnstructuredGrid
+        Created unstructured grid object. With this object one can compute more
+        complicated quantities on `LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1)`
+        and add it to the mesh by `mesh['complicated name'] = value`. Once the mesh
+        is changed, the user has to save it again `mesh.save(filename + ".vtu")`.
     """
     if not isinstance(obj, (Equilibrium, FourierRZToroidalSurface)):
         raise ValueError(
@@ -91,6 +99,7 @@ def export_surface_to_paraview(
 
     mesh.save(filename + ".vtu")
     print(f"File is saved as {filename}.vtu")
+    return mesh
 
 
 def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
@@ -181,6 +190,14 @@ def export_volume_to_paraview(eq, res=(20, 100, 100), keys=["B"], filename="volu
         B components.
     filename : str
         Name for the saved file. The file extension will be `.vtu`.
+
+    Returns
+    -------
+    mesh : pyvista.UnstructuredGrid
+        Created unstructured grid object. With this object one can compute more
+        complicated quantities on `LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1)`
+        and add it to the mesh by `mesh['complicated name'] = value`. Once the mesh
+        is changed, the user has to save it again `mesh.save(filename + ".vtu")`.
     """
     if not isinstance(eq, Equilibrium):
         raise ValueError(
@@ -240,3 +257,4 @@ def export_volume_to_paraview(eq, res=(20, 100, 100), keys=["B"], filename="volu
 
     mesh.save(filename + ".vtu")
     print(f"File is saved as {filename}.vtu")
+    return mesh

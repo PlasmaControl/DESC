@@ -202,8 +202,7 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=z1[lm],
                     z2=z2[lm],
                     k=pitch_inv[lm],
-                    title=title
-                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$",
+                    title=title,
                     **kwargs,
                 )
             )
@@ -295,6 +294,7 @@ def plot_ppoly(
     z1=None,
     z2=None,
     k=None,
+    *,
     k_transparency=0.5,
     klabel=r"$k$",
     title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
@@ -306,6 +306,10 @@ def plot_ppoly(
     include_knots=False,
     knot_transparency=0.4,
     include_legend=True,
+    tight=True,
+    return_legend=False,
+    legend_kwargs=None,
+    **kwargs,
 ):
     """Plot the piecewise polynomial ``ppoly``.
 
@@ -345,7 +349,7 @@ def plot_ppoly(
     knot_transparency : float
         Transparency of knot lines.
     include_legend : bool
-        Whether to include the legend in the plot. Default is true.
+        Whether to plot the legend. Default is true.
 
     Returns
     -------
@@ -353,7 +357,11 @@ def plot_ppoly(
         Matplotlib (fig, ax) tuple.
 
     """
-    fig, ax = plt.subplots()
+    if "figsize" in kwargs:
+        fig, ax = plt.subplots(figsize=kwargs.pop("figsize"))
+    else:
+        fig, ax = plt.subplots()
+
     legend = {}
     if include_knots:
         for knot in ppoly.x:
@@ -369,7 +377,7 @@ def plot_ppoly(
         stop=setdefault(stop, ppoly.x[-1]),
         num=num,
     )
-    _add2legend(legend, ax.plot(z, ppoly(z), label=vlabel))
+    _add2legend(legend, ax.plot(z, ppoly(z), label=vlabel, **kwargs))
     _plot_intersect(
         ax=ax,
         legend=legend,
@@ -379,17 +387,23 @@ def plot_ppoly(
         k_transparency=k_transparency,
         klabel=klabel,
         hlabel=hlabel,
+        **kwargs,
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)
-    if include_legend:
-        ax.legend(legend.values(), legend.keys(), loc="lower right")
     ax.set_title(title)
-    plt.tight_layout()
+
+    if include_legend:
+        if legend_kwargs is None:
+            legend_kwargs = dict(loc="lower right")
+        ax.legend(legend.values(), legend.keys(), **legend_kwargs)
+
+    if tight:
+        plt.tight_layout()
     if show:
         plt.show()
         plt.close()
-    return fig, ax
+    return (fig, ax, legend) if return_legend else (fig, ax)
 
 
 def get_extrema(knots, g, dg_dz, sentinel=jnp.nan):

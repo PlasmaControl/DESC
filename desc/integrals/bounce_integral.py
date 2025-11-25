@@ -1341,7 +1341,6 @@ class Bounce2D(Bounce):
         if v_ax_numticks is not None:
             ax.yaxis.set_major_locator(MaxNLocator(v_ax_numticks, integer=True))
 
-        plt.tight_layout()
         return fig
 
 

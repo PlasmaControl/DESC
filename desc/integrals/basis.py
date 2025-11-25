@@ -811,8 +811,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=z1[idx],
                         z2=z2[idx],
                         k=k[idx],
-                        title=title
-                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
+                        title=title,
                         **kwargs,
                     )
                 )
@@ -825,6 +824,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z1=None,
         z2=None,
         k=None,
+        *,
         k_transparency=0.5,
         klabel=r"$k$",
         title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
@@ -832,6 +832,10 @@ class PiecewiseChebyshevSeries(IOAble):
         vlabel=r"$f$",
         show=True,
         include_legend=True,
+        tight=True,
+        return_legend=False,
+        legend_kwargs=None,
+        **kwargs,
     ):
         """Plot the piecewise Chebyshev series ``cheb``.
 
@@ -864,7 +868,7 @@ class PiecewiseChebyshevSeries(IOAble):
         show : bool
             Whether to show the plot. Default is true.
         include_legend : bool
-            Whether to include the legend in the plot. Default is true.
+            Whether to plot the legend. Default is true.
 
         Returns
         -------
@@ -872,14 +876,18 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        fig, ax = plt.subplots()
+        if "figsize" in kwargs:
+            fig, ax = plt.subplots(figsize=kwargs.pop("figsize"))
+        else:
+            fig, ax = plt.subplots()
+
         legend = {}
         z = jnp.linspace(
             start=self.domain[0],
             stop=self.domain[0] + (self.domain[-1] - self.domain[0]) * self.X,
             num=num,
         )
-        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel))
+        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel, **kwargs))
         _plot_intersect(
             ax=ax,
             legend=legend,
@@ -889,17 +897,23 @@ class PiecewiseChebyshevSeries(IOAble):
             k_transparency=k_transparency,
             klabel=klabel,
             hlabel=hlabel,
+            **kwargs,
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
-        if include_legend:
-            ax.legend(legend.values(), legend.keys(), loc="lower right")
         ax.set_title(title)
-        plt.tight_layout()
+
+        if include_legend:
+            if legend_kwargs is None:
+                legend_kwargs = dict(loc="lower right")
+            ax.legend(legend.values(), legend.keys(), **legend_kwargs)
+
+        if tight:
+            plt.tight_layout()
         if show:
             plt.show()
             plt.close()
-        return fig, ax
+        return (fig, ax, legend) if return_legend else (fig, ax)
 
 
 def _add2legend(legend, lines):
@@ -910,7 +924,18 @@ def _add2legend(legend, lines):
             legend[label] = line
 
 
-def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, hlabel):
+def _plot_intersect(
+    ax,
+    legend,
+    z1,
+    z2,
+    k,
+    k_transparency,
+    klabel,
+    hlabel,
+    markersize=plt.rcParams["lines.markersize"] * 3,
+    **kwargs,
+):
     """Plot intersects on ``ax``."""
     if k is None:
         return
@@ -923,7 +948,13 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, hlabel):
     for p in k:
         _add2legend(
             legend,
-            ax.axhline(p, color="tab:purple", alpha=k_transparency, label=klabel),
+            ax.axhline(
+                p,
+                color="tab:purple",
+                alpha=k_transparency,
+                label=klabel,
+                linestyle="--",
+            ),
         )
     for i in range(k.size):
         _z1, _z2 = z1[i], z2[i]
@@ -939,6 +970,7 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, hlabel):
                 marker="v",
                 color="tab:red",
                 label=hlabel + r"$_1(w)$",
+                s=markersize,
             ),
         )
         _add2legend(
@@ -949,5 +981,6 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, hlabel):
                 marker="^",
                 color="tab:green",
                 label=hlabel + r"$_2(w)$",
+                s=markersize,
             ),
         )

@@ -1,0 +1,824 @@
+"""Scripts to generate plots for the article."""
+
+import os
+import pickle
+import warnings
+from fractions import Fraction
+from itertools import product
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import numpy as np
+import pytest
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+
+import plotting
+from desc.backend import jnp
+from desc.compat import flip_theta
+from desc.compute import data_index
+from desc.equilibrium import Equilibrium
+from desc.examples import get
+from desc.external import NeoIO
+from desc.grid import Grid, LinearGrid
+from desc.integrals import Bounce2D
+from desc.integrals._bounce_utils import truncate_rule
+from desc.plotting import plot_boozer_surface
+from plotting import plot_2d, plot_3d, plot_comparison, plot_section
+
+plotting._AXIS_LABELS_RPZ = [
+    r"$R ~(\mathrm{meters})$",
+    r"$\phi$",
+    r"$Z ~(\mathrm{meters})$",
+]
+
+
+def pi_formatter(ax, NFP=1):
+
+    def pi_form(x, pos):
+        multiple = np.round(NFP * x / np.pi)
+        if multiple == 0:
+            return "0"
+        elif multiple == 1:
+            return r"$\pi$"
+        elif multiple == -1:
+            return r"$-\pi$"
+        else:
+            return rf"${int(multiple)}\pi$"
+
+    ax.set_major_locator(mticker.MultipleLocator(base=np.pi / NFP))
+    ax.set_major_formatter(mticker.FuncFormatter(pi_form))
+    return ax
+
+
+def pi_half_formatter(ax, NFP=1):
+
+    def pi_half_form(x, pos):
+        multiple = np.round(NFP * x / (np.pi / 2))
+        if multiple == 0:
+            return "0"
+
+        frac = Fraction(int(multiple), 2).limit_denominator()
+        num, den = frac.numerator, frac.denominator
+
+        if num == 1:
+            num_str = r"\pi"
+        elif num == -1:
+            num_str = r"-\pi"
+        else:
+            num_str = rf"{num}\pi"
+
+        return rf"${num_str}$" if (den == 1) else rf"${num_str}/{den}$"
+
+    ax.set_major_locator(mticker.MultipleLocator(base=np.pi / 2 / NFP))
+    ax.set_major_formatter(mticker.FuncFormatter(pi_half_form))
+    return ax
+
+
+def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
+    """High resolution plot for the paper."""
+    plt.rcParams.update({"font.size": 14})
+    plt.rcParams["axes.labelsize"] = 14
+    plt.rcParams["xtick.labelsize"] = 13
+    plt.rcParams["ytick.labelsize"] = 12
+
+    eq = get(name)
+    rho = 1.0
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data = eq.compute(Bounce2D.required_names + ["min_tz |B|", "max_tz |B|"], grid=grid)
+    angle = Bounce2D.angle(eq, X, Y, rho=rho, tol=1e-12)
+    bounce = Bounce2D(grid, data, angle, Y_B, num_transit=2, nufft_eps=1e-9)
+    pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
+        grid.compress(data["min_tz |B|"]),
+        grid.compress(data["max_tz |B|"]),
+        num_pitch,
+        simp=False,
+    )
+    fig, ax, legend = bounce.plot(
+        0,
+        0,
+        pitch_inv[0],
+        klabel=r"$\varrho$",
+        k_transparency=0.25,
+        show=False,
+        include_legend=False,
+        return_legend=True,
+        figsize=(8.5, 4),
+        title="",
+        markersize=plt.rcParams["lines.markersize"] * 1.5,
+    )
+    ax.xaxis = pi_half_formatter(ax.xaxis)
+    fig.subplots_adjust(right=0.75)
+
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.75)
+
+    left, bottom, width, height = [0.775, 0.6, 0.1625, 0.35]
+    axins = fig.add_axes([left, bottom, width, height])
+    line = ax.lines[0]
+    x_data = line.get_xdata()
+    y_data = line.get_ydata()
+    axins.plot(x_data, y_data)
+
+    for collection in ax.collections:
+        offsets = collection.get_offsets()
+        x_scatter, y_scatter = offsets[:, 0], offsets[:, 1]
+        color = collection.get_facecolor()
+        marker = collection.get_paths()[0]
+        size = collection.get_sizes()[0]
+        axins.scatter(x_scatter, y_scatter, c=color, marker=marker, s=size)
+
+    x1, x2 = 6, 7.2
+    y1, y2 = 2.6, 2.8
+    axins.set_xlim(x1, x2)
+    axins.set_ylim(y1, y2)
+    axins.spines["top"].set_visible(True)
+    axins.spines["right"].set_visible(True)
+    axins.spines["left"].set_visible(True)
+    axins.spines["bottom"].set_visible(True)
+    for spine in axins.spines.values():
+        spine.set_linewidth(1.75)
+
+    axins.tick_params(
+        left=False, right=True, labelleft=False, labelright=True, labelsize=11
+    )
+    mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5", lw=1.5, linestyle=":")
+    fig.legend(
+        legend.values(),
+        legend.keys(),
+        loc="lower right",
+        bbox_to_anchor=(0.925, 0.175),
+        labelspacing=0.1,
+        frameon=False,
+    )
+    plt.savefig("bounce_point_w7x.pdf")
+
+
+def test_plot_section_lambda(name="W7-X"):
+    """Plot lambda sections."""
+    plt.rcParams.update({"font.size": 10})
+    eq1 = get(name)
+    grid = LinearGrid(
+        L=eq1.L_grid * 4,
+        theta=np.linspace(0, 2 * np.pi, 121, endpoint=True),
+        zeta=6,
+        NFP=eq1.NFP,
+    )
+    # Note this will plot -lambda unless one edits the source code manually.
+    fig, ax = plot_section(
+        eq1,
+        "lambda",
+        xlabel_fontsize=10,
+        ylabel_fontsize=10,
+        title_fontsize=9,
+        grid=grid,
+        cmap="turbo",
+        figsize=(6, 5),
+        cbar_label="",
+        suptitle=r"$(\iota \omega - \Lambda)~(\mathrm{radians})$",
+    )
+    plt.savefig(f"plot_section_lambda_{name}.pdf")
+
+
+def test_plot_section_alpha(name="W7-X"):
+    """Plot alpha sections."""
+    plt.rcParams.update({"font.size": 10})
+    eq = get(name)
+    grid = LinearGrid(
+        L=eq.L_grid * 4,
+        theta=np.linspace(0, 2 * np.pi, 121, endpoint=True),
+        zeta=6,
+        NFP=1,
+    )
+    # Note this will plot the correct data, but you will may want to
+    # edit the plot titles to print phi/2pi instead phi NFP / 2pi.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        fig, ax = plot_section(
+            eq,
+            "alpha",
+            xlabel_fontsize=10,
+            ylabel_fontsize=10,
+            title_fontsize=9,
+            grid=grid,
+            cmap="turbo",
+            cbar_label="",
+            suptitle=r"$\alpha~(\mathrm{radians})$",
+            figsize=(6, 5),
+        )
+    plt.savefig(f"plot_section_alpha_{name}.pdf")
+
+
+def test_plot2d_alphas(name="W7-X"):
+    """Plot alpha 2d plots."""
+    fig, axs = plt.subplots(1, 2, figsize=(7, 3), sharex=True)
+
+    eq = get(name)
+    M = max(eq.M_grid, 50)
+    N = max(eq.N_grid, 50)
+
+    grid = LinearGrid(rho=1, M=M, N=N, NFP=1)
+    kwargs = dict(
+        cmap="turbo",
+        cbar_format="%.1f",
+        cbar_ax_tick_label_size=11,
+        ax_tick_params_label_size=12,
+        title_fontsize=14,
+        xlabel_fontsize=13,
+        ylabel_fontsize=13,
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unequal number of field periods")
+        warnings.filterwarnings(
+            "ignore",
+            "Poloidal grid resolution is higher than necessary for coordinate",
+        )
+        _, ax = plot_2d(eq, "alpha", grid=grid, ax=axs[0], **kwargs)
+        ax.yaxis = pi_half_formatter(ax.yaxis)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(1.75)
+        custom_name = "alpha, zeta to theta - alpha"
+        fig, ax = plot_2d(eq, custom_name, grid=grid, ax=axs[1], **kwargs)
+        ax.yaxis = pi_half_formatter(ax.yaxis)
+        ax.xaxis = pi_half_formatter(ax.xaxis)
+
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(1.75)
+
+    plt.savefig(f"plot_2d_alphas_{name}.pdf")
+
+
+def test_plot_theta_mod(X=64, Y=64, tol=1e-7):
+    """θ mod (2π)."""
+    plt.rcParams.update({"font.size": 15})
+    plt.rcParams["axes.labelsize"] = 16
+    plt.rcParams["xtick.labelsize"] = 15
+    plt.rcParams["ytick.labelsize"] = 15
+
+    eq = get("NCSX")
+    rho = 1.0
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data = eq.compute(Bounce2D.required_names, grid=grid)
+    angle = Bounce2D.angle(eq, X, Y, rho, tol=tol)
+    bounce = Bounce2D(grid, data, angle, 1, np.array([0.0, np.pi / 2, np.pi]), 4)
+
+    lw = 1.5
+    kwargs = dict(title="", tight=False, show=False, include_legend=False, lw=lw)
+    fig, ax = bounce.plot_theta(0, 0, **kwargs)
+    fig2, ax2 = bounce.plot_theta(0, 1, **kwargs)
+    fig3, ax3 = bounce.plot_theta(0, 2, **kwargs)
+    for line in ax2.lines:
+        x_data = line.get_xdata()
+        y_data = line.get_ydata()
+        label = line.get_label()
+        ax.plot(x_data, y_data, label=label, lw=lw)
+    for line in ax3.lines:
+        x_data = line.get_xdata()
+        y_data = line.get_ydata()
+        label = line.get_label()
+        ax.plot(x_data, y_data, label=label, lw=lw)
+    plt.close(fig2)
+    plt.close(fig3)
+
+    ax.lines[0].set_label(r"$\alpha = 0$")
+    ax.lines[1].set_label(r"$\alpha = \pi/2$")
+    ax.lines[2].set_label(r"$\alpha = \pi$")
+
+    for line in ax.lines:
+        y_data = line.get_ydata()
+        diffs = np.diff(y_data)
+        jump_indices = np.where(np.abs(diffs) > 1.9 * np.pi)[0]
+        y_new = y_data.copy()
+        y_new[jump_indices] = np.nan
+        line.set_ydata(y_new)
+
+    ax.yaxis = pi_half_formatter(ax.yaxis)
+    ax.xaxis = pi_formatter(ax.xaxis)
+    ax.grid(axis="y", linestyle="--", color="gray", alpha=0.3)
+    ax.legend(labelspacing=0.001, framealpha=1, borderpad=0.25, fontsize=12)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.5)
+
+    plt.tight_layout()
+    plt.savefig("theta_plot_ncsx.pdf")
+
+
+@pytest.mark.parametrize("name, X, Y", [("NCSX", 72, 59), ("HELIOTRON", 50, 30)])
+def test_plot_angle_spectrum(name, X, Y, tol=1e-7):
+    """Magnitude of the spectral coefficients of α, ζ → θ − α."""
+    plt.rcParams.update({"font.size": 16})
+    plt.rcParams["axes.labelsize"] = 18
+    plt.rcParams["xtick.labelsize"] = 16
+    plt.rcParams["ytick.labelsize"] = 16
+
+    angle = Bounce2D.angle(get(name), X, Y, rho=1.0, tol=tol)
+    fig = Bounce2D.plot_angle_spectrum(angle, 0, title="", truncate=truncate_rule(Y))
+    fig.tight_layout()
+    fig.savefig(f"angle_spectrum_{name}.pdf")
+
+
+def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
+    """Mode 0 for compute, 1 for plot."""
+    assert mode == 0 or mode == 1
+
+    plt.figure(figsize=(7, 5))
+    plt.rcParams.update({"font.size": 20})
+    plt.rcParams["axes.labelsize"] = 24
+    plt.rcParams["xtick.labelsize"] = 20
+    plt.rcParams["ytick.labelsize"] = 20
+
+    res_table = [
+        [16, 24, 12, 25],
+        [16, 24, 16, 50],
+        [24, 32, 32, 100],
+        # very high resolution... let's assume this one is truth to machine precision
+        [64, 64, 64, 200],
+    ]
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(res_table)]
+    colors[3] = "purple"
+    linestyles = ["-", "--", ":", "-."]
+
+    if mode == 0:
+        eq = get(name)
+        rho = jnp.linspace(0, 1, 40)
+        alpha = jnp.linspace(0, 2 * jnp.pi, 5, endpoint=False)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        num_transit = 20
+        pick_data = {"rho": rho, "eps_32": []}
+    else:
+        with open(f"res_scan_{name}.pkl", "rb") as file:
+            pick_data = pickle.load(file)
+
+    for i, res in enumerate(res_table):
+        if mode == 0:
+            data = eq.compute(
+                "effective ripple 3/2",
+                grid=grid,
+                angle=Bounce2D.angle(eq, X=res[0], Y=res[1], rho=rho),
+                alpha=alpha,
+                Y_B=200,  # something super high to focus on others
+                num_transit=num_transit,
+                num_well=20 * num_transit,
+                num_quad=res[2],
+                num_pitch=res[3],
+            )
+            eps_32 = grid.compress(data["effective ripple 3/2"])
+            pick_data["eps_32"].append(eps_32)
+        else:
+            plt.plot(
+                pick_data["rho"],
+                pick_data["eps_32"][i],
+                linewidth=2,
+                label=rf"${res[0], res[1], res[3], res[2]}$",
+                linestyle=linestyles[i % len(linestyles)],
+                color=colors[i],
+            )
+
+    if mode == 0:
+        with open(f"res_scan_{name}.pkl", "wb") as file:
+            pickle.dump(pick_data, file)
+    else:
+        plt.ylim(top=top)
+        plt.xlabel(r"$\rho$", fontsize=24)
+        plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=24)
+        plt.xticks()
+        plt.yticks()
+        plt.legend(fontsize=22)
+
+        ax = plt.gca()
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(2)
+
+        plt.tight_layout()
+        plt.savefig(f"res_scan_{name}.pdf")
+
+
+def test_plot_neo_compare(
+    pick_filename="res_scan_W7-X.pkl",
+    neo_filename="tests/inputs/neo_out.W7-X",
+    top=0.0011,
+):
+    """Plot comparison to NEO."""
+    with open(pick_filename, "rb") as file:
+        data = pickle.load(file)
+
+    neo_rho, neo_eps_32 = NeoIO.read(neo_filename)
+
+    plt.figure(figsize=(7, 5))
+    plt.rcParams.update({"font.size": 20})
+    plt.rcParams["axes.labelsize"] = 24
+    plt.rcParams["xtick.labelsize"] = 20
+    plt.rcParams["ytick.labelsize"] = 20
+
+    plt.plot(neo_rho, neo_eps_32, "--", linewidth=3, label="NEO", color="tab:blue")
+    plt.plot(
+        data["rho"], data["eps_32"][-1], "-", linewidth=3, label="DESC", color="purple"
+    )
+    plt.ylim(top=top)
+    plt.xlabel(r"$\rho$", fontsize=24)
+    plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=24)
+    plt.xticks()
+    plt.yticks()
+    plt.legend(fontsize=20)
+
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2.5)
+
+    plt.tight_layout()
+    plt.savefig("NEO_vs_DESC.pdf")
+
+
+def test_plot_optimized_ripple():
+    with open("data_op.pkl", "rb") as file:
+        data_op = pickle.load(file)
+    with open("data_init.pkl", "rb") as file:
+        data_init = pickle.load(file)
+
+    plt.figure(figsize=(7, 6))
+    plt.rcParams.update({"font.size": 22})
+    plt.rcParams["axes.labelsize"] = 26
+    plt.rcParams["xtick.labelsize"] = 22
+    plt.rcParams["ytick.labelsize"] = 23
+
+    plt.plot(
+        data_init["rho"],
+        data_init["eps_32"],
+        "-",
+        linewidth=3.5,
+        label="initial",
+        color="tab:red",
+    )
+    plt.plot(
+        data_op["rho"],
+        data_op["eps_32"],
+        "-",
+        linewidth=3.5,
+        label="optimized",
+        color="tab:blue",
+    )
+    plt.xlabel(r"$\rho$", fontsize=26)
+    plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=28)
+    plt.xticks()
+    plt.yticks()
+    plt.legend(fontsize=26)
+
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2.5)
+
+    plt.tight_layout()
+    plt.savefig("ripple_comparison.pdf")
+
+
+def test_plot_optimized_boozer():
+    eq0 = Equilibrium.load("eq_initial.h5")
+    eq1 = Equilibrium.load("eq_optimized_final2.h5")
+    eq1 = flip_theta(eq1)
+    assert eq0.NFP == eq1.NFP
+
+    rho0 = 1.0
+    fig, ax, Boozer_data0 = plot_boozer_surface(eq0, rho=rho0, return_data=True)
+    plt.close()
+
+    fig, ax, Boozer_data1 = plot_boozer_surface(eq1, rho=rho0, return_data=True)
+    plt.close()
+
+    for i, Boozer_data in enumerate([Boozer_data0, Boozer_data1]):
+        theta_B0 = Boozer_data["theta_B"]
+        zeta_B0 = Boozer_data["zeta_B"]
+        B0 = Boozer_data["|B|"]
+
+        fig, ax = plt.subplots(figsize=(6, 5))
+        contour = ax.contour(
+            zeta_B0,
+            theta_B0,
+            B0,
+            levels=np.linspace(np.min(B0), np.max(B0), 30),
+            cmap="turbo",
+        )
+
+        cbar = fig.colorbar(contour, ax=ax, orientation="vertical", format="%.2f")
+        cbar.ax.tick_params(labelsize=18)
+        ax.xaxis = pi_half_formatter(ax.xaxis, NFP=eq1.NFP)
+        ax.yaxis = pi_half_formatter(ax.yaxis)
+        ax.set_xlabel(r"$N_{\text{FP}} \zeta_{\mathrm{Boozer}}$", fontsize=24)
+        ax.set_ylabel(r"$\theta_{\mathrm{Boozer}}$", fontsize=24)
+        ax.tick_params(axis="both", which="major", labelsize=20)
+
+        ax = plt.gca()
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(2)
+
+        plt.tight_layout()
+        plt.savefig(f"Boozer_contour_plot_{i}.pdf")
+        plt.close()
+
+
+def test_plot_X_section():
+    """Plots cross-sections of initial and optimized equilibrium."""
+    fname_path0 = os.path.dirname(os.getcwd()) + "eq_initial.h5"
+    fname_path1 = os.path.dirname(os.getcwd()) + "eq_optimized_final2.h5"
+
+    eq0 = Equilibrium.load(fname_path0)
+    eq1 = Equilibrium.load(fname_path1)
+
+    plt.rcParams.update({"font.size": 24})
+
+    # will need to replace plot_surface code with:
+    #   ax[i].xaxis.set_major_locator(MaxNLocator(nbins=4))
+    #   ax[i].yaxis.set_major_locator(MaxNLocator(nbins=7))
+    #   ax[i].set_title(
+    #       "$\\phi N_{{FP}}/2\\pi = {:.2f}$".format(nfp * phi[i] / (2 * np.pi)),
+    #       fontsize=title_fontsize - 3,
+    #   )
+    # and comment out legend
+    # # fig.tight_layout(rect=[-0.075, -0.09, 1, 1])
+    # and     rows = np.floor(1).astype(int)
+    # cols = np.ceil(nphi / rows).astype(int)
+
+    # figw = 4 * (cols - 1)
+    fig, ax = plot_comparison(
+        [eq0, eq1],
+        lw=np.array([2, 1.5]),
+        phi=4,
+        xlabel_fontsize=22,
+        ylabel_fontsize=22,
+        title_fontsize=22,
+        color=["tab:red", "tab:blue"],
+        wspace=-0.7,
+    )
+    plt.tight_layout()
+    plt.savefig("Xsection_comparison.pdf")
+
+
+def test_plot_3d():
+    """Plot initial and optimized boundary in 3D."""
+    fname_path0 = os.path.dirname(os.getcwd()) + "eq_initial.h5"
+    fname_path1 = os.path.dirname(os.getcwd()) + "eq_optimized_final2.h5"
+
+    eq0 = Equilibrium.load(f"{fname_path0}")
+    eq1 = Equilibrium.load(f"{fname_path1}")
+
+    legend_list = ["initial", "optimized"]
+    eq_list = [eq0, eq1]
+    scale_list = [2, 4]
+
+    for eq, legend, scale in zip(eq_list, legend_list, scale_list):
+        plt.figure()
+        theta_grid = np.linspace(0, 2 * np.pi, 300)
+        zeta_grid = np.linspace(0, 2 * np.pi, 300)
+        grid = LinearGrid(rho=1.0, theta=theta_grid, zeta=zeta_grid)
+        # May want to turn off title in source code.
+        fig = plot_3d(
+            eq,
+            name="|B|",
+            grid=grid,
+            show_grid=False,
+            zeroline=False,
+            showticklabels=False,
+            showaxislabels=False,
+            update_traces=dict(colorbar=dict(tickfont=dict(size=75))),
+        )
+
+        config = {
+            "toImageButtonOptions": {
+                "filename": f"modB_3d_{legend}",
+                "format": "svg",
+                "scale": scale,
+            }
+        }
+        save_path_html = os.getcwd() + f"/modB_3d_{legend}.html"
+        fig.write_html(
+            save_path_html, config=config, include_plotlyjs=True, full_html=True
+        )
+        plt.close()
+
+
+def test_plot_binormal_drift():
+    """Move this code into the relevant test to get the plots."""
+    plt.rcParams.update({"font.size": 17})
+    plt.rcParams["axes.labelsize"] = 20
+    plt.rcParams["xtick.labelsize"] = 17
+    plt.rcParams["ytick.labelsize"] = 17
+    fig = bounce.check_points(  # noqa: F821
+        points,  # noqa: F821
+        pitch_inv,  # noqa: F821
+        plot=True,
+        klabel=r"$1/(\lambda B_0)$",
+        k_transparency=0.25,
+        show=False,
+        vlabel=r"$\vert B \vert / B_0$",
+        legend_kwargs=dict(
+            loc="lower right", labelspacing=0.1, framealpha=1, borderpad=0.3
+        ),
+        markersize=(plt.rcParams["lines.markersize"] ** 2) * 1.5,
+        title="",
+        linewidth=2.5,
+        tight=False,
+    )
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2)
+    plt.tight_layout()
+    plt.savefig("bavg_drift_field.pdf")
+    plt.close()
+
+    fig, ax = plt.subplots()
+    ax.plot(
+        pitch_inv,  # noqa: F821
+        drift_analytic,  # noqa: F821
+        label="model",
+        color="black",
+        lw=4,
+    )
+
+    ax.plot(
+        pitch_inv,  # noqa: F821
+        drift_numerical,  # noqa: F821
+        label="computation",
+        color="tab:orange",
+        lw=2,
+        linestyle="--",
+    )
+    ax.set_xlabel(r"$1/(\lambda B_0)$")
+    ax.set_ylabel(r"1/seconds")
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("bavg_drift.pdf")
+    plt.close()
+
+
+keys = [
+    "kappa_g",
+    "|grad(rho)|",
+    "|e_alpha|r,p|",
+    "|B|",
+    "|B|_r|v,p",
+    "B^phi_r|v,p",
+    "gbdrift",
+]
+
+
+def _err_PEST(data_PEST, data):
+    return {k: np.abs(data[k] - data_PEST[k]).max() for k in keys}
+
+
+def _err_append(err_PEST_1, err_PEST_2):
+    if err_PEST_1 is None:
+        return err_PEST_2
+    return {k: np.append(err_PEST_1[k], err_PEST_2[k]) for k in keys}
+
+
+@pytest.mark.parametrize(
+    "name, upscale", product(["W7-X", "NCSX"], np.array([1, 2, 3, 4]))
+)
+def test_PEST_convergence_run(name, upscale, tol=1e-10, maxiter=30):
+    """Generate data for PEST basis convergence."""
+    eq = get(name)
+    eq_PEST = eq.to_sfl(
+        L=eq.L * upscale,
+        M=eq.M * upscale,
+        N=eq.N * upscale,
+        copy=True,
+        tol=tol,
+        maxiter=maxiter,
+    )
+    eq.change_resolution(
+        L_grid=eq_PEST.L_grid, M_grid=eq_PEST.M_grid, N_grid=eq_PEST.N_grid
+    )
+
+    grid_PEST = LinearGrid(
+        rho=np.linspace(0.1, 1, 20), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
+    grid_DESC = Grid(
+        eq.map_coordinates(
+            grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol, maxiter=maxiter
+        )
+    )
+    data_PEST = eq_PEST.compute(keys, grid_PEST)
+    data = eq.compute(keys, grid_DESC)
+    err = _err_PEST(data_PEST, data)
+
+    grid_PEST = LinearGrid(rho=0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    grid_DESC = Grid(
+        eq.map_coordinates(
+            grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol, maxiter=maxiter
+        )
+    )
+    data_PEST = eq_PEST.compute(keys, grid_PEST)
+    data = eq.compute(keys, grid_DESC)
+    axis_err = _err_PEST(data_PEST, data)
+
+    with open(f"{name}_{upscale}.pkl", "wb") as file:
+        pickle.dump(
+            {"eq": eq, "eq_PEST": eq_PEST, "err": err, "axis_err": axis_err},
+            file,
+        )
+
+
+def _plot_PEST_convergence(plot_data, keys, data_index, filename):
+    fig, axs = plt.subplots(1, 2, figsize=(8, 3.5), sharey=True)
+    lines, labels = [], []
+
+    for i, ax in enumerate(axs):
+        data = plot_data[i]
+        err = data["err"]
+
+        for k in keys:
+            label_text = data_index["desc.equilibrium.equilibrium.Equilibrium"][k][
+                "label"
+            ]
+            x_vals = np.arange(1, err[k].size + 1) ** 3
+            line = ax.semilogy(x_vals, err[k], marker="o")[0]
+
+            if i == 0:
+                lines.append(line)
+                labels.append(rf"${label_text}$")
+
+        ax.set_title(data["title"])
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+
+    fig.supxlabel(
+        "Spectral resolution ratio "
+        r"$(L M N)_{\vartheta, \phi} / (L M N)_{\theta, \zeta}$"
+        r" of $R, Z, \Lambda, \omega$."
+    )
+    fig.supylabel("Absolute error")
+    fig.legend(handles=lines, labels=labels, loc="center right", frameon=False)
+
+    fig.tight_layout(rect=[0, -0.05, 0.825, 1])
+    plt.savefig(filename)
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("tol", [1e-10, 1e-7])
+def test_plot_PEST_convergence(tol, plot_axis=False):
+    """Saves PEST basis conversion plots for W7-X and NCSX."""
+    plt.rcParams.update(
+        {
+            "axes.labelsize": 16,
+            "axes.titlesize": 14,
+            "xtick.labelsize": 12,
+            "ytick.labelsize": 12,
+            "legend.fontsize": 13,
+            "lines.linewidth": 1,
+            "lines.markersize": 4,
+            "axes.grid": False,
+        }
+    )
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    data_index[p]["gbdrift"]["label"] = "(\\nabla \\vert B \\vert)_{\\mathrm{drift}}"
+
+    configs = ["W7-X", "NCSX"]
+    all_data = {}
+
+    for name in configs:
+        err, axis_err = None, None
+        for i in range(1, 5):
+            with open(f"{name}_{i}_{tol}.pkl", "rb") as file:
+                pick = pickle.load(file)
+            err = _err_append(err, pick["err"])
+            axis_err = _err_append(axis_err, pick["axis_err"])
+        all_data[name] = {"err": err, "axis_err": axis_err, "eq": get(name)}
+
+    weq = all_data["W7-X"]["eq"]
+    neq = all_data["NCSX"]["eq"]
+
+    a1 = {
+        "err": all_data["W7-X"]["err"],
+        "eq": weq,
+        "title": rf"W7-X $(L,M,N)_{{\theta, \zeta}} = ({weq.L},{weq.M},{weq.N})$",
+    }
+    a2 = {
+        "err": all_data["NCSX"]["err"],
+        "eq": neq,
+        "title": rf"NCSX $(L,M,N)_{{\theta, \zeta}} = ({neq.L},{neq.M},{neq.N})$",
+    }
+    _plot_PEST_convergence([a1, a2], keys, data_index, "PEST_conversion_plot.pdf")
+
+    if plot_axis:
+        a1 = {
+            "err": all_data["W7-X"]["axis_err"],
+            "eq": weq,
+            "title": rf"W7-X $(L,M,N)_{{\theta, \zeta}} = ({weq.L},{weq.M},{weq.N})$",
+        }
+        a2 = {
+            "err": all_data["NCSX"]["axis_err"],
+            "eq": neq,
+            "title": rf"NCSX $(L,M,N)_{{\theta, \zeta}} = ({neq.L},{neq.M},{neq.N})$",
+        }
+        _plot_PEST_convergence([a1, a2], keys, data_index, "PEST_conversion_axis.pdf")

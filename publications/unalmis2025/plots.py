@@ -85,7 +85,7 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
     rho = 1.0
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute(Bounce2D.required_names + ["min_tz |B|", "max_tz |B|"], grid=grid)
-    angle = Bounce2D.angle(eq, X, Y, rho=rho, tol=1e-12)
+    angle = Bounce2D.angle(eq, X, Y, rho=rho)
     bounce = Bounce2D(grid, data, angle, Y_B, num_transit=2)
     pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),

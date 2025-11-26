@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pytest
+from matplotlib.ticker import AutoMinorLocator
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
 import plotting
@@ -76,7 +77,8 @@ def pi_half_formatter(ax, NFP=1):
 
 def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
     """High resolution plot for the paper."""
-    plt.rcParams.update({"font.size": 14})
+    plt.rcParams["figure.constrained_layout.use"] = True
+    plt.rcParams["font.size"] = 14
     plt.rcParams["axes.labelsize"] = 14
     plt.rcParams["xtick.labelsize"] = 13
     plt.rcParams["ytick.labelsize"] = 12
@@ -106,6 +108,7 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
         title="",
         markersize=plt.rcParams["lines.markersize"] * 1.5,
     )
+    fig.tight_layout()
     ax.xaxis = pi_half_formatter(ax.xaxis)
     fig.subplots_adjust(right=0.75)
 
@@ -157,6 +160,7 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
 
 def test_plot_section_lambda(name="W7-X"):
     """Plot lambda sections."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 10})
     eq1 = get(name)
     grid = LinearGrid(
@@ -183,6 +187,7 @@ def test_plot_section_lambda(name="W7-X"):
 
 def test_plot_section_alpha(name="W7-X"):
     """Plot alpha sections."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 10})
     eq = get(name)
     grid = LinearGrid(
@@ -212,6 +217,7 @@ def test_plot_section_alpha(name="W7-X"):
 
 def test_plot2d_alphas(name="W7-X"):
     """Plot alpha 2d plots."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     fig, axs = plt.subplots(1, 2, figsize=(7, 3), sharex=True)
 
     eq = get(name)
@@ -253,6 +259,7 @@ def test_plot2d_alphas(name="W7-X"):
 
 def test_plot_theta_mod(X=64, Y=64, tol=1e-7):
     """θ mod (2π)."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 15})
     plt.rcParams["axes.labelsize"] = 16
     plt.rcParams["xtick.labelsize"] = 15
@@ -266,7 +273,7 @@ def test_plot_theta_mod(X=64, Y=64, tol=1e-7):
     bounce = Bounce2D(grid, data, angle, 1, np.array([0.0, np.pi / 2, np.pi]), 4)
 
     lw = 1.5
-    kwargs = dict(title="", tight=False, show=False, include_legend=False, lw=lw)
+    kwargs = dict(title="", show=False, include_legend=False, lw=lw)
     fig, ax = bounce.plot_theta(0, 0, **kwargs)
     fig2, ax2 = bounce.plot_theta(0, 1, **kwargs)
     fig3, ax3 = bounce.plot_theta(0, 2, **kwargs)
@@ -303,13 +310,13 @@ def test_plot_theta_mod(X=64, Y=64, tol=1e-7):
         spine.set_visible(True)
         spine.set_linewidth(1.5)
 
-    plt.tight_layout()
     plt.savefig("theta_plot_ncsx.pdf")
 
 
 @pytest.mark.parametrize("name, X, Y", [("NCSX", 72, 59), ("HELIOTRON", 50, 30)])
 def test_plot_angle_spectrum(name, X, Y, tol=1e-7):
     """Magnitude of the spectral coefficients of α, ζ → θ − α."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 16})
     plt.rcParams["axes.labelsize"] = 18
     plt.rcParams["xtick.labelsize"] = 16
@@ -317,7 +324,6 @@ def test_plot_angle_spectrum(name, X, Y, tol=1e-7):
 
     angle = Bounce2D.angle(get(name), X, Y, rho=1.0, tol=tol)
     fig = Bounce2D.plot_angle_spectrum(angle, 0, title="", truncate=truncate_rule(Y))
-    fig.tight_layout()
     fig.savefig(f"angle_spectrum_{name}.pdf")
 
 
@@ -325,11 +331,12 @@ def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
     """Mode 0 for compute, 1 for plot."""
     assert mode == 0 or mode == 1
 
-    plt.figure(figsize=(7, 5))
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 20})
     plt.rcParams["axes.labelsize"] = 24
     plt.rcParams["xtick.labelsize"] = 20
     plt.rcParams["ytick.labelsize"] = 20
+    plt.figure(figsize=(7, 5))
 
     res_table = [
         [16, 24, 12, 25],
@@ -368,39 +375,39 @@ def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
             )
             eps_32 = grid.compress(data["effective ripple 3/2"])
             pick_data["eps_32"].append(eps_32)
-        else:
-            plt.plot(
-                pick_data["rho"],
-                pick_data["eps_32"][i],
-                linewidth=2,
-                label=rf"${res[0], res[1], res[3], res[2]}$",
-                linestyle=linestyles[i % len(linestyles)],
-                color=colors[i],
-            )
+            continue
+
+        plt.plot(
+            pick_data["rho"],
+            pick_data["eps_32"][i],
+            linewidth=2,
+            label=rf"${res[0], res[1], res[3], res[2]}$",
+            linestyle=linestyles[i % len(linestyles)],
+            color=colors[i],
+        )
 
     if mode == 0:
         with open(f"res_scan_{name}.pkl", "wb") as file:
             pickle.dump(pick_data, file)
-    else:
-        plt.ylim(top=top)
-        plt.xlabel(r"$\rho$", fontsize=24)
-        plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=24)
-        plt.xticks()
-        plt.yticks()
-        plt.legend(fontsize=22)
+        return
 
-        ax = plt.gca()
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(2)
+    plt.ylim(top=top)
+    plt.xlabel(r"$\rho$", fontsize=24)
+    plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=24)
+    plt.gca().yaxis.set_minor_locator(AutoMinorLocator())
+    plt.legend(fontsize=23)
 
-        plt.tight_layout()
-        plt.savefig(f"res_scan_{name}.pdf")
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2.5)
+
+    plt.savefig(f"res_scan_{name}.pdf")
 
 
 def test_plot_neo_compare(
     pick_filename="res_scan_W7-X.pkl",
-    neo_filename="tests/inputs/neo_out.W7-X",
+    neo_filename="../../tests/inputs/neo_out.W7-X",
     top=0.0011,
 ):
     """Plot comparison to NEO."""
@@ -409,11 +416,12 @@ def test_plot_neo_compare(
 
     neo_rho, neo_eps_32 = NeoIO.read(neo_filename)
 
-    plt.figure(figsize=(7, 5))
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 20})
     plt.rcParams["axes.labelsize"] = 24
     plt.rcParams["xtick.labelsize"] = 20
     plt.rcParams["ytick.labelsize"] = 20
+    plt.figure(figsize=(7, 5))
 
     plt.plot(neo_rho, neo_eps_32, "--", linewidth=3, label="NEO", color="tab:blue")
     plt.plot(
@@ -422,8 +430,7 @@ def test_plot_neo_compare(
     plt.ylim(top=top)
     plt.xlabel(r"$\rho$", fontsize=24)
     plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=24)
-    plt.xticks()
-    plt.yticks()
+    plt.gca().yaxis.set_minor_locator(AutoMinorLocator())
     plt.legend(fontsize=20)
 
     ax = plt.gca()
@@ -431,42 +438,68 @@ def test_plot_neo_compare(
         spine.set_visible(True)
         spine.set_linewidth(2.5)
 
-    plt.tight_layout()
     plt.savefig("NEO_vs_DESC.pdf")
 
 
-def test_plot_optimized_ripple():
-    with open("data_op.pkl", "rb") as file:
-        data_op = pickle.load(file)
-    with open("data_init.pkl", "rb") as file:
-        data_init = pickle.load(file)
+def test_plot_optimized_ripple(mode=1):
+    """Mode 0 for compute, 1 for plot."""
+    assert mode == 0 or mode == 1
 
-    plt.figure(figsize=(7, 6))
+    def compute(eq):
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        num_transit = 20
+        data = eq.compute(
+            "effective ripple 3/2",
+            grid=grid,
+            angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
+            alpha=jnp.linspace(0, 2 * jnp.pi, 3, endpoint=False),
+            Y_B=200,
+            num_transit=num_transit,
+            num_well=20 * num_transit,
+            num_quad=32,
+            num_pitch=100,
+        )
+        return grid.compress(data["effective ripple 3/2"])
+
+    if mode == 0:
+        eq0 = Equilibrium.load("eq_initial.h5")
+        eq1 = Equilibrium.load("eq_optimized.h5")
+        rho = jnp.linspace(0, 1, 20)
+        data = {"rho": rho, "eps_32_init": compute(eq0), "eps_32_opt": compute(eq1)}
+        with open("data_opt.pkl", "wb") as file:
+            pickle.dump(data, file)
+        return
+
+    with open("data_opt.pkl", "rb") as file:
+        data = pickle.load(file)
+
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 22})
-    plt.rcParams["axes.labelsize"] = 26
-    plt.rcParams["xtick.labelsize"] = 22
+    plt.rcParams["axes.labelsize"] = 29
+    plt.rcParams["xtick.labelsize"] = 24
     plt.rcParams["ytick.labelsize"] = 23
+    plt.figure(figsize=(7, 6))
 
     plt.plot(
-        data_init["rho"],
-        data_init["eps_32"],
+        data["rho"],
+        data["eps_32_init"],
         "-",
-        linewidth=3.5,
+        linewidth=4,
         label="initial",
         color="tab:red",
     )
     plt.plot(
-        data_op["rho"],
-        data_op["eps_32"],
+        data["rho"],
+        data["eps_32_opt"],
         "-",
-        linewidth=3.5,
+        linewidth=4,
         label="optimized",
         color="tab:blue",
     )
-    plt.xlabel(r"$\rho$", fontsize=26)
-    plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$", fontsize=28)
-    plt.xticks()
-    plt.yticks()
+    plt.gca().xaxis.set_minor_locator(AutoMinorLocator())
+    plt.gca().yaxis.set_minor_locator(AutoMinorLocator())
+    plt.xlabel(r"$\rho$")
+    plt.ylabel(r"$\epsilon_{\text{eff}}^{3/2}$")
     plt.legend(fontsize=26)
 
     ax = plt.gca()
@@ -474,15 +507,16 @@ def test_plot_optimized_ripple():
         spine.set_visible(True)
         spine.set_linewidth(2.5)
 
-    plt.tight_layout()
     plt.savefig("ripple_comparison.pdf")
 
 
 def test_plot_optimized_boozer():
     eq0 = Equilibrium.load("eq_initial.h5")
-    eq1 = Equilibrium.load("eq_optimized_final2.h5")
+    eq1 = Equilibrium.load("eq_optimized.h5")
     eq1 = flip_theta(eq1)
     assert eq0.NFP == eq1.NFP
+
+    plt.rcParams["figure.constrained_layout.use"] = True
 
     rho0 = 1.0
     fig, ax, Boozer_data0 = plot_boozer_surface(eq0, rho=rho0, return_data=True)
@@ -518,34 +552,18 @@ def test_plot_optimized_boozer():
             spine.set_visible(True)
             spine.set_linewidth(2)
 
-        plt.tight_layout()
         plt.savefig(f"Boozer_contour_plot_{i}.pdf")
         plt.close()
 
 
 def test_plot_X_section():
     """Plots cross-sections of initial and optimized equilibrium."""
-    fname_path0 = os.path.dirname(os.getcwd()) + "eq_initial.h5"
-    fname_path1 = os.path.dirname(os.getcwd()) + "eq_optimized_final2.h5"
+    eq0 = Equilibrium.load("eq_initial.h5")
+    eq1 = Equilibrium.load("eq_optimized.h5")
 
-    eq0 = Equilibrium.load(fname_path0)
-    eq1 = Equilibrium.load(fname_path1)
-
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 24})
 
-    # will need to replace plot_surface code with:
-    #   ax[i].xaxis.set_major_locator(MaxNLocator(nbins=4))
-    #   ax[i].yaxis.set_major_locator(MaxNLocator(nbins=7))
-    #   ax[i].set_title(
-    #       "$\\phi N_{{FP}}/2\\pi = {:.2f}$".format(nfp * phi[i] / (2 * np.pi)),
-    #       fontsize=title_fontsize - 3,
-    #   )
-    # and comment out legend
-    # # fig.tight_layout(rect=[-0.075, -0.09, 1, 1])
-    # and     rows = np.floor(1).astype(int)
-    # cols = np.ceil(nphi / rows).astype(int)
-
-    # figw = 4 * (cols - 1)
     fig, ax = plot_comparison(
         [eq0, eq1],
         lw=np.array([2, 1.5]),
@@ -554,19 +572,19 @@ def test_plot_X_section():
         ylabel_fontsize=22,
         title_fontsize=22,
         color=["tab:red", "tab:blue"],
-        wspace=-0.7,
+        labels=["initial", "optimized"],
+        rows=1,
+        figw=12,
+        legend_kw=dict(loc="lower right"),
     )
-    plt.tight_layout()
     plt.savefig("Xsection_comparison.pdf")
 
 
 def test_plot_3d():
     """Plot initial and optimized boundary in 3D."""
-    fname_path0 = os.path.dirname(os.getcwd()) + "eq_initial.h5"
-    fname_path1 = os.path.dirname(os.getcwd()) + "eq_optimized_final2.h5"
-
-    eq0 = Equilibrium.load(f"{fname_path0}")
-    eq1 = Equilibrium.load(f"{fname_path1}")
+    eq0 = Equilibrium.load("eq_initial.h5")
+    eq1 = Equilibrium.load("eq_optimized.h5")
+    plt.rcParams["figure.constrained_layout.use"] = True
 
     legend_list = ["initial", "optimized"]
     eq_list = [eq0, eq1]
@@ -582,7 +600,7 @@ def test_plot_3d():
             eq,
             name="|B|",
             grid=grid,
-            show_grid=False,
+            showgrid=False,
             zeroline=False,
             showticklabels=False,
             showaxislabels=False,
@@ -605,6 +623,7 @@ def test_plot_3d():
 
 def test_plot_binormal_drift():
     """Move this code into the relevant test to get the plots."""
+    plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 17})
     plt.rcParams["axes.labelsize"] = 20
     plt.rcParams["xtick.labelsize"] = 17
@@ -623,13 +642,12 @@ def test_plot_binormal_drift():
         markersize=(plt.rcParams["lines.markersize"] ** 2) * 1.5,
         title="",
         linewidth=2.5,
-        tight=False,
     )
     ax = plt.gca()
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_linewidth(2)
-    plt.tight_layout()
+
     plt.savefig("bavg_drift_field.pdf")
     plt.close()
 
@@ -656,7 +674,6 @@ def test_plot_binormal_drift():
         spine.set_visible(True)
         spine.set_linewidth(2)
     plt.legend()
-    plt.tight_layout()
     plt.savefig("bavg_drift.pdf")
     plt.close()
 
@@ -683,9 +700,10 @@ def _err_append(err_PEST_1, err_PEST_2):
 
 
 @pytest.mark.parametrize(
-    "name, upscale", product(["W7-X", "NCSX"], np.array([1, 2, 3, 4]))
+    "name, upscale, tol",
+    product(["W7-X", "NCSX"], np.array([1, 2, 3, 4]), [1e-10, 5e-7]),
 )
-def test_PEST_convergence_run(name, upscale, tol=1e-10, maxiter=30):
+def test_PEST_convergence_run(name, upscale, tol, maxiter=30):
     """Generate data for PEST basis convergence."""
     eq = get(name)
     eq_PEST = eq.to_sfl(
@@ -722,7 +740,7 @@ def test_PEST_convergence_run(name, upscale, tol=1e-10, maxiter=30):
     data = eq.compute(keys, grid_DESC)
     axis_err = _err_PEST(data_PEST, data)
 
-    with open(f"{name}_{upscale}.pkl", "wb") as file:
+    with open(f"{name}_{upscale}_{tol}.pkl", "wb") as file:
         pickle.dump(
             {"eq": eq, "eq_PEST": eq_PEST, "err": err, "axis_err": axis_err},
             file,
@@ -742,7 +760,8 @@ def _plot_PEST_convergence(plot_data, keys, data_index, filename):
                 "label"
             ]
             x_vals = np.arange(1, err[k].size + 1) ** 3
-            line = ax.semilogy(x_vals, err[k], marker="o")[0]
+            line = ax.semilogy(x_vals, err[k], "--", marker="D")[0]
+            ax.set_xticks(x_vals)
 
             if i == 0:
                 lines.append(line)
@@ -751,21 +770,22 @@ def _plot_PEST_convergence(plot_data, keys, data_index, filename):
         ax.set_title(data["title"])
         for spine in ax.spines.values():
             spine.set_visible(True)
+            spine.set_linewidth(1.75)
 
     fig.supxlabel(
         "Spectral resolution ratio "
         r"$(L M N)_{\vartheta, \phi} / (L M N)_{\theta, \zeta}$"
-        r" of $R, Z, \Lambda, \omega$."
+        r" of $(R, Z, \Lambda, \omega)$."
     )
     fig.supylabel("Absolute error")
     fig.legend(handles=lines, labels=labels, loc="center right", frameon=False)
 
-    fig.tight_layout(rect=[0, -0.05, 0.825, 1])
+    fig.tight_layout(rect=[0, -0.05, 0.8, 1])
     plt.savefig(filename)
     plt.close(fig)
 
 
-@pytest.mark.parametrize("tol", [1e-10, 1e-7])
+@pytest.mark.parametrize("tol", [1e-10, 5e-7])
 def test_plot_PEST_convergence(tol, plot_axis=False):
     """Saves PEST basis conversion plots for W7-X and NCSX."""
     plt.rcParams.update(
@@ -773,10 +793,10 @@ def test_plot_PEST_convergence(tol, plot_axis=False):
             "axes.labelsize": 16,
             "axes.titlesize": 14,
             "xtick.labelsize": 12,
-            "ytick.labelsize": 12,
-            "legend.fontsize": 13,
-            "lines.linewidth": 1,
-            "lines.markersize": 4,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 14,
+            "lines.linewidth": 2,
+            "lines.markersize": 6,
             "axes.grid": False,
         }
     )
@@ -801,14 +821,16 @@ def test_plot_PEST_convergence(tol, plot_axis=False):
     a1 = {
         "err": all_data["W7-X"]["err"],
         "eq": weq,
-        "title": rf"W7-X $(L,M,N)_{{\theta, \zeta}} = ({weq.L},{weq.M},{weq.N})$",
+        "title": rf"W7-X $(L M N)_{{\theta, \zeta}} = ({weq.L},{weq.M},{weq.N})$",
     }
     a2 = {
         "err": all_data["NCSX"]["err"],
         "eq": neq,
-        "title": rf"NCSX $(L,M,N)_{{\theta, \zeta}} = ({neq.L},{neq.M},{neq.N})$",
+        "title": rf"NCSX $(L M N)_{{\theta, \zeta}} = ({neq.L},{neq.M},{neq.N})$",
     }
-    _plot_PEST_convergence([a1, a2], keys, data_index, "PEST_conversion_plot.pdf")
+    _plot_PEST_convergence(
+        [a1, a2], keys, data_index, f"plot_PEST_convergence_{tol}.pdf"
+    )
 
     if plot_axis:
         a1 = {
@@ -821,4 +843,6 @@ def test_plot_PEST_convergence(tol, plot_axis=False):
             "eq": neq,
             "title": rf"NCSX $(L,M,N)_{{\theta, \zeta}} = ({neq.L},{neq.M},{neq.N})$",
         }
-        _plot_PEST_convergence([a1, a2], keys, data_index, "PEST_conversion_axis.pdf")
+        _plot_PEST_convergence(
+            [a1, a2], keys, data_index, f"plot_PEST_convergence_{tol}_axis.pdf"
+        )

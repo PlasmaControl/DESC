@@ -1,9 +1,4 @@
-"""Mostly a better version of desc.plotting.
-
-Didn't push to main branch since their are still some minor
-format issues to resolve that don't affect the generation
-of plots for the paper.
-"""
+"""Fixes stuff in desc.plotting."""
 
 import inspect
 import numbers
@@ -16,6 +11,7 @@ import numpy as np
 import plotly.graph_objects as go
 from diffrax import RESULTS
 from matplotlib import cycler, rcParams
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
@@ -126,6 +122,7 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
+    return
     # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
     if Version(matplotlib.__version__) >= Version("3.6.0"):
@@ -146,7 +143,7 @@ def _get_cmap(name, n=None):
         return matplotlib.cm.get_cmap(name, n)
 
 
-def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False, wspace=None):
+def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initialize one.
 
     Parameters
@@ -176,7 +173,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False, wspace
         figsize = (6, 6)
     if ax is None:
         if is3d:
-            fig = plt.figure(figsize=figsize, dpi=dpi)
+            fig = plt.figure(figsize=figsize, dpi=dpi, layout="constrained")
             ax = np.array(
                 [
                     fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
@@ -197,8 +194,6 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False, wspace
                 sharey=True,
                 subplot_kw=dict(aspect="equal") if equal else None,
             )
-            if wspace is not None:
-                fig.subplots_adjust(wspace=wspace)
             if ax.size == 1:
                 ax = ax.flatten()[0]
             return fig, ax
@@ -1798,13 +1793,13 @@ def plot_section(
             R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
         )
 
-        row = i // cols
         col = i % cols
-        ax[i].tick_params(labelbottom=(row == rows - 1), labelleft=(col == 0))
+        ax[i].tick_params(labelbottom=True, labelleft=(col == 0))
+        ax[i].xaxis.set_minor_locator(AutoMinorLocator())
+        for side in ["bottom", "left"]:
+            ax[i].spines[side].set_linewidth(1.25)
 
-        phi_title = "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
-            eq.NFP * phi[i] / (2 * np.pi)
-        )
+        phi_title = "$\\phi /2\\pi = {:.3f}$".format(phi[i] / (2 * np.pi))
         ax[i].set_title(phi_title, fontsize=title_fontsize)
         if normalize:
             ax[i].set_title(
@@ -1828,7 +1823,7 @@ def plot_section(
         else:
             cbar_label = r"$" + data_index_p[name]["label"] + units + "$"
 
-    fig.suptitle(suptitle, fontsize=title_fontsize + 2)
+    fig.suptitle(suptitle, fontsize=title_fontsize + 1)
     fig.supxlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
     fig.supylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     fig.tight_layout(rect=[-0.03, -0.05, 0.9, 1.05])
@@ -2074,22 +2069,25 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
 
         if i == 0:
             ax[i].tick_params(labelbottom=True, labelleft=True)
-        # ax[i].xaxis.set_major_locator(MaxNLocator(nbins=4))
-        # ax[i].yaxis.set_major_locator(MaxNLocator(nbins=7))
+        ax[i].xaxis.set_major_locator(MaxNLocator(nbins=4))
+        ax[i].yaxis.set_major_locator(MaxNLocator(nbins=7))
+
+        ax[i].xaxis.set_minor_locator(AutoMinorLocator())
+        ax[i].yaxis.set_minor_locator(AutoMinorLocator())
+
         ax[i].set_title(
-            "$\\phi N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
+            "$\\phi N_{{FP}} /2\\pi = {:.2f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
 
         for side in ["bottom", "left"]:
             ax[i].spines[side].set_visible(True)
-            ax[i].spines[side].set_linewidth(1.5)
+            ax[i].spines[side].set_linewidth(2)
         if label is not None and i == 0 and legend:
             ax[i].legend(loc="best")
 
-    fig.supxlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize, y=0.13)
-    fig.supylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize, x=0.09, y=0.55)
-
+    fig.supxlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+    fig.supylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr
@@ -2735,20 +2733,20 @@ def plot_comparison(
     phi = np.atleast_1d(phi)
     nphi = len(phi)
 
-    rows = np.floor(np.sqrt(nphi)).astype(int)
-    cols = np.ceil(nphi / rows).astype(int)
+    rows = kwargs.pop("rows", np.floor(np.sqrt(nphi)).astype(int))
+    cols = kwargs.pop("cols", np.ceil(nphi / rows).astype(int))
 
-    figw = 4 * cols
-    figh = 5 * rows
+    figw = kwargs.pop("figw", 4 * cols - 1)
+    figh = kwargs.pop("figh", 5 * rows)
     if figsize is None:
         figsize = (figw, figh)
+
     fig, ax = _format_ax(
         ax,
         rows=rows,
         cols=cols,
         figsize=figsize,
         equal=True,
-        wspace=kwargs.pop("wspace", None),
     )
     ax = np.atleast_1d(ax).flatten()
 

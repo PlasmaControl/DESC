@@ -1,5 +1,6 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
 import jax
+from desc.backend import jnp
 
 class QuadcoilObjective(_Objective):
     """
@@ -41,7 +42,7 @@ class QuadcoilObjective(_Objective):
 
         # ----- Superclass -----
         super().__init__(
-            things=[qf.eq, qf], # things is a list of things that will be optimized, in this case just the equilibrium
+            things=[qf] + qf._things, # things is a list of things that will be optimized
             target=target,
             bounds=bounds,
             weight=weight,
@@ -62,9 +63,31 @@ class QuadcoilObjective(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
     
     def compute(self, *all_params, constants=None):
-        params_eq = all_params[0]
-        params_qf = all_params[1]
-        qf = self.things[1]
-        qp = qf.params_to_qp(params_eq, params_qf)
+        # Loading qf and constants
+        qf = self.things[0]
+        constants = qf._constants
+
+        # Loading params
+        # all_params can be
+        # params_qf
+        # params_qf, params_eq
+        # params_qf, params_eq, params_field (may be multiple items)
+        # params_qf, params_field (may be multiple items)
+        params_list = list(all_params)
+        params_qf = params_list.pop(0)
+        # Load fixed params 
+        if qf._eq_fixed:
+            params_eq = qf._eq.params_dict
+        else:
+            params_eq = params_list.pop(0)
+        if qf._field_fixed:
+            if qf._field:
+                params_field = constants['sum_field'].params_dict
+            else:
+                params_field = {}
+        else:
+            params_field = params_list
+
+        qp = qf.params_to_qp(params_eq, params_qf, params_field)
         dofs = qf.params_to_dofs(params_qf)
         return qf._f_quadcoil(qp, dofs)

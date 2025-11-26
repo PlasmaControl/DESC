@@ -1,6 +1,5 @@
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.backend import jnp
-import warnings
 from jax import eval_shape
 import jax
 from jax import disable_jit
@@ -22,8 +21,8 @@ class QuadcoilConstraint(_Objective):
     def __init__(
         self,
         qf,
-        target=None, # None,
-        bounds=(-jnp.inf, 0.),
+        target=0, # None,
+        bounds=None, # (-jnp.inf, 0.),
         weight=1.,
         normalize=None,
         normalize_target=None,
@@ -44,7 +43,7 @@ class QuadcoilConstraint(_Objective):
 
         # ----- Superclass -----
         super().__init__(
-            things=[qf] + qf._things, # things is a list of things that will be optimized
+            things=[qf.eq, qf], # things is a list of things that will be optimized, in this case just the equilibrium
             target=target,
             bounds=bounds,
             weight=weight,
@@ -58,34 +57,25 @@ class QuadcoilConstraint(_Objective):
         # Nothing needed here.
         # All of the logics are packaged into 
         # QuadcoilField.
-        qf = self.things[0]
-        eq = qf._eq
+        # eq = self.things[0]
+        # qf = self.things[1]
         # 1:00 issue is between here
         # dim_f = size of the output vector returned by self.compute.
         # We now count the total number of scalar constraints in the 
         # problem.
-        dim_g = eval_shape(
-            qf._g_quadcoil, 
-            # The shape of field_params_dict doesn't impact 
-            # the shape of g and h.
-            qf.params_to_qp(eq.params_dict, qf.params_dict, qf._constants['sum_field'].params_dict),
-            qf.params_to_dofs(qf.params_dict)
-        ).size
-        dim_h = eval_shape(
-            qf._h_quadcoil, 
-            qf.params_to_qp(eq.params_dict, qf.params_dict, qf._constants['sum_field'].params_dict),
-            qf.params_to_dofs(qf.params_dict)
-        ).size
-        self._dim_f = dim_g + dim_h
-        if self._dim_f > 100:
-            warnings.warn(
-                'Large constraint number detected when initializing QUADCOIL-based '
-                'single-stage optimization: \n'
-                '    # equality constraint: ' + str(dim_h) + ',\n'
-                '    # inequality constraint: ' + str(dim_g) + '.\n'
-                'DESC may hang when the total constraint count approaches ~500.'
-            )
+        # dim_g = eval_shape(
+        #     qf._g_quadcoil, 
+        #     qf.params_to_qp(eq.params_dict, qf.params_dict),
+        #     qf.params_to_dofs(qf.params_dict)
+        # ).size
+        # dim_h = eval_shape(
+        #     qf._h_quadcoil, 
+        #     qf.params_to_qp(eq.params_dict, qf.params_dict),
+        #     qf.params_to_dofs(qf.params_dict)
+        # ).size
+        # self._dim_f = dim_g + dim_h
         # 1:00 issue is between here
+
         # params_eq = eq.params_dict
         # params_qf = qf.params_dict
         # qp = qf.params_to_qp(params_eq, params_qf)
@@ -93,41 +83,24 @@ class QuadcoilConstraint(_Objective):
         # g_dummy = qf._g_quadcoil(qp, dofs)
         # h_dummy = qf._h_quadcoil(qp, dofs)
         # self._dim_f = g_dummy.size + h_dummy.size
-        # 14:02: using 1 constraints is fast but 2177 isn't 
-        # is it just inefficient for high constraint #?
-        # self._dim_f = 2000# 2177 # TESTING
+        self._dim_f = 2177 # TESTING
         super().build(use_jit=use_jit, verbose=verbose)
     
-
-    def compute(self, *all_params, constants=None):
-        # Loading qf and constants
-        qf = self.things[0]
-        constants = qf._constants
-
-        # Loading params
-        # all_params can be
-        # params_qf
-        # params_qf, params_eq
-        # params_qf, params_eq, params_field (may be multiple items)
-        # params_qf, params_field (may be multiple items)
-        params_list = list(all_params)
-        params_qf = params_list.pop(0)
-        # Load fixed params 
-        if qf._eq_fixed:
-            params_eq = qf._eq.params_dict
-        else:
-            params_eq = params_list.pop(0)
-        if qf._field_fixed:
-            if qf._field:
-                params_field = constants['sum_field'].params_dict
-            else:
-                params_field = {}
-        else:
-            params_field = params_list
-
-        # All logics are packcaged into quadcoilfields
-        qp = qf.params_to_qp(params_eq, params_qf, params_field)
-        dofs = qf.params_to_dofs(params_qf)
-        g_vals = qf._g_quadcoil(qp, dofs)
-        h_vals = qf._h_quadcoil(qp, dofs)
+    def compute(self, params_eq, params_qf, constants=None):
+        qf = self.things[1]
+        # 13:52: does this cause issue?
+        # qp = qf.params_to_qp(params_eq, params_qf)
+        # dofs = qf.params_to_dofs(params_qf)
+        # jax.debug.print('TEST CONSTRAINT dofs {x}', x=dofs)
+        # 13:48 does this cause issue? It seems to!
+        # g_vals = qf._g_quadcoil(qp, dofs)
+        # h_vals = qf._h_quadcoil(qp, dofs)
+        # jax.debug.print('TEST CONSTRAINT g, h {x}, {y}', x=g_vals, y=h_vals)
+        # 10:00 Is dimf the issue?
+        # Issue happened before this, maybe during g_vals
+        # It still hangs after I comment out g_vals
+        # Commenting out the entire compute but "return jnp.zeros(self._dim_f)"
+        # 12:00 didnt help. The issue happened earlier.
+        jax.debug.print('TEST_CONSTRAINT: OUTPUTTING ZERO OF SHAPE DIMF {x}', x=self._dim_f)
+        return jnp.zeros(self._dim_f)
         return jnp.concatenate([g_vals,h_vals])

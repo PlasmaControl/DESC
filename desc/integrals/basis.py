@@ -832,7 +832,6 @@ class PiecewiseChebyshevSeries(IOAble):
         vlabel=r"$f$",
         show=True,
         include_legend=True,
-        tight=True,
         return_legend=False,
         legend_kwargs=None,
         **kwargs,
@@ -908,8 +907,6 @@ class PiecewiseChebyshevSeries(IOAble):
                 legend_kwargs = dict(loc="lower right")
             ax.legend(legend.values(), legend.keys(), **legend_kwargs)
 
-        if tight:
-            plt.tight_layout()
         if show:
             plt.show()
             plt.close()

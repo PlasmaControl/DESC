@@ -284,7 +284,6 @@ def _plot_check_interp(zeta, V, name=""):
         for i in marked:
             ax.plot(zeta[(*idx, i)], V[(*idx, i)], marker="o")
         fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
-        plt.tight_layout()
         plt.show()
 
 
@@ -306,7 +305,6 @@ def plot_ppoly(
     include_knots=False,
     knot_transparency=0.4,
     include_legend=True,
-    tight=True,
     return_legend=False,
     legend_kwargs=None,
     **kwargs,
@@ -398,8 +396,6 @@ def plot_ppoly(
             legend_kwargs = dict(loc="lower right")
         ax.legend(legend.values(), legend.keys(), **legend_kwargs)
 
-    if tight:
-        plt.tight_layout()
     if show:
         plt.show()
         plt.close()

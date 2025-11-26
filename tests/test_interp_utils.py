@@ -477,7 +477,6 @@ class TestStreams:
         plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")
         cbar = plt.colorbar(orientation="horizontal")
         cbar.ax.invert_xaxis()
-        plt.tight_layout()
         return fig
 
     @pytest.mark.unit

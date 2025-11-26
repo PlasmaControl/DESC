@@ -905,7 +905,7 @@ def num_well_rule(num_transit, NFP, Y_B=None):
     but more performant.
     """
     num_well = num_transit * (20 + NFP)
-    return num_well if Y_B is None else min(num_well, Y_B)
+    return num_well if Y_B is None else min(num_well, num_transit * Y_B)
 
 
 def get_vander(grid, x, Y, Y_B, NFP):

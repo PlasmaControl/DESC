@@ -4,7 +4,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._bounce_utils import Y_B_rule
+from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.integrals.bounce_integral import Bounce2D
 from desc.utils import parse_argname_change, setdefault, warnif
 
@@ -197,6 +197,7 @@ class EffectiveRipple(_Objective):
         self._hyperparam = {
             "Y_B": Y_B,
             "num_transit": num_transit,
+            "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
@@ -297,6 +298,9 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_bounce1d(self, use_jit=True, verbose=1):
+        self._hyperparam.pop("nufft_eps")
+        del self._constants["X"]
+
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -304,14 +308,18 @@ class EffectiveRipple(_Objective):
 
         Y_B = self._hyperparam.pop("Y_B")
         Y_B = setdefault(Y_B, Y_B_rule(32, eq.NFP, spline=True))
+
         num_transit = self._hyperparam.pop("num_transit")
-        self._hyperparam.setdefault("num_well", Y_B * num_transit)
+
+        if self._hyperparam["num_well"] is None:
+            self._hyperparam["num_well"] = num_well_rule(num_transit, eq.NFP, Y_B)
+
         num_quad = self._hyperparam.pop("num_quad")
-        self._hyperparam.pop("nufft_eps")
-        del self._constants["X"]
+
         self._constants["Y"] = jnp.linspace(
             0, 2 * jnp.pi * num_transit, Y_B * num_transit
         )
+
         self._keys_1dr = [
             "iota",
             "iota_r",

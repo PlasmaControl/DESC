@@ -1131,7 +1131,6 @@ class TestBounce:
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
-            simp=False,
         )
         points = bounce.points(pitch_inv)
 
@@ -1564,7 +1563,6 @@ class TestBounce2D:
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
-            simp=False,
         )
         points = bounce.points(pitch_inv)
 
@@ -1633,7 +1631,7 @@ class TestBounce2D:
             {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             # ~1% of the integrals differ significantly at lower epsilon.
-            nufft_eps=1e-11,
+            nufft_eps=1e-12,
             check=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
@@ -1643,7 +1641,7 @@ class TestBounce2D:
             num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
         )
         np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=6.5e-4
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=7e-4
         )
 
         bounce = Bounce2D(

@@ -2030,6 +2030,7 @@ class TestObjectiveFunction:
             **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
@@ -2043,6 +2044,7 @@ class TestObjectiveFunction:
             **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )

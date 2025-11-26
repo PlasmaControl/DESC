@@ -376,11 +376,13 @@ class Bounce2D(Bounce):
         obj._constants["Y"] = y_pts
 
         Y_B = obj._hyperparam["Y_B"]
-        Y_B = setdefault(Y_B, Y_B_rule(Y, eq.NFP))
-        obj._hyperparam["Y_B"] = Y_B
-        obj._hyperparam["num_well"] = num_well_rule(
-            obj._hyperparam["num_transit"], eq.NFP, Y_B
-        )
+        if Y_B is None:
+            Y_B = Y_B_rule(Y, eq.NFP)
+            obj._hyperparam["Y_B"] = Y_B
+        if obj._hyperparam["num_well"] is None:
+            obj._hyperparam["num_well"] = num_well_rule(
+                obj._hyperparam["num_transit"], eq.NFP, Y_B
+            )
 
         x, w = leggauss(fieldline_quad_rule(Y))
         obj._constants["fieldline quad"] = (x, w)

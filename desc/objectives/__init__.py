@@ -39,6 +39,7 @@ from ._geometry import (
     BScaleLength,
     Elongation,
     GoodCoordinates,
+    GXGeometry,
     MeanCurvature,
     MirrorRatio,
     PlasmaVesselDistance,

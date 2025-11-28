@@ -796,7 +796,7 @@ def test_plot_PEST_convergence(tol, plot_axis=False):
             "ytick.labelsize": 11,
             "legend.fontsize": 14,
             "lines.linewidth": 2,
-            "lines.markersize": 6,
+            "lines.markersize": 5,
             "axes.grid": False,
         }
     )

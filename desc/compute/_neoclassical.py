@@ -5,8 +5,8 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.surface_integral import surface_integrals
 from ..integrals.bounce_integral import Bounce2D
+from ..integrals.surface_integral import surface_integrals
 from ..utils import safediv
 from .data_index import register_compute_fun
 
@@ -100,7 +100,7 @@ _bounce_doc = {
     data=["psi_r/sqrt(g)", "alpha_t"],
 )
 def _field_line_weight(params, transforms, profiles, data, **kwargs):
-    """∬_Ω |𝐁 ⋅ ∇ζ|⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
+    """∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
 
     The returned quantity has shape (num rho, ).
     """

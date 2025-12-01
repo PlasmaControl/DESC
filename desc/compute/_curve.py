@@ -216,7 +216,9 @@ def _normal_PlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotation
     normal = jnp.matmul(normal, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
-    data["normal"] = xyz2rpz(normal) * jnp.ones_like(data["x"])
+    data["normal"] = xyz2rpz_vec(normal, phi=params["center"][1]) * jnp.ones_like(
+        data["x"]
+    )
     return data
 
 

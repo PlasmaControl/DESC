@@ -17,6 +17,7 @@ from desc.utils import (
     errorif,
     rpz2xyz,
     rpz2xyz_vec,
+    safearccos,
     safenorm,
     setdefault,
     warnif,
@@ -1387,6 +1388,22 @@ class PlasmaCoilSetNormalAngle(_Objective):
             Level of output.
 
         """
+        # local import to avoid circular import
+        from desc.coils import CoilSet, MixedCoilSet, _Coil
+
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
+
+        def _prune_coilset_tree(coilset):
+            """Remove extra members from CoilSets (but not MixedCoilSets)."""
+            if isinstance(coilset, list) or isinstance(coilset, MixedCoilSet):
+                return [_prune_coilset_tree(c) for c in coilset]
+            elif isinstance(coilset, CoilSet):
+                # CoilSet only uses a single grid/transform for all coils
+                return _prune_coilset_tree(coilset.coils[0])
+            else:
+                return coilset  # single coil
+
         if self._eq_fixed:
             eq = self._eq
             coil = self.things[0]
@@ -1396,6 +1413,10 @@ class PlasmaCoilSetNormalAngle(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
+
+        self._dim_f = coil.num_coils
+
+        # plasma grid
         default_M = 2 * eq.M if not hasattr(eq, "_M_grid") else eq.M_grid
         default_N = 2 * eq.N if not hasattr(eq, "_M_grid") else eq.N_grid
         plasma_grid = self._plasma_grid or LinearGrid(
@@ -1407,48 +1428,83 @@ class PlasmaCoilSetNormalAngle(_Objective):
             "Plasma/Surface grid includes interior points, should be rho=1.",
         )
 
-        self._dim_f = coil.num_coils
-        self._data_keys = ["R", "phi", "Z", "n_rho"]
+        # plasma profiles & transforms
+        self._eq_data_keys = ["x", "n_rho"]
+        eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
+        eq_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=plasma_grid)
 
-        eq_profiles = get_profiles(self._data_keys, obj=eq, grid=plasma_grid)
-        eq_transforms = get_transforms(self._data_keys, obj=eq, grid=plasma_grid)
+        self._coil_data_keys = ["center", "normal"]
+
+        # get individual coils from coilset
+        coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
+        for c in coils:
+            errorif(
+                not isinstance(c, _Coil),
+                TypeError,
+                f"Expected object of type Coil, got {type(c)}",
+            )
+
+        # map grid to list of length coils
+        coil_grid = [LinearGrid(N=0)] * len(coils)
+        coil_grid = tree_leaves(coil_grid, is_leaf=lambda g: isinstance(g, _Grid))
+
+        # map grid to the same structure as coil and then remove unnecessary members
+        coil_grid = tree_unflatten(structure, coil_grid)
+        coil_grid = _prune_coilset_tree(coil_grid)
+        pruned_coils = _prune_coilset_tree(coil)
+
+        coil_transforms = tree_map(
+            lambda c, g: get_transforms(self._coil_data_keys, obj=c, grid=g),
+            pruned_coils,
+            coil_grid,
+            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
+        )
 
         self._constants = {
             "eq": eq,
             "coil": coil,
             "eq_profiles": eq_profiles,
             "eq_transforms": eq_transforms,
+            "coil_transforms": coil_transforms,
+            "coil_grid": coil_grid,
             "quad_weights": 1.0,
         }
 
         if self._eq_fixed:
-            # precompute the equilibrium surface coordinates
+            # precompute the equilibrium surface coordinates & normal
             data = compute_fun(
                 eq,
-                self._data_keys,
+                self._eq_data_keys,
                 params=eq.params_dict,
                 transforms=eq_transforms,
                 profiles=eq_profiles,
             )
-            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
-            nrho = copy_rpz_periods(data["n_rho"], plasma_grid.NFP)
-            plasma_pts = rpz2xyz(rpz)
-            plasma_nrhos = rpz2xyz_vec(nrho, phi=rpz[:, 1])
-            self._constants["plasma_coords"] = plasma_pts
-            self._constants["plasma_normal"] = plasma_nrhos
+            # TODO: copy to all field periods
+            self._constants["plasma_coords"] = rpz2xyz(data["x"])
+            self._constants["plasma_normal"] = rpz2xyz_vec(
+                data["n_rho"], phi=data["x"][:, 1]
+            )
         if self._coils_fixed:
             # precompute the coil center & normal
-            data = coil.compute(  # TODO: add "normal" as compute quantity
-                ["center", "normal"], params=coil.params_dict, grid=LinearGrid(N=0)
+            data = coil.compute(
+                self._coil_data_keys,
+                params=coil.params_dict,
+                transforms=coil_transforms,
+                grid=coil_grid,
             )
-            self._constants["coil_center"] = rpz2xyz(data["center"])
-            self._constants["coil_normal"] = rpz2xyz(data["normal"])
+            data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+            self._constants["coil_center"] = jnp.vstack(
+                [rpz2xyz(dat["center"]) for dat in data]
+            )
+            self._constants["coil_normal"] = jnp.vstack(
+                [rpz2xyz_vec(dat["normal"], phi=dat["center"][:, 1]) for dat in data]
+            )
+            # TODO: copy to all field periods
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params_1, params_2=None, constants=None):
-        """Compute minimum/maximum distance between coils and the plasma/surface.
+        """Compute angle between normals of coils and nearest point on plasma/surface.
 
         Parameters
         ----------
@@ -1467,7 +1523,7 @@ class PlasmaCoilSetNormalAngle(_Objective):
         Returns
         -------
         f : array of floats
-            Minimum/maximum distance from coil to surface for each coil in the coilset.
+            Angle between normals of coils and nearest point on plasma/surface.
 
         """
         if constants is None:
@@ -1480,51 +1536,54 @@ class PlasmaCoilSetNormalAngle(_Objective):
             eq_params = params_1
             coil_params = params_2
 
-        # coil pts; shape(ncoils,coils_grid.num_nodes,3)
+        # coil vectors; shape(ncoils,3)
         if self._coils_fixed:
             coil_center = constants["coil_center"]
+            coil_normal = constants["coil_normal"]
         else:
             data = constants["coil"].compute(
-                ["center", "normal"], params=coil_params, grid=LinearGrid(N=0)
+                self._coil_data_keys,
+                params=coil_params,
+                transforms=constants["coil_transforms"],
+                grid=constants["coil_grid"],
             )
-            coil_center = jnp.vstack([rpz2xyz(d["center"]) for d in data])
-            coil_normal = jnp.vstack([rpz2xyz(d["normal"]) for d in data])
+            data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+            coil_center = jnp.vstack([rpz2xyz(dat["center"]) for dat in data])
+            coil_normal = jnp.vstack(
+                [rpz2xyz_vec(dat["normal"], phi=dat["center"][:, 1]) for dat in data]
+            )
+            # TODO: copy to all field periods
 
-        # plasma pts; shape(plasma_grid.num_nodes,3)
+        # plasma surface vectors; shape(plasma_grid.num_nodes,3)
         if self._eq_fixed:
             plasma_coords = constants["plasma_coords"]
             plasma_normal = constants["plasma_normal"]
         else:
             data = compute_fun(
                 constants["eq"],
-                self._data_keys,
+                self._eq_data_keys,
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
-            plasma_coords = rpz2xyz(rpz)
+            # TODO: copy to all field periods
+            plasma_coords = rpz2xyz(data["x"])
+            plasma_normal = rpz2xyz_vec(data["n_rho"], phi=data["x"][:, 1])
 
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes)
             dist = safenorm(coil_center[k, :] - plasma_coords, axis=-1)
-            idx = jnp.argmin(dist)
-            normal0 = plasma_normal[idx, :]
+            normal0 = plasma_normal[jnp.argmin(dist), :]
             normal1 = coil_normal[k, :]
             norm0 = jnp.linalg.norm(normal0)
             norm1 = jnp.linalg.norm(normal1)
-            angle = jnp.arccos(
-                jnp.clip(jnp.dot(normal0, normal1) / (norm0 * norm1), -1.0, 1)
+            angle = safearccos(
+                jnp.clip(jnp.dot(normal0, normal1) / (norm0 * norm1), -1.0, 1.0)
             )
             return angle
 
         k = jnp.arange(self.dim_f)
         angle_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
-
-        # if mode is bound, flatten the output
-        angle_per_coil = angle_per_coil.flatten()
-
         return angle_per_coil
 
 

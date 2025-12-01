@@ -169,7 +169,7 @@ def test_plot_section_lambda(name="W7-X"):
         zeta=6,
         NFP=eq1.NFP,
     )
-    # Note this will plot -lambda unless one edits the source code manually.
+    # Note this will plot lambda unless one edits the source code manually.
     fig, ax = plot_section(
         eq1,
         "lambda",

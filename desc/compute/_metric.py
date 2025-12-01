@@ -100,9 +100,10 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
 )
 def _fieldline_weight(params, transforms, profiles, data, **kwargs):
     jacobian = transforms["grid"].replace_at_axis(
-        safediv(data["sqrt(g)_Clebsch"], jnp.abs(data["psi_r"])),
-        lambda: jnp.reciprocal(jnp.abs(data["psi_r/sqrt(g)"]) * data["alpha_t"]),
+        safediv(data["sqrt(g)_Clebsch"], data["psi_r"]),
+        lambda: jnp.reciprocal(data["psi_r/sqrt(g)"] * data["alpha_t"]),
     )
+    jacobian = jnp.abs(jacobian)
     data["fieldline weight"] = surface_integrals(transforms["grid"], jacobian)
     return data
 

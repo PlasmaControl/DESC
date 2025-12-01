@@ -384,9 +384,7 @@ class Bounce2D(Bounce):
                 obj._hyperparam["num_transit"], eq.NFP, Y_B
             )
 
-        x, w = leggauss(fieldline_quad_rule(Y))
-        obj._constants["fieldline quad"] = (x, w)
-        obj._constants["_vander"] = get_vander(obj._grid, x, Y, Y_B, eq.NFP)
+        obj._constants["_vander"] = get_vander(obj._grid, Y, Y_B, eq.NFP)
 
         if singular == "deriv":
             obj._constants["quad"] = chebgauss2(obj._hyperparam.pop("num_quad"))
@@ -429,7 +427,7 @@ class Bounce2D(Bounce):
         -------
             angle, Y_B, alpha, num_transit, num_well, num_pitch
             pitch_batch_size, surf_batch_size
-            fieldline_quad, quad, nufft_eps, spline, vander
+            quad, nufft_eps, spline, vander
 
         """
         if singular == "deriv":
@@ -470,12 +468,6 @@ class Bounce2D(Bounce):
         Y_B = kwargs.get("Y_B", Y_B_rule(angle.shape[-1], NFP, spline))
         num_well = kwargs.get("num_well", num_well_rule(num_transit, NFP, Y_B))
 
-        fieldline_quad = (
-            kwargs["fieldline_quad"]
-            if "fieldline_quad" in kwargs
-            else leggauss(fieldline_quad_rule(angle.shape[-1]))
-        )
-
         return (
             angle,
             Y_B,
@@ -485,7 +477,6 @@ class Bounce2D(Bounce):
             num_pitch,
             pitch_batch_size,
             surf_batch_size,
-            fieldline_quad,
             quad,
             nufft_eps,
             spline,
@@ -1082,7 +1073,7 @@ class Bounce2D(Bounce):
 
         return argmin(*points, f, ext, B_ext)
 
-    def compute_fieldline_length(self, quad=None, vander=None):
+    def compute_fieldline_length(self, quad=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
 
         Computes mean_A ∫ dℓ / B where A is the set of field line labels
@@ -1095,8 +1086,6 @@ class Bounce2D(Bounce):
             approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
             Default is Gauss-Legendre quadrature on each field period along
             the field line.
-        vander : dict[str,jnp.ndarray]
-            Optional precomputed Vandermonde matrices for interpolation.
 
         Returns
         -------
@@ -1113,9 +1102,6 @@ class Bounce2D(Bounce):
             deg = fieldline_quad_rule(deg)
             quad = leggauss(deg)
         x, w = quad
-        vander = setdefault(vander, {})
-        vander_ζ = vander.get("dft cfl", None)
-        vander_θ = vander.get("dct cfl", None)
 
         shape = (
             *self._theta.cheb.shape[:-2],
@@ -1132,20 +1118,15 @@ class Bounce2D(Bounce):
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
         B_sup_z = ifft_mmt(
-            (
-                bijection_from_disc(x, *self._theta.domain)[:, None]
-                if vander_ζ is None
-                else None
-            ),
+            bijection_from_disc(x, *self._theta.domain)[:, None],
             self._c["B^zeta"],
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
             modes=self._modes_ζ,
-            vander=vander_ζ,
         )
         B_sup_z = B_sup_z[..., None, None, None, :, :]
         B_sup_z = irfft_mmt(
-            idct_mmt(x, self._theta.cheb.reshape(shape), vander=vander_θ),
+            idct_mmt(x, self._theta.cheb.reshape(shape)),
             B_sup_z,
             self._num_θ,
             _modes=self._modes_θ,

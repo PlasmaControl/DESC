@@ -77,6 +77,7 @@ def _drift2(data, B, pitch):
         "|e_alpha|r,p|",
         "kappa_g",
         "iota_r",
+        "fieldline weight",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -133,7 +134,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        fl_quad,
         quad,
         nufft_eps,
         spline,
@@ -186,7 +186,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
+        ) / (num_transit * 2**0.5)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -202,15 +202,18 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    data["Gamma_c"] = Bounce2D.batch(
-        Gamma_c,
-        fun_data,
-        data,
-        angle,
-        grid,
-        num_pitch,
-        surf_batch_size,
-        expand_out=True,
+    data["Gamma_c"] = (
+        Bounce2D.batch(
+            Gamma_c,
+            fun_data,
+            data,
+            angle,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            expand_out=True,
+        )
+        / data["fieldline weight"]
     )
     return data
 
@@ -294,7 +297,6 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        _,
         quad,
         nufft_eps,
         spline,
@@ -378,6 +380,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         "cvdrift0",
         "gbdrift (periodic)",
         "gbdrift (secular)/phi",
+        "fieldline weight",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -429,7 +432,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        fl_quad,
         quad,
         nufft_eps,
         spline,
@@ -470,20 +472,23 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad, vander) * 2**1.5 * jnp.pi)
+        ) / (num_transit * 2**0.5)
 
-    data["Gamma_c Velasco"] = Bounce2D.batch(
-        Gamma_c,
-        {
-            "cvdrift0": data["cvdrift0"],
-            "gbdrift (periodic)": data["gbdrift (periodic)"],
-            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
-        },
-        data,
-        angle,
-        grid,
-        num_pitch,
-        surf_batch_size,
-        expand_out=True,
+    data["Gamma_c Velasco"] = (
+        Bounce2D.batch(
+            Gamma_c,
+            {
+                "cvdrift0": data["cvdrift0"],
+                "gbdrift (periodic)": data["gbdrift (periodic)"],
+                "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+            },
+            data,
+            angle,
+            grid,
+            num_pitch,
+            surf_batch_size,
+            expand_out=True,
+        )
+        / data["fieldline weight"]
     )
     return data

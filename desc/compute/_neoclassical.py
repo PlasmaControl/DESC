@@ -82,7 +82,7 @@ _bounce_doc = {
         Whether to use cubic splines to compute bounce points.
         """,
     "_vander": """dict[str,jnp.ndarray] :
-        Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
+        Precomputed transform matrix "dct spline".
         This private parameter is intended to be used only by
         developers for objectives.
         """,
@@ -122,7 +122,15 @@ def _dI_ripple(data, B, pitch):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "kappa_g",
+        "R0",
+        "|grad(rho)|",
+        "<|grad(rho)|>",
+        "fieldline weight",
+    ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
@@ -167,7 +175,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        fl_quad,
         quad,
         nufft_eps,
         spline,
@@ -194,7 +201,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            H, I = bounce.integrate(
+            I_1, I_2 = bounce.integrate(
                 [_dH_ripple, _dI_ripple],
                 pitch_inv,
                 data,
@@ -203,18 +210,23 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 nufft_eps=nufft_eps,
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(-1).mean(-2)
+            return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad, vander)
+        )
+
+    prefactor = jnp.pi / (8 * 2**0.5)
+    prefactor *= 2 * jnp.pi / num_transit
 
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
-        Bounce2D.batch(
+        prefactor
+        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
@@ -224,8 +236,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             surf_batch_size,
             expand_out=True,
         )
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * (jnp.pi / (8 * 2**0.5))
+        / data["fieldline weight"]
     )
     return data
 

@@ -908,7 +908,7 @@ def num_well_rule(num_transit, NFP, Y_B=None):
     return num_well if Y_B is None else min(num_well, num_transit * Y_B)
 
 
-def get_vander(grid, x, Y, Y_B, NFP):
+def get_vander(grid, Y, Y_B, NFP):
     """Builds Vandermonde matrices for objectives."""
     assert isinstance(Y, int)
     assert isinstance(Y_B, int)
@@ -917,12 +917,7 @@ def get_vander(grid, x, Y, Y_B, NFP):
     Y_trunc = truncate_rule(Y)
     Y_B, num_ζ = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
 
-    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
-    zeta = bijection_from_disc(x, 0, 2 * jnp.pi / grid.NFP)
-
     return {
-        "dft cfl": jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis],
-        "dct cfl": vander_chebyshev(x, Y_trunc),
         "dct spline": vander_chebyshev(
             jnp.linspace(
                 -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_ζ, endpoint=False

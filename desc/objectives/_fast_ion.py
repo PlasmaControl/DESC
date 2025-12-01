@@ -307,7 +307,6 @@ class GammaC(_Objective):
             data,
             angle=delta,
             alpha=constants["alpha"],
-            fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
             _vander=constants["_vander"],
             **self._hyperparam,

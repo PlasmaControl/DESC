@@ -84,7 +84,7 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="fieldline weight",
-    label="\\sqrt{g}_{\\text{Clebsch}} / \\vert \\partial_{\\rho} \\psi \\vert",
+    label="\\vert \\sqrt{g}_{\\text{Clebsch}} / \partial_{\\rho} \\psi \\vert",
     units="m^{3} / Wb",
     units_long="cubic meters per Weber",
     description="Integrated Jacobian determinant of Clebsch field line"

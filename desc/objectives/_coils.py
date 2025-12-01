@@ -1577,9 +1577,8 @@ class PlasmaCoilSetNormalAngle(_Objective):
             normal1 = coil_normal[k, :]
             norm0 = jnp.linalg.norm(normal0)
             norm1 = jnp.linalg.norm(normal1)
-            angle = safearccos(
-                jnp.clip(jnp.dot(normal0, normal1) / (norm0 * norm1), -1.0, 1.0)
-            )
+            cosine = jnp.dot(normal0, normal1) / (norm0 * norm1)
+            angle = safearccos(jnp.clip(cosine, -1.0, 1.0))
             return angle
 
         k = jnp.arange(self.dim_f)

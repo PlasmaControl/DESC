@@ -2211,7 +2211,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
         source_grid : Grid, optional
             Grid used to discretize field. Defaults to the default grid for given field.
 
-
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
         rr, pp, zz = np.meshgrid(R, phi, Z, indexing="ij")

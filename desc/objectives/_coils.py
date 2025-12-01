@@ -16,6 +16,7 @@ from desc.utils import (
     copy_rpz_periods,
     errorif,
     rpz2xyz,
+    rpz2xyz_vec,
     safenorm,
     setdefault,
     warnif,
@@ -1273,6 +1274,258 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
             softmin_alpha=softmin_alpha,
             dist_chunk_size=dist_chunk_size,
         )
+
+
+class PlasmaCoilSetNormalAngle(_Objective):
+    """Target the angle between the normals of the plasma boundary and planar coils.
+
+    NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
+    computed at every iteration, for example if the equilibrium is changing in a
+    single-stage optimization.
+    If the plasma boundary is fixed, set eq_fixed=True to precompute the last closed
+    flux surface normals and improve the efficiency of the calculation.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium (or FourierRZToroidalSurface) that will be optimized
+        to satisfy the Objective.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    plasma_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    eq_fixed: bool, optional
+        Whether the equilibrium is fixed or not. If True, the last closed flux surface
+        is fixed and its normals are precomputed, which saves on computation time
+        during optimization, and self.things = [coil] only.
+        If False, the surface normals are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    coils_fixed: bool, optional
+        Whether the coils are fixed or not. If True, the coils
+        are fixed and their normals are precomputed, which saves on computation time
+        during optimization, and self.things = [eq] only.
+        If False, the coil normals are computed at every iteration.
+        False by default, so that self.things = [coil, eq].
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,np.pi/4)``.",
+        bounds_default="``bounds=(0,np.pi/4)``.",
+        coil=True,
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_coils_fixed",
+        "_dist_chunk_size",
+    ]
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "Plasma-coil normal angle: "
+
+    def __init__(
+        self,
+        eq,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        plasma_grid=None,
+        eq_fixed=False,
+        coils_fixed=False,
+        name="plasma-coil normal angle",
+        jac_chunk_size=None,
+        dist_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            bounds = (0, np.pi / 4)
+        self._eq = eq
+        self._coil = coil
+        self._plasma_grid = plasma_grid
+        self._eq_fixed = eq_fixed
+        self._coils_fixed = coils_fixed
+        self._dist_chunk_size = dist_chunk_size
+        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not coils_fixed:
+            things.append(coil)
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._eq_fixed:
+            eq = self._eq
+            coil = self.things[0]
+        elif self._coils_fixed:
+            eq = self.things[0]
+            coil = self._coil
+        else:
+            eq = self.things[0]
+            coil = self.things[1]
+        default_M = 2 * eq.M if not hasattr(eq, "_M_grid") else eq.M_grid
+        default_N = 2 * eq.N if not hasattr(eq, "_M_grid") else eq.N_grid
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=default_M, N=default_N, NFP=eq.NFP
+        )
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma/Surface grid includes interior points, should be rho=1.",
+        )
+
+        self._dim_f = coil.num_coils
+        self._data_keys = ["R", "phi", "Z", "n_rho"]
+
+        eq_profiles = get_profiles(self._data_keys, obj=eq, grid=plasma_grid)
+        eq_transforms = get_transforms(self._data_keys, obj=eq, grid=plasma_grid)
+
+        self._constants = {
+            "eq": eq,
+            "coil": coil,
+            "eq_profiles": eq_profiles,
+            "eq_transforms": eq_transforms,
+            "quad_weights": 1.0,
+        }
+
+        if self._eq_fixed:
+            # precompute the equilibrium surface coordinates
+            data = compute_fun(
+                eq,
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=eq_transforms,
+                profiles=eq_profiles,
+            )
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
+            nrho = copy_rpz_periods(data["n_rho"], plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
+            plasma_nrhos = rpz2xyz_vec(nrho, phi=rpz[:, 1])
+            self._constants["plasma_coords"] = plasma_pts
+            self._constants["plasma_normal"] = plasma_nrhos
+        if self._coils_fixed:
+            # precompute the coil center & normal
+            data = coil.compute(  # TODO: add "normal" as compute quantity
+                ["center", "normal"], params=coil.params_dict, grid=LinearGrid(N=0)
+            )
+            self._constants["coil_center"] = rpz2xyz(data["center"])
+            self._constants["coil_normal"] = rpz2xyz(data["normal"])
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute minimum/maximum distance between coils and the plasma/surface.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
+            self._coils_fixed is False, else is the equilibrium or surface degrees of
+            freedom
+        params_2 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg ``Equilibrium.params_dict``
+            Only required if ``self._eq_fixed = False``.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Minimum/maximum distance from coil to surface for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+        if self._eq_fixed:
+            coil_params = params_1
+        elif self._coils_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_1
+            coil_params = params_2
+
+        # coil pts; shape(ncoils,coils_grid.num_nodes,3)
+        if self._coils_fixed:
+            coil_center = constants["coil_center"]
+        else:
+            data = constants["coil"].compute(
+                ["center", "normal"], params=coil_params, grid=LinearGrid(N=0)
+            )
+            coil_center = jnp.vstack([rpz2xyz(d["center"]) for d in data])
+            coil_normal = jnp.vstack([rpz2xyz(d["normal"]) for d in data])
+
+        # plasma pts; shape(plasma_grid.num_nodes,3)
+        if self._eq_fixed:
+            plasma_coords = constants["plasma_coords"]
+            plasma_normal = constants["plasma_normal"]
+        else:
+            data = compute_fun(
+                constants["eq"],
+                self._data_keys,
+                params=eq_params,
+                transforms=constants["eq_transforms"],
+                profiles=constants["eq_profiles"],
+            )
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_coords = rpz2xyz(rpz)
+
+        def body(k):
+            # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes)
+            dist = safenorm(coil_center[k, :] - plasma_coords, axis=-1)
+            idx = jnp.argmin(dist)
+            normal0 = plasma_normal[idx, :]
+            normal1 = coil_normal[k, :]
+            norm0 = jnp.linalg.norm(normal0)
+            norm1 = jnp.linalg.norm(normal1)
+            angle = jnp.arccos(
+                jnp.clip(jnp.dot(normal0, normal1) / (norm0 * norm1), -1.0, 1)
+            )
+            return angle
+
+        k = jnp.arange(self.dim_f)
+        angle_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
+
+        # if mode is bound, flatten the output
+        angle_per_coil = angle_per_coil.flatten()
+
+        return angle_per_coil
 
 
 class CoilArclengthVariance(_CoilObjective):

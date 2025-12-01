@@ -190,6 +190,37 @@ def _center_PlanarCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="normal",
+    label="\\hat{n}",
+    units="m",
+    units_long="meters",
+    description="Normal of the plane",
+    dim=3,
+    params=["normal", "rotmat"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization=[
+        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.curve.FourierXYCurve",
+    ],
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+)
+def _normal_PlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
+    else:
+        normal = params["normal"]
+    # rotation
+    normal = jnp.matmul(normal, params["rotmat"].reshape((3, 3)).T)
+    # convert back to rpz
+    data["normal"] = xyz2rpz(normal) * jnp.ones_like(data["x"])
+    return data
+
+
+@register_compute_fun(
     name="x",
     label="\\mathbf{x}",
     units="~",

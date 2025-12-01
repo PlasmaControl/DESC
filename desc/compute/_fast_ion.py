@@ -77,7 +77,7 @@ def _drift2(data, B, pitch):
         "|e_alpha|r,p|",
         "kappa_g",
         "iota_r",
-        "fieldline weight",
+        "field line weight",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -186,7 +186,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (num_transit * 2**0.5)
+        )
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -202,7 +202,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    data["Gamma_c"] = (
+    data["Gamma_c"] = grid.expand(
         Bounce2D.batch(
             Gamma_c,
             fun_data,
@@ -211,9 +211,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            expand_out=True,
         )
-        / data["fieldline weight"]
+        / data["field line weight"]
+        / (num_transit * 2**0.5)
     )
     return data
 
@@ -380,7 +380,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         "cvdrift0",
         "gbdrift (periodic)",
         "gbdrift (secular)/phi",
-        "fieldline weight",
+        "field line weight",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -472,9 +472,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (num_transit * 2**0.5)
+        )
 
-    data["Gamma_c Velasco"] = (
+    data["Gamma_c Velasco"] = grid.expand(
         Bounce2D.batch(
             Gamma_c,
             {
@@ -487,8 +487,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            expand_out=True,
         )
-        / data["fieldline weight"]
+        / data["field line weight"]
+        / (num_transit * 2**0.5)
     )
     return data

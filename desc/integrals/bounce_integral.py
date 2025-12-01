@@ -1076,8 +1076,12 @@ class Bounce2D(Bounce):
     def compute_fieldline_length(self, quad=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
 
-        Computes mean_A ∫ dℓ / B where A is the set of field line labels
-        given when making this object.
+        Notes
+        -----
+        This result will converge to
+        (num transit / 2π) * ∬_Ω |𝐁 ⋅ ∇ζ|⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
+        In new versions of DESC, this can be computed more efficiently as
+        (num transit / 2π) * eq.compute("field line weight").
 
         Parameters
         ----------

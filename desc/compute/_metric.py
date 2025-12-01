@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 
-from ..integrals.surface_integral import surface_averages, surface_integrals
+from ..integrals.surface_integral import surface_averages
 from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
 
@@ -79,32 +79,6 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
     # Same as dot(data["e_rho|a,z"], cross(data["e_alpha"], data["e_zeta|r,a"])), but
     # more efficient as it avoids computing radial derivative of alpha and hence iota.
     data["sqrt(g)_Clebsch"] = data["sqrt(g)"] / data["alpha_t"]
-    return data
-
-
-@register_compute_fun(
-    name="fieldline weight",
-    label="\\vert \\sqrt{g}_{\\text{Clebsch}} / \\partial_{\\rho} \\psi \\vert",
-    units="m^{3} / Wb",
-    units_long="cubic meters per Weber",
-    description="Integrated Jacobian determinant of Clebsch field line"
-    " coordinate system (ψ,α,ζ)"
-    " where ζ is the DESC toroidal coordinate.",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["sqrt(g)_Clebsch", "psi_r"],
-    axis_limit_data=["psi_r/sqrt(g)", "alpha_t"],
-)
-def _fieldline_weight(params, transforms, profiles, data, **kwargs):
-    jacobian = transforms["grid"].replace_at_axis(
-        safediv(data["sqrt(g)_Clebsch"], data["psi_r"]),
-        lambda: jnp.reciprocal(data["psi_r/sqrt(g)"] * data["alpha_t"]),
-    )
-    jacobian = jnp.abs(jacobian)
-    data["fieldline weight"] = surface_integrals(transforms["grid"], jacobian)
     return data
 
 

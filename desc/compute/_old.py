@@ -72,6 +72,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
+    grid = transforms["grid"].source_grid
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 51)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
@@ -82,10 +83,10 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H² / I).sum(-1).
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (I₁²/I₂).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        H, I = bounce.integrate(
+        I_1, I_2 = bounce.integrate(
             [_dH_ripple, _dI_ripple],
             data["pitch_inv"],
             data,
@@ -93,16 +94,19 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             num_well=num_well,
         )
         return jnp.sum(
-            safediv(H**2, I).sum(-1).mean(-2)
+            safediv(I_1**2, I_2).sum(-1).mean(-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
         )
 
-    grid = transforms["grid"].source_grid
     B0 = data["max_tz |B|"]
+    scalar = jnp.pi / (8 * 2**0.5) * data["R0"] ** 2
+
     data["old effective ripple 3/2"] = (
-        Bounce1D.batch(
+        (B0 / data["<|grad(rho)|>"]) ** 2
+        * scalar
+        * Bounce1D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
@@ -112,8 +116,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             expand_out=True,
         )
         / data["fieldline length"]
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * (jnp.pi / (8 * 2**0.5))
     )
     return data
 
@@ -203,6 +205,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
+    grid = transforms["grid"].source_grid
     num_pitch = kwargs.get("num_pitch", 65)
     num_well = kwargs.get("num_well", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
@@ -238,7 +241,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (2**1.5 * jnp.pi)
+        )
 
     fun_data = {
         "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
@@ -248,7 +251,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    grid = transforms["grid"].source_grid
     data["old Gamma_c"] = (
         Bounce1D.batch(
             Gamma_c,
@@ -260,6 +262,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             expand_out=True,
         )
         / data["fieldline length"]
+        / (2**1.5 * jnp.pi)
     )
     return data
 
@@ -309,6 +312,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     transits.
     """
     # noqa: unused dependency
+    grid = transforms["grid"].source_grid
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 65)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
@@ -337,9 +341,8 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (2**1.5 * jnp.pi)
+        )
 
-    grid = transforms["grid"].source_grid
     data["old Gamma_c Velasco"] = (
         Bounce1D.batch(
             Gamma_c,
@@ -351,5 +354,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             expand_out=True,
         )
         / data["fieldline length"]
+        / (2**1.5 * jnp.pi)
     )
     return data

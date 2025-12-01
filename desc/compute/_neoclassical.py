@@ -5,6 +5,7 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
+from ..integrals.surface_integral import surface_integrals
 from ..integrals.bounce_integral import Bounce2D
 from ..utils import safediv
 from .data_index import register_compute_fun
@@ -62,13 +63,6 @@ _bounce_doc = {
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
         """,
-    "fieldline_quad": """tuple[jnp.ndarray] :
-        Used to compute the proper length of the field line ∫ dℓ / B.
-        Quadrature points xₖ and weights wₖ for the
-        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-        Default is Gauss-Legendre quadrature on each field period along
-        the field line.
-        """,
     "quad": """tuple[jnp.ndarray] :
         Used to compute bounce integrals.
         Quadrature points xₖ and weights wₖ for the
@@ -88,6 +82,34 @@ _bounce_doc = {
         """,
     "theta": "",
 }
+
+
+@register_compute_fun(
+    name="field line weight",
+    label="\\int \\vert B^{\\zeta} \\vert^{-1} \\mathrm{d}\\alpha \\mathrm{d}\\zeta",
+    units="m^{3} / Wb",
+    units_long="cubic meters per Weber",
+    description="Surface integrated volume Jacobian determinant of "
+    " Clebsch field line coordinate system (ψ,α,ζ)"
+    " where ζ is the DESC toroidal coordinate.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["psi_r/sqrt(g)", "alpha_t"],
+)
+def _field_line_weight(params, transforms, profiles, data, **kwargs):
+    """∬_Ω |𝐁 ⋅ ∇ζ|⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
+
+    The returned quantity has shape (num rho, ).
+    """
+    data["field line weight"] = surface_integrals(
+        transforms["grid"],
+        jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"] * data["alpha_t"])),
+        expand_out=False,
+    )
+    return data
 
 
 def _dH_ripple(data, B, pitch):
@@ -129,7 +151,7 @@ def _dI_ripple(data, B, pitch):
         "R0",
         "|grad(rho)|",
         "<|grad(rho)|>",
-        "fieldline weight",
+        "field line weight",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -184,7 +206,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H² / I).sum(-1).
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (I₁²/I₂).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce2D(
             grid,
@@ -219,13 +241,11 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             axis=-1,
         )
 
-    prefactor = jnp.pi / (8 * 2**0.5)
-    prefactor *= 2 * jnp.pi / num_transit
-
     B0 = data["max_tz |B|"]
-    data["effective ripple 3/2"] = (
-        prefactor
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+    scalar = (jnp.pi * data["R0"]) ** 2 / (num_transit * 4 * 2**0.5)
+
+    data["effective ripple 3/2"] = (B0 / data["<|grad(rho)|>"]) ** 2 * grid.expand(
+        scalar
         * Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
@@ -234,9 +254,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
-            expand_out=True,
         )
-        / data["fieldline weight"]
+        / data["field line weight"]
     )
     return data
 

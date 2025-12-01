@@ -1203,6 +1203,7 @@ def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["B^zeta"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    public=False,
 )
 def _fieldline_length(data, transforms, profiles, **kwargs):
     grid = transforms["grid"].source_grid

@@ -13,7 +13,7 @@ New Features
 - Method for developers to make adding new bounce integral objectives simpler ``Bounce2D._objective_build``.
 - The resolution parameter for the field line quadrature now corresponds to the resolution for integration over a single field period.
 - Default quadrature over pitch angles in ``Gamma_c`` switched from second to third order method.
-
+- Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
 
 v0.16.0
 -------
@@ -31,6 +31,7 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+
 
 Bug Fixes
 

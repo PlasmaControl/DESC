@@ -31,9 +31,9 @@ from .utils import (
         "scipy-trust-krylov",
     ],
     description=[
-        "L-BFGS-B quasi-newton method with line search. "
-        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
         "BFGS quasi-newton method with line search. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
+        "L-BFGS-B quasi-newton method with line search. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
         "Nonlinear conjugate gradient method. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-cg.html",

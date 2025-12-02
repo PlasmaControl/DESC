@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- ``ConcentricGrid`` now has more than one node at the innermost rho value by default, which should make the iota calculation that occurs for  the``ForceBalance`` objective with default ``ConcentricGrid`` more accurate for current-constrained equilibria. The new default node pattern is called `jacobi-dna`, and the old behavior can be obtained by using `node_pattern="jacobi"`.
 
 v0.16.0
 -------

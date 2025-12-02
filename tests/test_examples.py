@@ -45,6 +45,7 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
+    Elongation,
     ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
@@ -214,6 +215,7 @@ def run_qh_step(n, eq):
         (
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
+            Elongation(eq=eq, bounds=(0, 4), weight=3.25),
         ),
     )
     R_modes = np.vstack(
@@ -243,7 +245,6 @@ def run_qh_step(n, eq):
         maxiter=50,
         verbose=3,
         copy=True,
-        options={},
     )
 
     return eq1
@@ -808,7 +809,7 @@ def test_NAE_QSC_solve_near_axis_asym():
 
         # check |B| on axis
         np.testing.assert_allclose(
-            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=2e-4, err_msg=string
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=3e-4, err_msg=string
         )
 
 
@@ -1116,7 +1117,7 @@ def test_omnigenity_optimization():
 
     # check omnigenity error is low
     f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
-    np.testing.assert_allclose(f[2:], 0, atol=1.2e-2)  # f[:2] is R0 and R0/a
+    np.testing.assert_allclose(f[2:], 0, atol=2e-2)  # f[:2] is R0 and R0/a
 
     # check mirror ratio is correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))

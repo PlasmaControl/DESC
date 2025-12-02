@@ -97,6 +97,7 @@ _bounce_doc = {
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
+    resolution_requirement="tz",
     data=["psi_r/sqrt(g)", "alpha_t"],
 )
 def _field_line_weight(params, transforms, profiles, data, **kwargs):

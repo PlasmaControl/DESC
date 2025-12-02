@@ -1134,7 +1134,13 @@ class Equilibrium(IOAble, Optimizable):
                 ),
             )
             data1dr_seed = {
-                key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
+                key: (
+                    data[key]
+                    if (key == "field line weight")
+                    else grid1dr.copy_data_from_other(
+                        data[key], grid, surface_label="rho"
+                    )
+                )
                 for key in data
                 if is_1dr_rad_grid(key)
             }
@@ -1159,8 +1165,12 @@ class Equilibrium(IOAble, Optimizable):
             )
             # Need to make this data broadcast with the data on the original grid.
             data1dr = {
-                key: grid.copy_data_from_other(
-                    data1dr[key], grid1dr, surface_label="rho"
+                key: (
+                    data1dr[key]
+                    if (key == "field line weight")
+                    else grid.copy_data_from_other(
+                        data1dr[key], grid1dr, surface_label="rho"
+                    )
                 )
                 for key in data1dr
                 if key in dep1dr and key not in data

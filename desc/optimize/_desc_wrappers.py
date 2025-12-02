@@ -7,7 +7,7 @@ from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
-from .stochastic import sgd
+from .stochastic import adam, sgd
 
 
 @register_optimizer(
@@ -437,6 +437,79 @@ def _optimize_desc_stochastic(
         x0=x0,
         grad=objective.grad,
         args=(objective.constants,),
+        method=method,
+        ftol=stoptol["ftol"],
+        xtol=stoptol["xtol"],
+        gtol=stoptol["gtol"],
+        maxiter=stoptol["maxiter"],
+        verbose=verbose,
+        callback=None,
+        options=options,
+    )
+    return result
+
+
+@register_optimizer(
+    name="adam",
+    description="ADAM Optimizer"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.adam.html",  # noqa: E501
+    scalar=True,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=True,
+    hessian=False,
+    GPU=True,
+)
+def _optimize_desc_adam(
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
+):
+    """Wrapper for desc.optimize.adam.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Function to minimize.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
+    x0 : ndarray
+        Starting point.
+    method : str
+        Name of the method to use.
+    x_scale : array_like or 'auto', optional
+        Characteristic scale of each variable. Setting x_scale is equivalent to
+        reformulating the problem in scaled variables xs = x / x_scale. Improved
+        convergence may be achieved by setting x_scale such that
+        a step of a given size along any of the scaled variables has a similar effect
+        on the cost function.
+    verbose : int
+        * 0  : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
+    stoptol : dict
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
+        "maxiter", "max_nfev"}
+    options : dict, optional
+        Dictionary of optional keyword arguments to override default solver
+        settings. See ``desc.optimize.adam`` for details.
+
+    Returns
+    -------
+    res : OptimizeResult
+       The optimization result represented as a ``OptimizeResult`` object.
+       Important attributes are: ``x`` the solution array, ``success`` a
+       Boolean flag indicating if the optimizer exited successfully and
+       ``message`` which describes the cause of the termination. See
+       `OptimizeResult` for a description of other attributes.
+
+    """
+    assert constraint is None, f"method {method} doesn't support constraints"
+    options = {} if options is None else options
+    result = adam(
+        objective.compute_scalar,
+        x0=x0,
+        grad=objective.grad,
+        args=(objective.constants,),
+        x_scale=x_scale,
         method=method,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

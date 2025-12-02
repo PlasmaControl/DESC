@@ -28,6 +28,7 @@ def test_Gamma_c_Nemov_2D(nufft_eps):
         num_well=20 * num_transit,
         nufft_eps=nufft_eps,
     )
+    assert data["Gamma_c"].ndim == 1
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
@@ -52,6 +53,7 @@ def test_Gamma_c_Velasco_2D(nufft_eps):
         num_well=20 * num_transit,
         nufft_eps=nufft_eps,
     )
+    assert data["Gamma_c Velasco"].ndim == 1
     assert np.isfinite(data["Gamma_c Velasco"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")

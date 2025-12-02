@@ -38,6 +38,7 @@ def test_effective_ripple_2D(nufft_eps):
         nufft_eps=nufft_eps,
     )
 
+    assert data["effective ripple 3/2"].ndim == 1
     assert np.isfinite(data["effective ripple 3/2"]).all()
     eps_32 = grid.compress(data["effective ripple 3/2"])
     # NEO file generated from DESC equlibrium on 2025-10-23 17:47:07.280264.

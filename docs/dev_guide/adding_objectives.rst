@@ -538,7 +538,7 @@ is the sum of squared pointwise error between the current rotational transform p
 and the target passed into the objective. If the desired objective instead is to
 optimize to target an average rotational transform of `iota_target`, we can adapt the
 ``RotationalTransform`` object by passing in ``loss_function="mean"``. The options
-available for the ``loss_function`` kwarg are ``[None,"mean","min","max"]``, with
+available for the ``loss_function`` kwarg are ``[None,"mean","min","max","sum"]``, with
 ``None`` meaning using the usual default objective cost, while ``"mean"`` takes the
 average of the raw objective values (before subtracting the target/bounds or
-normalization), ``"min"`` takes the minimum, and ``"max"`` takes the maximum.
+normalization), ``"min"`` takes the minimum, ``"max"`` takes the maximum, and ``"sum"`` takes the sum.

@@ -6,7 +6,6 @@ import numpy as np
 
 try:
     import pyvista as pv
-    from pyvista import CellType
 except ImportError:
     warnings.warn(
         "DESC objects are exported to Paraview using `pyvista`"
@@ -21,34 +20,36 @@ from desc.grid import LinearGrid
 
 
 def export_surface_to_paraview(
-    obj, res=(100, 100), keys=[], rho=1.0, filename="surface"
+    obj, filename, res=(100, 100), keys=[], rho=1.0, return_mesh=False
 ):
-    """Export a constant rho surface as VTU file.
+    """Export a constant rho surface data for Paraview as VTK file.
 
     Parameters
     ----------
     obj : Equilibrium or FourierRZToroidalSurface
         Object to be exported. Different flux surfaces of the Equilibrium
         can be exported by supplying `rho`.
+    filename : str
+        Name for the saved file. The file extension will be `.vtk`.
     res : tuple, list
-        The resolution used to create the mesh. Must be in the form
-        (N_toroidal, N_poloidal). Default is (100, 100).
+        The resolution used to create the mesh. Must be in the form (Np, Nt),
+        number of points in poloidal and toroidal direction, respectively.
+        Default is (100, 100).
     keys : list, optional
         The names of the quantities to be computed on the grid points. Defaults to
         empty list.
     rho : float
         The flux surface to be exported if `obj` is an Equilibrium. Defaults to 1.
-    filename : str
-        Name for the saved file. The file extension will be `.vtu`. Default name will be
-        `surface.vtu`
+    return_mesh : bool
+        If True, return the created pyvista StructuredGrid object. Defaults to False.
 
     Returns
     -------
-    mesh : pyvista.UnstructuredGrid
-        Created unstructured grid object. With this object one can compute more
-        complicated quantities on `LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1)`
-        and add it to the mesh by `mesh['complicated name'] = value`. Once the mesh
-        is changed, the user has to save it again `mesh.save(filename + ".vtu")`.
+    mesh : pyvista.StructuredGrid
+        Created structured grid object. With this object one can compute more
+        quantities on `LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
+        and add it to the mesh by `mesh['name'] = value`. Once the mesh is changed,
+        the user has to save it again `mesh.save(filename)`.
     """
     if not isinstance(obj, (Equilibrium, FourierRZToroidalSurface)):
         raise ValueError(
@@ -56,68 +57,51 @@ def export_surface_to_paraview(
             f"objects but {type(obj)} is given."
         )
 
-    Nt, Np = res
-    grid = LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1)
+    Np, Nt = res
+    grid = LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Unequal number of field")
         data = obj.compute(["x"] + keys, grid=grid, basis="xyz")
     nodes = np.asarray(data.pop("x"))
 
-    # Build connectivity: each quad is made of 4 points
-    cells = []
-    celltypes = []
-
-    for i in range(Nt):
-        for j in range(Np):
-            # Current point index
-            p0 = i * Np + j
-            # Neighbor indices (with wrap-around)
-            p1 = i * Np + (j + 1) % Np
-            p2 = ((i + 1) % Nt) * Np + (j + 1) % Np
-            p3 = ((i + 1) % Nt) * Np + j
-
-            # Append one quad: format = [4, pt0, pt1, pt2, pt3]
-            cells.extend([4, p0, p1, p2, p3])
-            celltypes.append(CellType.QUAD)
-
-    # Convert to numpy arrays
-    cells = np.array(cells)
-    celltypes = np.array(celltypes, dtype=np.uint8)
-
-    # Create the unstructured mesh
-    mesh = pv.UnstructuredGrid(cells, celltypes, nodes)
+    # Create the structured mesh
+    mesh = pv.StructuredGrid()
+    mesh.points = nodes
+    mesh.dimensions = (Np, Nt, 1)
 
     # Additional data
     for key in keys:
         value = data[key]
-        if len(value) == Nt * Np or value.shape == (Nt * Np, 3):
+        if value.size == Nt * Np or value.shape == (Nt * Np, 3):
             # this will handle both 1D and 3D
             mesh[key] = value
         else:
             raise ValueError(f"Data {key} has an unimplemented shape ({value.shape})")
 
-    mesh.save(filename + ".vtu")
-    print(f"File is saved as {filename}.vtu")
-    return mesh
+    mesh.save(filename + ".vtk")
+    print(f"File is saved as {filename}.vtk")
+    if return_mesh:
+        return mesh
 
 
-def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
-    """Export coils as VTP files.
+def export_coils_to_paraview(coils, filename, res=100, keys=[]):
+    """Export coils data for Paraview as VTP files.
 
     Parameters
     ----------
     coils : Coil, CoilSet, MixedCoilSet
         Object to be exported. Can be a single coil or multiple coils given
         as CoilSet or MixedCoilSet.
+    filename : str
+        Name for the saved file. The file extension will be `.vtp`.
+        If there are multiple coils, an index will be appended to the given name.
     res : int
-        The resolution to use. Defaults to 100.
+        The resolution to use for all coils. Defaults to 100 points around a
+        single coil.
     keys : list of str
         Additional data to store in the file. By default, only the current
         corresponding to each coil is stored.
-    filename : str
-        Name for the saved file. The file extension will be `.vtp`. If there
-        are multiple coils, an index will be appended to the given name.
     """
     if not isinstance(coils, _Coil):
         raise ValueError(
@@ -141,7 +125,7 @@ def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
             return [coilset]
 
     coils_list = flatten_coils(coils)
-    grid = LinearGrid(N=res, endpoint=True)
+    grid = LinearGrid(zeta=res, endpoint=True)
 
     for i, coil in enumerate(coils_list):
         data = coil.compute(["x"] + keys, grid=grid, basis="xyz")
@@ -161,7 +145,7 @@ def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
         # Additional data
         for key in keys:
             value = data[key]
-            if len(value) == res or value.shape == (res, 3):
+            if value.size == res or value.shape == (res, 3):
                 # this will handle both 1D and 3D
                 poly[key] = value
             else:
@@ -169,35 +153,37 @@ def export_coils_to_paraview(coils, res=100, keys=[], filename="coil"):
                     f"Data {key} has an unimplemented shape ({value.shape})"
                 )
 
-        # Save to VTP
-        poly.save(filename + f"_{i}.vtp")
+        poly.save(f"{filename}_{i}.vtp")
 
     print(f"Saved {len(coils_list)} coils with name format `{filename}_i.vtp`")
 
 
-def export_volume_to_paraview(eq, res=(20, 100, 100), keys=["B"], filename="volume"):
-    """Export equilibrium volume as VTU files.
+def export_volume_to_paraview(
+    eq, filename, res=(20, 100, 100), keys=[], return_mesh=False
+):
+    """Export equilibrium volume data for Paraview as VTK file.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to be exported.
+    filename : str
+        Name for the saved file. The file extension will be `.vtk`.
     res : tuple of ints, (Nr, Np, Nt)
-        The resolutions to use. Defaults to (20, 100, 100) in radial, poloidal
+        The resolutions to use. Defaults to (20, 100, 100) points in radial, poloidal
         and toroidal directions, respectively.
     keys : list of str
-        Additional data to store in the file. By default, only has the magnetic field
-        B components.
-    filename : str
-        Name for the saved file. The file extension will be `.vtu`.
+        Additional data to store in the file. Defaults to empty list.
+    return_mesh : bool
+        If True, return the created pyvista StructuredGrid object. Defaults to False.
 
     Returns
     -------
-    mesh : pyvista.UnstructuredGrid
-        Created unstructured grid object. With this object one can compute more
-        complicated quantities on `LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1)`
-        and add it to the mesh by `mesh['complicated name'] = value`. Once the mesh
-        is changed, the user has to save it again `mesh.save(filename + ".vtu")`.
+    mesh : pyvista.StructuredGrid
+        Created structured grid object. With this object one can compute more
+        quantities on `LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
+        and add it to the mesh by `mesh['name'] = value`. Once the mesh
+        is changed, the user has to save it again `mesh.save(filename)`.
     """
     if not isinstance(eq, Equilibrium):
         raise ValueError(
@@ -205,56 +191,28 @@ def export_volume_to_paraview(eq, res=(20, 100, 100), keys=["B"], filename="volu
             f"but {type(eq)} is given."
         )
     Nr, Np, Nt = res
-    grid = LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1)
+    grid = LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Unequal number of field")
         data = eq.compute(["x"] + keys, grid=grid, basis="xyz")
     nodes = np.asarray(data.pop("x"))
 
-    def idx(p, r, t):
-        return t * (Nr * Np) + r * Np + p
-
-    cells = []
-    celltypes = []
-
-    for t in range(Nt):
-        t1 = (t + 1) % Nt  # wrap around toroidally
-        for r in range(Nr - 1):
-            for p in range(Np):
-                p1 = (p + 1) % Np  # wrap around poloidally
-
-                # 8 nodes of the hexahedron
-                # Bottom face
-                pt0 = idx(p, r, t)
-                pt1 = idx(p1, r, t)
-                pt2 = idx(p1, r + 1, t)
-                pt3 = idx(p, r + 1, t)
-
-                # Top face (toroidal +1)
-                pt4 = idx(p, r, t1)
-                pt5 = idx(p1, r, t1)
-                pt6 = idx(p1, r + 1, t1)
-                pt7 = idx(p, r + 1, t1)
-
-                cells.extend([8, pt0, pt1, pt2, pt3, pt4, pt5, pt6, pt7])
-                celltypes.append(CellType.HEXAHEDRON)
-
-    # Convert to VTK format
-    cells = np.array(cells)
-    celltypes = np.array(celltypes, dtype=np.uint8)
-
-    mesh = pv.UnstructuredGrid(cells, celltypes, nodes)
+    # Create the structured mesh
+    mesh = pv.StructuredGrid()
+    mesh.points = nodes
+    mesh.dimensions = (Np, Nr, Nt)
 
     # Additional data
     for key in keys:
         value = data[key]
-        if len(value) == Nr * Nt * Np or value.shape == (Nr * Nt * Np, 3):
+        if value.size == Nr * Nt * Np or value.shape == (Nr * Nt * Np, 3):
             # this will handle both 1D and 3D
             mesh[key] = value
         else:
             raise ValueError(f"Data {key} has an unimplemented shape ({value.shape})")
 
-    mesh.save(filename + ".vtu")
-    print(f"File is saved as {filename}.vtu")
-    return mesh
+    mesh.save(filename + ".vtk")
+    print(f"File is saved as {filename}.vtk")
+    if return_mesh:
+        return mesh

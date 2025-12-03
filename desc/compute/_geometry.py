@@ -55,7 +55,10 @@ def _V(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["V(r)"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     data["V"] = jnp.max(data["V(r)"])
@@ -77,6 +80,7 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
     resolution_requirement="tz",
 )
@@ -312,7 +316,10 @@ def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["Z", "n_rho", "e_theta", "rho"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
@@ -336,7 +343,10 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["Z", "n_rho", "e_theta", "rho"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
     resolution_requirement="tz",
 )
 def _A_flux_surface(params, transforms, profiles, data, **kwargs):
@@ -361,6 +371,7 @@ def _A_flux_surface(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _A_of_r(params, transforms, profiles, data, **kwargs):
@@ -402,7 +413,10 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["S(r)"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
 )
 def _S_fourier_rz_surface(params, transforms, profiles, data, **kwargs):
     data["S"] = jnp.max(data["S(r)"])
@@ -424,6 +438,7 @@ def _S_fourier_rz_surface(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
     resolution_requirement="tz",
 )
@@ -490,6 +505,7 @@ def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _R0(params, transforms, profiles, data, **kwargs):
@@ -534,6 +550,7 @@ def _a(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _R0_over_a(params, transforms, profiles, data, **kwargs):
@@ -590,7 +607,10 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["rho", "e_theta"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
@@ -665,7 +685,10 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["A(z)", "perimeter(z)"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
 )
 def _a_major_over_a_minor_flux_surface(params, transforms, profiles, data, **kwargs):
     A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
@@ -691,6 +714,7 @@ def _a_major_over_a_minor_flux_surface(params, transforms, profiles, data, **kwa
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _L_sff_rho(params, transforms, profiles, data, **kwargs):
@@ -715,6 +739,7 @@ def _L_sff_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _M_sff_rho(params, transforms, profiles, data, **kwargs):
@@ -739,6 +764,7 @@ def _M_sff_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _N_sff_rho(params, transforms, profiles, data, **kwargs):
@@ -763,6 +789,7 @@ def _N_sff_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
@@ -802,6 +829,7 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
@@ -823,6 +851,7 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
@@ -847,6 +876,7 @@ def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _curvature_H_rho(params, transforms, profiles, data, **kwargs):

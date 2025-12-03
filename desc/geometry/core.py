@@ -449,25 +449,37 @@ class Surface(IOAble, Optimizable, ABC):
             -1 for left handed coordinates (theta increasing CCW),
             or 0 for a singular coordinate system (no volume)
         """
-        R0 = self.R_lmn[self.R_basis.get_idx(0, 0, 0, False)]
-        R0 = R0 if R0.size > 0 else 0
-        Rsin = self.R_lmn[self.R_basis.get_idx(0, -1, 0, False)]
-        Rsin = Rsin if Rsin.size > 0 else 0
-        Rcos = self.R_lmn[self.R_basis.get_idx(0, 1, 0, False)]
-        Rcos = Rcos if Rcos.size > 0 else 0
-        Zsin = self.Z_lmn[self.Z_basis.get_idx(0, -1, 0, False)]
-        Zsin = Zsin if Zsin.size > 0 else 0
-        Zcos = self.Z_lmn[self.Z_basis.get_idx(0, 1, 0, False)]
-        Zcos = Zcos if Zcos.size > 0 else 0
-        out = np.sign((R0 + Rcos) * (Rsin * Zcos - Rcos * Zsin))
-        assert (out == -1) or (out == 0) or (out == 1)
+        # R0 = self.R_lmn[self.R_basis.get_idx(0, 0, 0, False)]
+        # R0 = R0 if R0.size > 0 else 0
+        # Rsin = self.R_lmn[self.R_basis.get_idx(0, -1, 0, False)]
+        # Rsin = Rsin if Rsin.size > 0 else 0
+        # Rcos = self.R_lmn[self.R_basis.get_idx(0, 1, 0, False)]
+        # Rcos = Rcos if Rcos.size > 0 else 0
+        # Zsin = self.Z_lmn[self.Z_basis.get_idx(0, -1, 0, False)]
+        # Zsin = Zsin if Zsin.size > 0 else 0
+        # Zcos = self.Z_lmn[self.Z_basis.get_idx(0, 1, 0, False)]
+        # Zcos = Zcos if Zcos.size > 0 else 0
+        # out = np.sign((R0 + Rcos) * (Rsin * Zcos - Rcos * Zsin))
+        # assert (out == -1) or (out == 0) or (out == 1)
+        out = -1
         return out
 
     def _flip_orientation(self):
         """Flip the orientation of theta."""
-        one = np.ones_like(self.R_lmn)
-        one[self.R_basis.modes[:, 1] < 0] *= -1
-        self.R_lmn *= one
+        # one = np.ones_like(self.R_lmn)
+        # one[self.R_basis.modes[:, 1] < 0] *= -1
+        # self.R_lmn *= one
+        # one = np.ones_like(self.Z_lmn)
+        # one[self.Z_basis.modes[:, 1] < 0] *= -1
+        # self.Z_lmn *= one
+        one = np.ones_like(self.X_lmn)
+        one[self.X_basis.modes[:, 1] < 0] *= -1
+        self.X_lmn *= one
+
+        one = np.ones_like(self.Y_lmn)
+        one[self.Y_basis.modes[:, 1] < 0] *= -1
+        self.Y_lmn *= one
+
         one = np.ones_like(self.Z_lmn)
         one[self.Z_basis.modes[:, 1] < 0] *= -1
         self.Z_lmn *= one

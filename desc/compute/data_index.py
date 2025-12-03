@@ -252,6 +252,9 @@ _class_inheritance = {
     "desc.geometry.surface.FourierRZToroidalSurface": [
         "desc.geometry.core.Surface",
     ],
+    "desc.geometry.surface.FourierXYZToroidalSurface": [
+        "desc.geometry.core.Surface",
+    ],
     "desc.geometry.surface.ZernikeRZToroidalSection": [
         "desc.geometry.core.Surface",
     ],

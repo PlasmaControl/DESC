@@ -91,11 +91,455 @@ def _x(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _R(params, transforms, profiles, data, **kwargs):
     data["R"] = transforms["R"].transform(params["R_lmn"], 0, 0, 0)
+    return data
+
+
+# --- R and its t/z derivatives for FourierXYZToroidalSurface, built from X and Y ---
+
+
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame (from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0]],
+        "Y": [[0, 0, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+
+    data["R"] = jnp.sqrt(X**2 + Y**2)
+    return data
+
+
+@register_compute_fun(
+    name="R_t",
+    label="\\partial_{\\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first poloidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0]],
+        "Y": [[0, 0, 0], [0, 1, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_t_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+
+    R = jnp.sqrt(X**2 + Y**2)
+    data["R_t"] = (X * X_t + Y * Y_t) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_z",
+    label="\\partial_{\\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first toroidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 1]],
+        "Y": [[0, 0, 0], [0, 0, 1]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_z_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+
+    R = jnp.sqrt(X**2 + Y**2)
+    data["R_z"] = (X * X_z + Y * Y_z) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_tt",
+    label="\\partial_{\\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second poloidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0], [0, 2, 0]],
+        "Y": [[0, 0, 0], [0, 1, 0], [0, 2, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_tt_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+    X_tt = transforms["X"].transform(params["X_lmn"], 0, 2, 0)
+    Y_tt = transforms["Y"].transform(params["Y_lmn"], 0, 2, 0)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # S = R^2 = X^2 + Y^2, S_t = 2 R R_t, S_tt = 2 (R_t^2 + R R_tt)
+    S_t = 2.0 * (X * X_t + Y * Y_t)
+    R_t = S_t / (2.0 * R)
+
+    S_tt = 2.0 * (X_t**2 + X * X_tt + Y_t**2 + Y * Y_tt)
+    data["R_tt"] = (S_tt / 2.0 - R_t**2) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_tz",
+    label="\\partial_{\\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, mixed poloidal-toroidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]],
+        "Y": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_tz_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+    X_tz = transforms["X"].transform(params["X_lmn"], 0, 1, 1)
+    Y_tz = transforms["Y"].transform(params["Y_lmn"], 0, 1, 1)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # First derivatives
+    S_t = 2.0 * (X * X_t + Y * Y_t)
+    S_z = 2.0 * (X * X_z + Y * Y_z)
+    R_t = S_t / (2.0 * R)
+    R_z = S_z / (2.0 * R)
+
+    # S_tz = 2 (R_t R_z + R R_tz)
+    S_tz = 2.0 * (X_t * X_z + X * X_tz + Y_t * Y_z + Y * Y_tz)
+    data["R_tz"] = (S_tz / 2.0 - R_t * R_z) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_zz",
+    label="\\partial_{\\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second toroidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
+        "Y": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_zz_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+    X_zz = transforms["X"].transform(params["X_lmn"], 0, 0, 2)
+    Y_zz = transforms["Y"].transform(params["Y_lmn"], 0, 0, 2)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # First derivative
+    S_z = 2.0 * (X * X_z + Y * Y_z)
+    R_z = S_z / (2.0 * R)
+
+    # Second derivative: S_zz = 2 (R_z^2 + R R_zz)
+    S_zz = 2.0 * (X_z**2 + X * X_zz + Y_z**2 + Y * Y_zz)
+    data["R_zz"] = (S_zz / 2.0 - R_z**2) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_ttt",
+    label="\\partial_{\\theta \\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third poloidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0]],
+        "Y": [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_ttt_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+    X_tt = transforms["X"].transform(params["X_lmn"], 0, 2, 0)
+    Y_tt = transforms["Y"].transform(params["Y_lmn"], 0, 2, 0)
+    X_ttt = transforms["X"].transform(params["X_lmn"], 0, 3, 0)
+    Y_ttt = transforms["Y"].transform(params["Y_lmn"], 0, 3, 0)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # R_t, R_tt from S-derivatives
+    S_t = 2.0 * (X * X_t + Y * Y_t)
+    R_t = S_t / (2.0 * R)
+
+    S_tt = 2.0 * (X_t**2 + X * X_tt + Y_t**2 + Y * Y_tt)
+    R_tt = (S_tt / 2.0 - R_t**2) / R
+
+    # S_ttt = 2 (X X_ttt + Y Y_ttt + 3 X_t X_tt + 3 Y_t Y_tt)
+    S_ttt = 2.0 * (X * X_ttt + Y * Y_ttt + 3.0 * X_t * X_tt + 3.0 * Y_t * Y_tt)
+
+    # S_ttt = 2 (3 R_t R_tt + R R_ttt)
+    data["R_ttt"] = (S_ttt / 2.0 - 3.0 * R_t * R_tt) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt poloidal angle "
+    "twice and toroidal angle (from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 2, 0], [0, 1, 1], [0, 2, 1]],
+        "Y": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 2, 0], [0, 1, 1], [0, 2, 1]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_ttz_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+    X_tt = transforms["X"].transform(params["X_lmn"], 0, 2, 0)
+    Y_tt = transforms["Y"].transform(params["Y_lmn"], 0, 2, 0)
+    X_tz = transforms["X"].transform(params["X_lmn"], 0, 1, 1)
+    Y_tz = transforms["Y"].transform(params["Y_lmn"], 0, 1, 1)
+    X_ttz = transforms["X"].transform(params["X_lmn"], 0, 2, 1)
+    Y_ttz = transforms["Y"].transform(params["Y_lmn"], 0, 2, 1)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # First derivatives
+    S_t = 2.0 * (X * X_t + Y * Y_t)
+    S_z = 2.0 * (X * X_z + Y * Y_z)
+    R_t = S_t / (2.0 * R)
+    R_z = S_z / (2.0 * R)
+
+    # Second derivatives
+    S_tt = 2.0 * (X_t**2 + X * X_tt + Y_t**2 + Y * Y_tt)
+    R_tt = (S_tt / 2.0 - R_t**2) / R
+
+    S_tz = 2.0 * (X_t * X_z + X * X_tz + Y_t * Y_z + Y * Y_tz)
+    R_tz = (S_tz / 2.0 - R_t * R_z) / R  # S_tz = 2 (R_t R_z + R R_tz)
+
+    # Third derivative S_ttz:
+    # S_ttz = 2 (X_tt X_z + 2 X_t X_tz + X X_ttz
+    #          + Y_tt Y_z + 2 Y_t Y_tz + Y Y_ttz)
+    S_ttz = 2.0 * (
+        X_tt * X_z
+        + 2.0 * X_t * X_tz
+        + X * X_ttz
+        + Y_tt * Y_z
+        + 2.0 * Y_t * Y_tz
+        + Y * Y_ttz
+    )
+
+    # S_ttz = 2 (R_tt R_z + 2 R_t R_tz + R R_ttz)
+    data["R_ttz"] = (S_ttz / 2.0 - (R_tt * R_z + 2.0 * R_t * R_tz)) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt poloidal angle "
+    "and toroidal angle twice (from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1], [0, 0, 2], [0, 1, 2]],
+        "Y": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1], [0, 0, 2], [0, 1, 2]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_tzz_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+    X_tz = transforms["X"].transform(params["X_lmn"], 0, 1, 1)
+    Y_tz = transforms["Y"].transform(params["Y_lmn"], 0, 1, 1)
+    X_zz = transforms["X"].transform(params["X_lmn"], 0, 0, 2)
+    Y_zz = transforms["Y"].transform(params["Y_lmn"], 0, 0, 2)
+    X_tzz = transforms["X"].transform(params["X_lmn"], 0, 1, 2)
+    Y_tzz = transforms["Y"].transform(params["Y_lmn"], 0, 1, 2)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # First derivatives
+    S_t = 2.0 * (X * X_t + Y * Y_t)
+    S_z = 2.0 * (X * X_z + Y * Y_z)
+    R_t = S_t / (2.0 * R)
+    R_z = S_z / (2.0 * R)
+
+    # Second derivatives
+    S_tz = 2.0 * (X_t * X_z + X * X_tz + Y_t * Y_z + Y * Y_tz)
+    R_tz = (S_tz / 2.0 - R_t * R_z) / R  # S_tz = 2 (R_t R_z + R R_tz)
+
+    S_zz = 2.0 * (X_z**2 + X * X_zz + Y_z**2 + Y * Y_zz)
+    R_zz = (S_zz / 2.0 - R_z**2) / R
+
+    # Third derivative S_tzz:
+    # S_tzz = 2 (X X_tzz + Y Y_tzz
+    #          + X_t X_zz + Y_t Y_zz
+    #          + 2 X_tz X_z + 2 Y_tz Y_z)
+    S_tzz = 2.0 * (
+        X * X_tzz
+        + Y * Y_tzz
+        + X_t * X_zz
+        + Y_t * Y_zz
+        + 2.0 * X_tz * X_z
+        + 2.0 * Y_tz * Y_z
+    )
+
+    # S_tzz = 2 (2 R_tz R_z + R_t R_zz + R R_tzz)
+    data["R_tzz"] = (S_tzz / 2.0 - (2.0 * R_tz * R_z + R_t * R_zz)) / R
+    return data
+
+
+@register_compute_fun(
+    name="R_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third toroidal derivative "
+    "(from X, Y for FourierXYZToroidalSurface)",
+    dim=1,
+    params=["X_lmn", "Y_lmn"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
+        "Y": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _R_zzz_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+    X_zz = transforms["X"].transform(params["X_lmn"], 0, 0, 2)
+    Y_zz = transforms["Y"].transform(params["Y_lmn"], 0, 0, 2)
+    X_zzz = transforms["X"].transform(params["X_lmn"], 0, 0, 3)
+    Y_zzz = transforms["Y"].transform(params["Y_lmn"], 0, 0, 3)
+
+    R = jnp.sqrt(X**2 + Y**2)
+
+    # R_z, R_zz from S-derivatives
+    S_z = 2.0 * (X * X_z + Y * Y_z)
+    R_z = S_z / (2.0 * R)
+
+    S_zz = 2.0 * (X_z**2 + X * X_zz + Y_z**2 + Y * Y_zz)
+    R_zz = (S_zz / 2.0 - R_z**2) / R
+
+    # Third derivative S_zzz:
+    # S_zzz = 2 (X X_zzz + Y Y_zzz + 3 X_z X_zz + 3 Y_z Y_zz)
+    S_zzz = 2.0 * (X * X_zzz + Y * Y_zzz + 3.0 * X_z * X_zz + 3.0 * Y_z * Y_zz)
+
+    # S_zzz = 2 (3 R_z R_zz + R R_zzz)
+    data["R_zzz"] = (S_zzz / 2.0 - 3.0 * R_z * R_zz) / R
     return data
 
 
@@ -1410,6 +1854,7 @@ def _Z_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_ttz(params, transforms, profiles, data, **kwargs):
@@ -1433,6 +1878,7 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_tz(params, transforms, profiles, data, **kwargs):
@@ -1456,6 +1902,7 @@ def _Z_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_tzz(params, transforms, profiles, data, **kwargs):
@@ -1478,6 +1925,7 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
@@ -1500,6 +1948,7 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_zz(params, transforms, profiles, data, **kwargs):
@@ -1522,6 +1971,7 @@ def _Z_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_zzz(params, transforms, profiles, data, **kwargs):
@@ -2651,6 +3101,7 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
@@ -2674,6 +3125,7 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
@@ -2697,6 +3149,7 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_tzz(params, transforms, profiles, data, **kwargs):
@@ -2719,6 +3172,7 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
@@ -2741,6 +3195,7 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
@@ -2763,6 +3218,7 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
@@ -3064,6 +3520,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
@@ -3087,6 +3544,7 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
@@ -3110,6 +3568,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _phi_zzz(params, transforms, profiles, data, **kwargs):

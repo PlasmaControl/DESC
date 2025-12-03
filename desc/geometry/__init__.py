@@ -8,4 +8,8 @@ from .curve import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from .surface import (
+    FourierRZToroidalSurface,
+    FourierXYZToroidalSurface,
+    ZernikeRZToroidalSection,
+)

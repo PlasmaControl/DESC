@@ -33,7 +33,11 @@ from desc.utils import (
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
+__all__ = [
+    "FourierRZToroidalSurface",
+    "FourierXYZToroidalSurface",
+    "ZernikeRZToroidalSection",
+]
 
 
 class FourierRZToroidalSurface(Surface):
@@ -956,10 +960,10 @@ class FourierXYZToroidalSurface(Surface):
                 sym = False
 
         self._X_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
         self._Y_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
         )
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
@@ -1058,15 +1062,15 @@ class FourierXYZToroidalSurface(Surface):
             Y_modes_old = self.Y_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.X_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             self.Y_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
             )
             self.Z_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            self.X_lmn = copy_coeffs(self.X_lmn, X_modes_old, self.R_basis.modes)
+            self.X_lmn = copy_coeffs(self.X_lmn, X_modes_old, self.X_basis.modes)
             self.Y_lmn = copy_coeffs(self.Y_lmn, Y_modes_old, self.Y_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self._M = M
@@ -1080,8 +1084,8 @@ class FourierXYZToroidalSurface(Surface):
 
     @X_lmn.setter
     def X_lmn(self, new):
-        if len(new) == self.R_basis.num_modes:
-            self._R_lmn = jnp.asarray(new)
+        if len(new) == self.X_basis.num_modes:
+            self.X_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"X_lmn should have the same size as the basis, got {len(new)} for "
@@ -1233,12 +1237,8 @@ class FourierXYZToroidalSurface(Surface):
         assert (
             coords.shape[0] == theta.size
         ), "coords first dimension and theta must have same size"
-        if zeta is None:
-            zeta = coords[:, 1]
-        else:
-            raise NotImplementedError("zeta != phi not yet implemented")
         nodes = Grid(
-            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            np.vstack([np.ones_like(theta), theta, zeta]).T,
             sort=False,
             jitable=True,
         )
@@ -1246,8 +1246,8 @@ class FourierXYZToroidalSurface(Surface):
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
-        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
-        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
 
         if w is None:  # unweighted fit

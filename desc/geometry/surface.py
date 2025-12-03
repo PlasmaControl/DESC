@@ -837,6 +837,521 @@ class FourierRZToroidalSurface(Surface):
         return axis
 
 
+class FourierXYZToroidalSurface(Surface):
+    """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    X_lmn, Y_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for R and Z in cylindrical coordinates
+    modes_X : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for X_lmn.
+    modes_Y : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for Y_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_X
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_X_lmn",
+        "_Y_lmn",
+        "_Z_lmn",
+        "_X_basis",
+        "_Y_basis",
+        "_Z_basis",
+        "_NFP",
+        "_rho",
+    ]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_X_basis", "_Y_basis", "_Z_basis"]
+
+    @execute_on_cpu
+    def __init__(
+        self,
+        X_lmn=None,
+        Y_lmn=None,
+        Z_lmn=None,
+        modes_X=None,
+        modes_Y=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        M=None,
+        N=None,
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        if X_lmn is None:
+            X_lmn = np.array([10, 1])
+            modes_X = np.array([[0, 0], [1, 0]])
+        if Y_lmn is None:
+            Y_lmn = np.array([10, 1])
+            modes_Y = np.array([[0, 0], [1, 0]])
+        if Z_lmn is None:
+            Z_lmn = np.array([0, -1])
+            modes_Z = np.array([[0, 0], [-1, 0]])
+        if modes_Z is None:
+            modes_Z = modes_X
+        X_lmn, Y_lmn, Z_lmn, modes_X, modes_Y, modes_Z = map(
+            np.asarray, (X_lmn, Y_lmn, Z_lmn, modes_X, modes_Y, modes_Z)
+        )
+
+        assert (
+            X_lmn.size == modes_X.shape[0]
+        ), "X_lmn size and modes_X.shape[0] must be the same size!"
+        assert (
+            Y_lmn.size == modes_Y.shape[0]
+        ), "Y_lmn size and modes_Y.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
+        assert issubclass(modes_X.dtype.type, np.integer)
+        assert issubclass(modes_Y.dtype.type, np.integer)
+        assert issubclass(modes_Z.dtype.type, np.integer)
+
+        MR = np.max(abs(modes_X[:, 0]))
+        NR = np.max(abs(modes_X[:, 1]))
+        MY = np.max(abs(modes_Y[:, 0]))
+        NY = np.max(abs(modes_Y[:, 1]))
+        MZ = np.max(abs(modes_Z[:, 0]))
+        NZ = np.max(abs(modes_Z[:, 1]))
+        self._L = 0
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP", False)
+        self._M = setdefault(M, max(MR, MY, MZ))
+        self._N = setdefault(N, max(NR, NY, NZ))
+        self._NFP = NFP
+
+        if sym == "auto":
+            if (
+                np.all(X_lmn[np.where(sign(modes_X[:, 0]) != sign(modes_X[:, 1]))] == 0)
+                and np.all(
+                    Y_lmn[np.where(sign(modes_Y[:, 0]) == sign(modes_Y[:, 1]))] == 0
+                )
+                and np.all(
+                    Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                )
+            ):
+                sym = True
+            else:
+                sym = False
+
+        self._X_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+        )
+        self._Y_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+        )
+        self._Z_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+        )
+
+        self._X_lmn = copy_coeffs(X_lmn, modes_X, self.X_basis.modes[:, 1:])
+        self._Y_lmn = copy_coeffs(Y_lmn, modes_Y, self.Y_basis.modes[:, 1:])
+        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
+        self._sym = bool(sym)
+        self._rho = rho
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta."
+                + " To avoid this warning in the future, switch the sign of all"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
+        self.name = name
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def X_basis(self):
+        """DoubleFourierSeries: Spectral basis for X."""
+        return self._X_basis
+
+    @property
+    def Y_basis(self):
+        """DoubleFourierSeries: Spectral basis for Y."""
+        return self._Y_basis
+
+    @property
+    def Z_basis(self):
+        """DoubleFourierSeries: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
+
+    @execute_on_cpu
+    def change_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal and toroidal resolution."""
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        if L is not None:
+            warnings.warn(
+                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
+            )
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            _, M, N = args
+
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = int(NFP if NFP is not None else self.NFP)
+
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+            or ((sym is not None) and (sym != self.sym))
+        ):
+            self._sym = sym if sym is not None else self.sym
+            M = int(M if M is not None else self.M)
+            N = int(N if N is not None else self.N)
+            X_modes_old = self.X_basis.modes
+            Y_modes_old = self.Y_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.X_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+            )
+            self.Y_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
+            self.Z_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
+            self.X_lmn = copy_coeffs(self.X_lmn, X_modes_old, self.R_basis.modes)
+            self.Y_lmn = copy_coeffs(self.Y_lmn, Y_modes_old, self.Y_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._M = M
+            self._N = N
+
+    @optimizable_parameter
+    @property
+    def X_lmn(self):
+        """ndarray: Spectral coefficients for X."""
+        return self._X_lmn
+
+    @X_lmn.setter
+    def X_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"X_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.X_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Y_lmn(self):
+        """ndarray: Spectral coefficients for Y."""
+        return self._Y_lmn
+
+    @Y_lmn.setter
+    def Y_lmn(self, new):
+        if len(new) == self.Y_basis.num_modes:
+            self._Y_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Y_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Y_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Z_basis.num_modes} modes."
+            )
+
+    def get_coeffs(self, m, n=0):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        m = np.atleast_1d(m).astype(int)
+
+        m, n = np.broadcast_arrays(m, n)
+        X = np.zeros_like(m).astype(float)
+        Y = np.zeros_like(m).astype(float)
+        Z = np.zeros_like(m).astype(float)
+
+        mn = np.array([m, n]).T
+        idxX = np.where(
+            (mn[:, np.newaxis, :] == self.X_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        idxY = np.where(
+            (mn[:, np.newaxis, :] == self.Y_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        idxZ = np.where(
+            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+
+        X[idxX[0]] = self.X_lmn[idxX[1]]
+        Y[idxY[0]] = self.Y_lmn[idxY[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
+        return X, Y, Z
+
+    def set_coeffs(self, m, n=0, X=None, Y=None, Z=None):
+        """Set specific Fourier coefficients."""
+        m, n, X, Y, Z = (
+            np.atleast_1d(m),
+            np.atleast_1d(n),
+            np.atleast_1d(X),
+            np.atleast_1d(Y),
+            np.atleast_1d(Z),
+        )
+        m, n, X, Y, Z = np.broadcast_arrays(m, n, X, Y, Z)
+        for mm, nn, XX, YY, ZZ in zip(m, n, X, Y, Z):
+            if XX is not None:
+                idxX = self.X_basis.get_idx(0, mm, nn)
+                self.X_lmn = put(self.X_lmn, idxX, XX)
+            if YY is not None:
+                idxY = self.Y_basis.get_idx(0, mm, nn)
+                self.Y_lmn = put(self.Y_lmn, idxY, YY)
+            if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, mm, nn)
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    @classmethod
+    def from_values(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
+        """Create a surface from given R,Z coordinates in real space.
+
+        Parameters
+        ----------
+        coords : array-like shape(num_points,3) or Grid
+            cylindrical coordinates (X, Y, Z) to fit as a FourierRZToroidalSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
+        M : int
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
+        N : int
+            toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
+        NFP : int
+            number of toroidal field periods for surface
+        sym : bool
+            True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with Fourier coefficients fitted from input coords.
+
+        """
+        M = check_nonnegint(M, "M", False)
+        N = check_nonnegint(N, "N", False)
+        NFP = check_posint(NFP, "NFP", False)
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimension and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
+
+        X = coords[:, 0]
+        Y = coords[:, 1]
+        Z = coords[:, 2]
+        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+
+        if w is None:  # unweighted fit
+            transform = Transform(
+                nodes, X_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Xb_lmn = transform.fit(X)
+
+            transform = Transform(
+                nodes, Y_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Yb_lmn = transform.fit(Y)
+
+            transform = Transform(
+                nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Zb_lmn = transform.fit(Z)
+        else:  # perform weighted fit
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
+            w = np.asarray(w)
+            W = np.diag(w)
+            assert w.size == X.size, "w must same length as number of points being fit"
+
+            transform = Transform(
+                nodes, X_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AX = transform.matrices[transform.method][0][0][0]
+
+            transform = Transform(
+                nodes, Y_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AY = transform.matrices[transform.method][0][0][0]
+
+            transform = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = block_diag(W @ AX, W @ AY, W @ AZ)
+            b = np.concatenate([w * X, w * Y, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Xb_lmn = x_lmn[0 : X_basis.num_modes]
+            Yb_lmn = x_lmn[0 : X_basis.num_modes]
+            Zb_lmn = x_lmn[X_basis.num_modes :]
+
+        surf = cls(
+            Xb_lmn,
+            Yb_lmn,
+            Zb_lmn,
+            X_basis.modes[:, 1:],
+            Y_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            sym,
+            check_orientation=check_orientation,
+        )
+        return surf
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        This method calculates the axis of the surface by finding the mid point of the
+        X, Y, and Z values at theta=0 and pi degrees for a bunch of toroidal angles and
+        fitting a Fourier curve to it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
+        Returns
+        -------
+        axis : FourierXYZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierXYZCurve
+
+        # over-sample to get a good axis fit
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
+        data = self.compute(["X", "Y", "Z"], grid=grid)
+        X = data["X"]
+        Y = data["X"]
+        Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
+        Xout = X[::2]
+        Xin = X[1::2]
+        Yout = Y[::2]
+        Yin = Y[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        Xmid = (Xout + Xin) / 2
+        Ymid = (Yout + Yin) / 2
+        Zmid = (Zout + Zin) / 2
+        axis = FourierXYZCurve.from_values(
+            jnp.vstack([Xmid, Ymid, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
+        )
+        return axis
+
+
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
 

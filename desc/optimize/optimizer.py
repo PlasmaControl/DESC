@@ -7,6 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -15,6 +16,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
+from desc.optimizable import OptimizableCollection
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
@@ -122,7 +124,7 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict] or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -130,7 +132,10 @@ class Optimizer(IOAble):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix. If an array,
+            should be the same size as sum(thing.dim_x for thing in things). If a list
+            of dict, the list should have 1 element for each thing, and each dict should
+            have the same keys and dimensions as thing.params_dict.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -190,6 +195,7 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
+        x_scale = _parse_x_scale(x_scale, things, options)
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
@@ -339,6 +345,34 @@ class Optimizer(IOAble):
             return things0, result
 
         return things, result
+
+
+def _parse_x_scale(x_scale, things, options):
+    """Convert lists/dicts of scales into single array for all dofs."""
+    if isinstance(x_scale, str) and x_scale == "auto":
+        return x_scale
+    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or np.isscalar(x_scale):
+        dimx_all = sum([t.dim_x for t in things])
+        return jnp.broadcast_to(x_scale, (dimx_all,))
+    elif len(things) == 1 and not isinstance(x_scale, (list, tuple)):
+        x_scale = [x_scale]
+    assert len(x_scale) == len(
+        things
+    ), f"expected {len(things)} x_scales for {len(things)} things but "
+    f"only got {len(x_scale)}"
+    all_scales = []
+    for xsc, tng in zip(x_scale, things):
+        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or np.isscalar(xsc):
+            all_scales.append(jnp.broadcast_to(xsc, (tng.dim_x,)))
+        elif isinstance(xsc, dict) or (
+            isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
+        ):
+            all_scales.append(tng.pack_params(xsc))
+        else:
+            raise TypeError(
+                f"all x_scales should be either array or dict, got {type(xsc)}"
+            )
+    return np.concatenate(all_scales)
 
 
 def _print_output(things, things0, objective, constraints, result):

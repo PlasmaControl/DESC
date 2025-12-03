@@ -7,6 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -15,6 +16,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
+from desc.optimizable import OptimizableCollection
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
@@ -122,28 +124,27 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array_like or ``'auto'`` or ``'ess'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If passing a custom array, it must have size equal to the total
-            number of optimization parameters across all objects in ``things`` (i.e.,
-            sum of ``t.dim_x`` for each ``t`` in ``things``). For Equilibrium objects,
-            the ordering must match ``eq.x_idx`` parameter indices. The array should
-            be ordered by concatenating parameters from each object in ``things`` in
-            the same order. If set to ``'auto'``, the scale is iteratively updated
-            using the inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type`` 
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of 
-            the scaling, and ``ess_type`` is the type of scaling, which can be 
-            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the 
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling 
-            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7`` 
-            (minimum allowed scale value).
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_type`` is the type of scaling, which can be
+            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
+            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            (minimum allowed scale value). If an array, should be the same size as
+            sum(thing.dim_x for thing in things). If a list, the list should
+            have 1 element for each thing, and each element should either be ``'ess'``
+            to use expoential spectral scaling for that thing, or a dict with the same
+            keys and dimensions as thing.params_dict to specify scales manually.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -211,12 +212,13 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
+        x_scale = _parse_x_scale(x_scale, things, options)
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.objectives import QuadraticFlux
         from desc.geometry import FourierRZToroidalSurface
+        from desc.objectives import QuadraticFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
@@ -376,6 +378,34 @@ class Optimizer(IOAble):
             return things0, result
 
         return things, result
+
+
+def _parse_x_scale(x_scale, things, options):
+    """Convert lists/dicts of scales into single array for all dofs."""
+    if isinstance(x_scale, str) and x_scale == "auto":
+        return x_scale
+    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or np.isscalar(x_scale):
+        dimx_all = sum([t.dim_x for t in things])
+        return jnp.broadcast_to(x_scale, (dimx_all,))
+    elif len(things) == 1 and not isinstance(x_scale, (list, tuple)):
+        x_scale = [x_scale]
+    assert len(x_scale) == len(
+        things
+    ), f"expected {len(things)} x_scales for {len(things)} things but "
+    f"only got {len(x_scale)}"
+    all_scales = []
+    for xsc, tng in zip(x_scale, things):
+        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or np.isscalar(xsc):
+            all_scales.append(jnp.broadcast_to(xsc, (tng.dim_x,)))
+        elif isinstance(xsc, dict) or (
+            isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
+        ):
+            all_scales.append(tng.pack_params(xsc))
+        else:
+            raise TypeError(
+                f"all x_scales should be either array or dict, got {type(xsc)}"
+            )
+    return np.concatenate(all_scales)
 
 
 def _print_output(things, things0, objective, constraints, result):
@@ -629,7 +659,11 @@ def get_combined_constraint_objectives(  # noqa: C901
     if is_prox and not isinstance(x_scale, str):
         # If we have ProximalProjection, project x_scale through both stages:
         # (eq.dim_x) -> (dim size post proximal projection)
-        prox_obj = objective if isinstance(objective, ProximalProjection) else objective._objective
+        prox_obj = (
+            objective
+            if isinstance(objective, ProximalProjection)
+            else objective._objective
+        )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
         x_scale = np.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
         # Project equilibrium part: remove excluded parameters

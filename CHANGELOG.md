@@ -3,6 +3,10 @@ Changelog
 
 New Features
 
+- Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
+
 
 v0.16.0
 -------
@@ -20,6 +24,7 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+
 
 Bug Fixes
 

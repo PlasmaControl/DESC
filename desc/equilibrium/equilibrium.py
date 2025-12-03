@@ -2242,15 +2242,27 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, or ``'ess'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_type`` is the type of scaling, which can be
+            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
+            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            (minimum allowed scale value). If an array, should be the same size as
+            sum(thing.dim_x for thing in things). If a list, the list should
+            have 1 element for each thing, and each element should either be ``'ess'``
+            to use expoential spectral scaling for that thing, or a dict with the same
+            keys and dimensions as thing.params_dict to specify scales manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2302,8 +2314,6 @@ class Equilibrium(IOAble, Optimizable):
             "Solving equilibrium with poincare XS as BC is not supported yet "
             + "on master branch.",
         )
-        if isinstance(x_scale, str):
-            assert x_scale in ["auto"], "ess scaling currently not supported for equilibrium solves"
 
         things, result = optimizer.optimize(
             self,
@@ -2350,23 +2360,27 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'`` or ``'ess'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. Default is ``'auto'``, which iteratively updates the scale using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type`` 
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of 
-            the scaling, and ``ess_type`` is the type of scaling, which can be 
-            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the 
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling 
-            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7`` 
-            (minimum allowed scale value).
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_type`` is the type of scaling, which can be
+            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
+            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            (minimum allowed scale value). If an array, should be the same size as
+            sum(thing.dim_x for thing in things). If a list, the list should
+            have 1 element for each thing, and each element should either be ``'ess'``
+            to use expoential spectral scaling for that thing, or a dict with the same
+            keys and dimensions as thing.params_dict to specify scales manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

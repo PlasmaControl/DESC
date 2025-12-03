@@ -137,13 +137,13 @@ class Optimizer(IOAble):
             this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
             which are passed through ``options``. ``ess_alpha`` is the decay rate of
             the scaling, and ``ess_type`` is the type of scaling, which can be
-            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
-            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            ``1``, ``2``, or ``np.inf``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type=np.inf'`` (scaling
+            type, can be ``1``, ``2``, or ``np.inf``), and ``ess_min_value=1e-7``
             (minimum allowed scale value). If an array, should be the same size as
             sum(thing.dim_x for thing in things). If a list, the list should
             have 1 element for each thing, and each element should either be ``'ess'``
-            to use expoential spectral scaling for that thing, or a dict with the same
+            to use exponential spectral scaling for that thing, or a dict with the same
             keys and dimensions as thing.params_dict to specify scales manually.
         verbose : integer, optional
             * 0  : work silently.
@@ -165,7 +165,7 @@ class Optimizer(IOAble):
             - ``"ess_alpha"`` : float, optional
               Decay rate of the scaling. Default is 1.2.
             - ``"ess_type"`` : str, optional
-              Type of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+              Type of scaling, which can be ``1``, ``2``, or ``np.inf``.
               Default is ``'Linf'``.
             - ``"ess_min_value"`` : float, optional
               Minimum allowed scale value. Default is 1e-7.
@@ -212,12 +212,12 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
+        options = {} if options is None else options
         x_scale = _parse_x_scale(x_scale, things, options)
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.geometry import FourierRZToroidalSurface
         from desc.objectives import QuadraticFlux
 
         # eq may be None
@@ -234,24 +234,7 @@ class Optimizer(IOAble):
                 )
             # save these for later
             eq_params_init = eq.params_dict.copy()
-            options = {} if options is None else options
-            if isinstance(x_scale, str) and x_scale == "ess":
-                ess_alpha = options.pop("ess_alpha", 1.2)
-                ess_type = options.pop("ess_type", "Linf")
-                ess_min_value = options.pop("ess_min_value", 1e-7)
-                x_scales = []
-                for t in things:
-                    if isinstance(t, (Equilibrium, FourierRZToroidalSurface)):
-                        t_scale = _create_exponential_spectral_scale(
-                            eq=t,
-                            alpha=ess_alpha,
-                            scale_type=ess_type,
-                            min_value=ess_min_value,
-                        )
-                    else:
-                        t_scale = np.ones(t.dim_x)
-                    x_scales.append(t_scale)
-                x_scale = np.concatenate(x_scales)
+
         timer = Timer()
         _, method = _parse_method(self.method)
 
@@ -382,30 +365,47 @@ class Optimizer(IOAble):
 
 def _parse_x_scale(x_scale, things, options):
     """Convert lists/dicts of scales into single array for all dofs."""
-    if isinstance(x_scale, str) and x_scale == "auto":
-        return x_scale
+    if isinstance(x_scale, str):
+        if x_scale == "auto":
+            return x_scale
+        if x_scale == "ess":
+            x_scale = ["ess"] * len(things)
+        else:
+            raise ValueError(
+                "only 'auto' and 'ess' are allowed string values for x_scale"
+            )
     if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or np.isscalar(x_scale):
         dimx_all = sum([t.dim_x for t in things])
         return jnp.broadcast_to(x_scale, (dimx_all,))
-    elif len(things) == 1 and not isinstance(x_scale, (list, tuple)):
+    if len(things) == 1 and not isinstance(x_scale, (list, tuple)):
         x_scale = [x_scale]
     assert len(x_scale) == len(
         things
     ), f"expected {len(things)} x_scales for {len(things)} things but "
     f"only got {len(x_scale)}"
+
     all_scales = []
+    ess_alpha = options.pop("ess_alpha", 1.2)
+    ess_type = options.pop("ess_type", np.inf)
+    ess_min_value = options.pop("ess_min_value", 1e-7)
+
     for xsc, tng in zip(x_scale, things):
-        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or np.isscalar(xsc):
+        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or (
+            np.isscalar(xsc) and not isinstance(xsc, str)
+        ):
             all_scales.append(jnp.broadcast_to(xsc, (tng.dim_x,)))
         elif isinstance(xsc, dict) or (
             isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
         ):
             all_scales.append(tng.pack_params(xsc))
+        elif isinstance(xsc, str) and xsc == "ess":
+            scl = tng._get_ess_scale(ess_alpha, ess_type, ess_min_value)
+            all_scales.append(tng.pack_params(scl))
         else:
             raise TypeError(
-                f"all x_scales should be either array or dict, got {type(xsc)}"
+                f"all x_scales should be either 'ess', array, or dict, got {type(xsc)}"
             )
-    return np.concatenate(all_scales)
+    return jnp.concatenate(all_scales)
 
 
 def _print_output(things, things0, objective, constraints, result):
@@ -740,72 +740,6 @@ def _get_default_tols(
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
 
     return stoptol
-
-
-##TODO: Add Diagnostics for x_scale to track what modes are being scaled
-def _create_exponential_spectral_scale(
-    eq, alpha=1.2, scale_type="Linf", min_value=1e-7
-):
-    """Create x_scale using exponential spectral scaling.
-
-    Parameters
-    ----------
-    eq : Equilibrium or FourierRZToroidalSurface
-        Equilibrium or Surface object to create scaling for
-    alpha : float, optional
-        Decay rate of the scaling. Default is 1.2
-    scale_type : str, optional
-        Type of scaling to use. Options are:
-        - 'L1': Diamond pattern using |m| + |n|
-        - 'L2': Circular pattern using sqrt(m² + n²)
-        - 'Linf': Square pattern using max(|m|,|n|)
-        Default is 'Linf'
-    min_value : float, optional
-        Minimum allowed scale value. Default is 1e-7
-
-    Returns
-    -------
-    ndarray
-        Array of scale values for each parameter
-    """
-    from desc.equilibrium import Equilibrium
-    from desc.geometry import FourierRZToroidalSurface
-
-    # Initialize x_scale array
-    x_scale = np.ones(eq.dim_x)
-
-    # Get R and Z modes (m,n pairs)
-    if isinstance(eq, Equilibrium):
-        R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
-        Z_modes = np.abs(eq.surface.Z_basis.modes[:, 1:])
-        R_param = "Rb_lmn"
-        Z_param = "Zb_lmn"
-    elif isinstance(eq, FourierRZToroidalSurface):
-        R_modes = np.abs(eq.R_basis.modes[:, 1:])
-        Z_modes = np.abs(eq.Z_basis.modes[:, 1:])
-        R_param = "R_lmn"
-        Z_param = "Z_lmn"
-    else:
-        raise TypeError(f"Unsupported type: {type(eq)}")
-
-    # Calculate mode scales based on scale_type
-    def get_mode_scales(modes):
-        if scale_type == "L1":
-            mode_level = np.sum(modes, axis=1)  # |m| + |n|
-        elif scale_type == "L2":
-            mode_level = np.sqrt(np.sum(modes**2, axis=1))  # sqrt(m² + n²)
-        elif scale_type == "Linf":
-            mode_level = np.max(modes, axis=1)  # max(|m|,|n|)
-        return np.maximum(np.exp(-alpha * mode_level) / np.exp(-alpha), min_value)
-
-    R_scales = get_mode_scales(R_modes)
-    Z_scales = get_mode_scales(Z_modes)
-
-    # Apply scaling to R and Z coefficients
-    x_scale[eq.x_idx[R_param]] = R_scales
-    x_scale[eq.x_idx[Z_param]] = Z_scales
-
-    return x_scale
 
 
 optimizers = {}

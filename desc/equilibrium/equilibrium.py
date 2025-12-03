@@ -47,6 +47,7 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    get_ess_scale,
     only1,
     setdefault,
     warnif,
@@ -2255,13 +2256,13 @@ class Equilibrium(IOAble, Optimizable):
             this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
             which are passed through ``options``. ``ess_alpha`` is the decay rate of
             the scaling, and ``ess_type`` is the type of scaling, which can be
-            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
-            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            ``1``, ``2``, or ``np.inf``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type=np.inf'`` (scaling
+            type, can be ``1``, ``2``, or ``np.inf``), and ``ess_min_value=1e-7``
             (minimum allowed scale value). If an array, should be the same size as
             sum(thing.dim_x for thing in things). If a list, the list should
             have 1 element for each thing, and each element should either be ``'ess'``
-            to use expoential spectral scaling for that thing, or a dict with the same
+            to use exponential spectral scaling for that thing, or a dict with the same
             keys and dimensions as thing.params_dict to specify scales manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
@@ -2373,13 +2374,13 @@ class Equilibrium(IOAble, Optimizable):
             this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
             which are passed through ``options``. ``ess_alpha`` is the decay rate of
             the scaling, and ``ess_type`` is the type of scaling, which can be
-            ``'L1'``, ``'L2'``, or ``'Linf'``. If not provided in ``options``, the
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type='Linf'`` (scaling
-            type, can be ``'L1'``, ``'L2'``, or ``'Linf'``), and ``ess_min_value=1e-7``
+            ``1``, ``2``, or ``np.inf``. If not provided in ``options``, the
+            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type=np.inf'`` (scaling
+            type, can be ``1``, ``2``, or ``np.inf``), and ``ess_min_value=1e-7``
             (minimum allowed scale value). If an array, should be the same size as
             sum(thing.dim_x for thing in things). If a list, the list should
             have 1 element for each thing, and each element should either be ``'ess'``
-            to use expoential spectral scaling for that thing, or a dict with the same
+            to use exponential spectral scaling for that thing, or a dict with the same
             keys and dimensions as thing.params_dict to specify scales manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
@@ -2513,6 +2514,46 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return eq
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        scale_type : str, optional
+            Type of scaling to use. Options are:
+            - 1: Diamond pattern using |m| + |n|
+            - 2: Circular pattern using sqrt(m² + n²)
+            - np.inf : Square pattern using max(|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the all ones scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {
+            "R_lmn": self.R_basis.modes,
+            "Z_lmn": self.Z_basis.modes,
+            "L_lmn": self.L_basis.modes,
+            "Rb_lmn": self.surface.R_basis.modes,
+            "Zb_lmn": self.surface.Z_basis.modes,
+        }
+        if hasattr(self.surface, "Phi_mn"):
+            modes["Phi_mn"] = self.surface.Phi_basis.modes
+        # note there is no ESS for profiles, since they may not be polynomials, and
+        # even if they are, they're usually low order and not in an orthogonal basis
+        # so its not clear if ESS is appropriate.
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

@@ -14,6 +14,7 @@ from desc.utils import (
     Timer,
     broadcast_tree,
     copy_rpz_periods,
+    dot,
     errorif,
     rpz2xyz,
     safenorm,
@@ -2688,3 +2689,222 @@ class SurfaceCurrentRegularization(_Objective):
         elif self._regularization == "sqrt(Phi)":
             K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
         return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+
+class BoozerLS(_Objective):
+    """Target B*n = 0 on a surface.
+
+    Used to find a quadratic-flux-minimizing (QFM) surface, so a
+    `FourierRZToroidalSurface` should be passed to the objective.
+    Should always be used along with a ``ToroidalFlux`` or ``Volume`` objective to
+    ensure that the resulting QFM surface has the desired amount of
+    flux enclosed and avoid trivial solutions.
+
+    Note: This objective can be used with ``field_fixed=True`` to find the QFM surface
+    by fixing the coils, however the surface is always free to change. For coil
+    optimization, use the ``QuadraticFlux`` objective.
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalSurface
+        QFM surface upon which the normal field error will be minimized.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided QFM surface. May be fixed
+        by passing in ``field_fixed=True``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=surface.M_grid,``
+        ``N=surface.N_grid, NFP=surface.NFP, sym=False)``
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    field_fixed : bool
+        Whether or not to fix the magnetic field's DOFs during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _static_attrs = _Objective._static_attrs + ["_bs_chunk_size", "_field_fixed"]
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "QFM surface normal field error: "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        surface,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        eval_grid=None,
+        field_grid=None,
+        name="QFM Boozer surface",
+        field_fixed=False,
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._eval_grid = eval_grid
+        self._surface = surface
+        self._field = field
+        self._field_grid = field_grid
+        self._field_fixed = field_fixed
+        self._bs_chunk_size = bs_chunk_size
+
+        things = [surface]
+        if not field_fixed:
+            things += [field]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface = self._surface
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=2 * surface.M,
+                N=2 * surface.N,
+                NFP=surface.NFP,
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = ["X", "Y", "Z", "X_t", "Y_t", "Z_t", "X_z", "Y_z", "Z_z"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=surface, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=surface, grid=eval_grid)
+        eval_data = compute_fun(
+            surface,
+            self._data_keys,
+            params=surface.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        one_pt_grid = LinearGrid(theta=0, zeta=0, NFP=surface.NFP)
+        self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "one_pt_grid": one_pt_grid,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(surface)
+            Bscale = 1.0  # surface has no inherent B scale
+            self._normalization = Bscale * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute normal field on surface.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of the surface's degrees of freedom.
+        params_2 : dict
+            Dictionary of the external field's degrees of freedom, only provided if
+            if field_fixed=False.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm on the QFM surface from the external field
+
+        """
+        if constants is None:
+            constants = self.constants
+        field_params = params_2 if not self._field_fixed else None
+        surf_params = params_1
+
+        eval_data = compute_fun(
+            self._surface,
+            self._data_keys,
+            surf_params,
+            constants["eval_transforms"],
+            constants["eval_profiles"],
+        )
+        x = jnp.array([eval_data["X"], eval_data["Y"], eval_data["Z"]]).T
+        if field_params is None:
+            field_params = constants["field"].params_dict
+
+        B_ext = constants["field"].compute_magnetic_field(
+            x,
+            source_grid=constants["field_grid"],
+            basis="xyz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
+        )
+
+        Xt = jnp.stack([eval_data["X_t"], eval_data["Y_t"], eval_data["Z_t"]], axis=-1)
+        Xz = jnp.stack([eval_data["X_z"], eval_data["Y_z"], eval_data["Z_z"]], axis=-1)
+
+        B2 = jnp.reshape(dot(B_ext, B_ext), (-1, 1))
+
+        # Check if G and iota can be accessed from params?
+        G = params_1["G"][0]
+        iota = params_1["iota"][0]
+        res = G * B_ext * mu_0 / (2 * jnp.pi) - B2 * (Xz + iota * Xt)
+
+        return dot(res, res, axis=-1)

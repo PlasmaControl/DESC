@@ -6,6 +6,13 @@ New Features
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
 - The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
+alternative to fourier continuation methods.
+- Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+
+Bug Fixes
+
+- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)
 
 
 v0.16.0

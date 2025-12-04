@@ -5,6 +5,10 @@ New Features
 
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
 
+Performance Improvements
+
+- `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+
 v0.16.0
 -------
 

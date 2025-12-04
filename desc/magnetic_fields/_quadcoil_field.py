@@ -248,7 +248,7 @@ class QuadcoilField(FourierCurrentPotentialField):
         # handle the winding surface first.
         self._plasma_coil_distance = plasma_coil_distance
         if winding_quadpoints_phi is None:
-            winding_quadpoints_phi = jnp.linspace(0, 1, 32*NFP, endpoint=False)
+            winding_quadpoints_phi = jnp.linspace(0, 1, 32*eq.NFP, endpoint=False)
         if winding_quadpoints_theta is None:
             winding_quadpoints_theta = jnp.linspace(0, 1, 34, endpoint=False)
         self._winding_quadpoints_phi = winding_quadpoints_phi

@@ -461,7 +461,7 @@ class Surface(IOAble, Optimizable, ABC):
         # Zcos = Zcos if Zcos.size > 0 else 0
         # out = np.sign((R0 + Rcos) * (Rsin * Zcos - Rcos * Zsin))
         # assert (out == -1) or (out == 0) or (out == 1)
-        out = -1
+        out = 1
         return out
 
     def _flip_orientation(self):

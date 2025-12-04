@@ -947,9 +947,9 @@ class FourierXYZToroidalSurface(Surface):
 
         if sym == "auto":
             if (
-                np.all(X_lmn[np.where(sign(modes_X[:, 0]) != sign(modes_X[:, 1]))] == 0)
+                np.all(X_lmn[np.where(sign(modes_X[:, 0]) == sign(modes_X[:, 1]))] == 0)
                 and np.all(
-                    Y_lmn[np.where(sign(modes_Y[:, 0]) == sign(modes_Y[:, 1]))] == 0
+                    Y_lmn[np.where(sign(modes_Y[:, 0]) != sign(modes_Y[:, 1]))] == 0
                 )
                 and np.all(
                     Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
@@ -975,15 +975,27 @@ class FourierXYZToroidalSurface(Surface):
         self._sym = bool(sym)
         self._rho = rho
 
-        if check_orientation and self._compute_orientation() == -1:
-            warnings.warn(
-                "Left handed coordinates detected, switching sign of theta."
-                + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0. You may also need to switch the sign of iota or"
-                + " current profiles."
-            )
-            self._flip_orientation()
-            assert self._compute_orientation() == 1
+        # one = np.ones_like(self._X_lmn)
+        # one[self._X_basis.modes[:, 1] < 0] *= -1
+        # self._X_lmn *= one
+
+        # one = np.ones_like(self._Y_lmn)
+        # one[self._Y_basis.modes[:, 1] < 0] *= -1
+        # self._Y_lmn *= one
+
+        # one = np.ones_like(self._Z_lmn)
+        # one[self._Z_basis.modes[:, 1] < 0] *= -1
+        # self._Z_lmn *= one
+
+        # if check_orientation and self._compute_orientation() == -1:
+        #    warnings.warn(
+        #        "Left handed coordinates detected, switching sign of theta."
+        #        + " To avoid this warning in the future, switch the sign of all"
+        #        + " modes with m<0. You may also need to switch the sign of iota or"
+        #        + " current profiles."
+        #    )
+        #    self._flip_orientation()
+        #    assert self._compute_orientation() == 1
 
         self.name = name
 
@@ -1293,8 +1305,8 @@ class FourierXYZToroidalSurface(Surface):
             x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
 
             Xb_lmn = x_lmn[0 : X_basis.num_modes]
-            Yb_lmn = x_lmn[0 : X_basis.num_modes]
-            Zb_lmn = x_lmn[X_basis.num_modes :]
+            Yb_lmn = x_lmn[X_basis.num_modes : X_basis.num_modes + Y_basis.num_modes]
+            Zb_lmn = x_lmn[X_basis.num_modes + Y_basis.num_modes :]
 
         surf = cls(
             Xb_lmn,

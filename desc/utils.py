@@ -626,14 +626,19 @@ def unique_list(thelist):
     inds : list of int
         Indices of unique elements in original list, such that
         unique[inds[i]] == thelist[i]
+    unique_inds : list of int
+        Indices of the original list containing unique elements such that
+        thelist[unique_inds[i]] == unique[i]
     """
     inds = []
     unique = []
+    unique_inds = []
     for i, x in enumerate(thelist):
         if x not in unique:
             unique.append(x)
+            unique_inds.append(i)
         inds.append(unique.index(x))
-    return unique, inds
+    return unique, inds, unique_inds
 
 
 def is_any_instance(things, cls):

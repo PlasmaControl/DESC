@@ -175,6 +175,7 @@ class Optimizer(IOAble):
             and constraints in the ``Objective values`` key.
 
         """
+        options = {} if options is None else options
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
         if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)
@@ -187,7 +188,17 @@ class Optimizer(IOAble):
         )
 
         # get unique things
-        things, indices = unique_list(flatten_list(things, flatten_tuple=True))
+        things, indices, unique_indices = unique_list(
+            flatten_list(things, flatten_tuple=True)
+        )
+        if isinstance(x_scale, (list, tuple)):
+            # make sure it stays in sync with things
+            x_scale = flatten_list(x_scale, flatten_tuple=True)
+            assert len(x_scale) == len(
+                indices
+            ), f"expected {len(indices)} x_scales for {len(indices)} things but "
+            f"only got {len(x_scale)}"
+            x_scale = [x_scale[i] for i in unique_indices]
         counts = np.unique(indices, return_counts=True)[1]
         duplicate_idx = np.where(counts > 1)[0]
         warnif(
@@ -196,6 +207,8 @@ class Optimizer(IOAble):
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
         x_scale = _parse_x_scale(x_scale, things, options)
+        # at this point x_scale is either "auto", an array matching with objective.x,
+        # or a list of scales in sync with things
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
@@ -217,25 +230,20 @@ class Optimizer(IOAble):
             # save these for later
             eq_params_init = eq.params_dict.copy()
 
-        options = {} if options is None else options
         timer = Timer()
-        options = {} if options is None else options
         _, method = _parse_method(self.method)
 
         timer.start("Initializing the optimization")
         if not is_linear_proj:
-            objective, nonlinear_constraint, x_scale = (
-                get_combined_constraint_objectives(
-                    eq,
-                    constraints,
-                    objective,
-                    things,
-                    x_scale,
-                    self.method,
-                    method,
-                    verbose,
-                    options,
-                )
+            objective, nonlinear_constraint = get_combined_constraint_objectives(
+                eq,
+                constraints,
+                objective,
+                things,
+                self.method,
+                method,
+                verbose,
+                options,
             )
         else:
             nonlinear_constraint = None
@@ -246,6 +254,14 @@ class Optimizer(IOAble):
         # different from objective.things, to ensure the correct order is passed
         # to the objective
         x0 = objective.x(*[things[things.index(t)] for t in objective.things])
+        if isinstance(x_scale, (list, tuple)):
+            # sort by things to make x_scale match with objective.x
+            x_scale = [x_scale[things.index(t)] for t in objective.things]
+            x_scale = jnp.concatenate(x_scale)
+        # at this point x_scale is either "auto" or an array matching with objective.x
+        # but we may need to project it down if objective got wrapped by
+        # eg LinearConstraintProjection
+        x_scale = _project_x_scale(x_scale, objective)
 
         stoptol = _get_default_tols(
             method,
@@ -348,7 +364,13 @@ class Optimizer(IOAble):
 
 
 def _parse_x_scale(x_scale, things, options):
-    """Convert lists/dicts of scales into single array for all dofs."""
+    """Convert lists/dicts of scales into arrays for all dofs.
+
+    If x_scale is "auto" we just return it since that's passed directly to optimizer
+    If its an array, we assume its already sorted to match objective.x and return it
+    Otherwise, we return a list of x_scale for each thing, which may get re-ordered
+    later before its concatenated.
+    """
     if isinstance(x_scale, str) and x_scale == "auto":
         return x_scale
     if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or np.isscalar(x_scale):
@@ -372,7 +394,20 @@ def _parse_x_scale(x_scale, things, options):
             raise TypeError(
                 f"all x_scales should be either array or dict, got {type(xsc)}"
             )
-    return np.concatenate(all_scales)
+    return all_scales
+
+
+def _project_x_scale(x_scale, objective):
+    """Project x_scale vector to remove fixed DoFs etc."""
+    if isinstance(objective, LinearConstraintProjection) and not isinstance(
+        x_scale, str
+    ):
+        # need to project x_scale down to correct size
+        Z = objective._Z
+        x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
+        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
+        x_scale = jnp.where(x_scale < jnp.finfo(x_scale.dtype).eps, 1, x_scale)
+    return x_scale
 
 
 def _print_output(things, things0, objective, constraints, result):
@@ -517,7 +552,6 @@ def get_combined_constraint_objectives(
     constraints,
     objective,
     things,
-    x_scale,
     opt_method,
     method,
     verbose,
@@ -623,13 +657,6 @@ def get_combined_constraint_objectives(
             )
             nonlinear_constraint.build(verbose=verbose)
 
-    if linear_constraint is not None and not isinstance(x_scale, str):
-        # need to project x_scale down to correct size
-        Z = objective._Z
-        x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = np.abs(np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z))
-        x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
-
     if objective.scalar and (not optimizers[method]["scalar"]):
         warnings.warn(
             colored(
@@ -640,7 +667,7 @@ def get_combined_constraint_objectives(
             )
         )
 
-    return objective, nonlinear_constraint, x_scale
+    return objective, nonlinear_constraint
 
 
 def _get_default_tols(

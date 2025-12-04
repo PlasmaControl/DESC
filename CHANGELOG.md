@@ -4,6 +4,7 @@ Changelog
 New Features
 
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
 
 v0.16.0
 -------

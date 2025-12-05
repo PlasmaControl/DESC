@@ -537,7 +537,6 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
                 num_well=10 * num_transit,
                 num_quad=16,
                 use_bounce1d=use_bounce1d,
-                jac_chunk_size=1,
             )
         ]
     )

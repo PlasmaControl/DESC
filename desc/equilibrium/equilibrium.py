@@ -54,7 +54,7 @@ from desc.utils import (
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import (
-    _map_clebsch_coordinates,
+    _map_poloidal_coordinates,
     get_rtz_grid,
     is_nested,
     map_coordinates,
@@ -1134,7 +1134,13 @@ class Equilibrium(IOAble, Optimizable):
                 ),
             )
             data1dr_seed = {
-                key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
+                key: (
+                    data[key]
+                    if (key == "V_r/psi_r")
+                    else grid1dr.copy_data_from_other(
+                        data[key], grid, surface_label="rho"
+                    )
+                )
                 for key in data
                 if is_1dr_rad_grid(key)
             }
@@ -1159,8 +1165,12 @@ class Equilibrium(IOAble, Optimizable):
             )
             # Need to make this data broadcast with the data on the original grid.
             data1dr = {
-                key: grid.copy_data_from_other(
-                    data1dr[key], grid1dr, surface_label="rho"
+                key: (
+                    data1dr[key]
+                    if (key == "V_r/psi_r")
+                    else grid.copy_data_from_other(
+                        data1dr[key], grid1dr, surface_label="rho"
+                    )
                 )
                 for key in data1dr
                 if key in dep1dr and key not in data
@@ -1352,23 +1362,30 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     @staticmethod
-    def _map_clebsch_coordinates(
+    def _map_poloidal_coordinates(
         iota,
-        alpha,
+        poloidal,
         zeta,
         L_lmn,
         lmbda,
+        varepsilon=None,
+        inbasis=("rho", "alpha", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
         guess=None,
+        *,
         tol=1e-6,
         maxiter=30,
         **kwargs,
     ):
-        return _map_clebsch_coordinates(
+        return _map_poloidal_coordinates(
             iota,
-            alpha,
+            poloidal,
             zeta,
             L_lmn,
             lmbda,
+            varepsilon,
+            inbasis,
+            outbasis,
             guess,
             tol=tol,
             maxiter=maxiter,
@@ -1448,6 +1465,7 @@ class Equilibrium(IOAble, Optimizable):
         rcond=None,
         copy=False,
         tol=1e-9,
+        maxiter=30,
     ):
         """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -1485,6 +1503,8 @@ class Equilibrium(IOAble, Optimizable):
         tol : float
             Tolerance for coordinate mapping.
             Default is ``1e-9``.
+        maxiter : int
+            Maximum number of Newton iterations.
 
         Returns
         -------
@@ -1492,7 +1512,9 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
+        return to_sfl(
+            self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol, maxiter=maxiter
+        )
 
     @property
     def surface(self):

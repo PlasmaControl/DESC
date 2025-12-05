@@ -1235,7 +1235,6 @@ def test_proximal_jacobian():
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
     sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
     Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
     jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
@@ -1248,7 +1247,6 @@ def test_proximal_jacobian():
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
     sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
     Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
     jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc

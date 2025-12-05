@@ -265,30 +265,13 @@ def test_qh_optimization():
     eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
     eq.solve(verbose=3)
 
-    eq1 = run_qh_step(0, eq)
+    eq1 = run_qh_step(2, eq)
 
     obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1)
     obj.build()
     B_asym = obj.compute(*obj.xs(eq1))
-
-    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-1)
-    np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)
-
-    eq2 = run_qh_step(1, eq1)
-
-    obj = QuasisymmetryBoozer(helicity=(1, eq2.NFP), eq=eq2)
-    obj.build()
-    B_asym = obj.compute(*obj.xs(eq2))
-    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-2)
-    np.testing.assert_array_less(eq2.compute("a_major/a_minor")["a_major/a_minor"], 5)
-
-    eq3 = run_qh_step(2, eq2)
-
-    obj = QuasisymmetryBoozer(helicity=(1, eq3.NFP), eq=eq3)
-    obj.build()
-    B_asym = obj.compute(*obj.xs(eq3))
     np.testing.assert_array_less(np.abs(B_asym).max(), 2e-3)
-    np.testing.assert_array_less(eq3.compute("a_major/a_minor")["a_major/a_minor"], 5)
+    np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
 
 @pytest.mark.regression

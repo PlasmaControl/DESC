@@ -1136,7 +1136,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: (
                     data[key]
-                    if (key == "field line weight")
+                    if (key == "V_r/psi_r")
                     else grid1dr.copy_data_from_other(
                         data[key], grid, surface_label="rho"
                     )
@@ -1167,7 +1167,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dr = {
                 key: (
                     data1dr[key]
-                    if (key == "field line weight")
+                    if (key == "V_r/psi_r")
                     else grid.copy_data_from_other(
                         data1dr[key], grid1dr, surface_label="rho"
                     )

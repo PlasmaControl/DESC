@@ -4,6 +4,8 @@ Changelog
 New Features
 
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 
 Bug Fixes

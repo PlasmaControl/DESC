@@ -373,7 +373,9 @@ def _parse_x_scale(x_scale, things, options):
     """
     if isinstance(x_scale, str) and x_scale == "auto":
         return x_scale
-    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or np.isscalar(x_scale):
+    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or (
+        np.isscalar(x_scale) and not isinstance(x_scale, str)
+    ):
         dimx_all = sum([t.dim_x for t in things])
         return jnp.broadcast_to(x_scale, (dimx_all,))
     elif len(things) == 1 and not isinstance(x_scale, (list, tuple)):

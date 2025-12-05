@@ -1073,7 +1073,7 @@ class ProximalProjection(ObjectiveFunction):
             signature="(n)->(k)",
             chunk_size=self._constraint._jac_chunk_size,
         )(v)
-        g = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+        g = self._objective.compute_scaled_error(xg, constants[0])
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
         return tangents @ g_vjp
 

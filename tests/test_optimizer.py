@@ -1672,15 +1672,19 @@ def test_parse_x_scale(DummyCoilSet):
     assert (xsc == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
 
-    xsc = _parse_x_scale([1, 1], [eq, coils], {})
-    assert (xsc == 1).all()
-    assert xsc.shape == (dim_eq + dim_coil,)
+    xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 2).all()
 
     xsc = _parse_x_scale(eq.params_dict, [eq], {})
+    xsc = np.concatenate(xsc)
     assert (xsc == eq.pack_params(eq.params_dict)).all()
     assert xsc.shape == (dim_eq,)
 
     xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
+    xsc = np.concatenate(xsc)
     assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)

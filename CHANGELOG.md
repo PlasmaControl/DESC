@@ -14,6 +14,12 @@ New Features
 - The resolution parameter for the field line quadrature now corresponds to the resolution for integration over a single field period.
 - Default quadrature over pitch angles in ``Gamma_c`` switched from second to third order method.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+
+Bug Fixes
+
+- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)
+
 
 v0.16.0
 -------

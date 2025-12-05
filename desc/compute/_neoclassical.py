@@ -85,7 +85,7 @@ _bounce_doc = {
 
 
 @register_compute_fun(
-    name="field line weight",
+    name="V_r/psi_r",
     label="\\int \\vert B^{\\zeta} \\vert^{-1} \\mathrm{d}\\alpha \\mathrm{d}\\zeta",
     units="m^{3} / Wb",
     units_long="cubic meters per Weber",
@@ -98,16 +98,16 @@ _bounce_doc = {
     profiles=[],
     coordinates="r",
     resolution_requirement="tz",
-    data=["psi_r/sqrt(g)", "alpha_t"],
+    data=["psi_r/sqrt(g)"],
 )
 def _field_line_weight(params, transforms, profiles, data, **kwargs):
     """∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
 
     The returned quantity has shape (num rho, ).
     """
-    data["field line weight"] = surface_integrals(
+    data["V_r/psi_r"] = surface_integrals(
         transforms["grid"],
-        jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"] * data["alpha_t"])),
+        jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"])),
         expand_out=False,
     )
     return data
@@ -152,7 +152,7 @@ def _dI_ripple(data, B, pitch):
         "R0",
         "|grad(rho)|",
         "<|grad(rho)|>",
-        "field line weight",
+        "V_r/psi_r",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -256,7 +256,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             num_pitch,
             surf_batch_size,
         )
-        / data["field line weight"]
+        / data["V_r/psi_r"]
     )
     return data
 

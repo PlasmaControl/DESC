@@ -586,7 +586,7 @@ class ProximalProjection(ObjectiveFunction):
         eq,
         perturb_options=None,
         solve_options=None,
-        inv_method="svd",
+        inv_method="qr",
         name="ProximalProjection",
     ):
         assert isinstance(

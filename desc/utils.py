@@ -626,14 +626,19 @@ def unique_list(thelist):
     inds : list of int
         Indices of unique elements in original list, such that
         unique[inds[i]] == thelist[i]
+    unique_inds : list of int
+        Indices of the original list containing unique elements such that
+        thelist[unique_inds[i]] == unique[i]
     """
     inds = []
     unique = []
+    unique_inds = []
     for i, x in enumerate(thelist):
         if x not in unique:
             unique.append(x)
+            unique_inds.append(i)
         inds.append(unique.index(x))
-    return unique, inds
+    return unique, inds, unique_inds
 
 
 def is_any_instance(things, cls):
@@ -1215,3 +1220,37 @@ def apply(d, fun=identity, subset=None, exclude=None):
         subset = d.keys()
     exclude = () if (exclude is None) else exclude
     return {k: fun(d[k]) for k in subset if k not in exclude}
+
+
+def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
+    """Create x_scale using exponential spectral scaling.
+
+    Parameters
+    ----------
+    modes : dict of ndarray
+        Dictionary mapping parameter names to mode number arrays, each mode number array
+        should be (N,k) where N is the dimension of the given variable and the 2nd axis
+        is the number of indices (usually 3)
+    alpha : float, optional
+        Decay rate of the scaling. Default is 1.2
+    scale_type : str, optional
+        Type of scaling to use. Options are:
+        - 1: Diamond pattern using |m| + |n|
+        - 2: Circular pattern using sqrt(m² + n²)
+        - np.inf : Square pattern using max(|m|,|n|)
+        Default is 'np.inf'
+    min_value : float, optional
+        Minimum allowed scale value. Default is 1e-7
+
+    Returns
+    -------
+    dict of ndarray
+        Array of scale values for each parameter
+    """
+    scales = {}
+    for name, md in modes.items():
+        mode_level = jnp.linalg.norm(md, axis=1, ord=order)
+        scales[name] = jnp.maximum(
+            jnp.exp(-alpha * mode_level) / jnp.exp(-alpha), min_value
+        )
+    return scales

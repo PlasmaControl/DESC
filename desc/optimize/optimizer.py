@@ -452,22 +452,22 @@ def _project_x_scale(x_scale, objective):
             else objective._objective
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
-        x_scale = np.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
+        x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
         # Project equilibrium part: remove excluded parameters
         excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
         included_idx = []
         for arg in prox_obj._eq.optimizable_params:
             if arg not in excluded_params:
                 included_idx.extend(prox_obj._eq.x_idx[arg])
-        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][included_idx]
-        x_scale = np.concatenate(x_scale)
+        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
+        x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
         # need to project x_scale down to correct size
         Z = objective._Z
-        x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = np.abs(np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z))
-        x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+        x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
+        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
+        x_scale = jnp.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
     return x_scale
 
 

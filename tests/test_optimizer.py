@@ -1659,7 +1659,7 @@ def test_parse_x_scale(DummyCoilSet):
         _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
     with pytest.raises(ValueError):
         _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         _parse_x_scale("foo", [eq], {})
     with pytest.raises(TypeError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})

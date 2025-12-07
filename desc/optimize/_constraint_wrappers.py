@@ -599,7 +599,7 @@ class ProximalProjection(ObjectiveFunction):
             "svd",
             "qr",
             "svd-reg",
-        ], f"inv_method should be either 'svd' or 'qr', got {inv_method}."
+        ], f"inv_method should be either 'svd', 'svd-reg' or 'qr', got {inv_method}."
         for con in constraint.objectives:
             errorif(
                 not con._equilibrium,

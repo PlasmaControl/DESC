@@ -1285,6 +1285,27 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
 
+    # Test different inversion methods give same result.
+    # Note: svd-reg is expected to be different due to regularization
+    # Above jac1 is obtained with default 'qr' method, we only need to test 'svd' here.
+    eq_svd = eq.copy()
+    con_svd = ObjectiveFunction(ForceBalance(eq_svd), use_jit=False)
+    obj_svd = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq_svd, deriv_mode="fwd"),
+            AspectRatio(eq_svd, deriv_mode="fwd"),
+            Volume(eq_svd, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+        use_jit=True,
+    )
+    prox_svd = ProximalProjection(
+        obj_svd, con_svd, eq_svd, perturb_options, solve_options, inv_method="svd"
+    )
+    prox_svd.build()
+    jac_svd = prox_svd.jac_unscaled(x)
+    np.testing.assert_allclose(jac1, jac_svd, rtol=1e-12, atol=1e-12)
+
 
 @pytest.mark.slow
 @pytest.mark.regression

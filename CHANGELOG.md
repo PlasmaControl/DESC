@@ -5,6 +5,7 @@ New Features
 
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- Adds ``prox_inv_method`` option to be used in equilibrium constrained optimization problems. ``prox_inv_method`` can be ``qr``, ``svd`` or ``svd-reg``. ``svd-reg`` is the legacy behaviour which had an unnecessary regularization term. The new default is ``qr`` which is faster than ``svd`` without loss of significant accuracy. Note that this may change the results of the optimization scripts. For number of example cases, it is been seen that the new default facilitates the optimization without continuation.
 
 Bug Fixes
 

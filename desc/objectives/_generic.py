@@ -813,7 +813,7 @@ class DeflationOperator(_Objective):
         Returns
         -------
         f : scalar
-            deflation error.
+            Deflation error.
 
         """
         this_thing_params = jnp.concatenate(

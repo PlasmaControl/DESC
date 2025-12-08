@@ -231,7 +231,7 @@ class ForceBalanceDeflated(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="force",
+        name="force-deflated",
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:

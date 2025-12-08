@@ -1058,7 +1058,7 @@ def trace_particles(
     max_steps : int
         Maximum number of steps for whole integration. This will be passed
         to the diffrax.diffeqsolve function. Defaults to
-        (ts[-1] - ts[0]) * 10 / min_step_size
+        (ts[-1] - ts[0]) / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     bounds : array of shape(3, 2), optional
@@ -1129,7 +1129,7 @@ def trace_particles(
     stepsize_controller = PIDController(
         rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
     )
-    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size * 10))
+    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(
@@ -1205,6 +1205,8 @@ def _trace_particles(
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
 
+    # suppress warnings till its fixed upstream:
+    # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments

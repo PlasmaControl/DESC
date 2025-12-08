@@ -17,6 +17,7 @@ from pylatexenc.latex2text import LatexNodes2Text
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
+from desc.batching import vmap_chunked
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
@@ -24,6 +25,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
+from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
     errorif,
@@ -47,13 +49,14 @@ __all__ = [
     "plot_coefficients",
     "plot_coils",
     "plot_comparison",
+    "plot_field_lines",
     "plot_fsa",
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_particle_trajectories",
     "plot_section",
     "plot_surfaces",
-    "plot_field_lines",
     "poincare_plot",
     "plot_gammac",
 ]
@@ -206,6 +209,68 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
             "ax argument must be None or an axis instance or array of axes",
         )
         return plt.gcf(), ax
+
+
+def _update_3d_layout(
+    fig,
+    showaxislabels,
+    showgrid,
+    zeroline,
+    showticklabels,
+    figsize,
+    dpi,
+    title,
+):
+    """Apply common layout operations for 3D plots using plotly."""
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    return fig
 
 
 def _get_grid(**kwargs):
@@ -1201,54 +1266,15 @@ def plot_3d(  # noqa : C901
     if fig is None:
         fig = go.Figure()
     fig.add_trace(meshdata)
-    xaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
-    )
-    yaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
-    )
-    zaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
-    )
-
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=xaxis_title,
-            yaxis_title=yaxis_title,
-            zaxis_title=zaxis_title,
-            aspectmode="data",
-            xaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            yaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            zaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-        ),
-        width=figsize[0] * dpi,
-        height=figsize[1] * dpi,
-        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
-        font=dict(family="Times"),
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
@@ -4063,16 +4089,15 @@ def plot_field_lines(
     if "throw" not in fli_kwargs["options"]:
         fli_kwargs["options"]["throw"] = False
 
-    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
     color = kwargs.pop("color", "black")
-    figsize = kwargs.pop("figsize", (10, 10))
     title = kwargs.pop("title", "")
+    figsize = kwargs.pop("figsize", (10, 10))
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
-    lw = kwargs.pop("lw", 5)
-    ls = kwargs.pop("ls", "solid")
 
     assert (
         len(kwargs) == 0
@@ -4131,6 +4156,7 @@ def plot_field_lines(
         x = rs[:, i] * np.cos(phis)
         y = rs[:, i] * np.sin(phis)
         z = zs[:, i]
+
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
@@ -4153,53 +4179,257 @@ def plot_field_lines(
                 showlegend=False,
             )
         )
-    xaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
-    yaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    if return_data:
+        return fig, plot_data
+    return fig
+
+
+def plot_particle_trajectories(  # noqa: C901
+    field,
+    model,
+    initializer,
+    ts,
+    end_position=True,
+    return_data=False,
+    fig=None,
+    **kwargs,
+):
+    """Plot particle trajectories in a magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField or Equilibrium
+        Magnetic field to trace the particle trajectories in. Given field, trajectory
+        model, and initializer must be compatible. Field can be a subclass of
+        MagneticField, such as Coilset, CurrentPotential, or it can be Equilibrium.
+    model : AbstractTrajectoryModel
+        Particle trajectory model to use for tracing the particle trajectories.
+    initializer : AbstractParticleInitializer
+        Particle initializer to use for initializing the particles.
+    ts : array-like
+        Time values to trace the particle trajectories for.
+    end_position : bool, optional
+        If True, the last point in the trajectory is shown with a marker.
+        Defaults to True.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on. Defaults to None, in which case a new figure is created.
+    return_data : bool, optional
+        If True, return the data plotted as well as fig, Defaults to False.
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``color``: color to use for particle trajectories, default is black.
+        * ``figsize``: tuple of length 2, the size of the figure in inches
+        * ``lw``: float, linewidth of plotted particle trajectories
+        * ``ls``: str, linestyle of plotted particle trajectories
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.particles.trace_particles``
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+        Contains keys ``["X","Y","Z","R","phi]``, each entry in the dict is a list
+        with length corresponding to the number of particles, and each
+        element of that list is an array of size `ts.size` corresponding to the
+        coordinate values along that particles trajectory.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import desc
+        from desc.plotting import plot_particle_trajectories
+        from desc.particles import (
+            ManualParticleInitializerFlux,
+            VacuumGuidingCenterTrajectory,
+        )
+
+        eq = desc.examples.get('precise_QA')
+        rhos = [0.7]
+
+        initializer = ManualParticleInitializerFlux(
+            rho0=rhos,
+            theta0=0,
+            zeta0=0,
+            xi0=0.7,
+            E = 1e-1,
+            m = 4.0,
+            q = 1.0,
+        )
+        model = VacuumGuidingCenterTrajectory(frame='flux')
+        ts=np.linspace(0, 1e-2, 1000)
+
+        # For visual purposes, we will plot the LCFS of the equilibrium
+        fig = plot_3d(eq, '|B|', alpha=0.5)
+        # Plot the particle trajectories
+        plot_particle_trajectories(
+            eq, model, initializer, ts=ts, fig=fig
+        )
+
+    """
+    from desc.equilibrium import Equilibrium
+
+    if "params" not in kwargs:
+        kwargs["params"] = field.params_dict
+    if "options" not in kwargs:
+        kwargs["options"] = {}
+    trace_kwargs = {}
+    for key in inspect.signature(trace_particles).parameters:
+        if key in kwargs:
+            trace_kwargs[key] = kwargs.pop(key)
+
+    if isinstance(field, Equilibrium):
+        if field.iota is None:
+            if "iota" not in trace_kwargs["options"]:
+                iota = field.get_profile("iota")
+                trace_kwargs["options"]["iota"] = iota
+                trace_kwargs["params"]["i_l"] = iota.params
+            else:
+                trace_kwargs["params"]["i_l"] = trace_kwargs["options"]["iota"].params
+
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+    color = kwargs.pop("color", "black")
+    title = kwargs.pop("title", "")
+    figsize = kwargs.pop("figsize", (10, 10))
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_particle_trajectories got unexpected keyword argument: {kwargs.keys()}"
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    rpz, _ = trace_particles(
+        field=field,
+        initializer=initializer,
+        model=model,
+        ts=ts,
+        **trace_kwargs,
     )
-    zaxis_title = (
-        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
-    )
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=xaxis_title,
-            yaxis_title=yaxis_title,
-            zaxis_title=zaxis_title,
-            aspectmode="data",
-            xaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            yaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-            zaxis=dict(
-                backgroundcolor="white",
-                gridcolor="darkgrey",
-                showbackground=False,
-                zerolinecolor="darkgrey",
-                showgrid=showgrid,
-                zeroline=zeroline,
-                showticklabels=showticklabels,
-            ),
-        ),
-        width=figsize[0] * dpi,
-        height=figsize[1] * dpi,
-        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
-        font=dict(family="Times"),
+
+    def to_lab(coords):
+        grid = Grid(coords, jitable=True)
+        return field.compute("x", grid=grid)["x"]
+
+    # tracing an equilibrium gives rpz in flux coordinates
+    if model.frame == "flux" and isinstance(field, Equilibrium):
+        rtz = rpz.copy()
+        rpz = vmap_chunked(to_lab, in_axes=(0,), chunk_size=500)(rpz)
+
+    rs = rpz[:, :, 0]
+    phis = rpz[:, :, 1]
+    zs = rpz[:, :, 2]
+
+    if fig is None:
+        fig = go.Figure()
+
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+    plot_data["R"] = []
+    plot_data["phi"] = []
+    if isinstance(field, Equilibrium):
+        plot_data["rho"] = []
+        plot_data["theta"] = []
+
+    end_points = []
+    end_point_colors = []
+    for i in range(rs.shape[0]):  # iterate over each particle
+        r = rs[i, :]
+        phi = phis[i, :]
+        z = zs[i, :]
+
+        x = r * np.cos(phi)
+        y = r * np.sin(phi)
+        z = z
+
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["R"].append(r)
+        plot_data["phi"].append(phi)
+        if isinstance(field, Equilibrium):
+            plot_data["rho"].append(rtz[i, :, 0])
+            plot_data["theta"].append(rtz[i, :, 1])
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+                line=dict(
+                    color=color[i % len(color)],
+                    width=lw[i % len(lw)],
+                    dash=ls[i % len(ls)],
+                ),
+                marker=dict(size=0),
+                name=f"Particle[{i}]",
+                hovertext=f"Particle[{i}]",
+                showlegend=False,
+            )
+        )
+        if end_position:
+            end_points.append([x[-1], y[-1], z[-1]])
+            end_point_colors.append(color[i % len(color)])
+
+    if end_position:
+        end_points = np.array(end_points)
+        fig.add_trace(
+            go.Scatter3d(
+                x=end_points[:, 0],
+                y=end_points[:, 1],
+                z=end_points[:, 2],
+                mode="markers",
+                marker=dict(size=5, color=end_point_colors),
+                showlegend=False,
+            )
+        )
+    fig = _update_3d_layout(
+        fig=fig,
+        showaxislabels=showaxislabels,
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+        figsize=figsize,
+        dpi=dpi,
+        title=title,
     )
     if return_data:
         return fig, plot_data

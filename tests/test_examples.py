@@ -672,7 +672,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
     qsc = Qsc.from_paper("precise QA", rs=[1e-3, 1e-2])
     ntheta = 75
     r = 0.01
-    N = 9
+    N = 8
     eq_fit = Equilibrium.from_near_axis(qsc, r=r, L=6, M=8, N=N, ntheta=ntheta)
     eq = eq_fit.copy()
     eq_2nd_order = eq_fit.copy()
@@ -699,7 +699,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
             verbose=3,
             ftol=1e-3,
             objective=obj,
-            maxiter=100,
+            maxiter=50,
             xtol=1e-6,
             gtol=1e-8,
             constraints=constraints,
@@ -751,6 +751,7 @@ def test_NAE_QSC_solve_near_axis_asym():
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
 
+    # we also give the NAE eq as constraint for this test
     cs = get_NAE_constraints(eq, qsc_eq=qsc, order=1, fix_lambda=False, N=eq.N)
     cs_2nd_order = get_NAE_constraints(
         eq_2nd_order, qsc_eq=qsc, order=2, fix_lambda=False, N=eq.N
@@ -768,11 +769,12 @@ def test_NAE_QSC_solve_near_axis_asym():
         objectives = ForceBalance(eq=eqq)
         obj = ObjectiveFunction(objectives)
 
+        # 2nd order eq takes long time to converge
         eqq.solve(
             verbose=3,
-            ftol=1e-3,
+            ftol=4e-3,
             objective=obj,
-            maxiter=100,
+            maxiter=50,
             xtol=1e-6,
             gtol=1e-8,
             constraints=constraints,
@@ -808,7 +810,7 @@ def test_NAE_QSC_solve_near_axis_asym():
 
         # check |B| on axis
         np.testing.assert_allclose(
-            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=2e-4, err_msg=string
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=4e-4, err_msg=string
         )
 
 

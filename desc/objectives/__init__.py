@@ -108,5 +108,6 @@ from .linear_objectives import (
     SectionLambdaSelfConsistency,
     SectionRSelfConsistency,
     SectionZSelfConsistency,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

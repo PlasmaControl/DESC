@@ -217,6 +217,36 @@ def test_perturb_axis():
 
 
 @pytest.mark.unit
+def test_perturb_to_lower_resolution_profile():
+    """Test that perturbing to a lower-resolution profile works correctly."""
+    from desc.perturbations import get_deltas
+
+    # related to gh issue #1974
+    eq = desc.equilibrium.Equilibrium(L=5, M=3)
+    eq.current = None
+    eq.iota = desc.profiles.PowerSeriesProfile(0.42)
+
+    p1 = desc.profiles.PowerSeriesProfile(np.array([1e4, 0, -1e4]), modes=[0, 1, 2])
+    p1.change_resolution(L=eq.L)
+    eq.pressure = p1
+    p2 = desc.profiles.PowerSeriesProfile(np.array([0.5e4, -0.5e4]), modes=[0, 2])
+
+    # p2 has lower resolution than eq.L which is not possible. If
+    # we wanted to assign it to eq.pressure, it would change automatically
+    with pytest.warns(UserWarning, match="has lower resolution"):
+        deltas = get_deltas({"pressure": eq.pressure}, {"pressure": p2})
+
+    with pytest.raises(TypeError):
+        _ = eq.perturb(deltas, order=0, copy=True)
+
+    eq2 = eq.copy()
+    # This assignment will fix the resolution issue
+    eq2.pressure = p2
+    deltas = get_deltas({"pressure": eq.pressure}, {"pressure": eq2.pressure})
+    _ = eq.perturb(deltas, order=0, copy=True)
+
+
+@pytest.mark.unit
 def test_perturb_poincare():
     """Test that perturbing the Poincare section."""
     eq = desc.examples.get("HELIOTRON")

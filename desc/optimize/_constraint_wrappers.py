@@ -1069,10 +1069,10 @@ class ProximalProjection(ObjectiveFunction):
         # Then, the gradient is ∇L = G.T @ J_of_G
         # where J_of_G is the Jacobian of G with respect to the optimization variables
         # We explained getting J_of_G in the _jvp method. It is basically,
-        # J_of_G = ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dx_tangents)]
+        # J_of_G = ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
         # where ∇G is the Jacobian of G with respect to full state vector
         # and ∇F is the Jacobian of F with respect to full state vector. Then,
-        # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dx_tangents)]
+        # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
         # We get the part in [] using the _get_tangent method.
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, self.constants)
@@ -1083,7 +1083,7 @@ class ProximalProjection(ObjectiveFunction):
             signature="(n)->(k)",
             chunk_size=self._constraint._jac_chunk_size,
         )(v)
-        g = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+        g = self._objective.compute_scaled_error(xg, constants[0])
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
         return tangents @ g_vjp
 

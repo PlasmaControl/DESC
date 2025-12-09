@@ -35,7 +35,7 @@ jobs:
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -110,7 +110,7 @@ jobs:
 
       - name: Checkout current master
         if: env.has_changes == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: master
           clean: false
@@ -173,7 +173,7 @@ jobs:
 
       - name: Upload benchmark data
         if: always() && env.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: benchmark_artifact_${{ matrix.group }}
           path: tests/benchmarks/.benchmarks

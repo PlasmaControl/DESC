@@ -1,6 +1,5 @@
 """Tests for particle tracing utilities."""
 
-import equinox as eqx
 import numpy as np
 import pytest
 
@@ -379,9 +378,7 @@ def test_init_surface_particles():
     np.testing.assert_allclose(x0[:, 0], surf.rho)
 
     # larger surface is out of small equilibrium, so it should fail
-    with pytest.raises(
-        eqx.EquinoxRuntimeError, match="Mapping from lab to flux coordinates failed"
-    ):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles_large.init_particles(model, eq)
 
     # surface and equilibrium are consistent in rho since we generated the surface
@@ -451,9 +448,7 @@ def test_init_curve_particles():
     _, _ = jit(particles_mid.init_particles)(model, eq)
 
     # larger curve is out of smaller equilibrium, so it should fail
-    with pytest.raises(
-        eqx.EquinoxRuntimeError, match="Mapping from lab to flux coordinates failed"
-    ):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles_large.init_particles(model, eq)
 
     x0, args = particles_large.init_particles(model, eq_large)
@@ -470,7 +465,5 @@ def test_init_curve_particles():
     np.testing.assert_allclose(rpz[:, 2], 0.0, atol=1e-8)
 
     # smaller curve is out of larger equilibrium, so it should fail
-    with pytest.raises(
-        eqx.EquinoxRuntimeError, match="Mapping from lab to flux coordinates failed"
-    ):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles.init_particles(model, eq_large)

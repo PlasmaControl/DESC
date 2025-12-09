@@ -1196,7 +1196,7 @@ def test_plot_particle_trajectories_vacuum_eq():
         rho0=0.5, theta0=0, zeta0=0, xi0=0.7, E=1e1
     )
     _, data = plot_particle_trajectories(
-        eq, model, particles, ts=np.linspace(0, 1e-9, 10), return_data=True
+        eq, model, particles, ts=np.linspace(0, 1e-8, 10), return_data=True
     )
 
     assert "rho" in data

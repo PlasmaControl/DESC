@@ -26,7 +26,7 @@ jobs:
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Filter changes
         id: changes
@@ -110,7 +110,7 @@ jobs:
 
       - name: save coverage file and plot comparison results
         if: always() && env.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: regression_test_artifact-${{ matrix.python-version }}-${{ matrix.group }}
           path: |

@@ -405,9 +405,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
     rho0 : array-like
         Initial radial coordinates
     theta0 : array-like
-        Initial poloidal coordinates
+        Initial poloidal coordinates in radians
     zeta0 : array-like
-        Initial toroidal coordinates
+        Initial toroidal coordinates in radians
     xi0 : array-like
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
@@ -462,8 +462,8 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             source_grid for the magnetic field computation, if using a MagneticField
             object, can be passed as a keyword argument.
             If you are trying to initialize particles in lab coordinates for a
-            MagneticField with flux coordinates, you must pass the Equilibrium
-            as keyword argument "eq" in kwargs.
+            MagneticField from inputs in flux coordinates, you must pass the
+            Equilibrium as keyword argument "eq" in kwargs.
 
         Returns
         -------
@@ -483,8 +483,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             x = x
             if field.iota is None:
@@ -511,10 +510,11 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
                     x = eq.compute("x", grid=grid)["x"]
                 else:
                     raise NotImplementedError(
-                        "If you have a MagneticField object, you cannot use input with "
-                        "flux coordinates since there is no easy mapping between the "
-                        "two. You can pass the Equilibrium as a keyword argument 'eq' "
-                        "in kwargs to enable the mapping."
+                        "The given model requires inputs in lab coordinates. Without "
+                        "an equilibrium, converting the initial positions from flux "
+                        "to lab frame is not possible. You can pass the Equilibrium "
+                        "as a keyword argument 'eq' in kwargs and it will be used for "
+                        "the mapping."
                     )
         else:
             raise NotImplementedError
@@ -536,11 +536,11 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
     Parameters
     ----------
     R0 : array-like
-        Initial radial coordinates
+        Initial radial coordinates in meters
     phi0 : array-like
-        Initial toroidal coordinates
+        Initial toroidal coordinates in radians
     Z0 : array-like
-        Initial vertical coordinates
+        Initial vertical coordinates in meters
     xi0 : array-like
         Initial normalized parallel velocity, xi=vpar/v
     E : array-like
@@ -762,8 +762,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             zeta = jnp.take(data["phi"], self._chosen_idxs, axis=0)
             # this is not the best guess, but most likely scenario for this class
@@ -925,8 +924,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         if model.frame == "flux":
             if not isinstance(field, Equilibrium):
                 raise ValueError(
-                    "Mapping from lab to flux coordinates requires an Equilibrium. "
-                    "Please use Equilibrium object with the model."
+                    "Please use Equilibrium object with the model in flux frame."
                 )
             # eq and surface might not have the same theta definition, so we will do a
             # root finding to find the correct theta and zeta coordinates from R, phi, Z
@@ -1001,7 +999,7 @@ def trace_particles(
     """Trace charged particles in an equilibrium or external magnetic field.
 
     For jit friendly version of this function or to have more control over
-    the integration, see `_trace_particles`.
+    the integration, see `desc.particles._trace_particles`.
 
     Parameters
     ----------
@@ -1009,53 +1007,53 @@ def trace_particles(
         Source of magnetic field to integrate
     initializer : AbstractParticleInitializer
         Particle initializer
-    ts : array-like
-        Strictly increasing array of time values where output is desired.
     model : AbstractTrajectoryModel
         Trajectory model to integrate with.
+    ts : array-like
+        Strictly increasing array of time values where output will be recorded.
     params : dict, optional
         Parameters of the field object, needed for automatic differentiation.
         Defaults to field.params_dict.
     rtol, atol : float, optional
-        relative and absolute tolerances for PID stepsize controller. Not used if
-        ``stepsize_controller`` is provided. Defaults to 1e-5
+        Relative and absolute tolerances for PID stepsize controller.
     max_steps : int
-        maximum number of steps for whole integration. This will be passed
+        Maximum number of steps for whole integration. This will be passed
         to the diffrax.diffeqsolve function. Defaults to
-        (ts[-1] - ts[0]) * 10 / min_step_size
+        (ts[-1] - ts[0]) / min_step_size
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     bounds : array of shape(3, 2), optional
-        Bounds for particle tracing bounding box. Trajectories that leave this
-        box will be stopped, and NaN returned for points outside the box. When tracing
-        an Equilibrium, the default bounds are set to
-        [[0, 1], [-inf, inf], [-inf, inf]] for rho, theta, zeta coordinates.
+        Bounds for particle trajectory during tracing. Trajectories that leave this
+        region will be stopped, and points outside the region will be shown with NaNs.
+        When tracing an Equilibrium, the default bounds are set to
+        [[0, 1], [-inf, inf], [-inf, inf]] for rho, theta, zeta coordinates (LCFS).
         When tracing a MagneticField, the default bounds are set to
-        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates. Not used if
-        ``event`` is provided.
+        [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates (no bounds).
     solver: diffrax.AbstractSolver, optional
         diffrax Solver object to use in integration. Defaults to
         `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
     adjoint : diffrax.AbstractAdjoint, optional
-        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
-        use ``diffrax.ForwardMode()``.
+        use `diffrax.ForwardMode()`.
     chunk_size : int, optional
-        Chunk size for integration over particles. If not provided, the integration will
-        be done over all particles at once without chunking.
+        Chunk size for integration over particles. If None (default), the integration
+        will be done over all particles at once without chunking.
     options : dict, optional
         Additional keyword arguments to pass to the field computation,
             - iota : Profile
                 Iota profile of the Equilibrium, if not already assigned.
             - source_grid: Grid
-                Source grid to use for field computation.
+                Source grid to use for field computation during Biot-Savart.
     throw : bool, optional
         Whether to throw an error if the integration fails. If False, will return NaN
         for the points where the integration failed. Defaults to True.
     return_aux : bool, optional
         Whether to return auxiliary information from the integrator. If True, will
-        return a tuple (x, v, aux) where aux consists ``stats`` and ``result`` from
-        ``diffrax.diffeqsolve``. Defaults to False.
+        return a tuple (x, v, aux) where aux consists `ts`, `stats` and `result`
+        from `diffrax.diffeqsolve`. Defaults to False. `ts` may become useful if
+        `SaveAt(steps=True)` is used (see `_trace_particles`). Note that `x`, `v` and
+        `ts` will be padded with NaNs to `max_steps` size in that case.
 
     Returns
     -------
@@ -1089,8 +1087,10 @@ def trace_particles(
         k_out = jnp.logical_or(y[2] < bounds[2, 0], y[2] > bounds[2, 1])
         return jnp.logical_or(i_out, jnp.logical_or(j_out, k_out))
 
-    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size * 10))
+    stepsize_controller = PIDController(
+        rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
+    )
+    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(
@@ -1107,8 +1107,8 @@ def trace_particles(
         solver=solver,
         adjoint=adjoint,
         event=Event(default_event),
-        chunk_size=chunk_size,
         options=options,
+        chunk_size=chunk_size,
         throw=throw,
         return_aux=return_aux,
     )
@@ -1128,10 +1128,10 @@ def _trace_particles(
     solver,
     adjoint,
     event,
-    chunk_size,
     options,
-    throw,
-    return_aux,
+    chunk_size=None,
+    throw=False,
+    return_aux=False,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1147,22 +1147,17 @@ def _trace_particles(
     ----------
     y0 : array-like
         Initial particle positions and velocities, stacked in horizontally [x0, v0].
-        The first output of ``initializer.init_particles``.
+        The first output of `initializer.init_particles`.
     model_args : array-like
         Additional arguments needed by the model, such as mass, charge, and
         magnetic moment (mv⊥²/2|B|) of each particle. The second output of
-        ``initializer.init_particles``.
+        `initializer.init_particles`.
     stepsize_controller : diffrax.AbstractStepsizeController
-        Stepsize controller to use for the integration. If not provided, a
-        PIDController with the given ``rtol`` and ``atol`` will be used.
+        Stepsize controller to use for the integration.
     saveat : diffrax.SaveAt
-        SaveAt object to specify where to save the output. If not provided, will
-        save at the specified times in ts.
+        SaveAt object to specify where to save the output.
     event : diffrax.Event
-        Custom event function to stop integration. If not provided, the default
-        event function will be used, which stops integration when particles leave the
-        bounds. If integration is stopped by the event, the output will contain NaN
-        values for the points outside the bounds.
+        Custom event function to stop integration.
     """
     # convert cartesian-like for integration in flux coordinates
     if isinstance(field, Equilibrium):
@@ -1171,6 +1166,8 @@ def _trace_particles(
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
 
+    # suppress warnings till its fixed upstream:
+    # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         # we only want to map over initial positions and particle arguments
@@ -1211,7 +1208,7 @@ def _trace_particles(
     if not return_aux:
         return x, v
     else:
-        return x, v, (out.stats, out.result)
+        return x, v, (out.ts, out.stats, out.result)
 
 
 def _intfun_wrapper(
@@ -1233,7 +1230,7 @@ def _intfun_wrapper(
 ):
     """Wrapper for the integration function for vectorized inputs.
 
-    Defining a lambda function inside the ``_trace_particles`` function leads
+    Defining a lambda function inside the `_trace_particles` function leads
     to recompilations, so instead we define the wrapper here.
     """
     return diffeqsolve(

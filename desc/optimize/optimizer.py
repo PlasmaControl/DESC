@@ -467,14 +467,12 @@ def _maybe_wrap_nonlinear_constraints(
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
-        inv_method = options.pop("prox_inv_method", "qr")
         objective = ProximalProjection(
             objective,
             constraint=_combine_constraints(nonlinear_constraints),
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
-            inv_method=inv_method,
         )
         nonlinear_constraints = ()
     return objective, nonlinear_constraints

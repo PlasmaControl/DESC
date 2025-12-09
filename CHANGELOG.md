@@ -3,6 +3,16 @@ Changelog
 
 New Features
 
+- Adds particle tracing capabilities in ``desc.particles`` module.
+    - Particle tracing is done via ``desc.particles.trace_particles`` function.
+    - Particles can be initialized in couple different ways:
+        - ``ManualParticleInitializerLab`` : Initializes particles at given positions in lab coordinates.
+        - ``ManualParticleInitializerFlux`` : Initializes particles at given positions in flux coordinates.
+        - ``CurveParticleInitializer`` : Initializes N particles on a given curve.
+        - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
+    - Implemented particle trajectory models are:
+        - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
+    - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Adds ``prox_inv_method`` option to be used in equilibrium constrained optimization problems. ``prox_inv_method`` can be ``qr``, ``svd`` or ``svd-reg``. ``svd-reg`` is the legacy behaviour which had an unnecessary regularization term. The new default is ``qr`` which is faster than ``svd`` without loss of significant accuracy. Note that this may change the results of the optimization scripts. For number of example cases, it is been seen that the new default facilitates the optimization without continuation.

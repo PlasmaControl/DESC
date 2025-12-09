@@ -173,18 +173,13 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         model_args, eq_or_field, params, kwargs = args
         m, q, mu = model_args
         if self.frame == "flux":
-            if isinstance(eq_or_field, Equilibrium):
-                return self._compute_flux_coordinates(
-                    x, eq_or_field, params, m, q, mu, **kwargs
-                )
-            elif isinstance(eq_or_field, FourierChebyshevField):
-                return self._compute_flux_coordinates_with_fit(x, eq_or_field, m, q, mu)
+            assert isinstance(
+                eq_or_field, Equilibrium
+            ), "Integration in flux coordinates requires an Equilibrium."
 
-            assert isinstance(eq_or_field, (Equilibrium, FourierChebyshevField)), (
-                "Integration in flux coordinates requires either Equilibrium "
-                "or FourierChebyshevField with fitted data."
+            return self._compute_flux_coordinates(
+                x, eq_or_field, params, m, q, mu, **kwargs
             )
-
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
@@ -1104,18 +1099,18 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
-    if not params and not isinstance(field, dict):
+    if not params:
         params = field.params_dict
     if not options:
         options = {}
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
-        if isinstance(field, Equilibrium) or isinstance(field, dict):
+        if isinstance(field, Equilibrium):
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_event(t, y, args, **kwargs):
-        if isinstance(field, Equilibrium) or isinstance(field, dict):
+        if isinstance(field, Equilibrium):
             i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
             j = jnp.arctan2(y[1], y[0])
         else:

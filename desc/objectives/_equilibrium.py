@@ -201,21 +201,28 @@ class ForceBalanceDeflated(_Objective):
     params_to_deflate_with: list of str
         Which params to use in the deflation operator to define the
         state to deflate, defaults to ["Rb_mn","Zb_mn"]
-
-
+    deflation_type: {"power","exp"}
+        What type of deflation to use. If `"power"`, uses the form
+        pioneered by Farrell where M(x;y)=1/|x-y|^p + sigma
+        while `"exp"` uses the form from Riley, where
+        M(x;y) = exp(1/|x-y|) + sigma. Defaults to "power".
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
-    _static_attrs = _Objective._static_attrs + ["_params_to_deflate_with"]
+    _static_attrs = _Objective._static_attrs + [
+        "_params_to_deflate_with",
+        "deflation_type",
+    ]
 
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
     _print_value_fmt = "Force error: "
 
+    # TODO: use a pytree input for params_to_deflate_with
     def __init__(
         self,
         eq,
@@ -233,6 +240,7 @@ class ForceBalanceDeflated(_Objective):
         grid=None,
         name="force-deflated",
         jac_chunk_size=None,
+        deflation_type="power",
     ):
         if target is None and bounds is None:
             target = 0
@@ -241,6 +249,8 @@ class ForceBalanceDeflated(_Objective):
         self._sigma = sigma
         self._power = power
         self._params_to_deflate_with = params_to_deflate_with
+        assert deflation_type in ["power", "exp"]
+        self._deflation_type = deflation_type
         super().__init__(
             things=eq,
             target=target,
@@ -348,9 +358,14 @@ class ForceBalanceDeflated(_Objective):
             for eq in self._eqs
         ]
         diffs = jnp.vstack(diffs)
-        deflation_parameter = jnp.prod(
-            1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
-        )
+        if self._deflation_type == "power":
+            deflation_parameter = jnp.prod(
+                1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+            )
+        else:
+            deflation_parameter = jnp.prod(
+                jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
+            )
         return jnp.concatenate([fr, fb]) * deflation_parameter
 
 

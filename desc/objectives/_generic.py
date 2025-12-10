@@ -719,12 +719,20 @@ class DeflationOperator(_Objective):
         sigma term in deflation operator
     power: float, optional
         power parameter in deflation operator.
+    deflation_type: {"power","exp"}
+        What type of deflation to use. If `"power"`, uses the form
+        pioneered by Farrell where M(x;y)=1/|x-y|^p + sigma
+        while `"exp"` uses the form from Riley, where
+        M(x;y) = exp(1/|x-y|) + sigma. Defaults to "power".
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    _static_attrs = _Objective._static_attrs + [
+        "_deflation_type",
+    ]
 
     _coordinates = "rtz"
     _units = "~"
@@ -747,6 +755,7 @@ class DeflationOperator(_Objective):
         grid=None,
         name="Deflation",
         jac_chunk_size=None,
+        deflation_type="power",
     ):
         if target is None and bounds is None:
             target = 0
@@ -757,6 +766,8 @@ class DeflationOperator(_Objective):
         self._sigma = sigma
         self._power = power
         self._params_to_deflate_with = params_to_deflate_with
+        assert deflation_type in ["power", "exp"]
+        self._deflation_type = deflation_type
         super().__init__(
             things=thing,
             target=target,
@@ -834,7 +845,12 @@ class DeflationOperator(_Objective):
         ]
 
         diffs = jnp.vstack(diffs)
-        deflation_parameter = jnp.prod(
-            1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
-        )
+        if self._deflation_type == "power":
+            deflation_parameter = jnp.prod(
+                1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+            )
+        else:
+            deflation_parameter = jnp.prod(
+                jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
+            )
         return deflation_parameter

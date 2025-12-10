@@ -1291,6 +1291,81 @@ def test_proximal_jacobian():
 
 @pytest.mark.slow
 @pytest.mark.regression
+def test_proximal_grad():
+    """Test that manual VJP gives the same direct VJP for proximal grad."""
+    eq = desc.examples.get("HELIOTRON")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1), use_jit=False)
+    con2 = ObjectiveFunction(ForceBalance(eq2), use_jit=False)
+    con3 = ObjectiveFunction(ForceBalance(eq3), use_jit=False)
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+        use_jit=False,
+    )
+    perturb_options = {"order": 1}
+    solve_options = {"maxiter": 1}
+    prox1 = ProximalProjection(obj1, con1, eq1, perturb_options, solve_options)
+    prox2 = ProximalProjection(obj2, con2, eq2, perturb_options, solve_options)
+    prox3 = ProximalProjection(obj3, con3, eq3, perturb_options, solve_options)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    # current implementation uses single vjp
+    x = prox1.x(eq)
+    g1 = prox1.grad(x)
+    g2 = prox2.grad(x)
+    g3 = prox3.grad(x)
+
+    # old version had multiple jvps and a manual vjp to get the grad
+    f1 = jnp.atleast_1d(prox1.compute_scaled_error(x))
+    J1 = prox1.jac_scaled_error(x)
+    vjp1 = f1.T @ J1
+
+    f2 = jnp.atleast_1d(prox2.compute_scaled_error(x))
+    J2 = prox2.jac_scaled_error(x)
+    vjp2 = f2.T @ J2
+
+    f3 = jnp.atleast_1d(prox3.compute_scaled_error(x))
+    J3 = prox3.jac_scaled_error(x)
+    vjp3 = f3.T @ J3
+
+    # check that both methods agree
+    np.testing.assert_allclose(g1, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g2, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g3, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")

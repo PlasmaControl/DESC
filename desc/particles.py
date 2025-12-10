@@ -173,13 +173,16 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         model_args, eq_or_field, params, kwargs = args
         m, q, mu = model_args
         if self.frame == "flux":
-            assert isinstance(
-                eq_or_field, Equilibrium
-            ), "Integration in flux coordinates requires an Equilibrium."
-
-            return self._compute_flux_coordinates(
-                x, eq_or_field, params, m, q, mu, **kwargs
+            assert isinstance(eq_or_field, (Equilibrium, FourierChebyshevField)), (
+                "Integration in flux coordinates requires an Equilibrium or "
+                "FourierChebyshevField."
             )
+            if isinstance(eq_or_field, FourierChebyshevField):
+                return self._compute_flux_coordinates_with_fit(x, eq_or_field, m, q, mu)
+            else:
+                return self._compute_flux_coordinates(
+                    x, eq_or_field, params, m, q, mu, **kwargs
+                )
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
@@ -1099,6 +1102,11 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
+    assert isinstance(field, (Equilibrium, _MagneticField)), (
+        f"field must be either Equilibrium or MagneticField object but {type(field)} "
+        "given. If field type is FourierChebyshevField, please use "
+        "_trace_particles function."
+    )
     if not params:
         params = field.params_dict
     if not options:
@@ -1285,10 +1293,12 @@ def _intfun_wrapper(
 
 
 class FourierChebyshevField(IOAble):
-    """Convenience class for fitting and evaluating fields.
+    """Convenience class for fitting and evaluating equilibrium fields.
 
     This class is intended to be used during particle tracing to reduce overhead
-    of creating transforms.
+    of creating transforms. It fits a Fourier-Fourier-Chebyshev series to the
+    quantities required for guiding center equations, and evaluates them
+    at requested points during tracing.
 
     Parameters
     ----------
@@ -1328,8 +1338,8 @@ class FourierChebyshevField(IOAble):
         self.n = jnp.fft.fftfreq(self.N_fft) * self.N_fft
         x = jnp.cos(jnp.pi * (2 * self.l + 1) / (2 * self.L))
         rho = (x + 1) / 2
-        self.grid = LinearGrid(rho=rho, M=self.M, N=self.N, sym=False, NFP=1)
-        self.transforms = get_transforms(self.data_keys, eq, self.grid, jitable=True)
+        self.grid = LinearGrid(rho=rho, M=self.M, N=self.N, sym=False, NFP=eq.NFP)
+        self.transforms = get_transforms(self.data_keys, eq, self.grid)
 
     def fit(self, params, profiles):
         """Fit a Fourier-Chebyshev series to an equilibrium field.
@@ -1413,6 +1423,7 @@ class FourierChebyshevField(IOAble):
         expm_real = jnp.cos(m_theta) / params["M"]
         expm_imag = jnp.sin(m_theta) / params["M"]
 
+        zeta = (zeta * self.grid.NFP) % (2 * jnp.pi)
         n_zeta = params["n"] * zeta
         expn_real = jnp.cos(n_zeta) / params["N"]
         expn_imag = jnp.sin(n_zeta) / params["N"]

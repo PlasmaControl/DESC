@@ -366,13 +366,13 @@ def test_poincare_bc():
     """Test fixed Poincare section solve for non-axisymmetry."""
 
     def solve_poincare(eq):
-        constraints = get_fixed_xsection_constraints(eq)
+        constraints = get_fixed_xsection_constraints(eq, fix_lambda=True)
         objective = ObjectiveFunction(ForceBalance(eq))
         eq.solve(
             verbose=3,
             objective=objective,
             constraints=constraints,
-            maxiter=100,
+            maxiter=75,
             ftol=1e-3,
         )
         return eq

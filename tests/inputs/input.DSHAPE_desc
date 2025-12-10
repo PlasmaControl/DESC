@@ -24,7 +24,6 @@ pert_order = 2.0
 # solver methods
 optimizer = lsq-exact
 objective = force
-bdry_mode = lcfs
 spectral_indexing = ansi
 
 # pressure and rotational transform/current profiles

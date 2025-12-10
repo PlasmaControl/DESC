@@ -1591,6 +1591,7 @@ def test_ess_scaling_with_proximal():
     )
 
     assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
 
 
 @pytest.mark.unit
@@ -1638,6 +1639,7 @@ def test_ess_scaling_without_proximal():
     )
 
     assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
 
 
 @pytest.mark.unit

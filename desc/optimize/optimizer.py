@@ -279,7 +279,8 @@ class Optimizer(IOAble):
         # at this point x_scale is either "auto" or an array matching with objective.x
         # but we may need to project it down if objective got wrapped by
         # eg LinearConstraintProjection
-        x_scale = _project_x_scale(x_scale, objective)
+
+        x_scale_projected = _project_x_scale(x_scale, objective)
 
         stoptol = _get_default_tols(
             method,
@@ -320,7 +321,7 @@ class Optimizer(IOAble):
             nonlinear_constraint,
             x0,
             method,
-            x_scale,
+            x_scale_projected,
             verbose,
             stoptol,
             options,
@@ -352,6 +353,10 @@ class Optimizer(IOAble):
             )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
+
+        # this is the un-projected one, that can be passed in to .optimize again if
+        # needed
+        result["x_scale"] = x_scale
 
         # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(objective.things, result["history"][-1]):

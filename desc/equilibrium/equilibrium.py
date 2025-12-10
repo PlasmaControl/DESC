@@ -2538,21 +2538,25 @@ class Equilibrium(IOAble, Optimizable):
         """
         # this is the all ones scale:
         scales = super()._get_ess_scale(alpha, order, min_value)
+        bdry_scale = self.surface._get_ess_scale(alpha, order, min_value)
+        axis_scale = self.axis._get_ess_scale(alpha, order, min_value)
         # we use ESS for the following:
         modes = {
             "R_lmn": self.R_basis.modes,
             "Z_lmn": self.Z_basis.modes,
             "L_lmn": self.L_basis.modes,
-            "Rb_lmn": self.surface.R_basis.modes,
-            "Zb_lmn": self.surface.Z_basis.modes,
         }
-        if hasattr(self.surface, "Phi_mn"):
-            modes["Phi_mn"] = self.surface.Phi_basis.modes
         # note there is no ESS for profiles, since they may not be polynomials, and
         # even if they are, they're usually low order and not in an orthogonal basis
         # so its not clear if ESS is appropriate.
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
+        scales["Ra_n"] = axis_scale["R_n"]
+        scales["Za_n"] = axis_scale["Z_n"]
+        scales["Rb_lmn"] = bdry_scale["R_lmn"]
+        scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        if hasattr(self.surface, "Phi_mn"):
+            scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales
 
 

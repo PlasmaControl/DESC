@@ -1,9 +1,12 @@
 """Tests for backend functions."""
 
+import os
+
 import numpy as np
 import pytest
 
 from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
+from desc.batching import make_shardable
 
 
 @pytest.mark.unit
@@ -140,3 +143,25 @@ def test_lstsq():
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
+
+
+@pytest.mark.xfail(reason="The flags need to be set before desc.backend is imported.")
+@pytest.mark.unit
+def test_make_shardable():
+    """Test that sharding works."""
+    num_cpu = 10
+    flags = os.environ.get("XLA_FLAGS", "")
+    flags += f" --xla_force_host_platform_device_count={num_cpu}"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ["XLA_FLAGS"] = flags
+
+    f = np.arange(201)
+    sf, rf = make_shardable(f, num_devices=num_cpu)
+    assert sf.size == 200
+    assert rf.size == 1
+
+    gsf = jnp.sin(sf)
+    grf = jnp.sin(rf)
+    g = np.concatenate([gsf, grf])
+
+    np.testing.assert_allclose(g, jnp.sin(f))

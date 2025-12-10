@@ -62,6 +62,7 @@
    api_plotting
    api_continuation
    api_fields
+   api_particles
    api
 
 .. toctree::

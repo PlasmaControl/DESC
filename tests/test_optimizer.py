@@ -65,6 +65,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.optimize.optimizer import _parse_x_scale
 from desc.utils import get_all_instances
 
 
@@ -1614,3 +1615,53 @@ def test_optimize_three_coil_at_once():
         np.testing.assert_allclose(c.shift, shift0)
         np.testing.assert_allclose(c.rotmat, rotmat0)
         np.testing.assert_allclose(c.compute("length")["length"], 13)
+
+
+@pytest.mark.unit
+def test_parse_x_scale(DummyCoilSet):
+    """Test for parsing dict/list of scales into single array."""
+    eq = Equilibrium()
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+
+    dim_eq = eq.dim_x
+    dim_coil = coils.dim_x
+    assert _parse_x_scale("auto", [eq], {}) == "auto"
+    assert _parse_x_scale("auto", [eq, coils], {}) == "auto"
+
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1], [eq, coils], {})
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1, 2], [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
+    with pytest.raises(TypeError):
+        _parse_x_scale("foo", [eq], {})
+    with pytest.raises(TypeError):
+        _parse_x_scale(["foo", "bar"], [eq, coils], {})
+
+    xsc = _parse_x_scale(1, [eq], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale(1, [eq, coils], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+    xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 2).all()
+
+    xsc = _parse_x_scale(eq.params_dict, [eq], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc == eq.pack_params(eq.params_dict)).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
+    assert (xsc[:dim_eq] == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)

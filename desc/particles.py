@@ -13,7 +13,7 @@ from diffrax import (
     Tsit5,
     diffeqsolve,
 )
-from interpax import interp3d
+from interpax import Interpolator3D
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
 from desc.backend import jax, jit, jnp, tree_map
@@ -1548,8 +1548,15 @@ class SplineFieldFlux(IOAble):
             for i in [0, 1, 2]
         ]
         stacks.append(jnp.moveaxis(data["e^zeta"][:, 1].reshape(N, L, M), 0, -1))
-        self.params_dict = {}
-        self.params_dict["f_data"] = jnp.stack(stacks, axis=3)  # shape (L, M, N, 13)
+        self.interpolator = Interpolator3D(
+            self.rhos,
+            self.thetas,
+            self.zetas,
+            jnp.stack(stacks, axis=3),  # shape (L, M, N, 13)
+            self.method,
+            extrap=False,
+            period=(None, 2 * jnp.pi, 2 * jnp.pi / self.grid.NFP),
+        )
 
     def evaluate(self, rho, theta, zeta, params=None):
         """Evaluate the 3D spline at a point.
@@ -1561,23 +1568,7 @@ class SplineFieldFlux(IOAble):
         params : dict
             Computed data at spline nodes stored as ``SplineFieldFlux.params_dict``.
         """
-        if params is None:
-            params = self.params_dict
-
-        results = interp3d(
-            rho,
-            theta,
-            zeta,
-            self.rhos,
-            self.thetas,
-            self.zetas,
-            params["f_data"],
-            self.method,
-            derivative=0,
-            extrap=False,
-            # this will handle the periodicty for zeta
-            period=(None, 2 * jnp.pi, 2 * jnp.pi / self.grid.NFP),
-        )
+        results = self.interpolator(rho, theta, zeta)
 
         out = {}
         # Magnetic Field B

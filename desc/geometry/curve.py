@@ -341,11 +341,11 @@ class FourierRZCurve(Curve):
         ----------
         alpha : float, optional
             Decay rate of the scaling. Default is 1.2
-        scale_type : str, optional
-            Type of scaling to use. Options are:
-            - 1: Diamond pattern using |m| + |n|
-            - 2: Circular pattern using sqrt(m² + n²)
-            - np.inf : Square pattern using max(|m|,|n|)
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
@@ -638,11 +638,11 @@ class FourierXYZCurve(Curve):
         ----------
         alpha : float, optional
             Decay rate of the scaling. Default is 1.2
-        scale_type : str, optional
-            Type of scaling to use. Options are:
-            - 1: Diamond pattern using |m| + |n|
-            - 2: Circular pattern using sqrt(m² + n²)
-            - np.inf : Square pattern using max(|m|,|n|)
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
@@ -986,11 +986,11 @@ class FourierPlanarCurve(Curve):
         ----------
         alpha : float, optional
             Decay rate of the scaling. Default is 1.2
-        scale_type : str, optional
-            Type of scaling to use. Options are:
-            - 1: Diamond pattern using |m| + |n|
-            - 2: Circular pattern using sqrt(m² + n²)
-            - np.inf : Square pattern using max(|m|,|n|)
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
@@ -1391,11 +1391,11 @@ class FourierXYCurve(Curve):
         ----------
         alpha : float, optional
             Decay rate of the scaling. Default is 1.2
-        scale_type : str, optional
-            Type of scaling to use. Options are:
-            - 1: Diamond pattern using |m| + |n|
-            - 2: Circular pattern using sqrt(m² + n²)
-            - np.inf : Square pattern using max(|m|,|n|)
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7

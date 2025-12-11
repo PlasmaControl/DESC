@@ -1233,11 +1233,11 @@ def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
         is the number of indices (usually 3)
     alpha : float, optional
         Decay rate of the scaling. Default is 1.2
-    scale_type : str, optional
-        Type of scaling to use. Options are:
-        - 1: Diamond pattern using |m| + |n|
-        - 2: Circular pattern using sqrt(m² + n²)
-        - np.inf : Square pattern using max(|m|,|n|)
+    order : int, optional
+        Order of norm to use for multi-index mode numbers. Options are:
+        - 1: Diamond pattern using |l| + |m| + |n|
+        - 2: Circular pattern using sqrt(l² + m² + n²)
+        - np.inf : Square pattern using max(|l|,|m|,|n|)
         Default is 'np.inf'
     min_value : float, optional
         Minimum allowed scale value. Default is 1e-7

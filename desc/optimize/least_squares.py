@@ -68,7 +68,8 @@ def lsqtr(  # noqa: C901
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'jac'``, the scale is iteratively updated using the
-        inverse norms of the columns of the Jacobian matrix.
+        inverse norms of the columns of the Jacobian matrix. Jacobian scaling will
+        automatically be used anywhere ``x_scale==0``.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function.
         The optimization process is stopped when ``dF < ftol * F``,
@@ -189,12 +190,10 @@ def lsqtr(  # noqa: C901
     max_dx = options.pop("max_dx", jnp.inf)
     scaled_termination = options.pop("scaled_termination", True)
 
-    jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
-    if jac_scale:
-        scale, scale_inv = compute_jac_scale(J)
-    else:
-        x_scale = jnp.broadcast_to(x_scale, x.shape)
-        scale, scale_inv = x_scale, 1 / x_scale
+    if isinstance(x_scale, str) and x_scale in ["jac", "auto"]:
+        x_scale = jnp.zeros_like(x)
+    x_scale = jnp.broadcast_to(x_scale, x.shape)
+    scale, scale_inv = compute_jac_scale(J, x_scale)
 
     v, dv = cl_scaling_vector(x, g, lb, ub)
     v = jnp.where(dv != 0, v * scale_inv, v)
@@ -408,8 +407,7 @@ def lsqtr(  # noqa: C901
             njev += 1
             g = jnp.dot(J.T, f)
 
-            if jac_scale:
-                scale, scale_inv = compute_jac_scale(J, scale_inv)
+            scale, scale_inv = compute_jac_scale(J, x_scale, scale_inv)
 
             v, dv = cl_scaling_vector(x, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)

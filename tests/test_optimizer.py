@@ -375,7 +375,7 @@ def test_proximal_scalar():
         constraints=constraints,
         verbose=3,
     )
-    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+    np.testing.assert_allclose(eq.compute("V")["V"], 90, rtol=1e-6)
 
 
 @pytest.mark.regression

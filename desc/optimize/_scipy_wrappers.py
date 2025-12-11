@@ -106,13 +106,17 @@ def _optimize_scipy_minimize(  # noqa: C901
     # don't call hess if the method is approximating the hessian, since we probably
     # are avoiding it due to it being expensive
     use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
-    if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
-        H = hess(x0)
-        scale, _ = compute_hess_scale(H)
-    elif isinstance(x_scale, str):
-        scale = 1.0  # don't do any auto scaling if our optimizer does not use hessian
+    if isinstance(x_scale, str) and x_scale == "auto":
+        x_scale = np.zeros_like(x0)
+    if use_hessian:
+        if np.any(x_scale) == 0:
+            H = hess(x0)
+            scale, _ = compute_hess_scale(H, x_scale)
+        else:
+            scale = x_scale
     else:
-        scale = x_scale
+        # don't do any auto scaling if our optimizer does not use hessian
+        scale = np.where(x_scale == 0, 1.0, x_scale)
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
         options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
         options.setdefault("max_trust_radius", np.inf)
@@ -360,7 +364,7 @@ def _optimize_scipy_least_squares(  # noqa: C901
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    x_scale = "jac" if x_scale == "auto" else x_scale
+    x_scale = "jac" if (isinstance(x_scale, str) and x_scale == "auto") else x_scale
     fun, jac = objective.compute_scaled_error, objective.jac_scaled_error
     # need to use some "global" variables here
     fun_allx = []
@@ -563,8 +567,10 @@ def _optimize_scipy_constrained(  # noqa: C901
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
 
     if isinstance(x_scale, str) and x_scale == "auto":
+        x_scale = np.zeros_like(x0)
+    if np.any(x_scale == 0):
         H = hess(x0)
-        scale, _ = compute_hess_scale(H)
+        scale, _ = compute_hess_scale(H, x_scale)
     else:
         scale = x_scale
 
@@ -578,9 +584,9 @@ def _optimize_scipy_constrained(  # noqa: C901
                 + "equality constraints than free variables. Suggest reducing the grid "
                 + "resolution of constraints"
             )
-        if isinstance(x_scale, str) and x_scale == "auto":
+        if np.any(x_scale == 0):
             J = constraint.jac_scaled(x0)
-            Jscale, _ = compute_jac_scale(J)
+            Jscale, _ = compute_jac_scale(J, x_scale)
             scale = jnp.sqrt(scale * Jscale)
 
         def cfun_wrapped(xs):

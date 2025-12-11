@@ -483,10 +483,12 @@ def test_FourierChebyshevField_interpolation():
         params=eq.params_dict, profiles={"current": eq.current, "iota": eq.iota}
     )
 
-    for key in interpolator.data_keys:
-        for comp in ["_r", "_p", "_z"]:
-            assert key + comp + "_real" in interpolator.params_dict.keys()
-            assert key + comp + "_imag" in interpolator.params_dict.keys()
+    assert interpolator.params_dict["coefs_real"].shape == (
+        13,
+        interpolator.N_fft,
+        interpolator.L,
+        interpolator.M_fft,
+    )
 
     rhos = np.linspace(0.05, 1.0, 5)
     grid = LinearGrid(rho=rhos, M=3, N=3, NFP=eq.NFP, sym=eq.sym)

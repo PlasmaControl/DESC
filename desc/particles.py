@@ -1368,16 +1368,16 @@ class FourierChebyshevField(IOAble):
             profiles,
         )
         L, M, N = self.L, self.M_fft, self.N_fft
-        # TODO: e^zeta only has _p component, rest is 0, no need to fit
-        keys = [key + i for key in self.data_keys for i in ["_r", "_p", "_z"]]
-        # stack data to perform 15 transforms in batch
-        stacked_data = jnp.stack(
-            [
-                data_raw[key][:, i].reshape(N, L, M)
-                for key in self.data_keys
-                for i in [0, 1, 2]
-            ]
-        )
+        # e^zeta only has one component to fit, deal with it separately
+        keys3d = [key for key in self.data_keys if key != "e^zeta"]
+        keys = [key + i for key in keys3d for i in ["_r", "_p", "_z"]]
+        keys += ["e^zeta_p"]
+        # stack data to perform 12+1 transforms in batch
+        stacks = [
+            data_raw[key][:, i].reshape(N, L, M) for key in keys3d for i in [0, 1, 2]
+        ]
+        stacks.append(data_raw["e^zeta"][:, 1].reshape(N, L, M))
+        stacked_data = jnp.stack(stacks)  # shape (13, N, L, M)
         coefs = jax.scipy.fft.dct(stacked_data, axis=2, norm=None)
         # handle the 0-th Chebyshev coefficient and normalization
         coefs = coefs.at[:, :, 0, :].divide(2)
@@ -1387,13 +1387,9 @@ class FourierChebyshevField(IOAble):
         coefs = jnp.fft.fft(coefs, axis=1, norm=None)
 
         data = {}
-        coefs_real = coefs.real
-        coefs_imag = coefs.imag
-
-        for i, key in enumerate(keys):
-            data[key + "_real"] = coefs_real[i]
-            data[key + "_imag"] = coefs_imag[i]
-
+        # stacking/unstacking is unnecessary
+        data["coefs_real"] = coefs.real
+        data["coefs_imag"] = coefs.imag
         data["l"] = self.l
         data["m"] = self.m
         data["n"] = self.n
@@ -1422,31 +1418,16 @@ class FourierChebyshevField(IOAble):
         m_theta = params["m"] * theta
         expm_real = jnp.cos(m_theta) / params["M"]
         expm_imag = jnp.sin(m_theta) / params["M"]
-
+        # we computed and fitted the field for zeta in [0, 2pi/NFP]
+        # so we need to map zeta back to that range
         zeta = (zeta * self.grid.NFP) % (2 * jnp.pi)
         n_zeta = params["n"] * zeta
         expn_real = jnp.cos(n_zeta) / params["N"]
         expn_imag = jnp.sin(n_zeta) / params["N"]
 
-        # The new shape for these arrays will be (k, n, l, m) where k=15
-        cf_real_all = jnp.stack(
-            [
-                params[key + i + "_real"]
-                for key in self.data_keys
-                for i in ["_r", "_p", "_z"]
-            ]
-        )
-        cf_imag_all = jnp.stack(
-            [
-                params[key + i + "_imag"]
-                for key in self.data_keys
-                for i in ["_r", "_p", "_z"]
-            ]
-        )
-
         # "knlm,l->knm" contracts the 'l' dimension for all 'k' batches at once
-        f_l_real = jnp.einsum("knlm,l->knm", cf_real_all, Tl)
-        f_l_imag = jnp.einsum("knlm,l->knm", cf_imag_all, Tl)
+        f_l_real = jnp.einsum("knlm,l->knm", params["coefs_real"], Tl)
+        f_l_imag = jnp.einsum("knlm,l->knm", params["coefs_imag"], Tl)
 
         # "knm,m->kn" contracts the 'm' dimension for all 'k' batches
         f_lm_real = jnp.einsum("knm,m->kn", f_l_real, expm_real) - jnp.einsum(
@@ -1473,6 +1454,6 @@ class FourierChebyshevField(IOAble):
         # e^theta*rho
         out["e^theta*rho"] = results[9:12]
         # e^zeta
-        out["e^zeta"] = results[12:15]
+        out["e^zeta"] = jnp.array([0, results[12], 0])
 
         return out

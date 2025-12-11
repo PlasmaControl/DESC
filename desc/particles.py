@@ -13,6 +13,7 @@ from diffrax import (
     Tsit5,
     diffeqsolve,
 )
+from interpax import interp3d
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
 from desc.backend import jax, jit, jnp, tree_map
@@ -173,11 +174,13 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         model_args, eq_or_field, params, kwargs = args
         m, q, mu = model_args
         if self.frame == "flux":
-            assert isinstance(eq_or_field, (Equilibrium, FourierChebyshevField)), (
+            assert isinstance(
+                eq_or_field, (Equilibrium, FourierChebyshevField, SplineFieldFlux)
+            ), (
                 "Integration in flux coordinates requires an Equilibrium or "
-                "FourierChebyshevField."
+                "FourierChebyshevField or SplineFieldFlux."
             )
-            if isinstance(eq_or_field, FourierChebyshevField):
+            if isinstance(eq_or_field, (FourierChebyshevField, SplineFieldFlux)):
                 return self._compute_flux_coordinates_with_fit(x, eq_or_field, m, q, mu)
             else:
                 return self._compute_flux_coordinates(
@@ -1104,7 +1107,7 @@ def trace_particles(
     """
     assert isinstance(field, (Equilibrium, _MagneticField)), (
         f"field must be either Equilibrium or MagneticField object but {type(field)} "
-        "given. If field type is FourierChebyshevField, please use "
+        "given. If field type is FourierChebyshevField or SplineFieldFlux, please use "
         "_trace_particles function."
     )
     if not params:
@@ -1202,7 +1205,7 @@ def _trace_particles(
         Custom event function to stop integration.
     """
     # convert cartesian-like for integration in flux coordinates
-    if isinstance(field, (Equilibrium, FourierChebyshevField)):
+    if isinstance(field, (Equilibrium, FourierChebyshevField, SplineFieldFlux)):
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
@@ -1240,7 +1243,7 @@ def _trace_particles(
     v = yt[:, :, 3:]
 
     # convert back to flux coordinates
-    if isinstance(field, (Equilibrium, FourierChebyshevField)):
+    if isinstance(field, (Equilibrium, FourierChebyshevField, SplineFieldFlux)):
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
@@ -1407,7 +1410,7 @@ class FourierChebyshevField(IOAble):
             Radial, poloidal and toroidal coordinates to evaluate.
         params : dict
             The spectral coefficients obtained from `FourierChebyshevField.fit()`
-            which is stored as `self.params`.
+            which is stored as `self.params_dict`.
         """
         if params is None:
             params = self.params_dict
@@ -1440,6 +1443,140 @@ class FourierChebyshevField(IOAble):
         # "kn,n->k" contracts the 'n' dimension, leaving just the batch dimension
         results = jnp.einsum("kn,n->k", f_lm_real, expn_real) - jnp.einsum(
             "kn,n->k", f_lm_imag, expn_imag
+        )
+
+        out = {}
+        # Magnetic Field B
+        B = results[0:3]
+        out["|B|"] = jnp.linalg.norm(B)
+        out["b"] = B / out["|B|"]
+        # grad(|B|)
+        out["grad(|B|)"] = results[3:6]
+        # e^rho
+        out["e^rho"] = results[6:9]
+        # e^theta*rho
+        out["e^theta*rho"] = results[9:12]
+        # e^zeta
+        out["e^zeta"] = jnp.array([0, results[12], 0])
+
+        return out
+
+
+class SplineFieldFlux(IOAble):
+    """Convenience class for splining and evaluating equilibrium fields.
+
+    This class is intended to be used during particle tracing to reduce overhead
+    of creating transforms. It fits a 3D spline to the quantities required for
+    guiding center equations, and evaluates them at requested points during tracing.
+
+    Parameters
+    ----------
+    L : int
+        Radial resolution of the linear grid for spline nodes.
+    M : int
+        Poloidal resolution of the linear grid for spline nodes.
+    N : int
+        Toroidal resolution of the linear grid for spline nodes.
+    method : str
+        Method to use for 3D spline interpolation. See `interpax.interp3d`
+        for options. Defaults to 'cubic'.
+    """
+
+    _static_attrs = ["L", "M", "N", "data_keys", "method"]
+
+    def __init__(self, L, M, N, method="cubic"):
+        self.L = L
+        self.M = M
+        self.N = N
+        self.method = method
+
+    def build(self, eq):
+        """Build the constants for fit.
+
+        During optimization, equilibrium field changes, however, the same transforms
+        can be used to get the fit faster. This method creates the grid and transforms
+        to be used during the fitting procedure.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to be used to get transforms.
+
+        """
+        self.data_keys = ["B", "grad(|B|)", "e^rho", "e^theta*rho", "e^zeta"]
+        rho = jnp.linspace(1e-6, 1.0, self.L + 1)
+        self.grid = LinearGrid(rho=rho, M=self.M, N=self.N, sym=False, NFP=eq.NFP)
+        self.transforms = get_transforms(self.data_keys, eq, self.grid)
+        self.rhos = self.grid.nodes[self.grid.unique_rho_idx, 0]
+        self.thetas = self.grid.nodes[self.grid.unique_theta_idx, 1]
+        self.zetas = self.grid.nodes[self.grid.unique_zeta_idx, 2]
+
+    def fit(self, params, profiles):
+        """Compute spline nodes for an equilibrium field.
+
+        First computes the magnetic field, its gradient and basis vectors at
+        the grid created in build. Since e^theta doesn't behave
+        well around axis, the fit is computed for e^theta*rho (which is what actually
+        required by the guiding center equations).
+
+        Parameters
+        ----------
+        params : dict
+            Equilibriums `params_dict` which contains the parameters that define
+            the equiliubrium.
+        profiles : dict of Profiles
+            Profiles necessary to compute magnetic field. Either iota or current
+            profile must be given.
+
+        """
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.data_keys,
+            params,
+            self.transforms,
+            profiles,
+        )
+        L, M, N = self.grid.num_rho, self.grid.num_theta, self.grid.num_zeta
+        # e^zeta only has one component to fit, deal with it separately
+        keys3d = [key for key in self.data_keys if key != "e^zeta"]
+        keys = [key + i for key in keys3d for i in ["_r", "_p", "_z"]]
+        keys += ["e^zeta_p"]
+        # stack data to query 12+1 quantities in interp3d
+        stacks = [
+            jnp.moveaxis(data[key][:, i].reshape(N, L, M), 0, -1)
+            for key in keys3d
+            for i in [0, 1, 2]
+        ]
+        stacks.append(jnp.moveaxis(data["e^zeta"][:, 1].reshape(N, L, M), 0, -1))
+        self.params_dict = {}
+        self.params_dict["f_data"] = jnp.stack(stacks, axis=3)  # shape (L, M, N, 13)
+
+    def evaluate(self, rho, theta, zeta, params=None):
+        """Evaluate the 3D spline at a point.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float
+            Radial, poloidal and toroidal coordinates to evaluate.
+        params : dict
+            Computed data at spline nodes stored as ``SplineFieldFlux.params_dict``.
+        """
+        if params is None:
+            params = self.params_dict
+
+        results = interp3d(
+            rho,
+            theta,
+            zeta,
+            self.rhos,
+            self.thetas,
+            self.zetas,
+            params["f_data"],
+            self.method,
+            derivative=0,
+            extrap=False,
+            # this will handle the periodicty for zeta
+            period=(None, 2 * jnp.pi, 2 * jnp.pi / self.grid.NFP),
         )
 
         out = {}

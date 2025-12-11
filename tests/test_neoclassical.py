@@ -15,14 +15,7 @@ from desc.integrals import Bounce2D
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 @pytest.mark.parametrize("nufft_eps", [0, 1e-6])
 def test_effective_ripple_2D(nufft_eps):
-    """Test effective ripple with W7-X against NEO.
-
-    If this test has a peak memory consumption of more than 2.7 GB on JAX version 0.5.0
-    or more than 5.7 GB on JAX versions 0.5.3+, then there is another memory regression.
-    These values are for the test where nufft_eps is zero.
-    https://github.com/jax-ml/jax/issues/30627.
-    For nufft_eps nonzero with surf_batch_size = 2, memory is 1 GB.
-    """
+    """Test effective ripple with W7-X against NEO."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)

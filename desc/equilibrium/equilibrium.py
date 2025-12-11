@@ -2253,17 +2253,17 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
             which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_type`` is the type of scaling, which can be
-            ``1``, ``2``, or ``np.inf``. If not provided in ``options``, the
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type=np.inf'`` (scaling
-            type, can be ``1``, ``2``, or ``np.inf``), and ``ess_min_value=1e-7``
-            (minimum allowed scale value). If an array, should be the same size as
-            sum(thing.dim_x for thing in things). If a list, the list should
-            have 1 element for each thing, and each element should either be ``'ess'``
-            to use exponential spectral scaling for that thing, or a dict with the same
-            keys and dimensions as thing.params_dict to specify scales manually.
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2371,17 +2371,17 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
             which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_type`` is the type of scaling, which can be
-            ``1``, ``2``, or ``np.inf``. If not provided in ``options``, the
-            defaults are: ``ess_alpha=1.2`` (decay rate), ``ess_type=np.inf'`` (scaling
-            type, can be ``1``, ``2``, or ``np.inf``), and ``ess_min_value=1e-7``
-            (minimum allowed scale value). If an array, should be the same size as
-            sum(thing.dim_x for thing in things). If a list, the list should
-            have 1 element for each thing, and each element should either be ``'ess'``
-            to use exponential spectral scaling for that thing, or a dict with the same
-            keys and dimensions as thing.params_dict to specify scales manually.
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2522,11 +2522,11 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         alpha : float, optional
             Decay rate of the scaling. Default is 1.2
-        scale_type : str, optional
-            Type of scaling to use. Options are:
-            - 1: Diamond pattern using |m| + |n|
-            - 2: Circular pattern using sqrt(m² + n²)
-            - np.inf : Square pattern using max(|m|,|n|)
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7

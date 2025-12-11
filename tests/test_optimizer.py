@@ -65,6 +65,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.optimize.optimizer import _parse_x_scale
 from desc.utils import get_all_instances
 
 
@@ -1290,6 +1291,81 @@ def test_proximal_jacobian():
 
 @pytest.mark.slow
 @pytest.mark.regression
+def test_proximal_grad():
+    """Test that manual VJP gives the same direct VJP for proximal grad."""
+    eq = desc.examples.get("HELIOTRON")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1), use_jit=False)
+    con2 = ObjectiveFunction(ForceBalance(eq2), use_jit=False)
+    con3 = ObjectiveFunction(ForceBalance(eq3), use_jit=False)
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+        use_jit=False,
+    )
+    perturb_options = {"order": 1}
+    solve_options = {"maxiter": 1}
+    prox1 = ProximalProjection(obj1, con1, eq1, perturb_options, solve_options)
+    prox2 = ProximalProjection(obj2, con2, eq2, perturb_options, solve_options)
+    prox3 = ProximalProjection(obj3, con3, eq3, perturb_options, solve_options)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    # current implementation uses single vjp
+    x = prox1.x(eq)
+    g1 = prox1.grad(x)
+    g2 = prox2.grad(x)
+    g3 = prox3.grad(x)
+
+    # old version had multiple jvps and a manual vjp to get the grad
+    f1 = jnp.atleast_1d(prox1.compute_scaled_error(x))
+    J1 = prox1.jac_scaled_error(x)
+    vjp1 = f1.T @ J1
+
+    f2 = jnp.atleast_1d(prox2.compute_scaled_error(x))
+    J2 = prox2.jac_scaled_error(x)
+    vjp2 = f2.T @ J2
+
+    f3 = jnp.atleast_1d(prox3.compute_scaled_error(x))
+    J3 = prox3.jac_scaled_error(x)
+    vjp3 = f3.T @ J3
+
+    # check that both methods agree
+    np.testing.assert_allclose(g1, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g2, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g3, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
@@ -1539,3 +1615,53 @@ def test_optimize_three_coil_at_once():
         np.testing.assert_allclose(c.shift, shift0)
         np.testing.assert_allclose(c.rotmat, rotmat0)
         np.testing.assert_allclose(c.compute("length")["length"], 13)
+
+
+@pytest.mark.unit
+def test_parse_x_scale(DummyCoilSet):
+    """Test for parsing dict/list of scales into single array."""
+    eq = Equilibrium()
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+
+    dim_eq = eq.dim_x
+    dim_coil = coils.dim_x
+    assert _parse_x_scale("auto", [eq], {}) == "auto"
+    assert _parse_x_scale("auto", [eq, coils], {}) == "auto"
+
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1], [eq, coils], {})
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1, 2], [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
+    with pytest.raises(TypeError):
+        _parse_x_scale("foo", [eq], {})
+    with pytest.raises(TypeError):
+        _parse_x_scale(["foo", "bar"], [eq, coils], {})
+
+    xsc = _parse_x_scale(1, [eq], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale(1, [eq, coils], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+    xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 2).all()
+
+    xsc = _parse_x_scale(eq.params_dict, [eq], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc == eq.pack_params(eq.params_dict)).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
+    assert (xsc[:dim_eq] == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)

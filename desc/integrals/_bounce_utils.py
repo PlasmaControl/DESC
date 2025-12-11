@@ -831,7 +831,7 @@ def mmt_for_bounce(v, c):
         Fourier coefficients.
 
     """
-    return (v * c[..., None, None, None, :, :]).real.sum((-2, -1))
+    return jnp.einsum("...pwqzt, ...zt -> ...pwq", v, c).real
 
 
 def broadcast_for_bounce(pitch_inv):

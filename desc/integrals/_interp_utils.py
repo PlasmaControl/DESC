@@ -129,8 +129,8 @@ def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
         i = (0, -1) if (n % 2 == 0) else 0
         a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(1j * _modes * (x - domain[0])[..., jnp.newaxis])
-    return (vander * a).real.sum(-1)
+    vander = jnp.exp(-1j * _modes * (x - domain[0])[..., jnp.newaxis])
+    return jnp.linalg.vecdot(vander, a).real
 
 
 def ifft_mmt(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None):
@@ -269,7 +269,7 @@ def _irfft2_mmt(
     f, r = np.argsort(axes)
     modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
     vander = rfft2_vander(x[f], x[r], modes_f, modes_r, d[f][0], d[r][0])
-    return (vander * a).real.sum((-2, -1))
+    return jnp.einsum("...mn, ...mn", vander, a).real
 
 
 def rfft2_vander(
@@ -286,14 +286,7 @@ def rfft2_vander(
 
     Warnings
     --------
-    It is vital to not perform any operations on Vandermonde array and immediately
-    reduce it. For example, to transform from spectral to real space do
-      ``a=jnp.fft.rfft2(f).at[...,i].divide(2)*2``
-
-      ``(vander*a).real.sum((-2,-1))``
-
-    Performing the scaling on the Vandermonde array would triple the memory consumption.
-    Perhaps this is required for the compiler to fuse operations.
+    Reduce with einsum to save memory.
 
     Notes
     -----

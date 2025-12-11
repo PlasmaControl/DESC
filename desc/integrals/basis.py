@@ -636,9 +636,10 @@ class PiecewiseChebyshevSeries(IOAble):
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
         df_dy = jnp.sign(
-            jnp.linalg.vecdot(
+            jnp.einsum(
+                "...yn, ...n",
                 n * jnp.sin(n * jnp.arccos(y)[..., None]),
-                self.cheb[..., None, :],
+                self.cheb,
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])

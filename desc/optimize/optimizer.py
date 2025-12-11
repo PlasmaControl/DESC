@@ -223,7 +223,6 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
-        options = {} if options is None else options
         x_scale = _parse_x_scale(x_scale, things, options)
         # at this point x_scale is either "auto", an array matching with objective.x,
         # or a list of scales in sync with things

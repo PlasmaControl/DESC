@@ -1545,6 +1545,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["theta", "alpha"],
+    public=False,  # figure out better name
 )
 def _delta(params, transforms, profiles, data, **kwargs):
     data["delta"] = data["theta"] - data["alpha"]
@@ -1564,6 +1565,7 @@ def _delta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["alpha", "iota", "zeta"],
+    public=False,  # figure out better name
 )
 def _varepsilon(params, transforms, profiles, data, **kwargs):
     data["varepsilon"] = data["alpha"] + data["iota"] * data["zeta"]

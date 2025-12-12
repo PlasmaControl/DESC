@@ -32,7 +32,6 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
-    _irfft2_mmt,
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -40,7 +39,8 @@ from desc.integrals._interp_utils import (
     ifft_mmt,
     interp1d_Hermite_vec,
     interp1d_vec,
-    irfft_mmt,
+    irfft2_mmt_pos,
+    irfft_mmt_pos,
     nufft2d2r,
     polyder_vec,
     rfft2_modes,
@@ -69,24 +69,7 @@ from desc.utils import (
 
 
 class Bounce(IOAble, ABC):
-    """Abstract class for bounce integrals.
-
-    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
-
-    * dℓ parametrizes the distance along the field line in meters.
-    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
-    * λ is a constant defining the integral proportional to the magnetic moment
-      over energy.
-    * B is the norm of the magnetic field.
-
-    For a particle with fixed λ, bounce points are defined to be the location on the
-    field line such that the particle's velocity parallel to the magnetic field is zero.
-    The bounce integral is defined up to a sign. We choose the sign that corresponds to
-    the particle's guiding center trajectory traveling in the direction of increasing
-    field-line-following coordinate ζ.
-
-    """
+    """Abstract class for bounce integrals."""
 
     @staticmethod
     def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=True):
@@ -167,6 +150,21 @@ default_quad = get_quadrature(
 
 class Bounce2D(Bounce):
     """Computes bounce integrals using pseudo-spectral methods.
+
+    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
+
+    * dℓ parametrizes the distance along the field line in meters.
+    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
+    * λ is a constant defining the integral proportional to the magnetic moment
+      over energy.
+    * B is the norm of the magnetic field.
+
+    For a particle with fixed λ, bounce points are defined to be the location on the
+    field line such that the particle's velocity parallel to the magnetic field is zero.
+    The bounce integral is defined up to a sign. We choose the sign that corresponds to
+    the particle's guiding center trajectory traveling in the direction of increasing
+    field-line-following coordinate ζ.
 
     Refrences
     ---------
@@ -559,10 +557,7 @@ class Bounce2D(Bounce):
             simp=simp,
         )
         out = batch_map(fun, fun_data, surf_batch_size)
-        if expand_out:
-            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-            return grid.expand(out)
-        return out
+        return grid.expand(out) if expand_out else out
 
     @staticmethod
     def reshape(grid, f):
@@ -678,7 +673,7 @@ class Bounce2D(Bounce):
         -------
         angle : jnp.ndarray
             Shape (num ρ, X, Y).
-            Angle that maps boundary to field line coordinates.
+            Angle that maps boundary coordinates to field line coordinates.
 
         """
         from desc.compute.utils import get_transforms
@@ -702,17 +697,14 @@ class Bounce2D(Bounce):
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
 
-        else:
-            raise ValueError(f"Got invalid angle name = {name}.")
-
         angle = eq._map_poloidal_coordinates(
             jnp.atleast_1d(iota),
             fourier_pts(X),
             zeta,
             params["L_lmn"],
             get_transforms("lambda", eq, grid)["L"],
-            inbasis=("rho", in_name, "zeta"),
-            outbasis=("rho", name, "zeta"),
+            inbasis=in_name,
+            outbasis=name,
             tol=tol,
             maxiter=maxiter,
         )
@@ -796,12 +788,39 @@ class Bounce2D(Bounce):
             num_well,
         )
 
-    def _refine_points(self, points, pitch_inv):
-        # TODO after (#1243): One application of Newton on Fourier series |B|.
-        #  If change < 1e-2 etc. then accept the refinement, otherwise reject.
-        #  e.g. jnp.where
+    def _refine_points(self, points, pitch_inv, nufft_eps=1e-6):
+        # TODO: One application of Newton on the functions that we actually
+        #  use in the quadratures.
         #  Thus can use less resolution for the global root finding algorithm
         #  and rely on the local one once good neighbourhood is found.
+
+        # pseudocode for someone else to complete
+
+        z = flatten_mat(points)
+        t = flatten_mat(self._theta.eval1d(points))
+        t = flatten_mat(points)
+
+        t_z = None  # at fixed alpha
+        dB_dz = None  # at fixed theta
+        dB_dt = None  # at fixed zeta
+
+        B, dB_dz, dB_dt = (
+            nufft2d2r(
+                z,
+                t,
+                jnp.concatenate([self._c["|B|"], dB_dz, dB_dt], -3),
+                (0, 2 * jnp.pi / self._NFP),
+                vec=True,
+                eps=nufft_eps,
+            )
+            .swapaxes(0, -2)
+            .reshape(3, *points.shape)
+        )
+
+        dp = (B - pitch_inv) / (dB_dz + dB_dt * t_z)
+        # reject if we think Newton failed
+        points = jnp.where(jnp.abs(dp) < 1e-2, points - dp, points)
+
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -982,7 +1001,8 @@ class Bounce2D(Bounce):
     def _nufft(self, ζ, data, eps):
         shape = ζ.shape
         ζ = flatten_mat(ζ, 3)
-        # TODO: Benchmark using a nufft to evaluate θ here
+        # TODO: eval1d(loop=True) reduced memory, but slow, try batching stuff
+        #       or succumb to nufft
         θ = flatten_mat(self._theta.eval1d(ζ))
         ζ = flatten_mat(ζ)
         c = nufft2d2r(
@@ -1052,7 +1072,7 @@ class Bounce2D(Bounce):
         θ = self._theta.eval1d(ext)
 
         if nufft_eps < 1e-14:
-            f = _irfft2_mmt(
+            f = irfft2_mmt_pos(
                 ext,
                 θ,
                 f[..., None, :, :],
@@ -1129,11 +1149,11 @@ class Bounce2D(Bounce):
             modes=self._modes_ζ,
         )
         B_sup_z = B_sup_z[..., None, None, None, :, :]
-        B_sup_z = irfft_mmt(
+        B_sup_z = irfft_mmt_pos(
             idct_mmt(x, self._theta.cheb.reshape(shape)),
             B_sup_z,
             self._num_θ,
-            _modes=self._modes_θ,
+            modes=self._modes_θ,
         )
 
         # B⋅∇ζ never vanishes, so it has the same sign over a surface.
@@ -1334,6 +1354,21 @@ class Bounce2D(Bounce):
 class Bounce1D(Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
+    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
+
+    * dℓ parametrizes the distance along the field line in meters.
+    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
+    * λ is a constant defining the integral proportional to the magnetic moment
+      over energy.
+    * B is the norm of the magnetic field.
+
+    For a particle with fixed λ, bounce points are defined to be the location on the
+    field line such that the particle's velocity parallel to the magnetic field is zero.
+    The bounce integral is defined up to a sign. We choose the sign that corresponds to
+    the particle's guiding center trajectory traveling in the direction of increasing
+    field-line-following coordinate ζ.
+
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
@@ -1503,10 +1538,7 @@ class Bounce1D(Bounce):
             simp=simp,
         )
         out = batch_map(fun, fun_data, surf_batch_size)
-        if expand_out:
-            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-            return grid.expand(out)
-        return out
+        return grid.expand(out) if expand_out else out
 
     @staticmethod
     def reshape(grid, f):

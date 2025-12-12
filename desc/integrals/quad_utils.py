@@ -1,6 +1,6 @@
 """Utilities for quadratures."""
 
-from orthax.chebyshev import chebgauss, chebweight
+from orthax.chebyshev import chebgauss
 from orthax.legendre import legder, legval
 
 from desc.backend import eigh_tridiagonal, jnp, put
@@ -260,7 +260,7 @@ def chebgauss1(deg):
 
     """
     x, w = chebgauss(deg)
-    return x, w / chebweight(x)
+    return x, w * jnp.sqrt(1.0 + x) * jnp.sqrt(1.0 - x)
 
 
 def chebgauss2(deg):

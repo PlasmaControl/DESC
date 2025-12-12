@@ -202,7 +202,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    data["Gamma_c"] = grid.expand(
+    data["Gamma_c"] = (
         Bounce2D.batch(
             Gamma_c,
             fun_data,
@@ -211,6 +211,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
+            expand_out=True,
         )
         / data["V_psi"]
         / (num_transit * 2**0.5)
@@ -474,7 +475,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             axis=-1,
         )
 
-    data["Gamma_c Velasco"] = grid.expand(
+    data["Gamma_c Velasco"] = (
         Bounce2D.batch(
             Gamma_c,
             {
@@ -487,6 +488,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
+            expand_out=True,
         )
         / data["V_psi"]
         / (num_transit * 2**0.5)

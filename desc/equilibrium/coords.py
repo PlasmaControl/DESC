@@ -456,8 +456,8 @@ def _map_poloidal_coordinates(
     L_lmn,
     lmbda,
     varepsilon=None,
-    inbasis=("rho", "alpha", "zeta"),
-    outbasis=("rho", "theta", "zeta"),
+    inbasis="alpha",
+    outbasis="theta",
     guess=None,
     *,
     tol=1e-6,
@@ -479,23 +479,24 @@ def _map_poloidal_coordinates(
         Rotational transform ι(ρ) on flux surfaces labeled by ρ.
     poloidal : jnp.ndarray
         Shape (num poloidal, ).
-        Values for coordinate specified by ``inbasis[1]``.
+        Values for coordinate specified by ``inbasis``.
     zeta : jnp.ndarray
         Shape (num zeta, ).
         DESC toroidal angle ζ.
     L_lmn : jnp.ndarray
         Spectral coefficients for λ.
     lmbda : Transform
-        Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ.
+        Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ
+        with same ρ and ζ points as the other inputs.
     varepsilon : jnp.ndarray
         Shape should broadcast with shape (num ρ, num poloidal, num ζ).
         Optional meshgrid of values ε = α + ι ζ.
         This meshgrid need not be a tensor-product grid.
         See the description in the docstring header for more information.
     inbasis : str
-        Label for input coordinates, e.g. (ρ, α, ζ) or (ρ, ϑ, ζ).
+        Label for input coordinates, e.g. α or ϑ
     outbasis : str
-        Label for output coordinates, e.g. (ρ, θ, ζ) or (ρ, δ, ζ).
+        Label for output coordinates, e.g. θ or δ.
     guess : jnp.ndarray
         Shape should broadcast with shape (num ρ, num poloidal, num ζ).
         Optional initial guess for the solution.
@@ -515,14 +516,12 @@ def _map_poloidal_coordinates(
 
     """
     errorif(
-        inbasis != ("rho", "alpha", "zeta") and inbasis != ("rho", "vartheta", "zeta"),
+        inbasis != "alpha" and inbasis != "vartheta",
         NotImplementedError,
         f"inbasis={inbasis} is not implemented.",
     )
     errorif(
-        outbasis != ("rho", "theta", "zeta")
-        and outbasis != ("rho", "lambda", "zeta")
-        and outbasis != ("rho", "delta", "zeta"),
+        outbasis != "theta" and outbasis != "lambda" and outbasis != "delta",
         NotImplementedError,
         f"outbasis={outbasis} is not implemented.",
     )
@@ -556,19 +555,19 @@ def _map_poloidal_coordinates(
     if varepsilon is None:
         iota = iota[:, None, None]
         poloidal = poloidal[:, None]
-        if inbasis[1] == "alpha":
+        if inbasis == "alpha":
             varepsilon = poloidal + iota * zeta
-        elif inbasis[1] == "vartheta":
+        elif inbasis == "vartheta":
             varepsilon = poloidal - iota * omega
 
     t = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
 
-    if outbasis[1] == "theta":
+    if outbasis == "theta":
         return t
-    if outbasis[1] == "lambda":
+    if outbasis == "lambda":
         vartheta = varepsilon + iota * omega
         return vartheta - t
-    if outbasis[1] == "delta":
+    if outbasis == "delta":
         alpha = varepsilon - iota * zeta
         return t - alpha
 

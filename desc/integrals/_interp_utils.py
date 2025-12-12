@@ -96,7 +96,7 @@ def interp_rfft(x, f, domain=(0, 2 * jnp.pi), axis=-1):
     return irfft_mmt(x, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis)
 
 
-def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
+def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1):
     """Evaluate Fourier coefficients ``a`` at ``x``.
 
     Uses matrix multiplication transform.
@@ -114,10 +114,6 @@ def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
-    _modes : jnp.ndarray
-        If supplied, just builds the Vandermonde array and computes the dot product.
-        Assumes the Fourier coefficients have the correct factors for the DC and
-        Nyquist frequency. Assumes ``axis=-1``.
 
     Returns
     -------
@@ -125,11 +121,43 @@ def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1, *, _modes=None):
         Real function value at query points.
 
     """
-    if _modes is None:
-        _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+    modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+    i = (0, -1) if (n % 2 == 0) else 0
+    a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
+    vander = jnp.exp(-1j * modes * (x - domain[0])[..., jnp.newaxis])
+    return jnp.linalg.vecdot(vander, a).real
+
+
+def irfft_mmt_pos(x, a, n, domain=(0, 2 * jnp.pi), modes=None):
+    """Evaluate Fourier coefficients ``a`` at ``x``.
+
+    Uses matrix multiplication transform.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Real query points where interpolation is desired.
+        Shape of ``x`` must broadcast with arrays of shape ``np.delete(a.shape,-1)``.
+    a : jnp.ndarray
+        Fourier coefficients of non-negative frequencies.
+    n : int
+        Spectral resolution of ``a``.
+    domain : tuple[float]
+        Domain over which samples were taken.
+    modes : jnp.ndarray
+        Optional frequency modes.
+
+    Returns
+    -------
+    fq : jnp.ndarray
+        Real function value at query points.
+
+    """
+    if modes is None:
+        modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
         i = (0, -1) if (n % 2 == 0) else 0
-        a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(-1j * _modes * (x - domain[0])[..., jnp.newaxis])
+        a = a.at[..., i].divide(2) * 2
+    vander = jnp.exp(-1j * modes * (x - domain[0])[..., jnp.newaxis])
     return jnp.linalg.vecdot(vander, a).real
 
 
@@ -210,7 +238,7 @@ def interp_rfft2(
     a = rfft2(f, axes=axes, norm="forward")
     a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
-    return _irfft2_mmt(
+    return irfft2_mmt_pos(
         x0,
         x1,
         a,
@@ -222,7 +250,7 @@ def interp_rfft2(
     )
 
 
-def _irfft2_mmt(
+def irfft2_mmt_pos(
     x0, x1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
     """Evaluate Fourier coefficients ``a`` at coordinates ``(x0,x1)``.
@@ -574,7 +602,9 @@ def vander_chebyshev(x, Y):
 def idct_mmt(x, a, axis=-1, vander=None):
     """Evaluate Chebyshev coefficients ``a`` at ``x`` ∈ [-1, 1].
 
-    Uses matrix multiplication transform.
+    Uses matrix multiplication transform, which was benchmarked
+    to be significantly faster than Clenshaw recursion via
+    ``chebval(x,moveaxis(a,axis,0),tensor=False)``.
 
     Parameters
     ----------
@@ -587,7 +617,7 @@ def idct_mmt(x, a, axis=-1, vander=None):
         Axis along which to transform.
     vander : jnp.ndarray
         Precomputed transform matrix.
-        If given returns ``(vander*a).sum(axis)``.
+        If given returns ``(vander*a).sum(-1)``.
 
     Returns
     -------
@@ -598,9 +628,7 @@ def idct_mmt(x, a, axis=-1, vander=None):
     if vander is None:
         vander = vander_chebyshev(x, a.shape[axis])
         a = jnp.moveaxis(a, axis, -1)
-        axis = -1
-    # Better than Clenshaw recursion ``chebval(x,a,tensor=False)`` on GPU.
-    return (vander * a).sum(axis)
+    return jnp.linalg.vecdot(vander, a).real
 
 
 # Warning: method must be specified as keyword argument.

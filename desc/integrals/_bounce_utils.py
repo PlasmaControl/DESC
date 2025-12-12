@@ -15,7 +15,7 @@ from desc.integrals._interp_utils import (
     cheb_pts,
     idct_mmt,
     ifft_mmt,
-    irfft_mmt,
+    irfft_mmt_pos,
     nufft1d2r,
     polyroot_vec,
     polyval_vec,
@@ -355,11 +355,7 @@ def plot_ppoly(
         Matplotlib (fig, ax) tuple.
 
     """
-    fig, ax = (
-        plt.subplots(figsize=kwargs.pop("figsize"))
-        if "figsize" in kwargs
-        else plt.subplots()
-    )
+    fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
 
     legend = {}
     if include_knots:
@@ -647,7 +643,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
         modes=modes_ζ,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt(theta.evaluate(Y), f, num_θ, _modes=modes_θ)
+    f = irfft_mmt_pos(theta.evaluate(Y), f, num_θ, modes=modes_θ)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
     assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
@@ -763,7 +759,7 @@ def fast_cubic_spline(
     if nufft_eps < 1e-14 or f.shape[-1] < 14:
         # second condition for GPU
         f = f[..., None, None, None, :, :]
-        f = irfft_mmt(θ, f, num_θ, _modes=modes_θ)
+        f = irfft_mmt_pos(θ, f, num_θ, modes=modes_θ)
     else:
         if len(lines) > 1:
             θ = θ.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_ζ, -1)

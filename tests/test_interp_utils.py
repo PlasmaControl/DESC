@@ -444,8 +444,8 @@ class TestStreams:
             zeta,
             eq.params_dict["L_lmn"],
             Λ,
-            inbasis=("rho", "alpha", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
+            inbasis="alpha",
+            outbasis="theta",
             tol=tol,
         ).squeeze(0)[..., ::-1]
 

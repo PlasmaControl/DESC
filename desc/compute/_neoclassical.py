@@ -101,14 +101,9 @@ _bounce_doc = {
     data=["psi_r/sqrt(g)"],
 )
 def _field_line_weight(params, transforms, profiles, data, **kwargs):
-    """∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
-
-    The returned quantity has shape (num rho, ).
-    """
+    """∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)²."""
     data["V_psi"] = surface_integrals(
-        transforms["grid"],
-        jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"])),
-        expand_out=False,
+        transforms["grid"], jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"]))
     )
     return data
 
@@ -245,8 +240,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     B0 = data["max_tz |B|"]
     scalar = (jnp.pi * data["R0"]) ** 2 / (num_transit * 4 * 2**0.5)
 
-    data["effective ripple 3/2"] = (B0 / data["<|grad(rho)|>"]) ** 2 * grid.expand(
-        scalar
+    data["effective ripple 3/2"] = scalar * (
+        (B0 / data["<|grad(rho)|>"]) ** 2
         * Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
@@ -255,6 +250,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             grid,
             num_pitch,
             surf_batch_size,
+            expand_out=True,
         )
         / data["V_psi"]
     )

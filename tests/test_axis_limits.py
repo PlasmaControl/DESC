@@ -252,9 +252,7 @@ def assert_is_continuous(
             # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
-        if name == "V_psi":
-            pass
-        elif data_index[p][name]["coordinates"] == "r":
+        if data_index[p][name]["coordinates"] == "r":
             # already single variable function of rho
             profile = grid.compress(data[name])
         else:

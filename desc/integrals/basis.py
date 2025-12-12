@@ -6,7 +6,18 @@ import numpy as np
 from matplotlib import pyplot as plt
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, dctn, flatnonzero, idct, idctn, irfft, jax, jnp, rfft
+from desc.backend import (
+    dct,
+    dctn,
+    flatnonzero,
+    fori_loop,
+    idct,
+    idctn,
+    irfft,
+    jax,
+    jnp,
+    rfft,
+)
 from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
@@ -566,7 +577,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y += self.domain[0]
         return x_idx, y
 
-    def eval1d(self, z, cheb=None):
+    def eval1d(self, z, cheb=None, loop=False):
         """Evaluate piecewise Chebyshev series at coordinates z.
 
         Parameters
@@ -581,6 +592,9 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb : jnp.ndarray
             Shape (..., X, Y).
             Chebyshev coefficients to use. If not given, uses ``self.cheb``.
+        loop : bool
+            Whether to use Clenshaw recursion.
+            This is slower on CPU, but it reduces memory of the Jacobian.
 
         Returns
         -------
@@ -591,10 +605,23 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb = _add_lead_axis(setdefault(cheb, self.cheb), z)
         x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
-        # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
+
+        # Recall that the Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
         # are in cheb array whose shape is (..., num cheb series, spectral resolution).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
-        return idct_mmt(y, cheb)
+
+        if not loop or self.Y < 3:
+            cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
+            return idct_mmt(y, cheb)
+
+        def body(i, val):
+            c0, c1 = val
+            return jnp.take_along_axis(cheb[..., -i], x_idx, axis=-1) - c1, c0 + c1 * y2
+
+        y2 = 2 * y
+        c0 = jnp.take_along_axis(cheb[..., -2], x_idx, axis=-1)
+        c1 = jnp.take_along_axis(cheb[..., -1], x_idx, axis=-1)
+        c0, c1 = fori_loop(3, self.Y + 1, body, (c0, c1))
+        return c0 + c1 * y
 
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
@@ -876,11 +903,7 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        fig, ax = (
-            plt.subplots(figsize=kwargs.pop("figsize"))
-            if "figsize" in kwargs
-            else plt.subplots()
-        )
+        fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
 
         legend = {}
         z = jnp.linspace(

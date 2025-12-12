@@ -320,7 +320,6 @@ class EffectiveRipple(_Objective):
             _vander=constants["_vander"],
             **self._hyperparam,
         )
-
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_bounce1d(self, use_jit=True, verbose=1):

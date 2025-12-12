@@ -90,7 +90,6 @@ from desc.objectives import (
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
-    UmbilicFieldAligned,
     UmbilicHighCurvature,
     VacuumBoundaryError,
     Volume,
@@ -3219,7 +3218,6 @@ class TestComputeScalarResolution:
         LinearObjectiveFromUser,
         ObjectiveFromUser,
         UmbilicHighCurvature,
-        UmbilicFieldAligned,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -3711,7 +3709,6 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
         UmbilicHighCurvature,
-        UmbilicFieldAligned,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

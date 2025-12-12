@@ -6,7 +6,7 @@ from abc import ABC
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_map
 
 
 class Optimizable(ABC):
@@ -130,6 +130,31 @@ class Optimizable(ABC):
         """
         return sorted(set(list(args)))
 
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # we don't know anything about the object so just assume scale is all 1s.
+        # subclasses can implement their own logic.
+        return tree_map(jnp.ones_like, self.params_dict)
+
 
 class OptimizableCollection(Optimizable):
     """Base class for collections of multiple optimizable objects (coilsets, etc).
@@ -211,6 +236,29 @@ class OptimizableCollection(Optimizable):
         xs = jnp.split(x, split_idx)
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        list of dict of ndarray
+            Array of scale values for each parameter
+        """
+        return [s._get_ess_scale(alpha, order, min_value) for s in self]
 
 
 def optimizable_parameter(f):

@@ -292,10 +292,6 @@ def _get_grid(**kwargs):
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": np.array([1.0]),
-        "theta": np.array([0.0]),
-        "zeta": np.array([0.0]),
-        "NFP_umbilic_factor": int(1),
     }
     grid_args.update(kwargs)
     if ("L" not in grid_args) and ("rho" not in grid_args):
@@ -2326,9 +2322,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(
-            0, 2 * np.pi / eq.NFP, phi, endpoint=False
-        )  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
@@ -2338,17 +2332,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-    coords = map_coordinates(
-        eq,
-        grid.nodes,
-        ["rho", "theta", "phi"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
-        guess=grid.nodes,
-    )
-
     grid = Grid(
-        coords,
+        map_coordinates(
+            eq,
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
+        ),
         sort=False,
     )
 
@@ -2835,7 +2827,6 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         len(kwargs) != 0,
         msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
     )
-
     errorif(
         not isinstance(coils, _Coil),
         ValueError,

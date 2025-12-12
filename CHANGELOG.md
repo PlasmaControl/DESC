@@ -14,12 +14,18 @@ New Features
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 
 Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)
 
+Performance Improvements
+
+- `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
 
 v0.16.0
 -------

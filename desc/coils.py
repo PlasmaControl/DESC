@@ -331,9 +331,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis = kwargs.get("basis", "xyz")
         if basis.lower() == "rpz":
             x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
-
-            # --no-verify x = x.at[:, :, 1].set(x[:, :, 1])
-
         if dx1:
             return x, x_s
         return x
@@ -631,7 +628,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
         """Convert Coil to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -662,13 +659,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            NFP=NFP,
-            basis="xyz",
-            sym=sym,
-            name=name,
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
@@ -814,16 +805,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        NFP=1,
-        basis="rpz",
-        name="",
-        sym=False,
-    ):
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -852,12 +834,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
         """
         curve = super().from_values(
-            coords,
-            N=N,
-            NFP=NFP,
-            basis=basis,
-            sym=sym,
-            name=name,
+            coords=coords, N=N, NFP=NFP, basis=basis, sym=sym, name=name
         )
         return FourierRZCoil(
             current=current,
@@ -2447,13 +2424,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self,
-        N=10,
-        grid=None,
-        NFP=None,
-        sym=False,
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
         """Convert all coils to FourierRZCoil representation.
 

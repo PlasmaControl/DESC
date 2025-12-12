@@ -288,15 +288,6 @@ def rfft2_vander(
     --------
     Reduce with einsum to save memory.
 
-    Notes
-    -----
-    When the Vandermonde matrix is large, care needs to be taken to ensure the compiler
-    fuses the operation to transform from spectral to real space. For JAX, this is up
-    to the JIT compiler's whim, and it helps to make the code as suggestive as possible
-    for that. Basically do not do anything besides the relevant matmuls after making
-    the Vandermonde; even things like adding a new axis to the coefficient array or
-    creating local variables after the Vandermonde array is made can prevent this.
-
     Parameters
     ----------
     x_fft : jnp.ndarray

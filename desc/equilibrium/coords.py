@@ -529,12 +529,10 @@ def _map_poloidal_coordinates(
 
     # Root finding for θₖ such that θₖ + (λ−ιω)(ρ,θₖ,ζ) - ε = 0.
     def rootfun(t, varepsilon, q_m):
-        q = (jnp.exp(1j * modes * t) * q_m).real.sum()
-        return t + q - varepsilon
+        return t + (jnp.exp(1j * modes * t) * q_m).real.sum() - varepsilon
 
     def jacfun(t, varepsilon, q_m):
-        dq_dt = ((1j * jnp.exp(1j * modes * t) * q_m).real * modes).sum()
-        return 1 + dq_dt
+        return 1 - (modes * (jnp.exp(1j * modes * t) * q_m).imag).sum()
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
     def vecroot(guess, varepsilon, q_m):

@@ -1081,7 +1081,7 @@ class Bounce2D(Bounce):
         This result will converge to
         (num transit / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
         In new versions of DESC, this can be computed more efficiently as
-        (num transit / 2π) * eq.compute("V_r/psi_r").
+        (num transit / 2π) * eq.compute("V_psi").
 
         Parameters
         ----------

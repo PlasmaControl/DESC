@@ -85,7 +85,7 @@ _bounce_doc = {
 
 
 @register_compute_fun(
-    name="V_r/psi_r",
+    name="V_psi",
     label="\\int \\vert B^{\\zeta} \\vert^{-1} \\mathrm{d}\\alpha \\mathrm{d}\\zeta",
     units="m^{3} / Wb",
     units_long="cubic meters per Weber",
@@ -105,7 +105,7 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
 
     The returned quantity has shape (num rho, ).
     """
-    data["V_r/psi_r"] = surface_integrals(
+    data["V_psi"] = surface_integrals(
         transforms["grid"],
         jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"])),
         expand_out=False,
@@ -152,7 +152,7 @@ def _dI_ripple(data, B, pitch):
         "R0",
         "|grad(rho)|",
         "<|grad(rho)|>",
-        "V_r/psi_r",
+        "V_psi",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -256,7 +256,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             num_pitch,
             surf_batch_size,
         )
-        / data["V_r/psi_r"]
+        / data["V_psi"]
     )
     return data
 

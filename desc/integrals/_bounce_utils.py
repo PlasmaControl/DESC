@@ -539,31 +539,15 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
 
     Notes
     -----
-    To accelerate convergence, we introduce the stream variable δ such that
+    To accelerate convergence, we introduced the stream variable δ such that
     θ = α + δ. This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ.
     Hence, it may be interpolated directly from discrete solutions θ* to
 
-    [1] θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
+    θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
 
     This feature avoids expensive off-grid re-interpolation in optimization.
 
-    [2] δ is (2π, ∞) periodic in (α, ζ).
-        A Fourier series efficiently interpolates δ(α, ζ) at fixed ζ.
-        Likewise, a Chebyshev series interpolates δ(α, ζ) at fixed α.
-
-    [3] The angle θ must be continuous at the branch cuts.
-        θ = αᵢ + δ(α=αᵢ, ζ=k 2π/NFP) = αᵢ₊₁ + δ(α=αᵢ₊₁, ζ=0) for k ∈ ℤ.
-        Hence, branch cuts in ζ where αᵢ, αᵢ₊₁ ∈ [0, 2π) introduce discontinuities of
-        αᵢ - αᵢ₊₁ = -ι ⌊ζ/NFP⌋ 2π/NFP in δ. This is consistent with our interpolation
-        of δ on the branch (α, NFP ζ) ∈ [0, 2π)². It is necessary to consider branch
-        cuts in α where αᵢ₊₁ ∉ [0, 2π) ∋ αᵢ as well. Observe the solutions θ* modulo
-        2π in [1] are invariant against rotations in α by integer multiples of 2π.
-        The periodicity of δ in α ensures the θ = α + δ we compute may be discontinuous
-        at branch cuts by integer multiplies of 2π only. We intend to evaluate maps
-        which are 2π periodic in θ. Hence, θ mod 2π is simple to recover from the
-        interpolation of δ on (α, NFP ζ) ∈ [0, 2π)².
-
-    The field line label α changes discontinuously along a magnetic field line.
+    Note the field line label α changes discontinuously along a magnetic field line.
     So an approximation f defined with basis functions in (α, NFP ζ) coordinates to
     some map F which is continuous along the magnetic field line does not guarantee
     continuity between branch cuts of (α, NFP ζ) ∈ [0, 2π)² until sufficient convergence

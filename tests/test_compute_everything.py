@@ -302,7 +302,6 @@ def test_compute_everything():
                 p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz
             )
 
-    # --no-verify if True or (not error_rpz and update_master_data_rpz):
     if not error_rpz and update_master_data_rpz:
         # then update the master compute data
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:

@@ -855,7 +855,7 @@ class FourierRZToroidalSurface(Surface):
             else jnp.zeros_like(Rmid)
         )
         axis = FourierRZCurve.from_values(
-            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
         )
         return axis
 
@@ -1167,5 +1167,5 @@ class ZernikeRZToroidalSection(Surface):
 
         grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
-        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis

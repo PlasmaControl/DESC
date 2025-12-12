@@ -37,7 +37,7 @@ class ExternalObjective(_Objective):
         It does not need to be JAX transformable.
     dim_f : int
         Dimension of the output of ``fun``.
-    fun_kwargs : any, optional
+    fun_kwargs : dict, optional
         Keyword arguments that are passed as inputs to ``fun``.
     vectorized : bool
         Set to False if ``fun`` takes a single Equilibrium as its positional argument.

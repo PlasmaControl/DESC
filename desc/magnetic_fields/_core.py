@@ -617,6 +617,8 @@ class _MagneticField(IOAble, ABC):
         path = os.path.expanduser(path)
         # cylindrical coordinates grid
         NFP = getattr(self, "_NFP", 1) if NFP is None else NFP
+        if hasattr(self, "_NFP"):
+            warnif(NFP != self.NFP, UserWarning, "NFP input is not equal to field.NFP.")
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
@@ -2226,6 +2228,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
             coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
         NFP = getattr(field, "_NFP", 1) if NFP is None else NFP
+        if hasattr(field, "_NFP"):
+            warnif(
+                NFP != field.NFP, UserWarning, "NFP input is not equal to field.NFP."
+            )
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords,

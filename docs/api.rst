@@ -96,6 +96,21 @@ Examples
     desc.examples.get
     desc.examples.listall
 
+External
+********
+Note that these objectives and utility functions are not regularly tested and maybe incompatible with newer version
+of the external code. Please see the README of the `desc.external` for more details.
+
+.. autosummary::
+    :toctree: _api/external
+    :recursive:
+
+    desc.external.export_coils_to_paraview
+    desc.external.export_surface_to_paraview
+    desc.external.export_volume_to_paraview
+    desc.external.TERPSICHORE
+
+
 Geometry
 ********
 

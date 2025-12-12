@@ -77,7 +77,7 @@ def _drift2(data, B, pitch):
         "|e_alpha|r,p|",
         "kappa_g",
         "iota_r",
-        "V_r/psi_r",
+        "V_psi",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -212,7 +212,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             num_pitch,
             surf_batch_size,
         )
-        / data["V_r/psi_r"]
+        / data["V_psi"]
         / (num_transit * 2**0.5)
     )
     return data
@@ -380,7 +380,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         "cvdrift0",
         "gbdrift (periodic)",
         "gbdrift (secular)/phi",
-        "V_r/psi_r",
+        "V_psi",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -488,7 +488,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             num_pitch,
             surf_batch_size,
         )
-        / data["V_r/psi_r"]
+        / data["V_psi"]
         / (num_transit * 2**0.5)
     )
     return data

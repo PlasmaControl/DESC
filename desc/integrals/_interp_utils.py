@@ -155,8 +155,6 @@ def irfft_mmt_pos(x, a, n, domain=(0, 2 * jnp.pi), modes=None):
     """
     if modes is None:
         modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-        i = (0, -1) if (n % 2 == 0) else 0
-        a = a.at[..., i].divide(2) * 2
     vander = jnp.exp(-1j * modes * (x - domain[0])[..., jnp.newaxis])
     return jnp.linalg.vecdot(vander, a).real
 

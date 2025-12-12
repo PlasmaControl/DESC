@@ -265,7 +265,7 @@ class FourierChebyshevSeries(IOAble):
         return cheb
 
 
-class ChebyshevSeries(IOAble):
+class DoubleChebyshevSeries(IOAble):
     """Real-valued 2D Chebyshev series.
 
     f(x, y) = ∑ₘₙ aₘₙ Tₘ(x) Tₙ(y)
@@ -876,10 +876,11 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        if "figsize" in kwargs:
-            fig, ax = plt.subplots(figsize=kwargs.pop("figsize"))
-        else:
-            fig, ax = plt.subplots()
+        fig, ax = (
+            plt.subplots(figsize=kwargs.pop("figsize"))
+            if "figsize" in kwargs
+            else plt.subplots()
+        )
 
         legend = {}
         z = jnp.linspace(

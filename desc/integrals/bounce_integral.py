@@ -559,10 +559,7 @@ class Bounce2D(Bounce):
             simp=simp,
         )
         out = batch_map(fun, fun_data, surf_batch_size)
-        if expand_out:
-            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-            return grid.expand(out)
-        return out
+        return grid.expand(out) if expand_out else out
 
     @staticmethod
     def reshape(grid, f):
@@ -701,9 +698,6 @@ class Bounce2D(Bounce):
             grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
-
-        else:
-            raise ValueError(f"Got invalid angle name = {name}.")
 
         angle = eq._map_poloidal_coordinates(
             jnp.atleast_1d(iota),
@@ -1503,10 +1497,7 @@ class Bounce1D(Bounce):
             simp=simp,
         )
         out = batch_map(fun, fun_data, surf_batch_size)
-        if expand_out:
-            assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-            return grid.expand(out)
-        return out
+        return grid.expand(out) if expand_out else out
 
     @staticmethod
     def reshape(grid, f):

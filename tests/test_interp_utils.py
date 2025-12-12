@@ -39,7 +39,7 @@ from desc.integrals._interp_utils import (
     rfft_to_trig,
     trig_vander,
 )
-from desc.integrals.basis import ChebyshevSeries, FourierChebyshevSeries
+from desc.integrals.basis import DoubleChebyshevSeries, FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
 from desc.utils import identity
 
@@ -364,7 +364,7 @@ class TestFastInterp:
 
         if not lobatto:
             g = f(m)[:, None] * _f_algebraic(cheb_pts(7))
-            cheb = ChebyshevSeries(g)
+            cheb = DoubleChebyshevSeries(g)
             np.testing.assert_allclose(
                 cheb._c,
                 sdctn(g) / g.size,
@@ -449,7 +449,7 @@ class TestStreams:
             tol=tol,
         ).squeeze(0)[..., ::-1]
 
-        c = ChebyshevSeries(theta, (0, 2 * np.pi), (0, 2 * np.pi / eq.NFP))._c
+        c = DoubleChebyshevSeries(theta, (0, 2 * np.pi), (0, 2 * np.pi / eq.NFP))._c
         c = cheb_from_dct(cheb_from_dct(c, -1), -2)
         return np.abs(c)
 

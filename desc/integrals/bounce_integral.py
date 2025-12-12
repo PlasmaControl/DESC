@@ -330,14 +330,7 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _objective_build(
-        obj,
-        get_profiles,
-        get_transforms,
-        parse_callable_target_bounds,
-        names,
-        singular,
-    ):
+    def _objective_build(obj, names, singular):
         """Default build for bounce integrals objectives.
 
         Examples
@@ -349,8 +342,6 @@ class Bounce2D(Bounce):
         ----------
         obj : _Objective
             The objective instance.
-        get_profiles, get_transforms, parse_callable_target_bounds
-            Functions that must be passed in to avoid circular import errors.
         names : str
             Builds profiles and transforms for the compute quantities registered
             with these names.
@@ -361,6 +352,9 @@ class Bounce2D(Bounce):
             Choose ``weak`` if the integrand is weakly singular.
 
         """
+        from desc.compute import get_profiles, get_transforms
+        from desc.objectives.utils import _parse_callable_target_bounds
+
         eq = obj.things[0]
         if obj._grid is None:
             obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -403,7 +397,7 @@ class Bounce2D(Bounce):
         obj._constants["profiles"] = get_profiles(names, eq, grid=obj._grid)
         obj._constants["transforms"] = get_transforms(names, eq, grid=obj._grid)
         obj._dim_f = obj._grid.num_rho
-        obj._target, obj._bounds = parse_callable_target_bounds(
+        obj._target, obj._bounds = _parse_callable_target_bounds(
             obj._target, obj._bounds, rho
         )
 

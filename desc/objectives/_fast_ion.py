@@ -248,14 +248,7 @@ class GammaC(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._objective_build(
-            self,
-            get_profiles,
-            get_transforms,
-            _parse_callable_target_bounds,
-            names=self._key,
-            singular="weak",
-        )
+        Bounce2D._objective_build(self, names=self._key, singular="weak")
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

@@ -19,6 +19,7 @@ New Features
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Adds ``UmbilicCurve`` and ``UmbilicHighCurvature`` classes to parametrize curves on flux surfaces and penalize curvature along those curves.
+
 Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)

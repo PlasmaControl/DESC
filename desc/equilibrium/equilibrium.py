@@ -2278,7 +2278,7 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict] or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -2286,7 +2286,10 @@ class Equilibrium(IOAble, Optimizable):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix. If an array,
+            should be the same size as sum(thing.dim_x for thing in things). If a list
+            of dict, the list should have 1 element for each thing, and each dict should
+            have the same keys and dimensions as thing.params_dict.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2384,7 +2387,7 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict] or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -2392,7 +2395,10 @@ class Equilibrium(IOAble, Optimizable):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix. If an array,
+            should be the same size as sum(thing.dim_x for thing in things). If a list
+            of dict, the list should have 1 element for each thing, and each dict should
+            have the same keys and dimensions as thing.params_dict.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

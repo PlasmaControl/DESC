@@ -724,15 +724,18 @@ class DeflationOperator(_Objective):
         pioneered by Farrell where M(x;y)=1/|x-y|^p + sigma
         while `"exp"` uses the form from Riley, where
         M(x;y) = exp(1/|x-y|) + sigma. Defaults to "power".
+    reduction_type: {"prod","sum"}
+        The type of reduction to use when reducing each individual
+        deflation term M_i(x;y_i) = exp(1/|x-y_i|) + sigma
+        into a single cost. Options are either "prod" which uses the product
+        of each M_i, or "sum" which sums each M_i. Default is "prod"
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
-    _static_attrs = _Objective._static_attrs + [
-        "_deflation_type",
-    ]
+    _static_attrs = _Objective._static_attrs + ["_deflation_type", "_reduction_type"]
 
     _coordinates = "rtz"
     _units = "~"
@@ -756,6 +759,7 @@ class DeflationOperator(_Objective):
         name="Deflation",
         jac_chunk_size=None,
         deflation_type="power",
+        reduction_type="prod",
     ):
         if target is None and bounds is None:
             target = 0
@@ -768,6 +772,9 @@ class DeflationOperator(_Objective):
         self._params_to_deflate_with = params_to_deflate_with
         assert deflation_type in ["power", "exp"]
         self._deflation_type = deflation_type
+        assert reduction_type in ["prod", "sum"]
+        self._reduction_type = reduction_type
+
         super().__init__(
             things=thing,
             target=target,
@@ -846,11 +853,14 @@ class DeflationOperator(_Objective):
 
         diffs = jnp.vstack(diffs)
         if self._deflation_type == "power":
-            deflation_parameter = jnp.prod(
-                1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
-            )
+            M_i = 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+
         else:
-            deflation_parameter = jnp.prod(
-                jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
-            )
+            M_i = jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
+
+        if self._reduction_type == "prod":
+            deflation_parameter = jnp.prod(M_i)
+        else:
+            deflation_parameter = jnp.sum(M_i)
+
         return deflation_parameter

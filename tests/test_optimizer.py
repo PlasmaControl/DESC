@@ -1731,8 +1731,8 @@ def test_parse_x_scale(DummyCoilSet):
 
     dim_eq = eq.dim_x
     dim_coil = coils.dim_x
-    assert _parse_x_scale("auto", [eq], {}) == "auto"
-    assert _parse_x_scale("auto", [eq, coils], {}) == "auto"
+    assert (np.concatenate(_parse_x_scale("auto", [eq], {})) == 0).all()
+    assert (np.concatenate(_parse_x_scale("auto", [eq, coils], {})) == 0).all()
 
     with pytest.raises(AssertionError):
         _parse_x_scale([1], [eq, coils], {})
@@ -1769,6 +1769,12 @@ def test_parse_x_scale(DummyCoilSet):
     xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
     xsc = np.concatenate(xsc)
     assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
+    assert (xsc[:dim_eq] == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+    xsc = _parse_x_scale([1, "auto"], [eq, coils], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc[dim_eq:] == 0).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
 

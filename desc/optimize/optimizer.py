@@ -124,7 +124,7 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``, ``'auto'``], ``'ess'`` or ``'auto'``
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -142,9 +142,10 @@ class Optimizer(IOAble):
             ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
             be the same size as sum(thing.dim_x for thing in things). If a list, the
             list should have 1 element for each thing, and each element should either
-            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually.
+            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
+            jacobian scaling for that thing, or a dict with the same keys and
+            dimensions as thing.params_dict to specify scales manually. Anywhere
+            ``x_scale==0``, automatic jacobian scaling will be used.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -395,8 +396,8 @@ def _parse_x_scale(x_scale, things, options):
     """
     if isinstance(x_scale, str):
         if x_scale == "auto":
-            return x_scale
-        if x_scale == "ess":
+            x_scale = ["auto"] * len(things)
+        elif x_scale == "ess":
             x_scale = ["ess"] * len(things)
         else:
             raise ValueError(
@@ -431,9 +432,13 @@ def _parse_x_scale(x_scale, things, options):
         elif isinstance(xsc, str) and xsc == "ess":
             scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value)
             all_scales.append(tng.pack_params(scl))
+        elif isinstance(xsc, str) and xsc == "auto":
+            scl = jnp.zeros_like(tng.pack_params(tng.params_dict))
+            all_scales.append(scl)
         else:
             raise TypeError(
-                f"all x_scales should be either 'ess', array, or dict, got {type(xsc)}"
+                f"all x_scales should be either 'ess', 'auto', "
+                f"array, or dict, got {type(xsc)}"
             )
     return all_scales
 

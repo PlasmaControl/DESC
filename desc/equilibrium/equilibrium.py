@@ -2243,7 +2243,7 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``, ``'auto'``], ``'ess'`` or ``'auto'``
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -2261,9 +2261,10 @@ class Equilibrium(IOAble, Optimizable):
             ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
             be the same size as sum(thing.dim_x for thing in things). If a list, the
             list should have 1 element for each thing, and each element should either
-            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually.
+            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
+            jacobian scaling for that thing, or a dict with the same keys and
+            dimensions as thing.params_dict to specify scales manually. Anywhere
+            ``x_scale==0``, automatic jacobian scaling will be used.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2361,7 +2362,7 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``, ``'auto'``], ``'ess'`` or ``'auto'``
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -2379,9 +2380,10 @@ class Equilibrium(IOAble, Optimizable):
             ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
             be the same size as sum(thing.dim_x for thing in things). If a list, the
             list should have 1 element for each thing, and each element should either
-            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually.
+            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
+            jacobian scaling for that thing, or a dict with the same keys and
+            dimensions as thing.params_dict to specify scales manually. Anywhere
+            ``x_scale==0``, automatic jacobian scaling will be used.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

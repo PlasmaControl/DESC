@@ -124,8 +124,8 @@ def irfft_mmt(x, a, n, domain=(0, 2 * jnp.pi), axis=-1):
     modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
     i = (0, -1) if (n % 2 == 0) else 0
     a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(-1j * modes * (x - domain[0])[..., jnp.newaxis])
-    return jnp.linalg.vecdot(vander, a).real
+    vander = jnp.exp(1j * modes * (x - domain[0])[..., jnp.newaxis])
+    return jnp.einsum("...m, ...m", vander, a).real
 
 
 def irfft_mmt_pos(x, a, n, domain=(0, 2 * jnp.pi), modes=None):
@@ -155,8 +155,8 @@ def irfft_mmt_pos(x, a, n, domain=(0, 2 * jnp.pi), modes=None):
     """
     if modes is None:
         modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-    vander = jnp.exp(-1j * modes * (x - domain[0])[..., jnp.newaxis])
-    return jnp.linalg.vecdot(vander, a).real
+    vander = jnp.exp(1j * modes * (x - domain[0])[..., jnp.newaxis])
+    return jnp.einsum("...m, ...m", vander, a).real
 
 
 def ifft_mmt(x, a, domain=(0, 2 * jnp.pi), axis=-1, *, vander=None, modes=None):
@@ -614,7 +614,7 @@ def idct_mmt(x, a, axis=-1, vander=None):
     if vander is None:
         vander = jnp.cos(jnp.arange(a.shape[axis]) * jnp.arccos(x)[..., None])
         a = jnp.moveaxis(a, axis, -1)
-    return jnp.linalg.vecdot(vander, a).real
+    return jnp.einsum("...m, ...m", vander, a)
 
 
 # Warning: method must be specified as keyword argument.

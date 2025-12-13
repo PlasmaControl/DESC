@@ -4,16 +4,10 @@ from functools import partial
 
 import numpy as np
 import pytest
+from interpax_fft import cheb_from_dct, cheb_pts, fourier_pts
 from jax import grad
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
-from numpy.polynomial.chebyshev import (
-    cheb2poly,
-    chebinterpolate,
-    chebpts1,
-    chebpts2,
-    chebval,
-)
 from numpy.polynomial.polynomial import polyvander
 from tests.test_plotting import tol_2d
 
@@ -23,24 +17,13 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
 from desc.integrals._interp_utils import (
-    cheb_from_dct,
-    cheb_pts,
-    fourier_pts,
-    ifft_mmt,
-    interp_dct,
-    interp_rfft,
-    interp_rfft2,
-    irfft_mmt,
     nufft1d2r,
     nufft2d2r,
     polyder_vec,
     polyroot_vec,
     polyval_vec,
-    rfft_to_trig,
-    trig_vander,
 )
 from desc.integrals.basis import DoubleChebyshevSeries, FourierChebyshevSeries
-from desc.integrals.quad_utils import bijection_to_disc
 from desc.utils import identity
 
 
@@ -119,41 +102,6 @@ class TestFastInterp:
     """Test fast (non-uniform) FFT and partial sum interpolation."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("M", [1, 8, 9])
-    def test_fft_shift(self, M):
-        """Test frequency shifting."""
-        a = np.fft.rfftfreq(M, 1 / M)
-        np.testing.assert_allclose(a, np.arange(M // 2 + 1))
-        b = np.fft.fftfreq(a.size, 1 / a.size) + a.size // 2
-        np.testing.assert_allclose(np.fft.ifftshift(a), b)
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "func, n, domain, imag_undersampled",
-        [
-            (*_test_inputs_1D[0], False),
-            (*_test_inputs_1D[1], True),
-            (*_test_inputs_1D[2], False),
-            (*_test_inputs_1D[3], True),
-            (*_test_inputs_1D[4], True),
-            (*_test_inputs_1D[5], False),
-        ],
-    )
-    def test_non_uniform_FFT(self, func, n, domain, imag_undersampled):
-        """Test non-uniform FFT interpolation."""
-        x = np.linspace(domain[0], domain[1], n, endpoint=False)
-        c = func(x)
-        xq = np.array([7.34, 1.10134, 2.28])
-
-        f = np.fft.fft(c, norm="forward")
-        np.testing.assert_allclose(f[0].imag, 0, atol=1e-12)
-        if n % 2 == 0:
-            np.testing.assert_allclose(f[n // 2].imag, 0, atol=1e-12)
-
-        r = ifft_mmt(xq, f, domain)
-        np.testing.assert_allclose(r.real if imag_undersampled else r, func(xq))
-
-    @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
     def test_non_uniform_real_FFT(self, func, n, domain):
         """Test non-uniform real FFT interpolation."""
@@ -212,53 +160,6 @@ class TestFastInterp:
         np.testing.assert_allclose(g2(xq, yq), g, atol=1e-11)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
-    def test_non_uniform_real_MMT(self, func, n, domain):
-        """Test non-uniform real MMT interpolation."""
-        x = np.linspace(domain[0], domain[1], n, endpoint=False)
-        c = func(x)
-        xq = np.array([7.34, 1.10134, 2.28])
-
-        np.testing.assert_allclose(interp_rfft(xq, c, domain), func(xq))
-        vand = trig_vander(xq, c.shape[-1], domain)
-        coef = rfft_to_trig(rfft(c, norm="forward"), c.shape[-1])
-        np.testing.assert_allclose((vand * coef).sum(-1), func(xq))
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)
-    def test_non_uniform_real_MMT_2D(self, func, m, n, domain_x, domain_y):
-        """Test non-uniform real MMT 2D interpolation."""
-        x = np.linspace(domain_x[0], domain_x[1], m, endpoint=False)
-        y = np.linspace(domain_y[0], domain_y[1], n, endpoint=False)
-        x, y = map(np.ravel, tuple(np.meshgrid(x, y, indexing="ij")))
-        c = func(x, y).reshape(m, n)
-        xq = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
-        yq = np.array([1.1, 3.78432, 8.542, 0])
-
-        v = func(xq, yq)
-        np.testing.assert_allclose(
-            interp_rfft2(xq, yq, c, domain_x, domain_y, (-2, -1)), v
-        )
-        np.testing.assert_allclose(
-            interp_rfft2(xq, yq, c, domain_x, domain_y, (-1, -2)), v
-        )
-        np.testing.assert_allclose(
-            interp_rfft2(yq, xq, c.T, domain_y, domain_x, (-2, -1)), v
-        )
-        np.testing.assert_allclose(
-            interp_rfft2(yq, xq, c.T, domain_y, domain_x, (-1, -2)), v
-        )
-        np.testing.assert_allclose(
-            irfft_mmt(
-                yq,
-                ifft_mmt(xq[:, None], rfft2(c, norm="forward"), domain_x, -2),
-                n,
-                domain_y,
-            ),
-            v,
-        )
-
-    @pytest.mark.unit
     def test_nufft2_vec(self):
         """Test vectorized JAX-finufft vectorized interpolation."""
         func_1, n, domain = _test_inputs_1D[0]
@@ -288,17 +189,6 @@ class TestFastInterp:
                 partial(nufft1d2r, domain=domain, vec=False),
                 signature="(x),(b,f)->(b,x)",
             )(xq, f),
-        )
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("N", [2, 6, 7])
-    def test_cheb_pts(self, N):
-        """Test we use Chebyshev points compatible with DCT."""
-        np.testing.assert_allclose(cheb_pts(N), chebpts1(N)[::-1], atol=1e-15)
-        np.testing.assert_allclose(
-            cheb_pts(N, domain=(-np.pi, np.pi), lobatto=True),
-            np.pi * chebpts2(N)[::-1],
-            atol=1e-15,
         )
 
     @pytest.mark.unit
@@ -373,38 +263,6 @@ class TestFastInterp:
             )
             truth = f(n)[:, None] * _f_algebraic(cheb_pts(8))
             np.testing.assert_allclose(cheb.evaluate(n.size, 8), truth)
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "f, M",
-        [(_f_non_periodic, 5), (_f_non_periodic, 6), (_f_algebraic, 7)],
-    )
-    def test_interp_dct(self, f, M):
-        """Test non-uniform DCT interpolation."""
-        c0 = chebinterpolate(f, M - 1)
-        assert not np.allclose(
-            c0,
-            cheb_from_dct(dct(f(chebpts1(M)), 2)) / M,
-        ), (
-            "Interpolation should fail because cosine basis is in wrong domain, "
-            "yet the supplied test function was interpolated fine using this wrong "
-            "domain. Pick a better test function."
-        )
-
-        z = cheb_pts(M)
-        fz = f(z)
-        np.testing.assert_allclose(c0, cheb_from_dct(dct(fz, 2) / M), atol=1e-13)
-        if np.allclose(_f_algebraic(z), fz):  # Should reconstruct exactly.
-            np.testing.assert_allclose(
-                cheb2poly(c0),
-                np.array([-np.e, -1, 0, 1, 1, 0, -10]),
-                atol=1e-13,
-            )
-
-        xq = np.arange(10 * 3 * 2).reshape(10, 3, 2)
-        xq = bijection_to_disc(xq, 0, xq.size)
-        fq = chebval(xq, c0, tensor=False)
-        np.testing.assert_allclose(fq, interp_dct(xq, fz), atol=1e-13)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

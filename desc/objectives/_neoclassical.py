@@ -20,8 +20,9 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        In ``rev`` mode, reducing the parameter ``pitch_batch_size`` does not
-        reduce memory consumption, so it is recommended to retain the default for that.
+        In ``rev`` mode, reducing the value of the parameter ``pitch_batch_size`` does
+        not reduce memory consumption, so it is recommended to retain the default unless
+        you have explicitly requested to use ``fwd`` mode.
         """
 }
 
@@ -119,6 +120,9 @@ class EffectiveRipple(_Objective):
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    low_ram : bool
+        If true, then will switch to a slower algorithm whose differentiation
+        consumes less memory. Default is false.
     use_bounce1d : bool
         Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
         basically replacing some pseudo-spectral methods with local splines.
@@ -171,6 +175,7 @@ class EffectiveRipple(_Objective):
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=1e-6,
+        low_ram=False,
         use_bounce1d=False,
         **kwargs,
     ):
@@ -192,8 +197,10 @@ class EffectiveRipple(_Objective):
             use_bounce1d, kwargs, "spline", "use_bounce1d"
         )
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha, "X": X, "Y": Y}
+        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
+            "X": X,
+            "Y": Y,
             "Y_B": Y_B,
             "num_transit": num_transit,
             "num_well": num_well,
@@ -202,7 +209,13 @@ class EffectiveRipple(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
+            "low_ram": low_ram,
         }
+        if use_bounce1d:
+            self._hyperparam.pop("X")
+            self._hyperparam.pop("Y")
+            self._hyperparam.pop("nufft_eps")
+            self._hyperparam.pop("low_ram")
 
         super().__init__(
             things=eq,
@@ -264,8 +277,8 @@ class EffectiveRipple(_Objective):
         )
         delta = eq._map_poloidal_coordinates(
             constants["transforms"]["grid"].compress(data["iota"]),
-            constants["X"],
-            constants["Y"],
+            constants["x"],
+            constants["y"],
             params["L_lmn"],
             constants["lambda"],
             outbasis="delta",
@@ -289,9 +302,6 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
     def _build_bounce1d(self, use_jit=True, verbose=1):
-        self._hyperparam.pop("nufft_eps")
-        del self._constants["X"]
-
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -307,7 +317,7 @@ class EffectiveRipple(_Objective):
 
         num_quad = self._hyperparam.pop("num_quad")
 
-        self._constants["Y"] = jnp.linspace(
+        self._constants["zeta"] = jnp.linspace(
             0, 2 * jnp.pi * num_transit, Y_B * num_transit
         )
 
@@ -351,7 +361,7 @@ class EffectiveRipple(_Objective):
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["Y"],
+            constants["zeta"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,

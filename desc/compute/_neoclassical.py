@@ -80,8 +80,25 @@ _bounce_doc = {
         This private parameter is intended to be used only by
         developers for objectives.
         """,
+    "low_ram": """bool :
+        If true, then will switch to a slower algorithm whose differentiation
+        consumes less memory. Default is false.
+        """,
     "theta": "",
 }
+
+_bounce_static_argnames = (
+    "Y_B",
+    "num_transit",
+    "num_well",
+    "num_quad",
+    "num_pitch",
+    "pitch_batch_size",
+    "surf_batch_size",
+    "nufft_eps",
+    "spline",
+    "low_ram",
+)
 
 
 @register_compute_fun(
@@ -154,20 +171,7 @@ def _dI_ripple(data, B, pitch):
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "nufft_eps",
-        "spline",
-    ],
-)
+@partial(jit, static_argnames=_bounce_static_argnames)
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
@@ -197,6 +201,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
+        low_ram,
     ) = Bounce2D._default_kwargs("deriv", grid.NFP, **kwargs)
 
     def eps_32(data):
@@ -226,6 +231,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 "|grad(rho)|*kappa_g",
                 num_well=num_well,
                 nufft_eps=nufft_eps,
+                low_ram=low_ram,
                 is_fourier=True,
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)

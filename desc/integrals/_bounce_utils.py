@@ -834,15 +834,15 @@ def round_up_rule(Y, NFP, axisymmetric=False):
     -------
     Y : int
         Number of points per toroidal transit.
-    num_ζ : int
+    num_z : int
         Number of points per field period.
 
     """
     if axisymmetric:
         assert Y % NFP == 0, "Should set NFP = 1."
         NFP = Y
-    num_ζ = (Y + NFP - 1) // NFP
-    return num_ζ * NFP, num_ζ
+    num_z = (Y + NFP - 1) // NFP
+    return num_z * NFP, num_z
 
 
 def fieldline_quad_rule(Y):
@@ -884,8 +884,8 @@ def get_vander(grid, Y, Y_B, NFP):
     assert isinstance(NFP, int)
 
     Y_trunc = truncate_rule(Y)
-    Y_B, num_ζ = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
     x = jnp.linspace(
-        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_ζ, endpoint=False
+        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
     )
     return {"dct spline": chebvander(x, Y_trunc - 1)}

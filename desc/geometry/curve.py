@@ -28,10 +28,10 @@ from desc.utils import (
 from .core import Curve
 
 __all__ = [
-    "FourierPlanarCurve",
     "FourierRZCurve",
-    "FourierXYCurve",
     "FourierXYZCurve",
+    "FourierPlanarCurve",
+    "FourierXYCurve",
     "SplineXYZCurve",
 ]
 
@@ -108,8 +108,18 @@ class FourierRZCurve(Curve):
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
+        self._R_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(1),
+            sym="cos" if sym else False,
+        )
+        self._Z_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(1),
+            sym="sin" if sym else False,
+        )
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -154,10 +164,16 @@ class FourierRZCurve(Curve):
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
-                N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=1,
+                sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
-                N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=1,
+                sym="sin" if self.sym else self.sym,
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
@@ -254,7 +270,7 @@ class FourierRZCurve(Curve):
         return curve
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, sym=False, basis="rpz", name=""):
+    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
@@ -429,9 +445,9 @@ class FourierXYZCurve(Curve):
         assert Z_n.size == modes.size, "Z_n and modes must be the same size"
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, sym=False)
-        self._Y_basis = FourierSeries(N, NFP=1, sym=False)
-        self._Z_basis = FourierSeries(N, NFP=1, sym=False)
+        self._X_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._Y_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._Z_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
@@ -715,7 +731,7 @@ class FourierPlanarCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._r_basis = FourierSeries(N, NFP=1, sym=False)
+        self._r_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
         self._basis = basis

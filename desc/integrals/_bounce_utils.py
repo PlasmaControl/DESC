@@ -585,7 +585,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
+def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_z, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -597,7 +597,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f`` over a field period.
@@ -606,7 +606,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
         Fourier resolution in poloidal direction.
     modes_θ : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
-    modes_ζ : jnp.ndarray
+    modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     vander : jnp.ndarray
         Precomputed transform matrix.
@@ -632,7 +632,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_ζ, *, vander=None):
         f,
         theta.domain,
         axis=-2,
-        modes=modes_ζ,
+        modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
     f = irfft_mmt_pos(theta.evaluate(Y), f, num_θ, modes=modes_θ)
@@ -648,12 +648,12 @@ def fast_cubic_spline(
     Y,
     num_θ,
     modes_θ,
-    modes_ζ,
+    modes_z,
     NFP=1,
     nufft_eps=1e-6,
     *,
     vander_θ=None,
-    vander_ζ=None,
+    vander_z=None,
     check=False,
 ):
     """Compute cubic spline of ``f`` on field lines using fast transforms.
@@ -667,7 +667,7 @@ def fast_cubic_spline(
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, modes_ζ.size, modes_θ.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_θ.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
@@ -676,7 +676,7 @@ def fast_cubic_spline(
         Fourier resolution in poloidal direction.
     modes_θ : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
-    modes_ζ : jnp.ndarray
+    modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
@@ -685,7 +685,7 @@ def fast_cubic_spline(
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_θ : jnp.ndarray
         Precomputed transform matrix.
-    vander_ζ : jnp.ndarray
+    vander_z : jnp.ndarray
         Precomputed transform matrix.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
@@ -710,9 +710,9 @@ def fast_cubic_spline(
     num_transit = theta.X // NFP
 
     axisymmetric = f.shape[-2] == 1
-    Y, num_ζ = round_up_rule(Y, NFP, axisymmetric)
-    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_ζ, endpoint=False)
-    ζ = bijection_from_disc(x, *theta.domain)
+    Y, num_z = round_up_rule(Y, NFP, axisymmetric)
+    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_z, endpoint=False)
+    z = bijection_from_disc(x, *theta.domain)
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
@@ -721,9 +721,9 @@ def fast_cubic_spline(
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
-    if num_ζ >= f.shape[-2]:
+    if num_z >= f.shape[-2]:
         f = f.squeeze(-3)
-        p = num_ζ - f.shape[-2]
+        p = num_z - f.shape[-2]
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
         pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
@@ -731,12 +731,12 @@ def fast_cubic_spline(
         f = ifft(f, axis=-2, norm="forward")
     else:
         f = ifft_mmt(
-            ζ[:, None],
+            z[:, None],
             f,
             theta.domain,
             axis=-2,
-            modes=modes_ζ,
-            vander=vander_ζ,
+            modes=modes_z,
+            vander=vander_z,
         )
 
     # θ at uniform ζ on field lines
@@ -754,19 +754,19 @@ def fast_cubic_spline(
         f = irfft_mmt_pos(θ, f, num_θ, modes=modes_θ)
     else:
         if len(lines) > 1:
-            θ = θ.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_ζ, -1)
+            θ = θ.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
         else:
-            θ = θ.transpose(3, 0, 1, 2).reshape(num_ζ, -1)
+            θ = θ.transpose(3, 0, 1, 2).reshape(num_z, -1)
         f = nufft1d2r(θ, f, eps=nufft_eps).mT
     f = f.reshape(*lines, -1)
 
-    ζ = jnp.ravel(
-        ζ + (theta.domain[1] - theta.domain[0]) * jnp.arange(theta.X)[:, None]
+    z = jnp.ravel(
+        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(theta.X)[:, None]
     )
-    f = CubicSpline(x=ζ, y=f, axis=-1, check=check).c
+    f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
     assert f.shape == (*lines, num_transit * Y - 1, 4)
-    return f, ζ
+    return f, z
 
 
 def move(f, out=True):

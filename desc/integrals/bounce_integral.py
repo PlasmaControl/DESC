@@ -330,14 +330,7 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _objective_build(
-        obj,
-        get_profiles,
-        get_transforms,
-        parse_callable_target_bounds,
-        names,
-        singular,
-    ):
+    def _objective_build(obj, names, singular):
         """Default build for bounce integrals objectives.
 
         Examples
@@ -349,8 +342,6 @@ class Bounce2D(Bounce):
         ----------
         obj : _Objective
             The objective instance.
-        get_profiles, get_transforms, parse_callable_target_bounds
-            Functions that must be passed in to avoid circular import errors.
         names : str
             Builds profiles and transforms for the compute quantities registered
             with these names.
@@ -361,17 +352,18 @@ class Bounce2D(Bounce):
             Choose ``weak`` if the integrand is weakly singular.
 
         """
+        from desc.compute import get_profiles, get_transforms
+        from desc.objectives.utils import _parse_callable_target_bounds
+
         eq = obj.things[0]
         if obj._grid is None:
             obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert obj._grid.can_fft2
 
-        X = obj._constants["X"]
-        Y = obj._constants["Y"]
-        x_pts = fourier_pts(X)
-        y_pts = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
-        obj._constants["X"] = x_pts
-        obj._constants["Y"] = y_pts
+        X = obj._hyperparam.pop("X")
+        Y = obj._hyperparam.pop("Y")
+        obj._constants["x"] = fourier_pts(X)
+        obj._constants["y"] = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
@@ -397,13 +389,15 @@ class Bounce2D(Bounce):
         obj._constants["lambda"] = get_transforms(
             "lambda",
             eq,
-            grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=y_pts, NFP=eq.NFP),
+            grid=LinearGrid(
+                rho=rho, M=eq.L_basis.M, zeta=obj._constants["y"], NFP=eq.NFP
+            ),
         )["L"]
 
         obj._constants["profiles"] = get_profiles(names, eq, grid=obj._grid)
         obj._constants["transforms"] = get_transforms(names, eq, grid=obj._grid)
         obj._dim_f = obj._grid.num_rho
-        obj._target, obj._bounds = parse_callable_target_bounds(
+        obj._target, obj._bounds = _parse_callable_target_bounds(
             obj._target, obj._bounds, rho
         )
 
@@ -424,8 +418,8 @@ class Bounce2D(Bounce):
         Returns
         -------
             angle, Y_B, alpha, num_transit, num_well, num_pitch
-            pitch_batch_size, surf_batch_size
-            quad, nufft_eps, spline, vander
+            pitch_batch_size, surf_batch_size,
+            quad, nufft_eps, spline, vander, low_ram
 
         """
         if singular == "deriv":
@@ -454,6 +448,11 @@ class Bounce2D(Bounce):
         assert (
             surf_batch_size == 1 or pitch_batch_size is None
         ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+        low_ram = kwargs.get("low_ram", False)
+        assert (
+            surf_batch_size == 1 or not low_ram
+        ), "Use surf_batch_size=1 before trying low_ram."
+
         spline = kwargs.get("spline", True)
         vander = kwargs.get("_vander", None)
 
@@ -479,6 +478,7 @@ class Bounce2D(Bounce):
             nufft_eps,
             spline,
             vander,
+            low_ram,
         )
 
     @staticmethod
@@ -881,6 +881,7 @@ class Bounce2D(Bounce):
         *,
         num_well=None,
         nufft_eps=1e-6,
+        low_ram=False,
         is_fourier=False,
         quad=None,
         check=False,
@@ -925,6 +926,9 @@ class Bounce2D(Bounce):
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        low_ram : bool
+            If true, then will switch to a slower algorithm whose differentiation
+            consumes less memory. Default is false.
         is_fourier : bool
             If true, then it is assumed that ``data`` holds Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -960,6 +964,11 @@ class Bounce2D(Bounce):
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
 
+        if low_ram and z1.ndim > 3 and z1.shape[0] > 1:
+            warnings.warn(
+                "Use Bounce2D.batch with surf_batch_size=1 before trying low_ram."
+            )
+
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
         if jnp.ndim(pitch) == 1:
@@ -972,7 +981,7 @@ class Bounce2D(Bounce):
         if nufft_eps < 1e-14:
             data = self._nummt(ζ, data)
         else:
-            data = self._nufft(ζ, data, nufft_eps)
+            data = self._nufft(ζ, data, nufft_eps, low_ram)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = ζ
 
@@ -998,12 +1007,11 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, ζ, data, eps):
+    def _nufft(self, ζ, data, eps, low_ram):
         shape = ζ.shape
         ζ = flatten_mat(ζ, 3)
-        # TODO: eval1d(loop=True) reduced memory, but slow, try batching stuff
-        #       or succumb to nufft
-        θ = flatten_mat(self._theta.eval1d(ζ))
+        # TODO: Use a nufft instead of eval1d here.
+        θ = flatten_mat(self._theta.eval1d(ζ, loop=low_ram))
         ζ = flatten_mat(ζ)
         c = nufft2d2r(
             ζ,
@@ -1096,13 +1104,6 @@ class Bounce2D(Bounce):
     def compute_fieldline_length(self, quad=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
 
-        Notes
-        -----
-        This result will converge to
-        (num transit / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)².
-        In new versions of DESC, this can be computed more efficiently as
-        (num transit / 2π) * eq.compute("V_psi").
-
         Parameters
         ----------
         quad : tuple[jnp.ndarray]
@@ -1117,6 +1118,14 @@ class Bounce2D(Bounce):
             Shape (num ρ, ).
 
         """
+        warnings.warn(
+            "This result will converge to "
+            "(num transit / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)². "
+            "This can be computed more efficiently as "
+            '(num transit / 2π) * eq.compute("V_psi").',
+            DeprecationWarning,
+        )
+
         if quad is None:
             deg = (
                 self._c["B(z)"].Y
@@ -1371,7 +1380,7 @@ class Bounce1D(Bounce):
 
     Examples
     --------
-    See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
+      * ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``
 
     See Also
     --------
@@ -1712,65 +1721,28 @@ class Bounce1D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv, num_well)
-        pitch = jnp.atleast_1d(1 / broadcast_for_bounce(pitch_inv))[..., None]
+        z1, z2 = points
 
-        if kwargs.get("batch", True):
-            pitch = pitch[..., None]
-            result = self._integrate(
-                x,
-                w,
-                integrand,
-                pitch,
-                data,
-                *points,
-                method,
-                check,
-                plot,
-                batch=True,
-            )
-        else:
+        pitch = jnp.atleast_1d(1 / broadcast_for_bounce(pitch_inv))[..., None, None]
 
-            def loop(points):
-                """Integrate one well at a time."""
-                return self._integrate(
-                    x,
-                    w,
-                    integrand,
-                    pitch,
-                    data,
-                    *points,
-                    method,
-                    check=False,
-                    plot=False,
-                    batch=False,
-                )
-
-            result = batch_map(loop, [jnp.moveaxis(z, -1, 0) for z in points], 1)
-            result = [jnp.moveaxis(r, 0, -1) for r in result]
-
-        return result[0] if len(result) == 1 else result
-
-    def _integrate(
-        self, x, w, integrand, pitch, data, z1, z2, method, check, plot, batch
-    ):
         shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
 
-        ζ = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 2 + batch)
+        z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
 
         b_sup_z = interp1d_Hermite_vec(
-            ζ,
+            z,
             self._zeta,
             self._data["|b^zeta|"],
             self._data["|b^zeta|_z|r,a"],
         ).reshape(shape)
         B = interp1d_Hermite_vec(
-            ζ,
+            z,
             self._zeta,
             self._data["|B|"],
             self._data["|B|_z|r,a"],
         ).reshape(shape)
         data = {
-            k: interp1d_vec(ζ, self._zeta, v, method=method).reshape(shape)
+            k: interp1d_vec(z, self._zeta, v, method=method).reshape(shape)
             for k, v in data.items()
         }
 
@@ -1783,7 +1755,7 @@ class Bounce1D(Bounce):
 
         if check:
             check_interp(
-                ζ.reshape(shape),
+                z.reshape(shape),
                 b_sup_z,
                 B,
                 data.values(),
@@ -1791,7 +1763,7 @@ class Bounce1D(Bounce):
                 plot=plot,
             )
 
-        return result
+        return result[0] if len(result) == 1 else result
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.

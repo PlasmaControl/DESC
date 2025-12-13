@@ -8,6 +8,7 @@ their API may change without warning.
 import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
+from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jnp
 from desc.integrals._interp_utils import (
@@ -19,7 +20,6 @@ from desc.integrals._interp_utils import (
     nufft1d2r,
     polyroot_vec,
     polyval_vec,
-    vander_chebyshev,
 )
 from desc.integrals.basis import (
     FourierChebyshevSeries,
@@ -798,10 +798,6 @@ def move(f, out=True):
 def mmt_for_bounce(v, c):
     """Matrix multiplication transform.
 
-    Warnings
-    --------
-    https://github.com/jax-ml/jax/issues/30627
-
     Parameters
     ----------
     v : jnp.ndarray
@@ -897,12 +893,7 @@ def get_vander(grid, Y, Y_B, NFP):
 
     Y_trunc = truncate_rule(Y)
     Y_B, num_ζ = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
-
-    return {
-        "dct spline": vander_chebyshev(
-            jnp.linspace(
-                -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_ζ, endpoint=False
-            ),
-            Y_trunc,
-        ),
-    }
+    x = jnp.linspace(
+        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_ζ, endpoint=False
+    )
+    return {"dct spline": chebvander(x, Y_trunc - 1)}

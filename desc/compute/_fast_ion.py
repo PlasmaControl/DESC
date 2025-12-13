@@ -7,7 +7,7 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc
+from ._neoclassical import _bounce_doc, _bounce_static_argnames
 from .data_index import register_compute_fun
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
@@ -84,20 +84,7 @@ def _drift2(data, B, pitch):
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "nufft_eps",
-        "spline",
-    ],
-)
+@partial(jit, static_argnames=_bounce_static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -138,6 +125,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
+        low_ram,
     ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def Gamma_c(data):
@@ -164,6 +152,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
                 nufft_eps=nufft_eps,
+                low_ram=low_ram,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -264,20 +253,7 @@ def _poloidal_drift(data, B, pitch):
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "nufft_eps",
-        "spline",
-    ],
-)
+@partial(jit, static_argnames=_bounce_static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -302,6 +278,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
+        low_ram,
     ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def gamma_c0(data):
@@ -328,6 +305,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
                 nufft_eps=nufft_eps,
+                low_ram=low_ram,
                 is_fourier=True,
             )
             return (2 / jnp.pi) * jnp.arctan(
@@ -388,20 +366,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "nufft_eps",
-        "spline",
-    ],
-)
+@partial(jit, static_argnames=_bounce_static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
@@ -437,6 +402,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
+        low_ram,
     ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
 
     def Gamma_c(data):
@@ -462,6 +428,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 num_well=num_well,
                 nufft_eps=nufft_eps,
+                low_ram=low_ram,
                 is_fourier=True,
             )
             # This is γ_c π/2.

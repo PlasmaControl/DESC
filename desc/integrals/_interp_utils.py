@@ -585,18 +585,6 @@ def interp_dct(x, f, lobatto=False, axis=-1):
     )
 
 
-def vander_chebyshev(x, Y):
-    """For points x with Chebyshev resolution Y.
-
-    Returns
-    -------
-    vander : jnp.ndarray
-        Shape (*x.shape, Y).
-
-    """
-    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[..., jnp.newaxis])
-
-
 def idct_mmt(x, a, axis=-1, vander=None):
     """Evaluate Chebyshev coefficients ``a`` at ``x`` ∈ [-1, 1].
 
@@ -624,7 +612,7 @@ def idct_mmt(x, a, axis=-1, vander=None):
 
     """
     if vander is None:
-        vander = vander_chebyshev(x, a.shape[axis])
+        vander = jnp.cos(jnp.arange(a.shape[axis]) * jnp.arccos(x)[..., None])
         a = jnp.moveaxis(a, axis, -1)
     return jnp.linalg.vecdot(vander, a).real
 

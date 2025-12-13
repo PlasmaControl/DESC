@@ -3170,6 +3170,7 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+        kwargs["low_ram"] = True
     return objective(eq=eq, **kwargs)
 
 

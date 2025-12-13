@@ -17,10 +17,16 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
@@ -1618,6 +1624,106 @@ def test_optimize_three_coil_at_once():
 
 
 @pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_with_proximal():
+    """Test exponential spectral scaling (ESS) with ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        ForceBalance(eq=eq),  # triggers ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
+        copy=True,
+        options={
+            "perturb_options": {"verbose": 0, "order": 1},
+            "solve_options": {"verbose": 0, "maxiter": 2},
+        },
+    )
+
+    assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_without_proximal():
+    """Test exponential spectral scaling (ESS) without ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        # No ForceBalance, so no ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
+        copy=True,
+    )
+
+    assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+
+
+@pytest.mark.unit
 def test_parse_x_scale(DummyCoilSet):
     """Test for parsing dict/list of scales into single array."""
     eq = Equilibrium()
@@ -1636,7 +1742,7 @@ def test_parse_x_scale(DummyCoilSet):
         _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
     with pytest.raises(ValueError):
         _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         _parse_x_scale("foo", [eq], {})
     with pytest.raises(TypeError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})
@@ -1665,3 +1771,184 @@ def test_parse_x_scale(DummyCoilSet):
     assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
+
+
+@pytest.mark.unit
+def test_get_ess_scale():  # noqa: C901
+    """Test that ESS scale for different objects is computed correctly."""
+    alpha = 1.5
+    order = 2
+    eq = Equilibrium()
+    eq.change_resolution(3, 4, 5)
+
+    surf = eq.surface
+    axis = eq.axis
+
+    zsurf = ZernikeRZToroidalSection()
+    zsurf.change_resolution(3, 4)
+
+    planar_coil = FourierPlanarCoil()
+    planar_coil.change_resolution(5)
+
+    xy_coil = FourierXYCoil()
+    xy_coil.change_resolution(5)
+
+    xyz_coil = FourierXYZCoil()
+    xyz_coil.change_resolution(5)
+
+    rz_coil = FourierRZCoil()
+    rz_coil.change_resolution(5)
+
+    eq_scale = eq._get_ess_scale(alpha, order)
+    surf_scale = surf._get_ess_scale(alpha, order)
+    axis_scale = axis._get_ess_scale(alpha, order)
+    zsurf_scale = zsurf._get_ess_scale(alpha, order)
+    planar_coil_scale = planar_coil._get_ess_scale(alpha, order)
+    xy_coil_scale = xy_coil._get_ess_scale(alpha, order)
+    xyz_coil_scale = xyz_coil._get_ess_scale(alpha, order)
+    rz_coil_scale = rz_coil._get_ess_scale(alpha, order)
+
+    # FourierRZCoil
+    assert rz_coil_scale.keys() == set(rz_coil.optimizable_params)
+    np.testing.assert_allclose(
+        rz_coil_scale["R_n"],
+        np.exp(-alpha * np.linalg.norm(rz_coil.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        rz_coil_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(rz_coil.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in rz_coil_scale.keys():
+        if key in ["R_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(rz_coil_scale[key], 1)
+
+    # FourierPlanarCoil
+    assert planar_coil_scale.keys() == set(planar_coil.optimizable_params)
+    np.testing.assert_allclose(
+        planar_coil_scale["r_n"],
+        np.exp(-alpha * np.linalg.norm(planar_coil.r_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    for key in planar_coil_scale.keys():
+        if key in ["r_n"]:
+            continue
+        np.testing.assert_allclose(planar_coil_scale[key], 1)
+
+    # FourierXYCoil
+    assert xy_coil_scale.keys() == set(xy_coil.optimizable_params)
+    np.testing.assert_allclose(
+        xy_coil_scale["X_n"],
+        np.exp(-alpha * np.linalg.norm(xy_coil.X_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xy_coil_scale["Y_n"],
+        np.exp(-alpha * np.linalg.norm(xy_coil.Y_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in xy_coil_scale.keys():
+        if key in ["X_n", "Y_n"]:
+            continue
+        np.testing.assert_allclose(xy_coil_scale[key], 1)
+
+    # FourierXYZCoil
+    assert xyz_coil_scale.keys() == set(xyz_coil.optimizable_params)
+    np.testing.assert_allclose(
+        xyz_coil_scale["X_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.X_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xyz_coil_scale["Y_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.Y_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xyz_coil_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.Z_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    for key in xyz_coil_scale.keys():
+        if key in ["X_n", "Y_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(xyz_coil_scale[key], 1)
+
+    # FourierRZCurve
+    assert axis_scale.keys() == set(axis.optimizable_params)
+    np.testing.assert_allclose(
+        axis_scale["R_n"],
+        np.exp(-alpha * np.linalg.norm(axis.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        axis_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(axis.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in axis_scale.keys():
+        if key in ["R_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(axis_scale[key], 1)
+
+    # FourierRZToroidalSurface
+    assert surf_scale.keys() == set(surf.optimizable_params)
+    np.testing.assert_allclose(
+        surf_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(surf.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        surf_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(surf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in surf_scale.keys():
+        if key in ["R_lmn", "Z_lmn"]:
+            continue
+        np.testing.assert_allclose(surf_scale[key], 1)
+
+    # ZernikeRZToroidalSection
+    assert zsurf_scale.keys() == set(zsurf.optimizable_params)
+    np.testing.assert_allclose(
+        zsurf_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(zsurf.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        zsurf_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(zsurf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in zsurf_scale.keys():
+        if key in ["R_lmn", "Z_lmn"]:
+            continue
+        np.testing.assert_allclose(zsurf_scale[key], 1)
+
+    # Equilibrium
+    assert eq_scale.keys() == set(eq.optimizable_params)
+    np.testing.assert_allclose(
+        eq_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        eq_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        eq_scale["L_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.L_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(eq_scale["Ra_n"], axis_scale["R_n"])
+    np.testing.assert_allclose(eq_scale["Za_n"], axis_scale["Z_n"])
+    np.testing.assert_allclose(eq_scale["Rb_lmn"], surf_scale["R_lmn"])
+    np.testing.assert_allclose(eq_scale["Zb_lmn"], surf_scale["Z_lmn"])
+    for key in eq_scale.keys():
+        if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
+            continue
+        np.testing.assert_allclose(eq_scale[key], 1)
+
+    eq2 = eq.copy()
+    eq2.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+    eq2.surface.change_Phi_resolution(3, 4)
+    eq2_scale = eq2._get_ess_scale(alpha, order)
+    assert eq2_scale.keys() == set(eq_scale.keys()).union({"I", "G", "Phi_mn"})
+    np.testing.assert_allclose(
+        eq2_scale["Phi_mn"],
+        np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(eq2_scale["I"], 1)
+    np.testing.assert_allclose(eq2_scale["G"], 1)

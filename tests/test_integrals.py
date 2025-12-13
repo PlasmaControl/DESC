@@ -1167,20 +1167,7 @@ class TestBounce:
 
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
 
-        self._not_part_of_tutorial_test(bounce, pitch_inv, points, den)
-
         return fig
-
-    @staticmethod
-    def _not_part_of_tutorial_test(bounce, pitch_inv, points, den):
-        den_no_batch = bounce.integrate(
-            TestBounce._example_denominator,
-            pitch_inv,
-            points=points,
-            check=True,
-            batch=False,
-        )
-        np.testing.assert_allclose(den_no_batch, den)
 
     @pytest.mark.unit
     def test_interp_to_argmin(self):
@@ -1610,8 +1597,11 @@ class TestBounce2D:
     def _not_part_of_tutorial_test(
         bounce, pitch_inv, points, num, data, grid, angle, alpha
     ):
+        with pytest.warns(DeprecationWarning):
+            length = bounce.compute_fieldline_length()
+
         np.testing.assert_allclose(
-            bounce.compute_fieldline_length(),
+            length,
             # Crossref w/ "fieldline length" in data index with 1000 points.
             [
                 385.20520905,

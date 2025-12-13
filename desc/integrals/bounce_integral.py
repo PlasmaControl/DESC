@@ -289,7 +289,7 @@ class Bounce2D(Bounce):
         self._quad = get_quadrature(setdefault(quad, default_quad), automorphism)
         self._NFP = grid.NFP
         self._num_θ = grid.num_theta
-        self._modes_ζ, self._modes_θ = rfft2_modes(
+        self._modes_z, self._modes_θ = rfft2_modes(
             grid.num_zeta, grid.num_theta, (0, 2 * jnp.pi / grid.NFP)
         )
 
@@ -315,7 +315,7 @@ class Bounce2D(Bounce):
                 Y_B,
                 self._num_θ,
                 self._modes_θ,
-                self._modes_ζ,
+                self._modes_z,
                 self._NFP,
                 nufft_eps,
                 vander_θ=vander.get("dct spline", None),
@@ -328,7 +328,7 @@ class Bounce2D(Bounce):
                 Y_B,
                 self._num_θ,
                 self._modes_θ,
-                self._modes_ζ,
+                self._modes_z,
             )
 
     @staticmethod
@@ -713,8 +713,8 @@ class Bounce2D(Bounce):
         return angle if (name == "lambda") else angle[..., ::-1]
 
     @property
-    def _num_ζ(self):
-        return self._modes_ζ.size
+    def _num_z(self):
+        return self._modes_z.size
 
     def _swap_pitch(self, pitch_inv):
         """Transpose to simplify broadcasting.
@@ -978,14 +978,14 @@ class Bounce2D(Bounce):
         elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, :, None, None]
 
-        ζ = bijection_from_disc(x, z1[..., None], z2[..., None])
+        z = bijection_from_disc(x, z1[..., None], z2[..., None])
 
         if nufft_eps < 1e-14:
-            data = self._nummt(ζ, data)
+            data = self._nummt(z, data)
         else:
-            data = self._nufft(ζ, data, nufft_eps, low_ram)
+            data = self._nufft(z, data, nufft_eps, low_ram)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
-        data["zeta"] = ζ
+        data["zeta"] = z
 
         # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
@@ -999,7 +999,7 @@ class Bounce2D(Bounce):
 
         if check:
             check_interp(
-                data["zeta"],
+                z,
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
                 [data[k] for k in data if k not in ("zeta", "|e_zeta|r,a|", "|B|")],
@@ -1009,14 +1009,14 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, ζ, data, eps, low_ram):
-        shape = ζ.shape
-        ζ = flatten_mat(ζ, 3)
+    def _nufft(self, z, data, eps, low_ram):
+        shape = z.shape
+        z = flatten_mat(z, 3)
         # TODO: Use a nufft instead of eval1d here.
-        θ = flatten_mat(self._theta.eval1d(ζ, loop=low_ram))
-        ζ = flatten_mat(ζ)
+        θ = flatten_mat(self._theta.eval1d(z, loop=low_ram))
+        z = flatten_mat(z)
         c = nufft2d2r(
-            ζ,
+            z,
             θ,
             jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
             (0, 2 * jnp.pi / self._NFP),
@@ -1026,9 +1026,9 @@ class Bounce2D(Bounce):
         c = c.swapaxes(0, -2).reshape(len(data) + 2, *shape)
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
-    def _nummt(self, ζ, data):
-        θ = self._theta.eval1d(flatten_mat(ζ, 3)).reshape(ζ.shape)
-        v = rfft2_vander(ζ, θ, self._modes_ζ, self._modes_θ)
+    def _nummt(self, z, data):
+        θ = self._theta.eval1d(flatten_mat(z, 3)).reshape(z.shape)
+        v = rfft2_vander(z, θ, self._modes_z, self._modes_θ)
         data = {name: mmt_for_bounce(v, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(v, self._c["B^zeta"])
         data["|B|"] = mmt_for_bounce(v, self._c["|B|"])
@@ -1086,7 +1086,7 @@ class Bounce2D(Bounce):
                 ext,
                 θ,
                 f[..., None, :, :],
-                self._num_ζ,
+                self._num_z,
                 self._num_θ,
                 (0, 2 * jnp.pi / self._NFP),
             )
@@ -1157,7 +1157,7 @@ class Bounce2D(Bounce):
             self._c["B^zeta"],
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
-            modes=self._modes_ζ,
+            modes=self._modes_z,
         )
         B_sup_z = B_sup_z[..., None, None, None, :, :]
         B_sup_z = irfft_mmt_pos(

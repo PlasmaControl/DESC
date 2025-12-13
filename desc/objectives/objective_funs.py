@@ -1120,7 +1120,7 @@ class _Objective(IOAble, ABC):
     ):
         if self._scalar:
             assert self._coordinates == ""
-        assert np.all(np.asarray(tree_leaves(weight)) > 0)
+        assert np.all(np.asarray(tree_leaves(weight)) >= 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
@@ -1267,8 +1267,6 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        if hasattr(self, "_mask"):
-            f = jnp.multiply(f, self._mask)
         return jnp.atleast_1d(f)
 
     @jit
@@ -1278,8 +1276,6 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        if hasattr(self, "_mask"):
-            f = jnp.multiply(f, self._mask)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
     @jit
@@ -1290,8 +1286,6 @@ class _Objective(IOAble, ABC):
         if self._loss_function is not None:
             f = self._loss_function(f)
         f = jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
-        if hasattr(self, "_mask"):
-            f = jnp.multiply(f, self._mask)
         return f
 
     def _shift(self, f):

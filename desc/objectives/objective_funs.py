@@ -442,7 +442,7 @@ class ObjectiveFunction(IOAble):
         flat_, treedef_ = tree_flatten(
             things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
-        unique_, inds_ = unique_list(flat_)
+        unique_, inds_, _ = unique_list(flat_)
 
         # this is needed to know which "thing" goes with which sub-objective,
         # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
@@ -1741,5 +1741,5 @@ class _ThingFlattener(IOAble):
         )
         assert treedef == self.treedef
         assert len(flat) == self.length
-        unique, _ = unique_list(flat)
+        unique, _, _ = unique_list(flat)
         return unique

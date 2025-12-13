@@ -3,14 +3,7 @@
 from functools import partial
 
 import numpy as np
-from matplotlib import pyplot as plt
-from orthax.chebyshev import chebroots
-
-from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
-from desc.integrals._interp_utils import (
-    _eps,
-    _filter_distinct,
-    _subtract_first,
+from interpax_fft import (
     cheb_from_dct,
     cheb_pts,
     dct_from_cheb,
@@ -19,6 +12,22 @@ from desc.integrals._interp_utils import (
     irfft_mmt,
     rfft_to_trig,
 )
+from matplotlib import pyplot as plt
+from orthax.chebyshev import chebroots
+
+from desc.backend import (
+    dct,
+    dctn,
+    flatnonzero,
+    fori_loop,
+    idct,
+    idctn,
+    irfft,
+    jax,
+    jnp,
+    rfft,
+)
+from desc.integrals._interp_utils import _eps, _filter_distinct, _subtract_first
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
 from desc.utils import (
@@ -86,27 +95,22 @@ def _in_epigraph_and(is_intersect, df_dy, /):
     return is_intersect.at[idx[0]].set(edge_case)
 
 
-# TODO: Move interpolation part to interpax. This is the only
-#       existing differentiable FourierChebyshev FFT interpolation
-#       in Python.
+#  TODO (#1388): Move to interpax_fft.
+
+
 class FourierChebyshevSeries(IOAble):
     """Real-valued Fourier-Chebyshev series.
 
     f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
     where ψₘ are trigonometric polynomials on [0, 2π]
-    and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ].
+    and Tₙ are Chebyshev polynomials on [yₘᵢₙ, yₘₐₓ].
 
     Examples
     --------
     Let the magnetic field be B = ∇ρ × ∇x. This basis will then parameterize
     maps in Clebsch coordinates. Passing in a sequence of x values tracking
-    the field line (see ``get_fieldline``) to the ``compute_cheb`` method will
+    the field line (see ``get_alphas``) to the ``compute_cheb`` method will
     generate a 1D parameterization of f along the field line.
-
-    This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
-    compute quantities along field lines via evaluating Fourier series
-    parameterized in DESC computational coordinates θ, ζ, where the Fourier
-    transform is more condensed, especially when NFP > 1.
 
     Notes
     -----
@@ -123,6 +127,11 @@ class FourierChebyshevSeries(IOAble):
     lobatto : bool
         Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
         instead of the interior roots grid for Chebyshev points.
+    truncate : int
+        Index at which to truncate the Chebyshev series.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
 
     Attributes
     ----------
@@ -133,16 +142,17 @@ class FourierChebyshevSeries(IOAble):
 
     """
 
-    def __init__(self, f, domain=(-1, 1), lobatto=False):
+    def __init__(self, f, domain=(-1, 1), lobatto=False, truncate=0):
         """Interpolate Fourier-Chebyshev series to ``f``."""
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-        self.X = f.shape[-2]
-        self.Y = f.shape[-1]
         self.domain = domain
         self.lobatto = lobatto
+        self.X = f.shape[-2]
+        Y = f.shape[-1]
+        self.Y = truncate if (0 < truncate < Y) else Y
         self._c = rfft(
-            dct(f, type=2 - lobatto, axis=-1) / (self.Y - lobatto),
+            dct(f, type=2 - lobatto, axis=-1)[..., : self.Y] / (Y - lobatto),
             axis=-2,
             norm="forward",
         )
@@ -243,7 +253,7 @@ class FourierChebyshevSeries(IOAble):
         return rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
 
     def compute_cheb(self, x):
-        """Evaluate Fourier series at ``x`` to obtain set of 1D Chebyshev coefficients.
+        """Evaluate at coordinate ``x`` to get set of 1D Chebyshev series in ``y``.
 
         Parameters
         ----------
@@ -256,10 +266,183 @@ class FourierChebyshevSeries(IOAble):
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
-        # Add axis to broadcast against Chebyshev coefficients.
+        # Add axis to broadcast against Chebyshev series in y.
         x = jnp.atleast_1d(x)[..., None]
         # Add axis to broadcast against multiple x values.
         cheb = cheb_from_dct(irfft_mmt(x, self._c[..., None, :, :], self.X, axis=-2))
+        assert cheb.shape[-2:] == (x.shape[-2], self.Y)
+        return cheb
+
+
+class DoubleChebyshevSeries(IOAble):
+    """Real-valued 2D Chebyshev series.
+
+    f(x, y) = ∑ₘₙ aₘₙ Tₘ(x) Tₙ(y)
+    where Tₘ are Chebyshev polynomials on [xₘᵢₙ, xₘₐₓ]
+    and Tₙ are Chebyshev polynomials on [yₘᵢₙ, yₘₐₓ].
+
+    Notes
+    -----
+    Performance may improve if ``X`` and ``Y`` are powers of two.
+
+    Parameters
+    ----------
+    f : jnp.ndarray
+        Shape (..., X, Y).
+        Samples of real function on the ``ChebyshevSeries.nodes`` grid.
+    domain_x : tuple[float]
+        Domain for x coordinates. Default is [-1, 1].
+    domain_y : tuple[float]
+        Domain for y coordinates. Default is [-1, 1].
+    lobatto : bool
+        Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
+        instead of the interior roots grid for Chebyshev points.
+    truncate_x: int
+        Index at which to truncate the Chebyshev series in x coordinate.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
+    truncate_y: int
+        Index at which to truncate the Chebyshev series in y coordinate.
+        This will remove aliasing error at the shortest wavelengths where the signal
+        to noise ratio is lowest. The default value is zero which is interpreted as
+        no truncation.
+
+    Attributes
+    ----------
+    X : int
+        Chebyshev spectral resolution in x coordinate.
+    Y : int
+        Chebyshev spectral resolution in y coordinate.
+
+    """
+
+    def __init__(
+        self,
+        f,
+        domain_x=(-1, 1),
+        domain_y=(-1, 1),
+        lobatto=False,
+        truncate_x=0,
+        truncate_y=0,
+    ):
+        """Interpolate Chebyshev-Chebyshev series to ``f``."""
+        errorif(domain_x[0] > domain_x[-1], msg="Got inverted x domain.")
+        errorif(domain_y[0] > domain_y[-1], msg="Got inverted y domain.")
+        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
+        self.domain_x = domain_x
+        self.domain_y = domain_y
+        self.lobatto = lobatto
+        X = f.shape[-2]
+        Y = f.shape[-1]
+        self.X = truncate_x if (0 < truncate_x < X) else X
+        self.Y = truncate_y if (0 < truncate_y < Y) else Y
+        self._c = dctn(f, type=2 - lobatto, axes=(-2, -1))[..., : self.X, : self.Y] / (
+            (X - lobatto) * (Y - lobatto)
+        )
+
+    @staticmethod
+    def nodes(X, Y, L=None, domain_x=(-1, 1), domain_y=(-1, 1), lobatto=False):
+        """Tensor product grid of optimal collocation nodes for this basis.
+
+        Parameters
+        ----------
+        X : int
+            Grid resolution in x direction. Preferably power of 2.
+        Y : int
+            Grid resolution in y direction. Preferably power of 2.
+        L : int or jnp.ndarray
+            Optional, resolution in radial direction of domain [0, 1].
+            May also be an array of coordinates values. If given, then the
+            returned ``coords`` is a 3D tensor-product with shape (L * X * Y, 3).
+        domain_x : tuple[float]
+            Domain for x coordinates. Default is [-1, 1].
+        domain_y : tuple[float]
+            Domain for y coordinates. Default is [-1, 1].
+        lobatto : bool
+            Whether to use the Gauss-Lobatto (Extrema-plus-Endpoint)
+            instead of the interior roots grid for Chebyshev points.
+
+        Returns
+        -------
+        coords : jnp.ndarray
+            Shape (X * Y, 2).
+            Grid of (x, y) points for optimal interpolation.
+
+        """
+        x = cheb_pts(X, domain_x, lobatto)
+        y = cheb_pts(Y, domain_y, lobatto)
+        if L is None:
+            coords = (x, y)
+        else:
+            if isposint(L):
+                L = jnp.flipud(jnp.linspace(1, 0, L, endpoint=False))
+            coords = (jnp.atleast_1d(L), x, y)
+        coords = tuple(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
+        return jnp.column_stack(coords)
+
+    def evaluate(self, X, Y):
+        """Evaluate Chebyshev series on tensor-product grid.
+
+        Parameters
+        ----------
+        X : int
+            Grid resolution in x direction. Preferably power of 2.
+        Y : int
+            Grid resolution in y direction. Preferably power of 2.
+
+        Returns
+        -------
+        fq : jnp.ndarray
+            Shape (..., X, Y)
+            Chebyshev series evaluated at
+            ``ChebyshevSeries.nodes(X,Y,L,self.domain_x,self.domain_y,self.lobatto)``.
+
+        """
+        warnif(
+            X < self.X,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got X = {X} < {self.X} = self.X.",
+        )
+        warnif(
+            Y < self.Y,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got Y = {Y} < {self.Y} = self.Y.",
+        )
+        BUG = jax.__version_info__ <= (0, 7, 2)
+        errorif(
+            self._c.ndim > 2 and BUG,
+            msg="https://github.com/jax-ml/jax/issues/31836",
+        )
+        axes = None if BUG else (-2, -1)
+        return (
+            idctn(self._c, type=2 - self.lobatto, s=(X, Y), axes=axes)
+            * (X - self.lobatto)
+            * (Y - self.lobatto)
+        )
+
+    def compute_cheb(self, x):
+        """Evaluate at coordinate ``x`` to get set of 1D Chebyshev series in ``y``.
+
+        Parameters
+        ----------
+        x : jnp.ndarray
+            Points to evaluate Chebyshev series.
+
+        Returns
+        -------
+        cheb : jnp.ndarray
+            Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
+
+        """
+        x = bijection_to_disc(x, self.domain_x[0], self.domain_x[-1])
+        # Add axis to broadcast against Chebyshev series in y.
+        x = jnp.atleast_1d(x)[..., None]
+        cheb = cheb_from_dct(cheb_from_dct(self._c, -2), -1)
+        # Add axis to broadcast against multiple x values.
+        cheb = idct_mmt(x, cheb[..., None, :, :], -2)
         assert cheb.shape[-2:] == (x.shape[-2], self.Y)
         return cheb
 
@@ -289,7 +472,7 @@ class PiecewiseChebyshevSeries(IOAble):
     ----------
     cheb : jnp.ndarray
         Shape (..., X, Y).
-        Chebyshev coefficients αₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
+        Chebyshev coefficients aₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y).
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
 
@@ -392,7 +575,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y += self.domain[0]
         return x_idx, y
 
-    def eval1d(self, z, cheb=None):
+    def eval1d(self, z, cheb=None, loop=False):
         """Evaluate piecewise Chebyshev series at coordinates z.
 
         Parameters
@@ -407,6 +590,9 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb : jnp.ndarray
             Shape (..., X, Y).
             Chebyshev coefficients to use. If not given, uses ``self.cheb``.
+        loop : bool
+            Whether to use Clenshaw recursion.
+            This is slower on CPU, but it reduces memory of the Jacobian.
 
         Returns
         -------
@@ -417,23 +603,23 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb = _add_lead_axis(setdefault(cheb, self.cheb), z)
         x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
-        # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are in cheb array whose shape is (..., num cheb series, spectral resolution).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
-        return idct_mmt(y, cheb)
 
-    #  The following changes would make root finding here more efficient.
-    #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-    #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-    #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-    #  Use that once to find extrema of |B| if Y_B > 64.
-    #  2. Then to find roots of bounce points use the closed formula in Boyd's
-    #  spectral methods section 19.6. Can isolate interval to search for root by
-    #  observing whether |B|-1/λ changes sign at extrema. Only need to do
-    #  evaluate Chebyshev series at quadrature points once, and can use that to
-    #  compute the integral for every λ. The integral will converge rapidly
-    #  since a low order polynomial approximates |B| well in between adjacent
-    #  extrema. 2 is a larger improvement than 1.
+        # Recall that the Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
+        # are in cheb array whose shape is (..., num cheb series, spectral resolution).
+
+        if not loop or self.Y < 3:
+            cheb = jnp.take_along_axis(cheb, x_idx[..., None], axis=-2)
+            return idct_mmt(y, cheb)
+
+        def body(i, val):
+            c0, c1 = val
+            return jnp.take_along_axis(cheb[..., -i], x_idx, axis=-1) - c1, c0 + c1 * y2
+
+        y2 = 2 * y
+        c0 = jnp.take_along_axis(cheb[..., -2], x_idx, axis=-1)
+        c1 = jnp.take_along_axis(cheb[..., -1], x_idx, axis=-1)
+        c0, c1 = fori_loop(3, self.Y + 1, body, (c0, c1))
+        return c0 + c1 * y
 
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
@@ -474,13 +660,11 @@ class PiecewiseChebyshevSeries(IOAble):
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        # Fast multipoint method would be better. Reduces to FFT. Cost is
-        # 𝒪([F+Q] log²[F + Q]) where F is spectral resolution and Q is number of points.
-        # See Chapter 10, https://doi.org/10.1017/CBO9781139856065.
         df_dy = jnp.sign(
-            jnp.linalg.vecdot(
+            jnp.einsum(
+                "...yn, ...n",
                 n * jnp.sin(n * jnp.arccos(y)[..., None]),
-                self.cheb[..., None, :],
+                self.cheb,
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
@@ -653,8 +837,7 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=z1[idx],
                         z2=z2[idx],
                         k=k[idx],
-                        title=title
-                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
+                        title=title,
                         **kwargs,
                     )
                 )
@@ -667,6 +850,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z1=None,
         z2=None,
         k=None,
+        *,
         k_transparency=0.5,
         klabel=r"$k$",
         title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
@@ -674,6 +858,9 @@ class PiecewiseChebyshevSeries(IOAble):
         vlabel=r"$f$",
         show=True,
         include_legend=True,
+        return_legend=False,
+        legend_kwargs=None,
+        **kwargs,
     ):
         """Plot the piecewise Chebyshev series ``cheb``.
 
@@ -706,7 +893,7 @@ class PiecewiseChebyshevSeries(IOAble):
         show : bool
             Whether to show the plot. Default is true.
         include_legend : bool
-            Whether to include the legend in the plot. Default is true.
+            Whether to plot the legend. Default is true.
 
         Returns
         -------
@@ -714,14 +901,15 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
+
         legend = {}
         z = jnp.linspace(
             start=self.domain[0],
             stop=self.domain[0] + (self.domain[-1] - self.domain[0]) * self.X,
             num=num,
         )
-        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel))
+        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel, **kwargs))
         _plot_intersect(
             ax=ax,
             legend=legend,
@@ -730,17 +918,22 @@ class PiecewiseChebyshevSeries(IOAble):
             k=k,
             k_transparency=k_transparency,
             klabel=klabel,
+            hlabel=hlabel,
+            **kwargs,
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
-        if include_legend:
-            ax.legend(legend.values(), legend.keys(), loc="lower right")
         ax.set_title(title)
-        plt.tight_layout()
+
+        if include_legend:
+            if legend_kwargs is None:
+                legend_kwargs = dict(loc="lower right")
+            ax.legend(legend.values(), legend.keys(), **legend_kwargs)
+
         if show:
             plt.show()
             plt.close()
-        return fig, ax
+        return (fig, ax, legend) if return_legend else (fig, ax)
 
 
 def _add2legend(legend, lines):
@@ -751,7 +944,18 @@ def _add2legend(legend, lines):
             legend[label] = line
 
 
-def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
+def _plot_intersect(
+    ax,
+    legend,
+    z1,
+    z2,
+    k,
+    k_transparency,
+    klabel,
+    hlabel,
+    markersize=plt.rcParams["lines.markersize"] * 3,
+    **kwargs,
+):
     """Plot intersects on ``ax``."""
     if k is None:
         return
@@ -764,7 +968,13 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
     for p in k:
         _add2legend(
             legend,
-            ax.axhline(p, color="tab:purple", alpha=k_transparency, label=klabel),
+            ax.axhline(
+                p,
+                color="tab:purple",
+                alpha=k_transparency,
+                label=klabel,
+                linestyle="--",
+            ),
         )
     for i in range(k.size):
         _z1, _z2 = z1[i], z2[i]
@@ -779,7 +989,8 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
                 jnp.full_like(_z1, k[i]),
                 marker="v",
                 color="tab:red",
-                label=r"$z_1$",
+                label=hlabel + r"$_1(w)$",
+                s=markersize,
             ),
         )
         _add2legend(
@@ -789,6 +1000,7 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
                 jnp.full_like(_z2, k[i]),
                 marker="^",
                 color="tab:green",
-                label=r"$z_2$",
+                label=hlabel + r"$_2(w)$",
+                s=markersize,
             ),
         )

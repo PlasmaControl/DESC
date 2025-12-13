@@ -24,6 +24,7 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
+from desc.integrals._bounce_utils import num_well_rule
 from desc.magnetic_fields import field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
@@ -4729,12 +4730,12 @@ def plot_gammac(
 
     # TODO(#1352)
     X = kwargs.pop("X", 32)
-    Y = kwargs.pop("Y", 64)
-    Y_B = kwargs.pop("Y_B", Y * 2)
+    Y = kwargs.pop("Y", 32)
+    Y_B = kwargs.pop("Y_B", Y * 4)
     num_quad = kwargs.pop("num_quad", 32)
     pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
-    num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
+    num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B))
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4749,7 +4750,7 @@ def plot_gammac(
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X, Y, rho),
+        angle=Bounce2D.angle(eq, X, Y, rho),
         Y_B=Y_B,
         num_transit=num_transit,
         num_quad=num_quad,

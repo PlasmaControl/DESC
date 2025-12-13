@@ -701,22 +701,27 @@ def surface_min(grid, x, surface_label="rho"):
 
     """
     surface_label = grid.get_label(surface_label)
-    unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
-    errorif(
-        not has_idx,
-        NotImplementedError,
-        msg=f"Grid lacks attributes 'num_{surface_label}' and "
-        f"'inverse_{surface_label}_idx', which are required for this function.",
-    )
-    inverse_idx = jnp.asarray(inverse_idx)
-    x = jnp.asarray(x)
-    mins = jnp.full(unique_size, jnp.inf)
 
-    def body(i, mins):
-        mins = put(mins, inverse_idx[i], jnp.minimum(x[i], mins[inverse_idx[i]]))
-        return mins
+    if grid.is_meshgrid and (surface_label == "rho"):
+        mins = grid.meshgrid_reshape(x, grid.coordinates).min((-2, -1))
+    else:
+        # The below implementation was benchmarked to be more efficient than
+        # alternatives without explicit loops in GitHub pull request #501.
+        unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
+        errorif(
+            not has_idx,
+            NotImplementedError,
+            msg=f"Grid lacks attributes 'num_{surface_label}' and "
+            f"'inverse_{surface_label}_idx', which are required for this function.",
+        )
+        inverse_idx = jnp.asarray(inverse_idx)
+        x = jnp.asarray(x)
+        mins = jnp.full(unique_size, jnp.inf)
 
-    mins = fori_loop(0, inverse_idx.size, body, mins)
-    # The above implementation was benchmarked to be more efficient than
-    # alternatives without explicit loops in GitHub pull request #501.
+        def body(i, mins):
+            mins = put(mins, inverse_idx[i], jnp.minimum(x[i], mins[inverse_idx[i]]))
+            return mins
+
+        mins = fori_loop(0, inverse_idx.size, body, mins)
+
     return grid.expand(mins, surface_label)

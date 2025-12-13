@@ -7,20 +7,12 @@ their API may change without warning.
 
 import numpy as np
 from interpax import CubicSpline, PPoly
+from interpax_fft import cheb_from_dct, cheb_pts, idct_mmt, ifft_mmt, irfft_mmt_pos
 from matplotlib import pyplot as plt
 from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jnp
-from desc.integrals._interp_utils import (
-    cheb_from_dct,
-    cheb_pts,
-    idct_mmt,
-    ifft_mmt,
-    irfft_mmt_pos,
-    nufft1d2r,
-    polyroot_vec,
-    polyval_vec,
-)
+from desc.integrals._interp_utils import nufft1d2r, polyroot_vec, polyval_vec
 from desc.integrals.basis import (
     FourierChebyshevSeries,
     PiecewiseChebyshevSeries,

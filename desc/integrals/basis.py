@@ -3,6 +3,15 @@
 from functools import partial
 
 import numpy as np
+from interpax_fft import (
+    cheb_from_dct,
+    cheb_pts,
+    dct_from_cheb,
+    fourier_pts,
+    idct_mmt,
+    irfft_mmt,
+    rfft_to_trig,
+)
 from matplotlib import pyplot as plt
 from orthax.chebyshev import chebroots
 
@@ -18,18 +27,7 @@ from desc.backend import (
     jnp,
     rfft,
 )
-from desc.integrals._interp_utils import (
-    _eps,
-    _filter_distinct,
-    _subtract_first,
-    cheb_from_dct,
-    cheb_pts,
-    dct_from_cheb,
-    fourier_pts,
-    idct_mmt,
-    irfft_mmt,
-    rfft_to_trig,
-)
+from desc.integrals._interp_utils import _eps, _filter_distinct, _subtract_first
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
 from desc.utils import (
@@ -97,9 +95,9 @@ def _in_epigraph_and(is_intersect, df_dy, /):
     return is_intersect.at[idx[0]].set(edge_case)
 
 
-# TODO: Move interpolation part to interpax. This is the only
-#       existing differentiable FourierChebyshev FFT interpolation
-#       in Python.
+#  TODO (#1388): Move to interpax_fft.
+
+
 class FourierChebyshevSeries(IOAble):
     """Real-valued Fourier-Chebyshev series.
 

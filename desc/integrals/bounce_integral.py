@@ -4,6 +4,17 @@ import warnings
 from abc import ABC, abstractmethod
 
 from interpax import CubicHermiteSpline, PPoly
+from interpax_fft import (
+    cheb_from_dct,
+    cheb_pts,
+    fourier_pts,
+    idct_mmt,
+    ifft_mmt,
+    irfft2_mmt_pos,
+    irfft_mmt_pos,
+    rfft2_modes,
+    rfft2_vander,
+)
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
@@ -32,19 +43,10 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
-    cheb_from_dct,
-    cheb_pts,
-    fourier_pts,
-    idct_mmt,
-    ifft_mmt,
     interp1d_Hermite_vec,
     interp1d_vec,
-    irfft2_mmt_pos,
-    irfft_mmt_pos,
     nufft2d2r,
     polyder_vec,
-    rfft2_modes,
-    rfft2_vander,
 )
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (

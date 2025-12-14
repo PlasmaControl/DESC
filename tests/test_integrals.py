@@ -4,7 +4,7 @@ from functools import partial
 
 import numpy as np
 import pytest
-from interpax_fft import fourier_pts
+from interpax_fft import FourierChebyshevSeries, fourier_pts
 from jax import grad
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
@@ -36,8 +36,12 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import bounce_points, check_bounce_points, get_extrema
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
+from desc.integrals._bounce_utils import (
+    PiecewiseChebyshevSeries,
+    bounce_points,
+    check_bounce_points,
+    get_extrema,
+)
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,

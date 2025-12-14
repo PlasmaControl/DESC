@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
+    FourierChebyshevSeries,
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -24,6 +25,7 @@ from desc.backend import jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
+    PiecewiseChebyshevSeries,
     Y_B_rule,
     argmin,
     bounce_points,
@@ -48,7 +50,6 @@ from desc.integrals._interp_utils import (
     nufft2d2r,
     polyder_vec,
 )
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -845,7 +846,7 @@ class Bounce2D(Bounce):
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs : dict
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d`` or
+            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d`` or
             ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
@@ -1191,7 +1192,7 @@ class Bounce2D(Bounce):
             specified by Clebsch coordinate ρ(l), α(m) will be plotted.
         kwargs
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -1243,7 +1244,7 @@ class Bounce2D(Bounce):
             The alpha value corresponds to ``alpha[m]``.
         kwargs
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------

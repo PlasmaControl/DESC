@@ -1028,8 +1028,8 @@ class Bounce2D(Bounce):
 
     def _nummt(self, z, data):
         t = self._theta.eval1d(flatten_mat(z, 3)).reshape(z.shape)
-        z = jnp.exp(1j * self._modes_z * z[..., None])
         t = jnp.exp(1j * self._modes_θ * t[..., None])
+        z = jnp.exp(1j * self._modes_z * z[..., None])
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
         data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])

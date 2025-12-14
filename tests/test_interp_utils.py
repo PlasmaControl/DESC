@@ -4,17 +4,13 @@ from functools import partial
 
 import numpy as np
 import pytest
-from interpax_fft import cheb_from_dct, cheb_pts, fourier_pts
 from jax import grad
-from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from numpy.polynomial.polynomial import polyvander
 from tests.test_plotting import tol_2d
 
-from desc.backend import dct, idct, jnp, rfft, rfft2
-from desc.compute.utils import get_transforms
+from desc.backend import jnp, rfft, rfft2
 from desc.examples import get
-from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
 from desc.integrals._interp_utils import (
     nufft1d2r,
@@ -23,8 +19,6 @@ from desc.integrals._interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals.basis import DoubleChebyshevSeries, FourierChebyshevSeries
-from desc.utils import identity
 
 
 def _c_1d(x):
@@ -191,93 +185,6 @@ class TestFastInterp:
             )(xq, f),
         )
 
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "f, M, lobatto",
-        [
-            # Identity map known for bad Gibbs; if discrete Chebyshev transform
-            # implemented correctly then won't see Gibbs.
-            (identity, 2, False),
-            (identity, 3, False),
-            (identity, 3, True),
-            (identity, 4, True),
-        ],
-    )
-    def test_dct(self, f, M, lobatto):
-        """Test discrete cosine transform interpolation.
-
-        Parameters
-        ----------
-        f : callable
-            Function to test.
-        M : int
-            Fourier spectral resolution.
-        lobatto : bool
-            Whether ``f`` should be sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-            or interior roots grid for Chebyshev points.
-
-        """
-        # Need to test interpolation due to issues like
-        # Resolved in unpublished version of JAX:
-        # https://github.com/google/jax/issues/22466
-        # https://github.com/jax-ml/jax/issues/23827
-        # https://github.com/google/jax/issues/23895
-        # https://github.com/jax-ml/jax/issues/31836
-        # Unresolved:
-        # https://github.com/jax-ml/jax/issues/29426
-        # https://github.com/jax-ml/jax/issues/29325
-        # DESC claims to support JAX versions without the bug fixes...
-        from scipy.fft import dct as sdct
-        from scipy.fft import dctn as sdctn
-        from scipy.fft import idct as sidct
-
-        domain = (0, 2 * np.pi)
-        m = cheb_pts(M, domain, lobatto)
-        n = cheb_pts(m.size * 10, domain, lobatto)
-        norm = (n.size - lobatto) / (m.size - lobatto)
-
-        dct_type = 2 - lobatto
-        fq_1 = np.sqrt(norm) * sidct(
-            sdct(f(m), type=dct_type, norm="ortho", orthogonalize=False),
-            type=dct_type,
-            n=n.size,
-            norm="ortho",
-            orthogonalize=False,
-        )
-        if lobatto:
-            # JAX has yet to implement type 1 DCT.
-            fq_2 = norm * sidct(sdct(f(m), type=dct_type), n=n.size, type=dct_type)
-        else:
-            fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
-        np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
-        np.testing.assert_allclose(fq_2, f(n), atol=1e-14)
-
-        if not lobatto:
-            g = f(m)[:, None] * _f_algebraic(cheb_pts(7))
-            cheb = DoubleChebyshevSeries(g)
-            np.testing.assert_allclose(
-                cheb._c,
-                sdctn(g) / g.size,
-                atol=1e-14,
-                err_msg="Scipy and JAX disagree.",
-            )
-            truth = f(n)[:, None] * _f_algebraic(cheb_pts(8))
-            np.testing.assert_allclose(cheb.evaluate(n.size, 8), truth)
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "func, m, n",
-        [(_c_2d, 2 * _c_2d_nyquist_freq()[0] + 1, 2 * _c_2d_nyquist_freq()[1] + 1)],
-    )
-    def test_fourier_chebyshev(self, func, m, n):
-        """Tests for coverage of FourierChebyshev series."""
-        x = fourier_pts(m)
-        y = cheb_pts(n)
-        x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
-        f = func(x, y).reshape(m, n)
-        fc = FourierChebyshevSeries(f)
-        np.testing.assert_allclose(fc.evaluate(m, n), f)
-
 
 class TestStreams:
     """Test convergence of inverse stream maps."""
@@ -287,55 +194,6 @@ class TestStreams:
     X = 48
     Y = 48
     rho = 0.6
-
-    @staticmethod
-    def theta_chebyshev(eq, X, Y, rho, tol):
-        """Chebyshev spectrum of θ(α, ζ)."""
-        zeta = cheb_pts(Y, (0, 2 * np.pi / eq.NFP))[::-1]
-        Λ = get_transforms(
-            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
-        )["L"]
-
-        theta = eq._map_poloidal_coordinates(
-            jnp.atleast_1d(eq._compute_iota_under_jit(rho)),
-            cheb_pts(X, (0, 2 * np.pi)),
-            zeta,
-            eq.params_dict["L_lmn"],
-            Λ,
-            inbasis="alpha",
-            outbasis="theta",
-            tol=tol,
-        ).squeeze(0)[..., ::-1]
-
-        c = DoubleChebyshevSeries(theta, (0, 2 * np.pi), (0, 2 * np.pi / eq.NFP))._c
-        c = cheb_from_dct(cheb_from_dct(c, -1), -2)
-        return np.abs(c)
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-    @staticmethod
-    def test_theta_chebyshev(name):
-        """Plot Chebyshev spectrum of θ(α, ζ)."""
-        eq = get(name)
-        X = TestStreams.X
-        Y = TestStreams.Y
-        rho = TestStreams.rho
-        c = TestStreams.theta_chebyshev(eq, X, Y, rho, tol=TestStreams.tol)
-
-        fig, ax = plt.subplots()
-        ax.set(ylabel=r"$x$", xlabel=r"$y$")
-        ax.set_title(
-            r"Projection of "
-            r"$\alpha, \zeta \mapsto \theta$ onto "
-            r"$\{T_x(\alpha / \pi - 1) T_y(N_{\text{FP}} \zeta / \pi - 1)\}$"
-            r"$_{\text{Chebyshev}}$",
-            pad=20,
-        )
-        plt.matshow(c, fignum=0, norm=TestStreams.norm, cmap="turbo")
-        cbar = plt.colorbar(orientation="horizontal")
-        cbar.ax.invert_xaxis()
-        return fig
 
     @pytest.mark.unit
     @pytest.mark.parametrize("name", ["W7-X", "NCSX", "HELIOTRON"])

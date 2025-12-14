@@ -15,7 +15,7 @@ New Features
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
 - Adds support for optimization targeting individual coils in a coilset.
   - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
-  - Optional argument `indices` consists of a nested list of bools, allowing certain coils to be excluded from optimization under the particular objective.
+  - Able to set weights to zero, excluding certain coils from the objective.
 
 
 Bug Fixes

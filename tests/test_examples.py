@@ -2300,17 +2300,16 @@ def test_coil_individual_targets_optimization(DummyMixedCoilSet):
     """Test coil arclength optimization where length targets vary between coils."""
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
     target = [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0]
-    weight = [1.0]
-    indices = [True, [False, True, True], False, False]
-    obj = CoilLength(coilset, target=target, weight=weight, indices=indices)
+    weight = [1, [0, 1, 1], 0, 0]
+    mask = tree_leaves(weight)
+    coil_list = [1, 3, 1, 1]
+    obj = CoilLength(coilset, target=target, weight=weight)
     obj_fun = ObjectiveFunction(obj)
     obj_fun.build()
-    mask = obj._mask
-    num_coils = len(mask)
+    num_coils = obj._num_coils
     grad = obj_fun.grad(obj_fun.x())
 
     # Collects the gradient of the objective with respect to the coils marked "False"
-    coil_list = obj._coilset_tree["coils"]
     dim_x = [a.dim_x for a in obj_fun.things[0].coils]
     dim_x = tree_map(lambda a, b: [int(a / b)] * b, dim_x, coil_list)
     dim_x, _ = tree_flatten(dim_x)
@@ -2336,7 +2335,7 @@ def test_coil_individual_targets_optimization(DummyMixedCoilSet):
 
     # Differences between lengths of *optimized* coils and their targets
     length_error = np.array(
-        [np.abs(length_fin[i] - obj._target[i]) for i in range(num_coils) if mask[i]]
+        [np.abs(length_fin[i] - obj._target[i]) for i in range(len(obj._target))]
     )
 
     np.testing.assert_allclose(length_error, 0.0, atol=1e-4)

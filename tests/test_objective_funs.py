@@ -4213,7 +4213,6 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     objA.build()
     objB.build()
     compA = objA.compute_scaled_error(None)
-    compA = jnp.array([compA[i] for i in [1, 4, 5]])
     compB = objB.compute_scaled_error(None)
     np.testing.assert_allclose(compA, compB, atol=1e-13)
 
@@ -4223,11 +4222,11 @@ def test_coil_objective_setter(DummyMixedCoilSet):
     """Tests setters for _CoilObjectives."""
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
     obj = CoilLength(coilset)
-    obj.build()
 
     weight = [1.0, 1.0, 0.0, 0.0]
     weight_expanded = [1.0, 1.0, 1.0, 1.0]
     obj.weight = weight
+    obj.build()
     np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
 
     bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])

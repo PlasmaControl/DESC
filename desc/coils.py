@@ -3564,3 +3564,23 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
         )
         coils.append(coil)
     return CoilSet(*coils)
+
+
+def print_coil_structure(coilset):
+    """Prints a representation of the coils in a CoilSet or MixedCoilSet."""
+
+    def expand(t):
+        if isinstance(t, MixedCoilSet):
+            return expand(t.coils)
+        if isinstance(t, CoilSet):
+            return "[" + ",".join(["*"] * len(t.coils)) + "]"
+        if isinstance(t, _Coil):
+            return "*"
+        if isinstance(t, list):
+            l_coils = []
+            for s in t:
+                l_coils.append(expand(s))
+            return "[" + ",".join(l_coils) + "]"
+        return t
+
+    print(expand(coilset))

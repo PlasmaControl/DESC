@@ -928,20 +928,25 @@ def move(f, out=True):
     return jnp.moveaxis(f, s, d)
 
 
-def mmt_for_bounce(v, c):
+def mmt_for_bounce(z, t, c):
     """Matrix multiplication transform.
 
     Parameters
     ----------
-    v : jnp.ndarray
-        Shape (num ρ, num α, num pitch, num well, num quad, num ζ modes, num θ modes).
+    z : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well, num quad, num ζ modes).
+        Vandermonde array.
+    t : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well, num quad, num θ modes).
         Vandermonde array.
     c : jnp.ndarray
         Shape (num ρ, 1, num ζ modes, num θ modes).
         Fourier coefficients.
 
     """
-    return jnp.einsum("...pwqzt, ...zt -> ...pwq", v, c).real
+    # Reduce over ζ first since the derivative graph is deeper in θ, and
+    # because num ζ modes ~= 2 num θ modes since real fft done over θ.
+    return (t * jnp.einsum("...pwqz, ...zt -> ...pwqt", z, c)).real.sum(-1)
 
 
 def broadcast_for_bounce(pitch_inv):

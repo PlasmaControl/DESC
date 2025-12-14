@@ -14,7 +14,6 @@ from interpax_fft import (
     irfft2_mmt_pos,
     irfft_mmt_pos,
     rfft2_modes,
-    rfft2_vander,
 )
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
@@ -1028,11 +1027,12 @@ class Bounce2D(Bounce):
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _nummt(self, z, data):
-        θ = self._theta.eval1d(flatten_mat(z, 3)).reshape(z.shape)
-        v = rfft2_vander(z, θ, self._modes_z, self._modes_θ)
-        data = {name: mmt_for_bounce(v, c) for name, c in data.items()}
-        data["B^zeta"] = mmt_for_bounce(v, self._c["B^zeta"])
-        data["|B|"] = mmt_for_bounce(v, self._c["|B|"])
+        t = self._theta.eval1d(flatten_mat(z, 3)).reshape(z.shape)
+        z = jnp.exp(1j * self._modes_z * z[..., None])
+        t = jnp.exp(1j * self._modes_θ * t[..., None])
+        data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
+        data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
+        data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
         return data
 
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False):

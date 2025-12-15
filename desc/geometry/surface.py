@@ -1268,7 +1268,11 @@ class ZernikeRZToroidalSection(Surface):
         # this is the base class scale:
         scales = super()._get_ess_scale(alpha, order, min_value)
         # we use ESS for the following:
-        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        modes = {
+            "R_lmn": self.R_basis.modes,
+            "Z_lmn": self.Z_basis.modes,
+            "L_lmn": self.L_basis.modes,
+        }
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales

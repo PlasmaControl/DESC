@@ -2657,6 +2657,7 @@ class Equilibrium(IOAble, Optimizable):
         scales = super()._get_ess_scale(alpha, order, min_value)
         bdry_scale = self.surface._get_ess_scale(alpha, order, min_value)
         axis_scale = self.axis._get_ess_scale(alpha, order, min_value)
+        xsec_scale = self.xsection._get_ess_scale(alpha, order, min_value)
         # we use ESS for the following:
         modes = {
             "R_lmn": self.R_basis.modes,
@@ -2672,6 +2673,9 @@ class Equilibrium(IOAble, Optimizable):
         scales["Za_n"] = axis_scale["Z_n"]
         scales["Rb_lmn"] = bdry_scale["R_lmn"]
         scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        scales["Rp_lmn"] = xsec_scale["R_lmn"]
+        scales["Zp_lmn"] = xsec_scale["Z_lmn"]
+        scales["Lp_lmn"] = xsec_scale["L_lmn"]
         if hasattr(self.surface, "Phi_mn"):
             scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales

@@ -148,7 +148,7 @@ jobs:
 
       - name: Download artifact
         if: always() && env.has_changes == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: benchmark_artifact_*
           path: tests/benchmarks

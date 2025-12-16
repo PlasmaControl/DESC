@@ -6,6 +6,8 @@ from scipy.constants import mu_0
 from desc.vmec_utils import ptolemy_linear_transform
 from jax import jit
 from functools import partial
+from desc.vmec_utils import ptolemy_identity_fwd
+from quadcoil import make_rzfourier_mc_ms_nc_ns
 import numpy as np
 
 # Data keys needed to calculate Bnormal_plasma.
@@ -74,7 +76,7 @@ def compute_G(params_eq, constants):
         transforms=constants['net_poloidal_current_transforms'],
         profiles=constants['net_poloidal_current_profiles'],
     )
-    net_poloidal_current_amperes += - G_data['G'][0] / mu_0 * 2 * jnp.pi
+    net_poloidal_current_amperes = - G_data['G'][0] / mu_0 * 2 * jnp.pi
     return net_poloidal_current_amperes
 
 def ptolemy_identity_rev_precompute(m_1, n_1):
@@ -238,3 +240,21 @@ def toroidal_flip(phi, m, n):
         else:
             phi_swapped[i] = -phi[i]
     return phi_swapped
+
+def quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
+    '''Converts quadcoil phi to desc phi.'''
+    if stellsym:
+        # The dofs contain rc, zs, and rc has one more element than zs.
+        phis = phi_mn_quadcoil
+        phic = jnp.zeros(len(phis) + 1)
+    else:
+        # The dofs contain rc, zs, and rc has one more element than zs.
+        len_sin = len(phi_mn_quadcoil)//2
+        phis = phi_mn_quadcoil[-len_sin:]
+        phic = phi_mn_quadcoil[:-len_sin]
+
+    phis = jnp.insert(phis, 0, 0.)
+    mc, _, nc, _ = make_rzfourier_mc_ms_nc_ns(mpol, ntor)
+    modes_M, modes_N, Phi_mn = ptolemy_identity_fwd(mc, nc, phis, phic)
+    Phi_mn = Phi_mn.flatten()
+    return Phi_mn, modes_M, modes_N

@@ -11,7 +11,6 @@ from quadcoil import (
     SurfaceRZFourierJAX,
     merge_callables, 
     gen_winding_surface_arc, 
-    make_rzfourier_mc_ms_nc_ns
 )
 from desc.vmec_utils import ptolemy_identity_fwd
 from desc.grid import LinearGrid
@@ -22,6 +21,7 @@ from desc.objectives._quadcoil_utils import (
     ptolemy_identity_rev_precompute,
     ptolemy_identity_rev_compute,
     interpolate_array,
+    quadcoil_phi_to_desc_phi,
     toroidal_flip,
     compute_Bnormal_plasma,
     compute_eval_data_coils,
@@ -489,24 +489,6 @@ class QuadcoilField(FourierCurrentPotentialField):
         self.unravel_aux_dofs = unravel_aux_dofs
         self._aux_dofs_flat = aux_dofs_flat
 
-    def quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
-        '''Converts quadcoil phi to desc phi.'''
-        if stellsym:
-            # The dofs contain rc, zs, and rc has one more element than zs.
-            phis = phi_mn_quadcoil
-            phic = jnp.zeros(len(phis) + 1)
-        else:
-            # The dofs contain rc, zs, and rc has one more element than zs.
-            len_sin = len(phi_mn_quadcoil)//2
-            phis = phi_mn_quadcoil[-len_sin:]
-            phic = phi_mn_quadcoil[:-len_sin]
-
-        phis = jnp.insert(phis, 0, 0.)
-        mc, _, nc, _ = make_rzfourier_mc_ms_nc_ns(mpol, ntor)
-        modes_M, modes_N, Phi_mn = ptolemy_identity_fwd(mc, nc, phis, phic)
-        Phi_mn = Phi_mn.flatten()
-        return Phi_mn, modes_M, modes_N
-
     def from_quadcoil_kwargs(
         eq, 
         quadcoil_kwargs,
@@ -579,7 +561,7 @@ class QuadcoilField(FourierCurrentPotentialField):
                 ntor = quadcoil_kwargs['ntor']
                 m, n = QuadcoilParams.make_mn_helper(mpol, ntor, stellsym)
                 phi_flipped = toroidal_flip(phi_pre_flip, m, n)
-                Phi_mn, modes_M, modes_N = QuadcoilField.quadcoil_phi_to_desc_phi(
+                Phi_mn, modes_M, modes_N = quadcoil_phi_to_desc_phi(
                     phi_mn_quadcoil=phi_flipped, 
                     stellsym=stellsym, 
                     mpol=mpol, 

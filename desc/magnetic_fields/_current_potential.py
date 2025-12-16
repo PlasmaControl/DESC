@@ -22,6 +22,7 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    get_ess_scale,
     rpz2xyz,
     rpz2xyz_vec,
     safediv,
@@ -1025,6 +1026,35 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             # helical as well
             final_coilset = CoilSet(*coils, check_intersection=False)
         return final_coilset
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following, the R,Z scales are already in the base class:
+        modes = {"Phi_mn": self.Phi_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 def _compute_A_or_B_from_CurrentPotentialField(

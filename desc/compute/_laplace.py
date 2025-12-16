@@ -10,9 +10,9 @@ References
 from functools import partial
 
 import lineax as lx
+from interpax_fft import rfft_interp2d
 
 from desc.backend import fixed_point, jit, jnp
-from desc.integrals._fourier import fft_interp2d
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -305,7 +305,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
         # TODO: just interpolate Rb_mn, Zb_mn, and omegab_mn onto potential grid
         #       to avoid interpolation on oversampled grid
         def fun(x):
-            return fft_interp2d(
+            return rfft_interp2d(
                 grid.meshgrid_reshape(x, "rtz")[0],
                 potential_grid.num_theta,
                 potential_grid.num_zeta,

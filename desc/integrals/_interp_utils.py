@@ -260,7 +260,7 @@ def _filter_distinct(r, sentinel, eps):
     return jnp.where(mask, sentinel, r)
 
 
-_polyroots_vec = jnp.vectorize(
+_root_companion = jnp.vectorize(
     partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
 )
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
@@ -268,7 +268,7 @@ _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 def polyroot_vec(
     c,
-    k=0,
+    k=0.0,
     a_min=None,
     a_max=None,
     sort=False,
@@ -316,7 +316,6 @@ def polyroot_vec(
     """
     get_only_real_roots = not (a_min is None and a_max is None)
     num_coef = c.shape[-1]
-    c = _subtract_last(c, k)
     func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
 
     if (
@@ -326,12 +325,13 @@ def polyroot_vec(
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient. Also consumes less memory.
-        r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)
+        r = func[num_coef](
+            *jnp.moveaxis(c[..., :-1], -1, 0), c[..., -1] - k, sentinel, eps, distinct
+        )
         # We already filtered distinct roots for quadratics.
         distinct = distinct and num_coef > 3
     else:
-        # Compute from eigenvalues of polynomial companion matrix.
-        r = _polyroots_vec(c)
+        r = _root_companion(_subtract_last(c, k))
 
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
@@ -349,7 +349,7 @@ def polyroot_vec(
     return r
 
 
-def _root_cubic(C, sentinel, eps, distinct):
+def _root_cubic(a, b, c, d, sentinel, eps, distinct):
     """Return real cubic root assuming real coefficients."""
     # numerical.recipes/book.html, page 228
 
@@ -374,7 +374,7 @@ def _root_cubic(C, sentinel, eps, distinct):
 
     def reducible(Q, R, b):
         # One real and two complex roots.
-        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
+        A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
         B = safediv(Q, A)
         r1 = (A + B) - b / 3
         return _concat_sentinel(r1[..., jnp.newaxis], sentinel, num=2)
@@ -384,7 +384,7 @@ def _root_cubic(C, sentinel, eps, distinct):
         c = safediv(c, a)
         d = safediv(d, a)
         Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
+        R = (2 * b**3 - 9 * b * c) / 54 + 0.5 * d
         mask = R**2 < Q**3
         return jnp.where(
             mask[..., jnp.newaxis],
@@ -392,36 +392,27 @@ def _root_cubic(C, sentinel, eps, distinct):
             reducible(Q, R, b),
         )
 
-    a = C[..., 0]
-    b = C[..., 1]
-    c = C[..., 2]
-    d = C[..., 3]
     return jnp.where(
         # Tests catch failure here if eps < 1e-12 for 64 bit precision.
         jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
         _concat_sentinel(
-            _root_quadratic(
-                C=C[..., 1:], sentinel=sentinel, eps=eps, distinct=distinct
-            ),
+            _root_quadratic(b, c, d, sentinel, eps, distinct),
             sentinel,
         ),
         root(b, c, d),
     )
 
 
-def _root_quadratic(C, sentinel, eps, distinct):
+def _root_quadratic(a, b, c, sentinel, eps, distinct):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
-    a = C[..., 0]
-    b = C[..., 1]
-    c = C[..., 2]
 
     discriminant = b**2 - 4 * a * c
     q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
     r1 = jnp.where(
         discriminant < 0,
         sentinel,
-        safediv(q, a, _root_linear(C=C[..., 1:], sentinel=sentinel, eps=eps)),
+        safediv(q, a, _root_linear(b, c, sentinel, eps)),
     )
     r2 = jnp.where(
         # more robust to remove repeated roots with discriminant
@@ -432,14 +423,11 @@ def _root_quadratic(C, sentinel, eps, distinct):
     return jnp.stack([r1, r2], axis=-1)
 
 
-def _root_linear(C, sentinel, eps, distinct=False):
+def _root_linear(a, b, sentinel, eps, distinct=False):
     """Return real linear root assuming real coefficients."""
-    a = C[..., 0]
-    b = C[..., 1]
     return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
 
 
 def _concat_sentinel(r, sentinel, num=1):
     """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
-    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
-    return jnp.append(r, sent, axis=-1)
+    return jnp.append(r, jnp.broadcast_to(sentinel, (*r.shape[:-1], num)), axis=-1)

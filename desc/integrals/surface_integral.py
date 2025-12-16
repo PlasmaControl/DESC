@@ -222,88 +222,101 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         msg="Integrals over constant poloidal surfaces"
         " are poorly defined for ConcentricGrid.",
     )
-    unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
-        grid, surface_label
-    )
-    spacing = jnp.prod(spacing, axis=1)
+    if grid.can_fft2 and surface_label == "rho" and hasattr(grid, "num_rho"):
 
-    if has_idx:
-        # The ith row of masks is True only at the indices which correspond to the
-        # ith surface. The integral over the ith surface is the dot product of the
-        # ith row vector and the integrand defined over all the surfaces.
-        mask = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
-        # Imagine a torus cross-section at zeta=π.
-        # A grid with a duplicate zeta=π node has 2 of those cross-sections.
-        #     In grid.py, we multiply by 1/n the areas of surfaces with
-        # duplicity n. This prevents the area of that surface from being
-        # double-counted, as surfaces with the same node value are combined
-        # into 1 integral, which sums their areas. Thus, if the zeta=π
-        # cross-section has duplicity 2, we ensure that the area on the zeta=π
-        # surface will have the correct total area of π+π = 2π.
-        #     An edge case exists if the duplicate surface has nodes with
-        # different values for the surface label, which only occurs when
-        # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
-        # has a duplicate surface at surface_label=0 and
-        # surface_label=max surface value. Although the modulo of these values
-        # are equal, their numeric values are not, so the integration
-        # would treat them as different surfaces. We solve this issue by
-        # combining the indices corresponding to the integrands of the duplicated
-        # surface, so that the duplicate surface is treated as one, like in the
-        # previous paragraph.
-        mask = cond(
-            has_endpoint_dupe,
-            lambda _: put(mask, jnp.array([0, -1]), mask[0] | mask[-1]),
-            lambda _: mask,
-            None,
-        )
+        def integrate(q=jnp.array([1.0])):
+            if q.shape[0] == 1:
+                return 4 * jnp.pi**2 * q
+            integrals = (
+                4
+                * jnp.pi**2
+                * grid.meshgrid_reshape(q, grid.coordinates).mean((-2, -1))
+            )
+            return grid.expand(integrals, surface_label) if expand_out else integrals
+
     else:
-        # If we don't have the idx attributes, we are forced to expand out.
-        errorif(
-            not has_idx and not expand_out,
-            msg=f"Grid lacks attributes 'num_{surface_label}' and "
-            f"'inverse_{surface_label}_idx', so this method "
-            f"can't satisfy the request expand_out={expand_out}.",
+        unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = (
+            _get_grid_surface(grid, surface_label)
         )
-        # don't try to expand if already expanded
-        expand_out = expand_out and has_idx
-        axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
-        # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
-        # reduces memory usage by > 400% for the forward computation and Jacobian.
-        nodes = jnp.asarray(grid.nodes[:, axis])
-        # This branch will execute for custom grids, which don't have a use
-        # case for having duplicate nodes, so we don't bother to modulo nodes
-        # by 2pi or 2pi/NFP.
-        mask = jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol
-        # The above implementation was benchmarked to be more efficient than
-        # alternatives with explicit loops in GitHub pull request #934.
+        spacing = jnp.prod(spacing, axis=1)
 
-    def integrate(q=jnp.array([1.0])):
-        """Compute a surface integral for each surface in the grid.
+        if has_idx:
+            # The ith row of masks is True only at the indices which correspond to the
+            # ith surface. The integral over the ith surface is the dot product of the
+            # ith row vector and the integrand defined over all the surfaces.
+            mask = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
+            # Imagine a torus cross-section at zeta=π.
+            # A grid with a duplicate zeta=π node has 2 of those cross-sections.
+            #     In grid.py, we multiply by 1/n the areas of surfaces with
+            # duplicity n. This prevents the area of that surface from being
+            # double-counted, as surfaces with the same node value are combined
+            # into 1 integral, which sums their areas. Thus, if the zeta=π
+            # cross-section has duplicity 2, we ensure that the area on the zeta=π
+            # surface will have the correct total area of π+π = 2π.
+            #     An edge case exists if the duplicate surface has nodes with
+            # different values for the surface label, which only occurs when
+            # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
+            # has a duplicate surface at surface_label=0 and
+            # surface_label=max surface value. Although the modulo of these values
+            # are equal, their numeric values are not, so the integration
+            # would treat them as different surfaces. We solve this issue by
+            # combining the indices corresponding to the integrands of the duplicated
+            # surface, so that the duplicate surface is treated as one, like in the
+            # previous paragraph.
+            mask = cond(
+                has_endpoint_dupe,
+                lambda _: put(mask, jnp.array([0, -1]), mask[0] | mask[-1]),
+                lambda _: mask,
+                None,
+            )
+        else:
+            # If we don't have the idx attributes, we are forced to expand out.
+            errorif(
+                not has_idx and not expand_out,
+                msg=f"Grid lacks attributes 'num_{surface_label}' and "
+                f"'inverse_{surface_label}_idx', so this method "
+                f"can't satisfy the request expand_out={expand_out}.",
+            )
+            # don't try to expand if already expanded
+            expand_out = expand_out and has_idx
+            axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
+            # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
+            # reduces memory usage by > 400% for the forward computation and Jacobian.
+            nodes = jnp.asarray(grid.nodes[:, axis])
+            # This branch will execute for custom grids, which don't have a use
+            # case for having duplicate nodes, so we don't bother to modulo nodes
+            # by 2pi or 2pi/NFP.
+            mask = jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol
+            # The above implementation was benchmarked to be more efficient than
+            # alternatives with explicit loops in GitHub pull request #934.
 
-        Notes
-        -----
-            It is assumed that the integration surface has area 4π² when the
-            surface label is rho and area 2π when the surface label is theta or
-            zeta. You may want to multiply the input by the surface area Jacobian.
+        def integrate(q=jnp.array([1.0])):
+            """Compute a surface integral for each surface in the grid.
 
-        Parameters
-        ----------
-        q : ndarray
-            Quantity to integrate.
-            The first dimension of the array should have size ``grid.num_nodes``.
-            When ``q`` is n-dimensional, the intention is to integrate,
-            over the domain parameterized by rho, poloidal, and zeta,
-            an n-dimensional function over the previously mentioned domain.
+            Notes
+            -----
+                It is assumed that the integration surface has area 4π² when the
+                surface label is rho and area 2π when the surface label is theta or
+                zeta. You may want to multiply the input by the surface area Jacobian.
 
-        Returns
-        -------
-        integrals : ndarray
-            Surface integral of the input over each surface in the grid.
+            Parameters
+            ----------
+            q : ndarray
+                Quantity to integrate.
+                The first dimension of the array should have size ``grid.num_nodes``.
+                When ``q`` is n-dimensional, the intention is to integrate,
+                over the domain parameterized by rho, poloidal, and zeta,
+                an n-dimensional function over the previously mentioned domain.
 
-        """
-        integrands = (spacing * jnp.nan_to_num(q).T).T
-        integrals = jnp.tensordot(mask, integrands, axes=1)
-        return grid.expand(integrals, surface_label) if expand_out else integrals
+            Returns
+            -------
+            integrals : ndarray
+                Surface integral of the input over each surface in the grid.
+
+            """
+            integrands = (spacing * jnp.nan_to_num(q).T).T
+            integrals = jnp.tensordot(mask, integrands, axes=1)
+            return grid.expand(integrals, surface_label) if expand_out else integrals
 
     return integrate
 

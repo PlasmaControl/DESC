@@ -1021,7 +1021,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             final_coilset = CoilSet(*coils, check_intersection=False)
         return final_coilset
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1036,6 +1036,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -1043,7 +1046,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following, the R,Z scales are already in the base class:
         modes = {"Phi_mn": self.Phi_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))

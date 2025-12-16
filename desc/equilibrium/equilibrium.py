@@ -2253,18 +2253,20 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_order`` is the norm order for multi-index modes,
-            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
-            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
-            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
-            be the same size as sum(thing.dim_x for thing in things). If a list, the
-            list should have 1 element for each thing, and each element should either
-            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
-            jacobian scaling for that thing, or a dict with the same keys and
-            dimensions as thing.params_dict to specify scales manually. Anywhere
-            ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
+            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
+            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
+            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
+            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
+            sets the default scale for variables without an ess rule defined.
+            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
+            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
+            If an array, should be the same size as sum(thing.dim_x for thing in
+            things). If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'`` to use exponential
+            spectral scaling or automatic jacobian scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2372,18 +2374,20 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_order`` is the norm order for multi-index modes,
-            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
-            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
-            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
-            be the same size as sum(thing.dim_x for thing in things). If a list, the
-            list should have 1 element for each thing, and each element should either
-            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
-            jacobian scaling for that thing, or a dict with the same keys and
-            dimensions as thing.params_dict to specify scales manually. Anywhere
-            ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
+            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
+            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
+            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
+            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
+            sets the default scale for variables without an ess rule defined.
+            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
+            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
+            If an array, should be the same size as sum(thing.dim_x for thing in
+            things). If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'`` to use exponential
+            spectral scaling or automatic jacobian scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2517,7 +2521,7 @@ class Equilibrium(IOAble, Optimizable):
 
         return eq
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -2532,6 +2536,9 @@ class Equilibrium(IOAble, Optimizable):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -2539,9 +2546,9 @@ class Equilibrium(IOAble, Optimizable):
             Array of scale values for each parameter
         """
         # this is the all ones scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
-        bdry_scale = self.surface._get_ess_scale(alpha, order, min_value)
-        axis_scale = self.axis._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
+        bdry_scale = self.surface._get_ess_scale(alpha, order, min_value, default)
+        axis_scale = self.axis._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {
             "R_lmn": self.R_basis.modes,

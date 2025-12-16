@@ -134,18 +134,20 @@ class Optimizer(IOAble):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_order`` is the norm order for multi-index modes,
-            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
-            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
-            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
-            be the same size as sum(thing.dim_x for thing in things). If a list, the
-            list should have 1 element for each thing, and each element should either
-            be ``'ess'``, ``'auto'`` to use exponential spectral scaling or automatic
-            jacobian scaling for that thing, or a dict with the same keys and
-            dimensions as thing.params_dict to specify scales manually. Anywhere
-            ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
+            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
+            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
+            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
+            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
+            sets the default scale for variables without an ess rule defined.
+            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
+            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
+            If an array, should be the same size as sum(thing.dim_x for thing in
+            things). If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'`` to use exponential
+            spectral scaling or automatic jacobian scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -419,6 +421,7 @@ def _parse_x_scale(x_scale, things, options):
     ess_alpha = options.pop("ess_alpha", 1.2)
     ess_order = options.pop("ess_order", np.inf)
     ess_min_value = options.pop("ess_min_value", 1e-7)
+    ess_default = options.pop("ess_default", 0.0)
 
     for xsc, tng in zip(x_scale, things):
         if isinstance(xsc, (jnp.ndarray, np.ndarray)) or (
@@ -430,7 +433,7 @@ def _parse_x_scale(x_scale, things, options):
         ):
             all_scales.append(tng.pack_params(xsc))
         elif isinstance(xsc, str) and xsc == "ess":
-            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value)
+            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value, ess_default)
             all_scales.append(tng.pack_params(scl))
         elif isinstance(xsc, str) and xsc == "auto":
             scl = jnp.zeros_like(tng.pack_params(tng.params_dict))

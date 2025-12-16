@@ -334,7 +334,7 @@ class FourierRZCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -349,6 +349,9 @@ class FourierRZCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -356,7 +359,7 @@ class FourierRZCurve(Curve):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {"R_n": self.R_basis.modes, "Z_n": self.Z_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))
@@ -631,7 +634,7 @@ class FourierXYZCurve(Curve):
             X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -646,6 +649,9 @@ class FourierXYZCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -653,7 +659,7 @@ class FourierXYZCurve(Curve):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {
             "X_n": self.X_basis.modes,
@@ -979,7 +985,7 @@ class FourierPlanarCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -994,6 +1000,9 @@ class FourierPlanarCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -1001,7 +1010,7 @@ class FourierPlanarCurve(Curve):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {"r_n": self.r_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))
@@ -1384,7 +1393,7 @@ class FourierXYCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1399,6 +1408,9 @@ class FourierXYCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -1406,7 +1418,7 @@ class FourierXYCurve(Curve):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {"X_n": self.X_basis.modes, "Y_n": self.Y_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))

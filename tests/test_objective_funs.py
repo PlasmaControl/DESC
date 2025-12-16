@@ -90,6 +90,7 @@ from desc.objectives import (
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
+    UmbilicHighCurvature,
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
@@ -3216,6 +3217,7 @@ class TestComputeScalarResolution:
         ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
+        UmbilicHighCurvature,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -3705,6 +3707,8 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
+        # TODO: add Omnigenity objective (see GH issue #943)
+        UmbilicHighCurvature,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

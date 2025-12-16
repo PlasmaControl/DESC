@@ -4,12 +4,12 @@ import warnings
 from abc import ABC, abstractmethod
 from functools import partial
 
+from interpax_fft import rfft2_modes, rfft2_vander, rfft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import jit, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.grid import LinearGrid  # noqa: F401
-from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.integrals.quad_utils import (
     _best_params,
     _best_ratio,
@@ -32,8 +32,6 @@ from desc.utils import (
     warnif,
     xyz2rpz_vec,
 )
-
-from ._fourier import fft_interp2d
 
 
 def get_interpolator(
@@ -322,7 +320,7 @@ class FFTInterpolator(_BIESTInterpolator):
         """
         if not is_fourier:
             f = self.fourier(f)
-        return fft_interp2d(
+        return rfft_interp2d(
             f,
             n1=self.eval_grid.num_theta,
             n2=self.eval_grid.num_zeta,
@@ -584,7 +582,6 @@ def _singular_part(
 
 
 def _add_reduce(x):
-    # https://github.com/jax-ml/jax/issues/23493
     return x.sum(0)
 
 

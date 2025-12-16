@@ -8,8 +8,6 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies", "skip_changelog", "run_benchmarks"]
-    reviewers:
-      - "PlasmaControl/desc-dev"
     groups:
       # group similar dependencies together into fewer PRs
       docs:
@@ -38,6 +36,7 @@ updates:
           - "jax"
           - "diffrax"
           - "interpax"
+          - "interpax_fft"
           - "orthax"
           - "quadax"
   - package-ecosystem: "github-actions"

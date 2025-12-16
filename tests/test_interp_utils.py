@@ -491,11 +491,3 @@ class TestPolyUtils:
         assert c.shape[:-1] == x.shape[x.ndim - (c.ndim - 1) :]
         assert np.unique((c.shape[-1],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
         test(x, c)
-
-
-@pytest.mark.unit
-def test_fft_interp2d():
-    """Test https://github.com/f0uriest/interpax/pull/117."""
-    from desc.integrals._fourier import _test_fft_interp2d
-
-    return _test_fft_interp2d()

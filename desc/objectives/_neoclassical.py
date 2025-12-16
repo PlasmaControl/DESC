@@ -489,7 +489,8 @@ class TrappedResonance(_Objective):
         name="TrappedResonance",
         jac_chunk_size=None,
         pitch_invs=None,
-        N=0
+        N=0,
+        QS_flag=True
     ):
         # assign attributes and store inputs. No expensive calculations
                 # we don't have to do much here, mostly just call ``super().__init__()``
@@ -519,7 +520,8 @@ class TrappedResonance(_Objective):
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
             "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
             "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
-            "Psi": Psi
+            "Psi": Psi,
+            "QS_flag": QS_flag
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"

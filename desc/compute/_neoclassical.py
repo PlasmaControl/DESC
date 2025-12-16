@@ -1033,6 +1033,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     Bcrit_res = kwargs.get("Bcrit_res",None)
     Psi = kwargs.get("Psi",None)
     wd_blur = kwargs.get('wd_blur',3)
+    QS_flag = kwargs.get('QS_flag',False) # True for QS
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -1197,11 +1198,23 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
 
 
-    # Omega eta calculation (currently for one energy only), average over alphas
+    # # Omega eta calculation (currently for one energy only), average over alphas
+    # tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
+    # iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
+    # # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # # omega_arr_test1 = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out
+    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    # # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
+    # omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
+        # Omega eta calculation (currently for one energy only), average over alphas
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
-    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    omega_arr_test = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    def tb_QS(nfp,N,iotas_omega):
+        return (nfp / ((N*nfp)-iotas_omega))
+    def fb_QS(nfp,N,iotas_omega):
+        return jnp.ones(iotas_omega.shape)
+    QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
+    omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
     # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
     omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
@@ -1261,12 +1274,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
     f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
 
-    # Plotting code, not necessary for optimization
-    plot_poinc=True
-    if plot_poinc:
-        poinc_plot = f_b * psi_drift_out / iotas_rho1_sum # := (rho,Bcrit,well)
-
-
     # Sum over Bcrit
     f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)
     f_tr2_out = jnp.transpose(f_tr2_out,(2,3,0,1)) # := (rho,alpha,Bcrit,well)
@@ -1290,7 +1297,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     data["f_tr2"] = f_tr2_out # full output
     # data["f_tr2"] = {
-    #     'poinc_plot':poinc_plot,
     #     'omega_arr':omega_arr_test,
     #     'psi_drift_out':psi_drift_out,
     #     'iotas_rho1_sum': iotas_rho1_sum,
@@ -1302,7 +1308,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     #     'f_tr2_out':f_tr2_out,
     #     'iotas': iotas
     #     } # for plotting
-    return data
+    # return data
 
 
 

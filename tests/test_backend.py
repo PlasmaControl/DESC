@@ -3,7 +3,17 @@
 import numpy as np
 import pytest
 
-from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
+from desc.backend import (
+    _lstsq,
+    fixed_point,
+    jax,
+    jnp,
+    put,
+    root,
+    root_scalar,
+    sign,
+    vmap,
+)
 
 
 @pytest.mark.unit
@@ -131,12 +141,32 @@ def test_lstsq():
     # square
     A = rng.standard_normal((5, 5))
     b = rng.standard_normal(5)
-    np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
-    )
+    np.testing.assert_allclose(_lstsq(A, b), np.linalg.solve(A, b), rtol=1e-6)
     # scalar
     A = rng.standard_normal((1, 5))
     b = rng.standard_normal(1)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("method", ["del2", "iteration", "anderson"])
+def test_fixed_point(method):
+    """Test fixed point iteration."""
+
+    def func(x, c1, c2):
+        return jnp.sqrt(c1 / (x + c2))
+
+    c1 = jnp.array([10.0, 12.0])
+    c2 = jnp.array([3.0, 5.0])
+    x0 = jnp.array([1.2, 1.3])
+    p, (_, i, full_ps, full_fs) = fixed_point(
+        func, x0, (c1, c2), xtol=1e-10, method=method, full_output=True, anderson_m=2
+    )
+    np.testing.assert_allclose(p, [1.4920333, 1.37228132])
+    assert (
+        (i == 4 and method == "del2")
+        or (i == 14 and method == "iteration")
+        or (i == 6 and method == "anderson")
     )

@@ -1784,6 +1784,7 @@ def test_get_ess_scale():  # noqa: C901
     """Test that ESS scale for different objects is computed correctly."""
     alpha = 1.5
     order = 2
+    default = 0
     eq = Equilibrium()
     eq.change_resolution(3, 4, 5)
 
@@ -1827,7 +1828,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in rz_coil_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(rz_coil_scale[key], 1)
+        np.testing.assert_allclose(rz_coil_scale[key], default)
 
     # FourierPlanarCoil
     assert planar_coil_scale.keys() == set(planar_coil.optimizable_params)
@@ -1839,7 +1840,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in planar_coil_scale.keys():
         if key in ["r_n"]:
             continue
-        np.testing.assert_allclose(planar_coil_scale[key], 1)
+        np.testing.assert_allclose(planar_coil_scale[key], default)
 
     # FourierXYCoil
     assert xy_coil_scale.keys() == set(xy_coil.optimizable_params)
@@ -1854,7 +1855,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in xy_coil_scale.keys():
         if key in ["X_n", "Y_n"]:
             continue
-        np.testing.assert_allclose(xy_coil_scale[key], 1)
+        np.testing.assert_allclose(xy_coil_scale[key], default)
 
     # FourierXYZCoil
     assert xyz_coil_scale.keys() == set(xyz_coil.optimizable_params)
@@ -1876,7 +1877,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in xyz_coil_scale.keys():
         if key in ["X_n", "Y_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(xyz_coil_scale[key], 1)
+        np.testing.assert_allclose(xyz_coil_scale[key], default)
 
     # FourierRZCurve
     assert axis_scale.keys() == set(axis.optimizable_params)
@@ -1891,7 +1892,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in axis_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(axis_scale[key], 1)
+        np.testing.assert_allclose(axis_scale[key], default)
 
     # FourierRZToroidalSurface
     assert surf_scale.keys() == set(surf.optimizable_params)
@@ -1906,7 +1907,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in surf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(surf_scale[key], 1)
+        np.testing.assert_allclose(surf_scale[key], default)
 
     # ZernikeRZToroidalSection
     assert zsurf_scale.keys() == set(zsurf.optimizable_params)
@@ -1921,7 +1922,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in zsurf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(zsurf_scale[key], 1)
+        np.testing.assert_allclose(zsurf_scale[key], default)
 
     # Equilibrium
     assert eq_scale.keys() == set(eq.optimizable_params)
@@ -1944,7 +1945,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in eq_scale.keys():
         if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
             continue
-        np.testing.assert_allclose(eq_scale[key], 1)
+        np.testing.assert_allclose(eq_scale[key], default)
 
     eq2 = eq.copy()
     eq2.surface = FourierCurrentPotentialField.from_surface(eq.surface)
@@ -1956,5 +1957,5 @@ def test_get_ess_scale():  # noqa: C901
         np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
         / np.exp(-alpha),
     )
-    np.testing.assert_allclose(eq2_scale["I"], 1)
-    np.testing.assert_allclose(eq2_scale["G"], 1)
+    np.testing.assert_allclose(eq2_scale["I"], default)
+    np.testing.assert_allclose(eq2_scale["G"], default)

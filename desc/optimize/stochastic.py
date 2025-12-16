@@ -148,6 +148,7 @@ def sgd(
             maxiter,
             nfev,
             jnp.inf,
+            False,
         )
         if success is not None:
             break

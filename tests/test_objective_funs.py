@@ -713,6 +713,29 @@ class TestObjectiveFunction:
         test(get("HELIOTRON"))
 
     @pytest.mark.unit
+    def test_target_sum_iota(self):
+        """Test calculation of iota profile sum."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            sum_iota = jnp.sum(
+                eq.compute("iota", grid=grid)["iota"][grid.unique_rho_idx]
+            )
+            obj = RotationalTransform(
+                target=sum_iota, weight=1, eq=eq, loss_function="sum", grid=grid
+            )
+            obj.build()
+            sum_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            sum_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            sum_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(sum_iota, sum_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(sum_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(sum_iota_scaled, sum_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
     def test_plasma_vessel_distance(self):
         """Test calculation of min distance from plasma to vessel."""
         R0 = 10.0
@@ -3158,6 +3181,7 @@ class TestComputeScalarResolution:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3644,6 +3668,7 @@ class TestObjectiveNaNGrad:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]

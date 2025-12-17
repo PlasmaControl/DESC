@@ -33,6 +33,7 @@ __all__ = [
     "magnetic_fields",
     "objectives",
     "optimize",
+    "particles",
     "perturbations",
     "plotting",
     "profiles",

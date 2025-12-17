@@ -229,7 +229,6 @@ def _optimize_scipy_minimize(  # noqa: C901
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            False,
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -442,7 +441,6 @@ def _optimize_scipy_least_squares(  # noqa: C901
             stoptol["maxiter"],
             len(fun_allf),
             stoptol["max_nfev"],
-            False,
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -762,7 +760,6 @@ def _optimize_scipy_constrained(  # noqa: C901
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            False,
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
             ctol=stoptol["ctol"],

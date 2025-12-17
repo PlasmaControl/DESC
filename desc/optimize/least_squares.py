@@ -390,7 +390,6 @@ def lsqtr(  # noqa: C901
                 maxiter,
                 nfev,
                 max_nfev,
-                hits_boundary,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(x - x0),
                 max_dx=max_dx,

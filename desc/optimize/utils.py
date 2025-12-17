@@ -438,14 +438,11 @@ def check_termination(
     maxiter,
     nfev,
     max_nfev,
-    hits_boundary,
     **kwargs,
 ):
     """Check termination condition and get message."""
     ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
-    ftol_satisfied = ftol_satisfied and not hits_boundary
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
-    xtol_satisfied = xtol_satisfied and not hits_boundary
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 

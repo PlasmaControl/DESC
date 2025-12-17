@@ -14,13 +14,22 @@ New Features
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
+alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Adds ``prox_inv_method`` option to be used in equilibrium constrained optimization problems. ``prox_inv_method`` can be ``qr``, ``svd`` or ``svd-reg``. ``svd-reg`` is the legacy behaviour which had an unnecessary regularization term. The new default is ``qr`` which is faster than ``svd`` without loss of significant accuracy. Note that this may change the results of the optimization scripts. For number of example cases, it is been seen that the new default facilitates the optimization without continuation.
 
 Bug Fixes
 
-- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)
+- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
+- ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
 
+Performance Improvements
+
+- `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
 
 v0.16.0
 -------

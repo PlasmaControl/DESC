@@ -52,7 +52,7 @@ jobs:
 
       - name: Cache Python environment
         id: cache-env
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

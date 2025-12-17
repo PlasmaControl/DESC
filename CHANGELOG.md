@@ -20,6 +20,7 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
 alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- Adds ``prox_inv_method`` option to be used in equilibrium constrained optimization problems. ``prox_inv_method`` can be ``qr``, ``svd`` or ``svd-reg``. ``svd-reg`` is the legacy behaviour which had an unnecessary regularization term. The new default is ``qr`` which is faster than ``svd`` without loss of significant accuracy. Note that this may change the results of the optimization scripts. For number of example cases, it is been seen that the new default facilitates the optimization without continuation.
 
 Bug Fixes
 

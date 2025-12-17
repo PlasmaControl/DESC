@@ -771,7 +771,7 @@ def test_solve_with_x_scale():
             ),
         ]
     )
-    eq.solve(x_scale=scale)
+    eq.solve(x_scale=eq.unpack_params(scale))
     assert eq.is_nested()
 
 
@@ -1672,7 +1672,9 @@ def test_ess_scaling_with_proximal():
     )
 
     assert out["success"] is not None
-    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+    np.testing.assert_allclose(
+        eq.pack_params(out["x_scale"][0]), eq.pack_params(eq._get_ess_scale())
+    )
 
 
 @pytest.mark.unit
@@ -1720,7 +1722,9 @@ def test_ess_scaling_without_proximal():
     )
 
     assert out["success"] is not None
-    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+    np.testing.assert_allclose(
+        eq.pack_params(out["x_scale"][0]), eq.pack_params(eq._get_ess_scale())
+    )
 
 
 @pytest.mark.unit
@@ -1731,49 +1735,62 @@ def test_parse_x_scale(DummyCoilSet):
 
     dim_eq = eq.dim_x
     dim_coil = coils.dim_x
-    assert (np.concatenate(_parse_x_scale("auto", [eq], {})) == 0).all()
-    assert (np.concatenate(_parse_x_scale("auto", [eq, coils], {})) == 0).all()
+
+    xsc = _parse_x_scale("auto", [eq], {})
+    xsc = eq.pack_params(xsc[0])
+    assert (xsc == 0).all()
+
+    xsc = _parse_x_scale("auto", [eq, coils], {})
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
+    assert (xsc == 0).all()
 
     with pytest.raises(AssertionError):
         _parse_x_scale([1], [eq, coils], {})
     with pytest.raises(AssertionError):
         _parse_x_scale([1, 2], [eq], {})
-    with pytest.raises(ValueError):
-        _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
-    with pytest.raises(ValueError):
-        _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError):
+            _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError):
+            _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
     with pytest.raises(ValueError):
         _parse_x_scale("foo", [eq], {})
     with pytest.raises(TypeError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})
 
     xsc = _parse_x_scale(1, [eq], {})
+    xsc = eq.pack_params(xsc[0])
     assert (xsc == 1).all()
     assert xsc.shape == (dim_eq,)
 
     xsc = _parse_x_scale(1, [eq, coils], {})
-    assert (xsc == 1).all()
-    assert xsc.shape == (dim_eq + dim_coil,)
+    xsc = [eq.pack_params(xsc[0]), coils.pack_params(xsc[1])]
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 1).all()
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
 
     xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    xsc = [eq.pack_params(xsc[0]), coils.pack_params(xsc[1])]
     assert xsc[0].shape == (dim_eq,)
     assert xsc[1].shape == (dim_coil,)
     assert (xsc[0] == 1).all()
     assert (xsc[1] == 2).all()
 
     xsc = _parse_x_scale(eq.params_dict, [eq], {})
-    xsc = np.concatenate(xsc)
+    xsc = eq.pack_params(xsc[0])
     assert (xsc == eq.pack_params(eq.params_dict)).all()
     assert xsc.shape == (dim_eq,)
 
     xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
-    xsc = np.concatenate(xsc)
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
     assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
 
     xsc = _parse_x_scale([1, "auto"], [eq, coils], {})
-    xsc = np.concatenate(xsc)
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
     assert (xsc[dim_eq:] == 0).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)

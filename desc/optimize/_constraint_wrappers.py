@@ -236,21 +236,24 @@ class LinearConstraintProjection(ObjectiveFunction):
         # does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        # if user specified x_scale, don't dynamically change it
-        if self._x_scale == "auto":
-            x_scale = self._objective.x(*self._objective.things)
-            self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+        x_scale = self._x_scale
+        x0 = self._objective.x(*self._objective.things)
+        auto_x_scale = np.where(np.abs(x0) < 1e2, 1, np.abs(x0))
 
-            # since D has changed, we need to update the ADinv
-            # as mentioned above A does not change, so we can use the same Ainv
-            # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
-            self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
-            # we also need to update the nullspace Z of AD in a similar way
-            # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
-            # where ZA is the nullspace of A, and Z is the nullspace of AD
-            self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
-            # we also normalize Z to make each column have unit norm
-            self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
+        if isinstance(x_scale) and x_scale == "auto":
+            x_scale = auto_x_scale
+
+        self._D = jnp.where(x_scale == 0, auto_x_scale, x_scale)
+        # since D has changed, we need to update the ADinv
+        # as mentioned above A does not change, so we can use the same Ainv
+        # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
+        self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
+        # we also need to update the nullspace Z of AD in a similar way
+        # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
+        # where ZA is the nullspace of A, and Z is the nullspace of AD
+        self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
+        # we also normalize Z to make each column have unit norm
+        self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
 
         xp = put(xp, unfixed_idx, self._ADinv @ b)
         xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])

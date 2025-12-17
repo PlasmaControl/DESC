@@ -106,8 +106,6 @@ def _optimize_scipy_minimize(  # noqa: C901
     # don't call hess if the method is approximating the hessian, since we probably
     # are avoiding it due to it being expensive
     use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
-    if isinstance(x_scale, str) and x_scale == "auto":
-        x_scale = np.zeros_like(x0)
     if use_hessian:
         if np.any(x_scale) == 0:
             H = hess(x0)
@@ -365,7 +363,14 @@ def _optimize_scipy_least_squares(  # noqa: C901
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    x_scale = "jac" if (isinstance(x_scale, str) and x_scale == "auto") else x_scale
+    if np.all(x_scale == 0):
+        x_scale = "jac"  # automatic scaling
+    else:
+        # we can't combine adaptive scaling with user specified scale, but we
+        # can use the initial jacobian to get a rough guess
+        J = objective.jac_scaled_error(x0, objective.constants)
+        x_scale = compute_jac_scale(J, x_scale)
+
     fun, jac = objective.compute_scaled_error, objective.jac_scaled_error
     # need to use some "global" variables here
     fun_allx = []
@@ -568,8 +573,6 @@ def _optimize_scipy_constrained(  # noqa: C901
     options.setdefault("disp", False)
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
 
-    if isinstance(x_scale, str) and x_scale == "auto":
-        x_scale = np.zeros_like(x0)
     if np.any(x_scale == 0):
         H = hess(x0)
         scale, _ = compute_hess_scale(H, x_scale)

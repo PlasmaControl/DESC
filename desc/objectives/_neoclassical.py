@@ -20,6 +20,11 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
+        The default mode of ``auto`` will likely choose ``rev`` for this objective.
+
+        To reduce memory consumption in ``rev`` mode, it is more effective to set
+        the parameter ``low_ram=True`` prior to reducing ``jac_chunk_size``.
+
         In ``rev`` mode, reducing the value of the parameter ``pitch_batch_size`` does
         not reduce memory consumption, so it is recommended to retain the default unless
         you have explicitly requested to use ``fwd`` mode.

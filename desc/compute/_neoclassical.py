@@ -617,7 +617,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     def jnpmean_nz(x,axis=0):
         mask = x!=0.0
         count = jnp.sum(mask,axis) # how many wells that are not 0
-        return jnp.sum(x,axis=axis) / count
+        return safediv(jnp.sum(x,axis=axis) , count)
     def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "0" elements in JAX numpy
         # x is an array with size: (num_rho,num_alpha,num_pitch,num_fieldlines)
         xbar = jnpmean_nz(x,axis=axis)
@@ -668,7 +668,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
     def tb_QS(nfp,N,iotas_omega):
-        return (nfp / ((N*nfp)-iotas_omega))
+        return safediv(nfp , ((N*nfp)-iotas_omega))
     def fb_QS(nfp,N,iotas_omega):
         return jnp.ones(iotas_omega.shape)
     QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
@@ -723,14 +723,14 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Calculate bump function (f_b) and sum over resonances
     f_b_res = jnp.where(
         condition,
-        safediv(jnp.exp(  jnp.clip( w * ((a-b)**2) / ( (omega_broad-b) * (omega_broad-a) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
+        safediv(jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
     f_b = jnp.sum(f_b_res,axis=-1) # := (rho,Bcrit,well)
 
     # First sum over rho
     iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
-    f_tr2_out = rho_res * jnp.sum( f_b * psi_drift_out / iotas_rho1_sum , axis=0 )  # := (Bcrit,well)
+    f_tr2_out = rho_res * jnp.sum( safediv(f_b * psi_drift_out , iotas_rho1_sum) , axis=0 )  # := (Bcrit,well)
 
     # Sum over Bcrit
     f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)

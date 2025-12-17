@@ -240,7 +240,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x0 = self._objective.x(*self._objective.things)
         auto_x_scale = np.where(np.abs(x0) < 1e2, 1, np.abs(x0))
 
-        if isinstance(x_scale) and x_scale == "auto":
+        if isinstance(x_scale, str) and x_scale == "auto":
             x_scale = auto_x_scale
 
         self._D = jnp.where(x_scale == 0, auto_x_scale, x_scale)

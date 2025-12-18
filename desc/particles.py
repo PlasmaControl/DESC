@@ -198,6 +198,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 x, eq_or_field, params, m, q, mu, **kwargs
             )
 
+    @jit
     def _compute_flux_coordinates(self, x, eq, params, m, q, mu, **kwargs):
         """ODE equation for vacuum guiding center in flux coordinates.
 
@@ -263,6 +264,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
+    @jit
     def _compute_flux_coordinates_with_fit(self, x, field, m, q, mu):
         """ODE equation for vacuum guiding center in flux coordinates.
 
@@ -297,6 +299,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
+    @jit
     def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):
         """Compute the RHS of the ODE using MagneticField.
 

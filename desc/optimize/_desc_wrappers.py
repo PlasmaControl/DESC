@@ -7,7 +7,7 @@ from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
-from .stochastic import adam, sgd
+from .stochastic import generic_sgd
 
 
 @register_optimizer(
@@ -376,9 +376,13 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum"
-    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    name=["sgd", "adam"],
+    description=[
+        "Stochastic gradient descent with Nesterov momentum. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        "ADAM optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -389,7 +393,7 @@ def _optimize_desc_fmin_scalar(
 def _optimize_desc_stochastic(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.sgd.
+    """Wrapper for desc.optimize.generic_sgd.
 
     Parameters
     ----------
@@ -400,81 +404,7 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use.
-    x_scale : array_like or ‘jac’, optional
-        Characteristic scale of each variable. Setting x_scale is equivalent to
-        reformulating the problem in scaled variables xs = x / x_scale. An alternative
-        view is that the size of a trust region along jth dimension is proportional to
-        x_scale[j]. Improved convergence may be achieved by setting x_scale such that
-        a step of a given size along any of the scaled variables has a similar effect
-        on the cost function. If set to ‘jac’, the scale is iteratively updated using
-        the inverse norms of the columns of the Jacobian matrix.
-    verbose : int
-        * 0  : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
-    stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev"}
-    options : dict, optional
-        Dictionary of optional keyword arguments to override default solver
-        settings. See ``desc.optimize.sgd`` for details.
-
-    Returns
-    -------
-    res : OptimizeResult
-       The optimization result represented as a ``OptimizeResult`` object.
-       Important attributes are: ``x`` the solution array, ``success`` a
-       Boolean flag indicating if the optimizer exited successfully and
-       ``message`` which describes the cause of the termination. See
-       `OptimizeResult` for a description of other attributes.
-
-    """
-    assert constraint is None, f"method {method} doesn't support constraints"
-    options = {} if options is None else options
-    result = sgd(
-        objective.compute_scalar,
-        x0=x0,
-        grad=objective.grad,
-        args=(objective.constants,),
-        method=method,
-        ftol=stoptol["ftol"],
-        xtol=stoptol["xtol"],
-        gtol=stoptol["gtol"],
-        maxiter=stoptol["maxiter"],
-        verbose=verbose,
-        callback=None,
-        options=options,
-    )
-    return result
-
-
-@register_optimizer(
-    name="adam",
-    description="ADAM Optimizer"
-    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.adam.html",  # noqa: E501
-    scalar=True,
-    equality_constraints=False,
-    inequality_constraints=False,
-    stochastic=True,
-    hessian=False,
-    GPU=True,
-)
-def _optimize_desc_adam(
-    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
-):
-    """Wrapper for desc.optimize.adam.
-
-    Parameters
-    ----------
-    objective : ObjectiveFunction
-        Function to minimize.
-    constraint : ObjectiveFunction
-        Constraint to satisfy - not supported by this method
-    x0 : ndarray
-        Starting point.
-    method : str
-        Name of the method to use.
+        Name of the method to use. Available options are 'sgd' and 'adam'.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
@@ -490,7 +420,7 @@ def _optimize_desc_adam(
         "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See ``desc.optimize.adam`` for details.
+        settings. See ``desc.optimize.generic_sgd`` for details.
 
     Returns
     -------
@@ -504,13 +434,13 @@ def _optimize_desc_adam(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    result = adam(
+    result = generic_sgd(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
         args=(objective.constants,),
-        x_scale=x_scale,
         method=method,
+        x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],

@@ -3,44 +3,74 @@ Changelog
 
 New Features
 
+- Adds particle tracing capabilities in ``desc.particles`` module.
+    - Particle tracing is done via ``desc.particles.trace_particles`` function.
+    - Particles can be initialized in couple different ways:
+        - ``ManualParticleInitializerLab`` : Initializes particles at given positions in lab coordinates.
+        - ``ManualParticleInitializerFlux`` : Initializes particles at given positions in flux coordinates.
+        - ``CurveParticleInitializer`` : Initializes N particles on a given curve.
+        - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
+    - Implemented particle trajectory models are:
+        - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
+    - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
+- Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
+alternative to fourier continuation methods.
+- Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+
+Bug Fixes
+
+- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale)
+
+Performance Improvements
+
+- `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+
+v0.16.0
+-------
+
+New Features
+
 - New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
 - Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
 - Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
 - Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
 - Adds new linear objective `ShareParameters` which can enforce that the chosen parameters of two or more objects of the same type remain identical during an optimization. Potentially useful for flexible stellarator optimization, where one has two coilsets with the same geometry but differing currents, and attempts to optimize for two different stellarator equilibria.
-- Changes related to ``field_line_integrate``:
+- Changes related to ``field_line_integrate``, see #1839:
     - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
     - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
 
+
 Bug Fixes
 
-- [Fixes straight field line equilibrium conversion](https://github.com/PlasmaControl/DESC/pull/1880).
+- Fixes straight field line equilibrium conversion, see #1880
 - ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
 - Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
 - Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
-- Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see [GH issue](https://github.com/PlasmaControl/DESC/issues/1954)
-- [Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid](https://github.com/PlasmaControl/DESC/pull/2013)
+- Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see #1954
+- Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid, see #2013
 - Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
 - Allow ``desc.vmec.VMECIO.load`` to load wout files that lack ``lrfp__logical__``, like those outputted by VMEC++. This change assumes that those output files don't have poloidal flux label.
 - Fixes a bug that had prevented passing the ``legend`` kwarg to ``desc.plotting.plot_surfaces``.
 
-
 Backend
--------
 
 - When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
 - ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
-- Minimum JAX version bumped up to ``0.4.29``
 - ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
-
+- Minimum JAX version bumped up to ``0.5.0``
 
 Performance Improvements
 
-- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
-- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
+- Coordinate mapping uses partial summation, see #1826
+- Non-uniform FFTs (NUFFTS) are now used by default for computing bounce integrals, see #1834. NUFFT functionality is added through `jax-finufft` package. If the GPU installation fails, users can fall back to the older (much slower) implementation by setting `nufft_eps=0` in the computation of the related quantities.
+
 
 v0.15.0
 -------
@@ -61,7 +91,6 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
-
 
 Bug Fixes
 

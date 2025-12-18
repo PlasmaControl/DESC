@@ -44,6 +44,10 @@ def generic_sgd(
         v_hat = v_t / (1 - beta2^t)
         x_t = x_{t-1} - alpha * m_hat / (sqrt(v_hat) + epsilon)
 
+    Update rule for 'rmsprop':
+        v_{k}   = beta*v_{k-1} + (1-beta)*grad(x_{k})^2
+        x_{k+1} = x_{k} - alpha * grad(x_{k}) / (sqrt(v_{k}) + epsilon)
+
     Parameters
     ----------
     fun : callable
@@ -55,7 +59,7 @@ def generic_sgd(
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step size update rule. Available options are 'sgd', 'adam'.
+        Step size update rule. Available options are 'sgd', 'adam', 'rmsprop'.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
@@ -97,11 +101,14 @@ def generic_sgd(
         - ``"beta"`` : (float > 0) Exponential decay rate for the first moment
           estimates. Default 0.9.
 
+        For 'adam' and 'rmsprop', additional options are,
+        - ``"epsilon"``: (float > 0) Small constant for numerical stability.
+          Default 1e-8.
+
         For 'adam', additional options are,
         - ``"beta2"`` : (float > 0) Exponential decay rate for the second moment
           estimates. Default 0.999.
-        - ``"epsilon"``: (float > 0) Small constant for numerical stability.
-          Default 1e-8.
+
 
     Returns
     -------
@@ -112,8 +119,9 @@ def generic_sgd(
 
     """
     errorif(
-        method not in ["sgd", "adam"],
-        f"Available options for method are 'sgd' and 'adam', but {method} " "is given.",
+        method not in ["sgd", "adam", "rmsprop"],
+        f"Available options for method are 'sgd', 'adam' and 'rmsprop', but {method} "
+        "is given.",
     )
     errorif(
         isinstance(x_scale, str) and x_scale not in ["auto"],
@@ -146,10 +154,11 @@ def generic_sgd(
     method_options = {}
     method_options["alpha"] = options.pop("alpha", 1e-1 * xs_norm / gs_norm)
     method_options["beta"] = options.pop("beta", 0.9)
+    if method in ["adam", "rmsprop"]:
+        method_options["epsilon"] = options.pop("epsilon", 1e-8)
     if method == "adam":
         m = jnp.zeros_like(x)
         method_options["beta2"] = options.pop("beta2", 0.999)
-        method_options["epsilon"] = options.pop("epsilon", 1e-8)
 
     errorif(
         len(options) > 0,
@@ -176,7 +185,7 @@ def generic_sgd(
         print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
-    update_rule = {"sgd": _sgd, "adam": _adam}[method]
+    update_rule = {"sgd": _sgd, "adam": _adam, "rmsprop": _rmsprop}[method]
     while True:
         success, message = check_termination(
             df_norm,
@@ -256,4 +265,11 @@ def _adam(g, v, m, iteration, alpha, beta, beta2, epsilon):
     m_hat = m / (1 - beta**t)
     v_hat = v / (1 - beta2**t)
     dx = alpha * m_hat / (jnp.sqrt(v_hat) + epsilon)
+    return dx, v, m
+
+
+def _rmsprop(g, v, m, iteration, alpha, beta, epsilon):
+    """Update rule for the RMSProp optimizer."""
+    v = beta * v + (1 - beta) * g**2
+    dx = alpha * g / (jnp.sqrt(v) + epsilon)
     return dx, v, m

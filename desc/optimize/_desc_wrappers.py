@@ -376,11 +376,13 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name=["sgd", "adam"],
+    name=["sgd", "adam", "rmsprop"],
     description=[
         "Stochastic gradient descent with Nesterov momentum. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
         "ADAM optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        "RMSProp optimizer. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
     ],
     scalar=True,
@@ -404,7 +406,7 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Available options are 'sgd' and 'adam'.
+        Name of the method to use. Available options are 'sgd', 'adam' and 'rmsprop'.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved

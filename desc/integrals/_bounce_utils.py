@@ -726,7 +726,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_z, *, vander=None):
+def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -738,14 +738,14 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_z, *, vander=None):
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, modes_z.size, modes_θ.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f`` over a field period.
         Preferably power of 2.
-    num_θ : int
+    num_t : int
         Fourier resolution in poloidal direction.
-    modes_θ : jnp.ndarray
+    modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
@@ -776,7 +776,7 @@ def fast_chebyshev(theta, f, Y, num_θ, modes_θ, modes_z, *, vander=None):
         modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt_pos(theta.evaluate(Y), f, num_θ, modes=modes_θ)
+    f = irfft_mmt_pos(theta.evaluate(Y), f, num_t, modes=modes_t)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
     assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
@@ -787,13 +787,13 @@ def fast_cubic_spline(
     theta,
     f,
     Y,
-    num_θ,
-    modes_θ,
+    num_t,
+    modes_t,
     modes_z,
     NFP=1,
     nufft_eps=1e-6,
     *,
-    vander_θ=None,
+    vander_t=None,
     vander_z=None,
     check=False,
 ):
@@ -808,14 +808,14 @@ def fast_cubic_spline(
         θ over one toroidal transit. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, 1, modes_z.size, modes_θ.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
         This number will be rounded up to an integer multiple of ``NFP``.
-    num_θ : int
+    num_t : int
         Fourier resolution in poloidal direction.
-    modes_θ : jnp.ndarray
+    modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
@@ -824,7 +824,7 @@ def fast_cubic_spline(
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-    vander_θ : jnp.ndarray
+    vander_t : jnp.ndarray
         Precomputed transform matrix.
     vander_z : jnp.ndarray
         Precomputed transform matrix.
@@ -881,24 +881,24 @@ def fast_cubic_spline(
         )
 
     # θ at uniform ζ on field lines
-    θ = idct_mmt(
+    t = idct_mmt(
         x,
         theta.cheb.reshape(*lines, num_transit, NFP, 1, theta.Y),
-        vander=vander_θ,
+        vander=vander_t,
     )
     if axisymmetric:
-        θ = θ.reshape(*lines, num_transit, -1, 1)
+        t = t.reshape(*lines, num_transit, -1, 1)
 
     if nufft_eps < 1e-14 or f.shape[-1] < 14:
         # second condition for GPU
         f = f[..., None, None, None, :, :]
-        f = irfft_mmt_pos(θ, f, num_θ, modes=modes_θ)
+        f = irfft_mmt_pos(t, f, num_t, modes=modes_t)
     else:
         if len(lines) > 1:
-            θ = θ.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
+            t = t.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
         else:
-            θ = θ.transpose(3, 0, 1, 2).reshape(num_z, -1)
-        f = nufft1d2r(θ, f, eps=nufft_eps).mT
+            t = t.transpose(3, 0, 1, 2).reshape(num_z, -1)
+        f = nufft1d2r(t, f, eps=nufft_eps).mT
     f = f.reshape(*lines, -1)
 
     z = jnp.ravel(
@@ -1190,11 +1190,12 @@ class PiecewiseChebyshevSeries(IOAble):
 
         def body(i, val):
             c0, c1 = val
-            return jnp.take_along_axis(cheb[..., -i], x_idx, axis=-1) - c1, c0 + c1 * y2
+            return jnp.take_along_axis(cheb[-i], x_idx, axis=-1) - c1, c0 + c1 * y2
 
+        cheb = jnp.moveaxis(cheb, -1, 0)  # to leverage cache
         y2 = 2 * y
-        c0 = jnp.take_along_axis(cheb[..., -2], x_idx, axis=-1)
-        c1 = jnp.take_along_axis(cheb[..., -1], x_idx, axis=-1)
+        c0 = jnp.take_along_axis(cheb[-2], x_idx, axis=-1)
+        c1 = jnp.take_along_axis(cheb[-1], x_idx, axis=-1)
         c0, c1 = fori_loop(3, self.Y + 1, body, (c0, c1))
         return c0 + c1 * y
 
@@ -1240,8 +1241,8 @@ class PiecewiseChebyshevSeries(IOAble):
         df_dy = jnp.sign(
             jnp.einsum(
                 "...yn, ...n",
-                n * jnp.sin(n * jnp.arccos(y)[..., None]),
-                self.cheb,
+                jnp.sin(n * jnp.arccos(y)[..., None]),
+                self.cheb * n,
             )
         )
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])

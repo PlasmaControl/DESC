@@ -1643,7 +1643,9 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
         )
-        bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
+        points = bounce.points(pitch_inv)
+        points = bounce._refine_points(points, pitch_inv[:, None], low_ram=True)
+        bounce.check_points(points, pitch_inv, plot=True)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
 

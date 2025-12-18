@@ -44,6 +44,7 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
+    chebder,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -288,8 +289,8 @@ class Bounce2D(Bounce):
 
         self._quad = get_quadrature(setdefault(quad, default_quad), automorphism)
         self._NFP = grid.NFP
-        self._num_θ = grid.num_theta
-        self._modes_z, self._modes_θ = rfft2_modes(
+        self._num_t = grid.num_theta
+        self._modes_z, self._modes_t = rfft2_modes(
             grid.num_zeta, grid.num_theta, (0, 2 * jnp.pi / grid.NFP)
         )
 
@@ -313,12 +314,12 @@ class Bounce2D(Bounce):
                 self._theta,
                 self._c["|B|"],
                 Y_B,
-                self._num_θ,
-                self._modes_θ,
+                self._num_t,
+                self._modes_t,
                 self._modes_z,
                 self._NFP,
                 nufft_eps,
-                vander_θ=vander.get("dct spline", None),
+                vander_t=vander.get("dct spline", None),
                 check=check,
             )
         else:
@@ -326,8 +327,8 @@ class Bounce2D(Bounce):
                 self._theta,
                 self._c["|B|"],
                 Y_B,
-                self._num_θ,
-                self._modes_θ,
+                self._num_t,
+                self._modes_t,
                 self._modes_z,
             )
 
@@ -790,40 +791,66 @@ class Bounce2D(Bounce):
             num_well,
         )
 
-    def _refine_points(self, points, pitch_inv, nufft_eps=1e-6):
-        # TODO: One application of Newton on the functions that we actually
-        #  use in the quadratures.
-        #  Thus can use less resolution for the global root finding algorithm
-        #  and rely on the local one once good neighbourhood is found.
+    # TODO: Enable in later PR.
+    def _refine_points(self, points, pitch_inv, nufft_eps=1e-6, low_ram=False):
+        """One application of the Newton method to recover spectral accuracy.
 
-        # pseudocode for someone else to complete
+        Identifies points with the functions we actually use in the quadrature,
+        e.g. same nufft eps and computes (∂B/∂ζ)|α from (∂θ/∂ζ)|α.
+        Also allows using less resolution for the global root finding algorithm.
 
-        z = flatten_mat(points)
-        t = flatten_mat(self._theta.eval1d(points))
-        t = flatten_mat(points)
+        Parameters
+        ----------
+        pitch_inv : jnp.ndarray
+            Shape broadcasts with (num ρ, num α, num pitch).
 
-        t_z = None  # at fixed alpha
-        dB_dz = None  # at fixed theta
-        dB_dt = None  # at fixed zeta
+        """
+        shape = points[0].shape
+        domain = (0, 2 * jnp.pi / self._NFP)
+        dy_dz = self._NFP / jnp.pi
 
-        B, dB_dz, dB_dt = (
-            nufft2d2r(
-                z,
-                t,
-                jnp.concatenate([self._c["|B|"], dB_dz, dB_dt], -3),
-                (0, 2 * jnp.pi / self._NFP),
-                vec=True,
-                eps=nufft_eps,
-            )
-            .swapaxes(0, -2)
-            .reshape(3, *points.shape)
+        # stack on last axis bad for memory, but need to for jax finufft compatibility
+        z = flatten_mat(jnp.stack(points, axis=-1), 3)
+        t, dt_dz = self._theta.eval1d(
+            z[None],
+            jnp.stack(
+                [
+                    self._theta.cheb,
+                    chebder(self._theta.cheb, scl=dy_dz, axis=-1, keepdims=True),
+                ]
+            ),
+            loop=low_ram,
         )
+        dt_dz = dt_dz.reshape(*shape, 2)
+        t = flatten_mat(t)
+        z = flatten_mat(z)
 
-        dp = (B - pitch_inv) / (dB_dz + dB_dt * t_z)
-        # reject if we think Newton failed
-        points = jnp.where(jnp.abs(dp) < 1e-2, points - dp, points)
+        B = nufft2d2r(
+            z,
+            t,
+            jnp.concatenate(
+                [
+                    self._c["|B|"],
+                    self._c["|B|"] * (1j * self._modes_z)[:, None],
+                    self._c["|B|"] * (1j * self._modes_t),
+                ],
+                -3,
+            ),
+            domain,
+            vec=True,
+            eps=nufft_eps,
+        )
+        if B.ndim == 2:
+            B, dB_dz, dB_dt = B.reshape(3, *shape, 2)
+        else:
+            # reshape before swap to avoid memory copy
+            B, dB_dz, dB_dt = B.reshape(shape[0], 3, *shape[1:], 2).swapaxes(0, 1)
 
-        raise NotImplementedError
+        dz = (B - pitch_inv[..., None, None]) / (dB_dz + dB_dt * dt_dz)
+        z = z.reshape(*shape, 2)
+        # probably good idea to and this mask with the one in bounce_points()
+        z = jnp.where(jnp.abs(dz) < 1e-2, z - dz, z)
+        return z[..., 0], z[..., 1]
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1012,23 +1039,27 @@ class Bounce2D(Bounce):
     def _nufft(self, z, data, eps, low_ram):
         shape = z.shape
         z = flatten_mat(z, 3)
-        # TODO: Use a nufft instead of eval1d here.
-        θ = flatten_mat(self._theta.eval1d(z, loop=low_ram))
+        t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
         z = flatten_mat(z)
         c = nufft2d2r(
             z,
-            θ,
+            t,
             jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
             (0, 2 * jnp.pi / self._NFP),
             vec=True,
             eps=eps,
         )
-        c = c.swapaxes(0, -2).reshape(len(data) + 2, *shape)
+        if c.ndim == 2:
+            c = c.reshape(len(data) + 2, *shape)
+        else:
+            # reshape before swap to avoid memory copy
+            c = c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
+
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _nummt(self, z, data):
         t = self._theta.eval1d(flatten_mat(z, 3)).reshape(z.shape)
-        t = jnp.exp(1j * self._modes_θ * t[..., None])
+        t = jnp.exp(1j * self._modes_t * t[..., None])
         z = jnp.exp(1j * self._modes_z * z[..., None])
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
@@ -1080,23 +1111,23 @@ class Bounce2D(Bounce):
             polyder_vec(self._c["B(z)"]),
             sentinel=0.0,
         )
-        θ = self._theta.eval1d(ext)
+        t = self._theta.eval1d(ext)
 
         if nufft_eps < 1e-14:
             f = irfft2_mmt_pos(
                 ext,
-                θ,
+                t,
                 f[..., None, :, :],
                 self._num_z,
-                self._num_θ,
+                self._num_t,
                 (0, 2 * jnp.pi / self._NFP),
             )
         else:
             shape = (*ext.shape[:-2], -1)
-            θ = θ.reshape(shape)
+            t = t.reshape(shape)
             f = nufft2d2r(
                 ext.reshape(shape),
-                θ,
+                t,
                 f.squeeze(-3),
                 (0, 2 * jnp.pi / self._NFP),
                 eps=nufft_eps,
@@ -1164,8 +1195,8 @@ class Bounce2D(Bounce):
         B_sup_z = irfft_mmt_pos(
             idct_mmt(x, self._theta.cheb.reshape(shape)),
             B_sup_z,
-            self._num_θ,
-            modes=self._modes_θ,
+            self._num_t,
+            modes=self._modes_t,
         )
 
         # B⋅∇ζ never vanishes, so it has the same sign over a surface.

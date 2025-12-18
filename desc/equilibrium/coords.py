@@ -531,7 +531,7 @@ def _map_poloidal_coordinates(
         return t + (jnp.exp(1j * modes * t) * q_m).real.sum() - varepsilon
 
     def jacfun(t, varepsilon, q_m):
-        return 1 - (modes * (jnp.exp(1j * modes * t) * q_m).imag).sum()
+        return 1 - modes.dot((jnp.exp(1j * modes * t) * q_m).imag)
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
     def vecroot(guess, varepsilon, q_m):

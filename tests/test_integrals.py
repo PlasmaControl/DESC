@@ -905,14 +905,16 @@ class TestBouncePoints:
             fourier_pts(X)
         )
         cheb = PiecewiseChebyshevSeries(cheb)
-        pitch_inv = 3
+        pitch_inv = jnp.array([2, 3])
         z1, z2 = cheb.intersect1d(pitch_inv)
         cheb.check_intersect1d(z1, z2, pitch_inv)
-        z1, z2 = TestBouncePoints.filter(z1, z2)
 
-        r = self._cheb_intersect(chebinterpolate(f, Y - 1), pitch_inv)
-        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
-        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
+        bench = chebinterpolate(f, Y - 1)
+        for i in range(pitch_inv.size):
+            z1i, z2i = TestBouncePoints.filter(z1[i], z2[i])
+            r = self._cheb_intersect(bench, pitch_inv[i])
+            np.testing.assert_allclose(z1i, r[1])
+            np.testing.assert_allclose(z2i, r[2])
 
 
 auto_sin = (automorphism_sin, grad_automorphism_sin)

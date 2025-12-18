@@ -1037,21 +1037,6 @@ def get_vander(grid, Y, Y_B, NFP):
     return {"dct spline": chebvander(x, Y_trunc - 1)}
 
 
-def _add_lead_axis(cheb, arr):
-    """Add leading axis for batching ``cheb`` depending on ``arr.ndim``.
-
-    Input ``arr`` should not have rightmost dimension of cheb that iterates
-    coefficients, but may have one leading axis for batching.
-    """
-    errorif(
-        jnp.ndim(arr) > cheb.ndim,
-        NotImplementedError,
-        msg=f"Only one leading axis for batching is allowed. "
-        f"Got {jnp.ndim(arr) - cheb.ndim + 1} leading axes.",
-    )
-    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[None]
-
-
 class PiecewiseChebyshevSeries(IOAble):
     """Chebyshev series.
 
@@ -1171,7 +1156,8 @@ class PiecewiseChebyshevSeries(IOAble):
         Parameters
         ----------
         z : jnp.ndarray
-            Shape (..., *cheb.shape[:-2], z.shape[-1]).
+            Shape should broadcast with (*cheb.shape[:-2], z.shape[-1])
+            and also have the same dimension as (*cheb.shape[:-2], z.shape[-1]).
             Coordinates in [self.domain[0], ∞).
             The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
             ``z//domain`` yields the index into the proper Chebyshev series
@@ -1190,8 +1176,9 @@ class PiecewiseChebyshevSeries(IOAble):
             Chebyshev series evaluated at z.
 
         """
-        cheb = _add_lead_axis(setdefault(cheb, self.cheb), z)
+        cheb = setdefault(cheb, self.cheb)
         x_idx, y = self._isomorphism_to_C2(z)
+
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
 
         # Recall that the Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
@@ -1235,7 +1222,7 @@ class PiecewiseChebyshevSeries(IOAble):
             Sign of ∂f/∂y (x, yᵢ).
 
         """
-        c = _subtract_first(_add_lead_axis(self.cheb, k), k)
+        c = _subtract_first(self.cheb, k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = _chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.Y - 1)
@@ -1383,7 +1370,7 @@ class PiecewiseChebyshevSeries(IOAble):
 
         err_1 = jnp.any(z1 > z2, axis=-1)
         err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
-        f_midpoint = self.eval1d((z1 + z2) / 2)
+        f_midpoint = self.eval1d((z1 + z2) / 2, self.cheb[None])
         eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
         err_3 = jnp.any(f_midpoint > k + eps, axis=-1)
         if not (plot or jnp.any(err_1 | err_2 | err_3)):

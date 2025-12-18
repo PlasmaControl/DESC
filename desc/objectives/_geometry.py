@@ -1710,7 +1710,7 @@ class GXGeometry(_Objective):
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["zeta"],
+            constants["zeta"] / iota,
             coordinates="raz",
             iota=iota,
             params=params,

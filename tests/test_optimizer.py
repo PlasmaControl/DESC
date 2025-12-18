@@ -1759,6 +1759,9 @@ def test_parse_x_scale(DummyCoilSet):
     with pytest.raises(TypeError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})
 
+    with pytest.warns(DeprecationWarning):
+        _parse_x_scale(np.ones(dim_eq), [eq], {})
+
     xsc = _parse_x_scale(1, [eq], {})
     xsc = eq.pack_params(xsc[0])
     assert (xsc == 1).all()

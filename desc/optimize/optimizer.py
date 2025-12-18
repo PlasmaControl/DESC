@@ -270,7 +270,10 @@ class Optimizer(IOAble):
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
-            x_scale_projected = _project_x_scale(x_scale, things, objective)
+            x_scale_projected = _project_x_scale_prox(x_scale, things, objective)
+            x_scale_projected = _project_x_scale_linear(
+                x_scale_projected, things, objective
+            )
         # we have to use this cumbersome indexing in this method when passing things
         # to objective to guard against the passed-in things having an ordering
         # different from objective.things, to ensure the correct order is passed
@@ -400,7 +403,7 @@ def _parse_x_scale(x_scale, things, options):
             "thing.params_dict",
             DeprecationWarning,
         )
-        dimx_all = np.cumsum([t.dim_x for t in things])
+        dimx_all = np.cumsum([t.dim_x for t in things])[:-1]
         x_scale = jnp.split(x_scale, dimx_all)
     if np.isscalar(x_scale) and not isinstance(x_scale, str):
         full_like = lambda x: jnp.full_like(x, x_scale)
@@ -408,10 +411,10 @@ def _parse_x_scale(x_scale, things, options):
 
     if len(things) == 1 and not isinstance(x_scale, (list, tuple)):
         x_scale = [x_scale]
-    assert len(x_scale) == len(
-        things
-    ), f"expected {len(things)} x_scales for {len(things)} things but "
-    f"only got {len(x_scale)}"
+    assert len(x_scale) == len(things), (
+        f"expected {len(things)} x_scales for {len(things)} things but "
+        f" got {len(x_scale)}"
+    )
 
     all_scales = []
     ess_alpha = options.pop("ess_alpha", 1.2)
@@ -450,8 +453,8 @@ def _parse_x_scale(x_scale, things, options):
     return all_scales
 
 
-def _project_x_scale(x_scale, things, objective):
-    """Project x_scale vector to remove fixed DoFs etc."""
+def _project_x_scale_prox(x_scale, things, objective):
+    """Project x_scale through proximal wrapper to remove internal DoFs etc."""
     # sort by things to make x_scale match with objective.x
     if isinstance(x_scale, (list, tuple)):
         x_scale = [t.pack_params(x_scale[things.index(t)]) for t in objective.things]
@@ -478,6 +481,16 @@ def _project_x_scale(x_scale, things, objective):
             if arg not in excluded_params:
                 included_idx.extend(prox_obj._eq.x_idx[arg])
         x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
+        x_scale = jnp.concatenate(x_scale)
+
+    return x_scale
+
+
+def _project_x_scale_linear(x_scale, things, objective):
+    """Project x_scale through linear constriant wrapper to remove fixed DoFs etc."""
+    # sort by things to make x_scale match with objective.x
+    if isinstance(x_scale, (list, tuple)):
+        x_scale = [t.pack_params(x_scale[things.index(t)]) for t in objective.things]
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
@@ -734,7 +747,7 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # this removes dofs for proximal, needs to happen before we use this
     # for LinearConstraintProjection
-    x_scale = _project_x_scale(x_scale, things, objective)
+    x_scale = _project_x_scale_prox(x_scale, things, objective)
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
@@ -762,7 +775,7 @@ def get_combined_constraint_objectives(  # noqa: C901
             )
         )
     # final projection for linear constraints
-    x_scale_projected = _project_x_scale(x_scale, things, objective)
+    x_scale_projected = _project_x_scale_linear(x_scale, things, objective)
 
     return objective, nonlinear_constraint, x_scale_projected
 

@@ -28,25 +28,40 @@ def generic_sgd(
     callback=None,
     options=None,
 ):
-    """Minimize a scalar function using one of stochastic gradient descent methods.
+    r"""Minimize a scalar function using one of stochastic gradient descent methods.
 
     This is the generic function. The update method is chosen based on the `method`
     argument.
 
-    Update rule for 'sgd':
-        v_{k}   = beta*v_{k-1} + (1-beta)*grad(x_k)
-        x_{k+1} = x_{k} - alpha*v_{k}
+    Update rule for ``'sgd'``:
 
-    Update rule for 'adam':
-        m_t = beta * m_{t-1} + (1 - beta) * grad(x_{t-1})
-        v_t = beta2 * v_{t-1} + (1 - beta2) * grad(x_{t-1})^2
-        m_hat = m_t / (1 - beta^t)
-        v_hat = v_t / (1 - beta2^t)
-        x_t = x_{t-1} - alpha * m_hat / (sqrt(v_hat) + epsilon)
+    .. math::
 
-    Update rule for 'rmsprop':
-        v_{k}   = beta*v_{k-1} + (1-beta)*grad(x_{k})^2
-        x_{k+1} = x_{k} - alpha * grad(x_{k}) / (sqrt(v_{k}) + epsilon)
+        \begin{aligned}
+            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_k) \\
+            x_{k+1} &= x_{k} - \alpha v_{k}
+        \end{aligned}
+
+    Update rule for ``'adam'``:
+
+    .. math::
+
+        \begin{aligned}
+            m_t &= \beta m_{t-1} + (1 - \beta) \nabla f(x_{t-1}) \\
+            v_t &= \beta_2 v_{t-1} + (1 - \beta_2) \nabla f(x_{t-1})^2 \\
+            \hat{m} &= \frac{m_t}{1 - \beta^t} \\
+            \hat{v} &= \frac{v_t}{1 - \beta_2^t} \\
+            x_t &= x_{t-1} - \frac{\alpha \hat{m}}{\sqrt{\hat{v}} + \epsilon}
+        \end{aligned}
+
+    Update rule for ``'rmsprop'``:
+
+    .. math::
+
+        \begin{aligned}
+            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_{k})^2 \\
+            x_{k+1} &= x_{k} - \frac{\alpha \nabla f(x_{k})}{\sqrt{v_{k}} + \epsilon}
+        \end{aligned}
 
     Parameters
     ----------
@@ -59,7 +74,7 @@ def generic_sgd(
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step size update rule. Available options are 'sgd', 'adam', 'rmsprop'.
+        Step size update rule. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
@@ -101,11 +116,13 @@ def generic_sgd(
         - ``"beta"`` : (float > 0) Exponential decay rate for the first moment
           estimates. Default 0.9.
 
-        For 'adam' and 'rmsprop', additional options are,
+        For `'adam'` and `'rmsprop'`, additional options are,
+
         - ``"epsilon"``: (float > 0) Small constant for numerical stability.
           Default 1e-8.
 
-        For 'adam', additional options are,
+        For `'adam'`, additional options are,
+
         - ``"beta2"`` : (float > 0) Exponential decay rate for the second moment
           estimates. Default 0.999.
 

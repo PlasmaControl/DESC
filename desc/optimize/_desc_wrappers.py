@@ -406,7 +406,7 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Available options are 'sgd', 'adam' and 'rmsprop'.
+        Name of the method to use. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved

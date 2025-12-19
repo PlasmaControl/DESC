@@ -90,7 +90,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             [_dH_ripple, _dI_ripple],
             data["pitch_inv"],
             data,
-            "|grad(rho)|*kappa_g",
+            ["|grad(rho)|*kappa_g"],
             num_well=num_well,
         )
         return jnp.sum(

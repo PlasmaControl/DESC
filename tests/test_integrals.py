@@ -1625,7 +1625,7 @@ class TestBounce2D:
                 # ~1% of the integrals differ significantly at lower epsilon.
                 nufft_eps=1e-12,
                 check=True,
-                _low_ram=True,
+                low_ram=True,
             )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)

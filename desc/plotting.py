@@ -24,7 +24,7 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
-from desc.integrals._bounce_utils import num_well_rule
+from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.magnetic_fields import field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
@@ -4696,7 +4696,7 @@ def plot_gammac(
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
-        * ``num_transit``, ``pitch_batch_size``: int
+        * ``num_transit``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
 
@@ -4729,11 +4729,12 @@ def plot_gammac(
     num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
+    kwargs.pop("pitch_batch_size", None)
+    kwargs.pop("surf_batch_size", None)
     X = kwargs.pop("X", 32)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", Y * 4)
+    Y_B = kwargs.pop("Y_B", Y_B_rule(Y, eq.NFP))
     num_quad = kwargs.pop("num_quad", 32)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B))
 
@@ -4756,7 +4757,6 @@ def plot_gammac(
         num_quad=num_quad,
         num_pitch=num_pitch,
         num_well=num_well,
-        pitch_batch_size=pitch_batch_size,
         alpha=alphas,
     )
 

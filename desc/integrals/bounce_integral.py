@@ -899,10 +899,10 @@ class Bounce2D(Bounce):
         num_well=None,
         nufft_eps=1e-6,
         is_fourier=False,
+        low_ram=False,
         quad=None,
         check=False,
         plot=False,
-        _low_ram=False,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -946,6 +946,8 @@ class Bounce2D(Bounce):
         is_fourier : bool
             If true, then it is assumed that ``data`` holds Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
+        low_ram : bool
+            Whether to use a more memory efficient algorithm.
         quad : tuple[jnp.ndarray]
             Optional quadrature points and weights. If given this overrides
             the quadrature chosen when this object was made.
@@ -978,7 +980,7 @@ class Bounce2D(Bounce):
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
 
-        if _low_ram and z1.ndim > 3 and z1.shape[0] > 1:
+        if low_ram and z1.ndim > 3 and z1.shape[0] > 1:
             warnings.warn("Use Bounce2D.batch with surf_batch_size=1 before low_ram.")
 
         pitch = 1 / pitch_inv
@@ -991,9 +993,9 @@ class Bounce2D(Bounce):
         z = bijection_from_disc(x, z1[..., None], z2[..., None])
 
         if nufft_eps < 1e-14:
-            data = self._nummt(z, data, _low_ram)
+            data = self._nummt(z, data, low_ram)
         else:
-            data = self._nufft(z, data, nufft_eps, _low_ram)
+            data = self._nufft(z, data, nufft_eps, low_ram)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = z
 

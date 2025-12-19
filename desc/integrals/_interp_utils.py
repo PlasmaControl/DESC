@@ -7,7 +7,6 @@ methods that have the best (asymptotic) algorithmic complexity.
 For example, we prefer to not use Horner's method.
 """
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -16,13 +15,7 @@ from interpax import interp1d
 try:
     from jax_finufft import nufft2, options
 except ImportError:
-    warnings.warn(
-        "\njax-finufft is not installed.\n"
-        "If you want to use NUFFTs, follow the DESC installation instructions.\n"
-        "Otherwise you must set the parameter nufft_eps to zero\n"
-        "when computing effective ripple, Gamma_c, and any other\n"
-        "computations that involve bounce integrals.\n"
-    )
+    pass
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
@@ -972,3 +965,8 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
     return jnp.concatenate(
         [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
     )
+
+
+from desc._checks import check_jax_finufft  # noqa: E402
+
+check_jax_finufft()

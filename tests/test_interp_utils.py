@@ -113,7 +113,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("M", [1, 8, 9])
-    def test_fft_shift(self, M):
+    @staticmethod
+    def test_fft_shift(M):
         """Test frequency shifting."""
         a = np.fft.rfftfreq(M, 1 / M)
         np.testing.assert_allclose(a, np.arange(M // 2 + 1))
@@ -132,7 +133,8 @@ class TestFastInterp:
             (*_test_inputs_1D[5], False),
         ],
     )
-    def test_non_uniform_FFT(self, func, n, domain, imag_undersampled):
+    @staticmethod
+    def test_non_uniform_FFT(func, n, domain, imag_undersampled):
         """Test non-uniform FFT interpolation."""
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         c = func(x)
@@ -148,7 +150,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
-    def test_non_uniform_real_FFT(self, func, n, domain):
+    @staticmethod
+    def test_non_uniform_real_FFT(func, n, domain):
         """Test non-uniform real FFT interpolation."""
         x = jnp.linspace(domain[0], domain[1], n, endpoint=False)
         c = func(x)
@@ -170,7 +173,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)
-    def test_non_uniform_real_FFT_2D(self, func, m, n, domain_x, domain_y):
+    @staticmethod
+    def test_non_uniform_real_FFT_2D(func, m, n, domain_x, domain_y):
         """Test non-uniform real FFT 2D interpolation."""
         x = jnp.linspace(domain_x[0], domain_x[1], m, endpoint=False)
         y = jnp.linspace(domain_y[0], domain_y[1], n, endpoint=False)
@@ -206,7 +210,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
-    def test_non_uniform_real_MMT(self, func, n, domain):
+    @staticmethod
+    def test_non_uniform_real_MMT(func, n, domain):
         """Test non-uniform real MMT interpolation."""
         x = np.linspace(domain[0], domain[1], n, endpoint=False)
         c = func(x)
@@ -219,7 +224,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)
-    def test_non_uniform_real_MMT_2D(self, func, m, n, domain_x, domain_y):
+    @staticmethod
+    def test_non_uniform_real_MMT_2D(func, m, n, domain_x, domain_y):
         """Test non-uniform real MMT 2D interpolation."""
         x = np.linspace(domain_x[0], domain_x[1], m, endpoint=False)
         y = np.linspace(domain_y[0], domain_y[1], n, endpoint=False)
@@ -252,7 +258,8 @@ class TestFastInterp:
         )
 
     @pytest.mark.unit
-    def test_nufft2_vec(self):
+    @staticmethod
+    def test_nufft2_vec():
         """Test vectorized JAX-finufft vectorized interpolation."""
         func_1, n, domain = _test_inputs_1D[0]
         func_2 = lambda x: -77 * np.sin(7 * x) + 18 * np.cos(x) + 100  # noqa: E731
@@ -285,7 +292,8 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("N", [2, 6, 7])
-    def test_cheb_pts(self, N):
+    @staticmethod
+    def test_cheb_pts(N):
         """Test we use Chebyshev points compatible with DCT."""
         np.testing.assert_allclose(cheb_pts(N), chebpts1(N)[::-1], atol=1e-15)
         np.testing.assert_allclose(
@@ -306,7 +314,8 @@ class TestFastInterp:
             (identity, 4, True),
         ],
     )
-    def test_dct(self, f, M, lobatto):
+    @staticmethod
+    def test_dct(f, M, lobatto):
         """Test discrete cosine transform interpolation.
 
         Parameters
@@ -354,7 +363,8 @@ class TestFastInterp:
         "f, M",
         [(_f_non_periodic, 5), (_f_non_periodic, 6), (_f_algebraic, 7)],
     )
-    def test_interp_dct(self, f, M):
+    @staticmethod
+    def test_interp_dct(f, M):
         """Test non-uniform DCT interpolation."""
         c0 = chebinterpolate(f, M - 1)
         assert not np.allclose(
@@ -386,7 +396,8 @@ class TestFastInterp:
         "func, m, n",
         [(_c_2d, 2 * _c_2d_nyquist_freq()[0] + 1, 2 * _c_2d_nyquist_freq()[1] + 1)],
     )
-    def test_fourier_chebyshev(self, func, m, n):
+    @staticmethod
+    def test_fourier_chebyshev(func, m, n):
         """Tests for coverage of FourierChebyshev series."""
         x = fourier_pts(m)
         y = cheb_pts(n)

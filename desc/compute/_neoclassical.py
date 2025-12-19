@@ -222,7 +222,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 [_dH_ripple, _dI_ripple],
                 pitch_inv,
                 data,
-                "|grad(rho)|*kappa_g",
+                ["|grad(rho)|*kappa_g"],
                 num_well=num_well,
                 nufft_eps=nufft_eps,
                 is_fourier=True,

@@ -270,8 +270,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         num_transit,
         num_well,
         num_pitch,
-        pitch_batch_size,
-        surf_batch_size,
+        _,
+        _,
         quad,
         nufft_eps,
         spline,
@@ -293,31 +293,29 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             vander=vander,
         )
 
-        def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well)
-            drift1, drift2 = bounce.integrate(
-                [_drift1, _drift2],
-                pitch_inv,
-                data,
-                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
-                points,
-                nufft_eps=nufft_eps,
-                is_fourier=True,
+        points = bounce.points(data["pitch_inv"], num_well)
+        drift1, drift2 = bounce.integrate(
+            [_drift1, _drift2],
+            data["pitch_inv"],
+            data,
+            ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
+            points,
+            nufft_eps=nufft_eps,
+            is_fourier=True,
+            low_ram=True,
+        )
+        return (2 / jnp.pi) * jnp.arctan(
+            safediv(
+                drift1,
+                drift2
+                * bounce.interp_to_argmin(
+                    data["|grad(rho)|*|e_alpha|r,p|"],
+                    points,
+                    nufft_eps=nufft_eps,
+                    is_fourier=True,
+                ),
             )
-            return (2 / jnp.pi) * jnp.arctan(
-                safediv(
-                    drift1,
-                    drift2
-                    * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"],
-                        points,
-                        nufft_eps=nufft_eps,
-                        is_fourier=True,
-                    ),
-                )
-            ).sum(-1)
-
-        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+        ).sum(-1)
 
     fun_data = {
         "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
@@ -328,7 +326,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
     data["gamma_c"] = Bounce2D.batch(
-        gamma_c0, fun_data, data, angle, grid, num_pitch, surf_batch_size
+        gamma_c0, fun_data, data, angle, grid, num_pitch, 1
     )
     return data
 

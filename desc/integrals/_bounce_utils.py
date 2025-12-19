@@ -1024,7 +1024,12 @@ def _gather_reduce(y, cheb, x_idx):
     Lies:
     https://docs.jax.dev/en/latest/notebooks/autodiff_remat.html#practical-notes
     """
-    return idct_mmt(y, jnp.take_along_axis(cheb, x_idx[..., None], axis=-2))
+    Y = cheb.shape[-1]
+    return jnp.einsum(
+        "...m, ...m",
+        jnp.cos(jnp.arange(Y) * y[..., None]),
+        jnp.take_along_axis(cheb, x_idx[..., None], axis=-2),
+    )
 
 
 @jax.checkpoint
@@ -1195,7 +1200,12 @@ class PiecewiseChebyshevSeries(IOAble):
         cheb = setdefault(cheb, self.cheb)
         x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[-1])
-        return (_loop if (loop and self.Y >= 3) else _gather_reduce)(y, cheb, x_idx)
+
+        if loop and self.Y >= 3:
+            return _loop(y, cheb, x_idx)
+
+        y = jnp.arccos(y)
+        return _gather_reduce(y, cheb, x_idx)
 
     def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).

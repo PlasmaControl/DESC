@@ -162,7 +162,7 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
 
 
 def cubic_val(*, x, c, der=False):
-    """Evaluate the derivative of cubic polynomial ``c`` at the points ``x``.
+    """Evaluate cubic polynomial ``c`` at the points ``x``.
 
     Parameters
     ----------
@@ -193,8 +193,7 @@ def cubic_val(*, x, c, der=False):
     assert c.shape[-1] == 4
     if der:
         return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
-    else:
-        return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+    return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
 
 
 def _subtract_first(c, k):

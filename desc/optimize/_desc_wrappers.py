@@ -410,9 +410,9 @@ def _optimize_desc_stochastic(
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
-        convergence may be achieved by setting x_scale such that
-        a step of a given size along any of the scaled variables has a similar effect
-        on the cost function.
+        convergence may be achieved by setting x_scale such that a step of a given
+        size along any of the scaled variables has a similar effect on the cost
+        function. Defaults to 'auto', meaning no scaling.
     verbose : int
         * 0  : work silently.
         * 1 : display a termination report.

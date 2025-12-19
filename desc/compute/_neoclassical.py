@@ -2,25 +2,22 @@
 
 from functools import partial
 
-from orthax.legendre import leggauss
-
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
-from ..integrals.quad_utils import chebgauss2
+from ..integrals.surface_integral import surface_integrals
 from ..utils import safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
-    "theta": """jnp.ndarray :
+    "angle": """jnp.ndarray :
         Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
+        Angle returned by ``Bounce2D.angle``.
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        A reference value is 100. Default is double ``Y``.
+        A reference value is 100.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -38,14 +35,14 @@ _bounce_doc = {
         """,
     "num_well": """int :
         Maximum number of wells to detect for each pitch and field line.
-        Giving ``None`` will detect all wells but due to current limitations in
+        Giving ``-1`` will detect all wells but due to current limitations in
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
         """,
@@ -66,13 +63,6 @@ _bounce_doc = {
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
         """,
-    "fieldline_quad": """tuple[jnp.ndarray] :
-        Used to compute the proper length of the field line ∫ dℓ / B.
-        Quadrature points xₖ and weights wₖ for the
-        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-        Default is Gauss-Legendre quadrature at resolution ``Y_B//2``
-        on each toroidal transit.
-        """,
     "quad": """tuple[jnp.ndarray] :
         Used to compute bounce integrals.
         Quadrature points xₖ and weights wₖ for the
@@ -86,70 +76,48 @@ _bounce_doc = {
         Whether to use cubic splines to compute bounce points.
         """,
     "_vander": """dict[str,jnp.ndarray] :
-        Precomputed transform matrices "dct spline", "dct cfl", "dft cfl".
-        This parameter is intended to be used by objectives only.
+        Precomputed transform matrix "dct spline".
+        This private parameter is intended to be used only by
+        developers for objectives.
         """,
+    "theta": "",
 }
 
+_bounce_static_argnames = (
+    "Y_B",
+    "num_transit",
+    "num_well",
+    "num_quad",
+    "num_pitch",
+    "pitch_batch_size",
+    "surf_batch_size",
+    "nufft_eps",
+    "spline",
+)
 
-def _compute(
-    fun,
-    fun_data,
-    data,
-    theta,
-    grid,
-    num_pitch,
-    surf_batch_size=1,
-    simp=False,
-    expand_out=True,
-):
-    """Compute Bounce2D integral quantity with ``fun``.
 
-    Parameters
-    ----------
-    fun : callable
-        Function to compute.
-    fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``. This dict will be modified.
-    data : dict[str, jnp.ndarray]
-        DESC data dict.
-    theta : jnp.ndarray
-        Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
-    grid : Grid
-        Grid that can expand and compress.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate.
-    surf_batch_size : int
-        Number of flux surfaces with which to compute simultaneously.
-        Default is ``1``.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
-    expand_out : bool
-        Whether to expand output to full grid so that the first dimension
-        has size ``grid.num_nodes`` instead of ``grid.num_rho``.
-        Default is True.
-
-    """
-    for name in Bounce2D.required_names:
-        fun_data[name] = data[name]
-    fun_data.pop("iota", None)
-    for name in fun_data:
-        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
-    fun_data["iota"] = grid.compress(data["iota"])
-    fun_data["theta"] = theta
-    fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
-        grid.compress(data["min_tz |B|"]),
-        grid.compress(data["max_tz |B|"]),
-        num_pitch,
-        simp=simp,
+@register_compute_fun(
+    name="V_psi",
+    label="\\int \\vert B^{\\zeta} \\vert^{-1} \\mathrm{d}\\alpha \\mathrm{d}\\zeta",
+    units="m^{3} / Wb",
+    units_long="cubic meters per Weber",
+    description="Surface integrated volume Jacobian determinant of "
+    " Clebsch field line coordinate system (ψ,α,ζ)"
+    " where ζ is the DESC toroidal coordinate.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    resolution_requirement="tz",
+    data=["psi_r/sqrt(g)"],
+)
+def _field_line_weight(params, transforms, profiles, data, **kwargs):
+    """∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)²."""
+    data["V_psi"] = surface_integrals(
+        transforms["grid"], jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"]))
     )
-    out = batch_map(fun, fun_data, surf_batch_size)
-    if expand_out:
-        assert out.ndim == 1, "Are you sure you want to expand to full grid?"
-        return grid.expand(out)
-    return out
+    return data
 
 
 def _dH_ripple(data, B, pitch):
@@ -184,65 +152,61 @@ def _dI_ripple(data, B, pitch):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "kappa_g",
+        "R0",
+        "|grad(rho)|",
+        "<|grad(rho)|>",
+        "V_psi",
+    ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "nufft_eps",
-        "spline",
-    ],
-)
+@partial(jit, static_argnames=_bounce_static_argnames)
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    https://doi.org/10.1063/1.873749.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    [1] Evaluation of 1/ν neoclassical transport in stellarators.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+        https://doi.org/10.1063/1.873749.
+
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
+        algorithm and its applications.
+        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        https://arxiv.org/abs/2412.01724.
+
     """
     # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 51)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
-    quad = (
-        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
-    )
-    nufft_eps = kwargs.get("nufft_eps", 1e-6)
-    spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    grid = transforms["grid"]
+    (
+        angle,
+        Y_B,
+        alpha,
+        num_transit,
+        num_well,
+        num_pitch,
+        pitch_batch_size,
+        surf_batch_size,
+        quad,
+        nufft_eps,
+        spline,
+        vander,
+    ) = Bounce2D._default_kwargs("deriv", grid.NFP, **kwargs)
 
     def eps_32(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
+        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
         # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (H² / I).sum(-1).
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (I₁²/I₂).sum(-1).
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce2D(
             grid,
             data,
-            data["theta"],
+            data["angle"],
             Y_B,
             alpha,
             num_transit,
@@ -254,7 +218,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            H, I = bounce.integrate(
+            I_1, I_2 = bounce.integrate(
                 [_dH_ripple, _dI_ripple],
                 pitch_inv,
                 data,
@@ -263,30 +227,31 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 nufft_eps=nufft_eps,
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(-1).mean(-2)
+            return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad, vander)
+        )
 
-    grid = transforms["grid"]
     B0 = data["max_tz |B|"]
-    data["effective ripple 3/2"] = (
-        _compute(
+    scalar = (jnp.pi * data["R0"]) ** 2 / (num_transit * 4 * 2**0.5)
+
+    data["effective ripple 3/2"] = scalar * (
+        (B0 / data["<|grad(rho)|>"]) ** 2
+        * Bounce2D.batch(
             eps_32,
             {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data,
-            theta,
+            angle,
             grid,
             num_pitch,
             surf_batch_size,
-            simp=True,
+            expand_out=True,
         )
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * (jnp.pi / (8 * 2**0.5))
+        / data["V_psi"]
     )
     return data
 

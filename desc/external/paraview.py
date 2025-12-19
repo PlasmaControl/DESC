@@ -7,11 +7,13 @@ import numpy as np
 try:
     import pyvista as pv
 except ImportError:
-    warnings.warn(
-        "DESC objects are exported to Paraview using `pyvista`"
-        "package which is an optional dependency. Please pip install "
-        "`pyvista` to your environment."
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("default", "DESC objects are exported to Paraview")
+        warnings.warn(
+            "DESC objects are exported to Paraview using `pyvista` "
+            "package which is an optional dependency. Please pip install "
+            "`pyvista` to your environment."
+        )
 
 from desc.coils import CoilSet, _Coil
 from desc.equilibrium import Equilibrium

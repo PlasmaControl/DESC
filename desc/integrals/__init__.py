@@ -1,6 +1,6 @@
 """Classes for function integration."""
 
-from ._bounce_utils import fast_chebyshev, fast_cubic_spline, fourier_chebyshev
+from ._bounce_utils import fast_chebyshev, fast_cubic_spline
 from ._interp_utils import nufft1d2r, nufft2d2r
 from .bounce_integral import Bounce1D, Bounce2D
 from .singularities import (

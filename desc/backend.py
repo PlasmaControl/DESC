@@ -12,6 +12,8 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+OMEGA_IS_0 = True
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
@@ -83,7 +85,7 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
-    from jax.scipy.fft import dct, idct
+    from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln
     from jax.tree_util import (
@@ -529,7 +531,7 @@ else:  # pragma: no cover
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
-    from scipy.fft import dct, idct  # noqa: F401
+    from scipy.fft import dct, dctn, idct, idctn  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,

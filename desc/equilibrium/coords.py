@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -400,14 +400,11 @@ def _map_PEST_coordinates(
 def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """Convert FourierZernikeBasis to set of Fourier series.
 
-    TODO(#1243) Do proper partial summation once the DESC
-    basis are improved to store the padded tensor product modes.
-    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
+    TODO(#2017, #1243) Do proper partial summation.
     The partial summation implemented here has a totally unnecessary FourierZernike
-    spectral to real transform and unnecessary N^2 FFT's of size N. Still the
-    performance improvement is significant. To avoid the transform and FFTs,
-    I suggest padding the FourierZernike basis modes to make the partial summation
-    trivial. Then this computation will likely take microseconds.
+    spectral to real transform and unnecessary N^2 FFT's of size N.
+    Store the padded tensor product modes would make code simpler.
+    https://github.com/PlasmaControl/DESC/issues/1243#issuecomment-3131182128.
 
     Parameters
     ----------
@@ -431,8 +428,6 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     """
     grid = lmbda.grid
     errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
-    # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
-    # TODO: (#568)
     warnif(
         grid.M > lmbda.basis.M,
         ResolutionWarning,
@@ -453,43 +448,58 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
     return lmbda_minus_iota_omega, jnp.fft.rfftfreq(grid.num_theta, 1 / grid.num_theta)
 
 
-@partial(jit, static_argnames=["tol", "maxiter"])
-def _map_clebsch_coordinates(
+@partial(jit, static_argnames=["inbasis", "outbasis", "tol", "maxiter"])
+def _map_poloidal_coordinates(
     iota,
-    alpha,
+    poloidal,
     zeta,
     L_lmn,
     lmbda,
+    varepsilon=None,
+    inbasis="alpha",
+    outbasis="theta",
     guess=None,
     *,
     tol=1e-6,
     maxiter=30,
     **kwargs,
 ):
-    """Find θ for given Clebsch field line poloidal label α.
+    """Map poloidal coordinate in the input basis to the output basis.
 
-    # TODO: input (rho, alpha, zeta) coordinates may be an arbitrary point cloud
-    #       and the partial summation will work without modification.
-    #       Clean up input parameter API to support this.
+    If ``varepsilon`` is not given, then the input coordinate grid is constructed as
+    the tensor product of the values ``iota``, ``poloidal``, and ``zeta``.
+
+    If ``varepsilon`` is given, then the input coordinate grid is taken to be the
+    meshgrid of values ε = α + ι ζ stored in that array.
 
     Parameters
     ----------
-    iota : ndarray
-        Shape (num iota, ).
-        Rotational transform.
-    alpha : ndarray
-        Shape (num alpha, ).
-        Field line labels.
-    zeta : ndarray
+    iota : jnp.ndarray
+        Shape (num ρ, ).
+        Rotational transform ι(ρ) on flux surfaces labeled by ρ.
+    poloidal : jnp.ndarray
+        Shape (num poloidal, ).
+        Values for coordinate specified by ``inbasis``.
+    zeta : jnp.ndarray
         Shape (num zeta, ).
-        DESC toroidal angle.
+        DESC toroidal angle ζ.
     L_lmn : jnp.ndarray
         Spectral coefficients for λ.
     lmbda : Transform
-        Transform for λ built on DESC coordinates [ρ, θ, ζ].
+        Transform for λ built on DESC coordinates (ρ, θ, ζ) uniformly spaced in θ
+        with same ρ and ζ points as the other inputs.
+    varepsilon : jnp.ndarray
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
+        Optional meshgrid of values ε = α + ι ζ.
+        This meshgrid need not be a tensor-product grid.
+        See the description in the docstring header for more information.
+    inbasis : str
+        Label for input coordinates, e.g. α or ϑ
+    outbasis : str
+        Label for output coordinates, e.g. θ or δ.
     guess : jnp.ndarray
-        Shape (num iota, num alpha, num zeta).
-        Optional initial guess for the DESC computational coordinate θ solution.
+        Shape should broadcast with shape (num ρ, num poloidal, num ζ).
+        Optional initial guess for the solution.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -500,40 +510,66 @@ def _map_clebsch_coordinates(
 
     Returns
     -------
-    theta : ndarray
-        Shape (num iota, num alpha, num zeta).
-        DESC computational coordinates θ at given input meshgrid.
+    out : ndarray
+        Shape (num ρ, num poloidal, num ζ).
+        Returns the output poloidal coordinate evaluated at the input coordinates.
 
     """
-    # noqa: D202
+    errorif(
+        inbasis != "alpha" and inbasis != "vartheta",
+        NotImplementedError,
+        f"inbasis={inbasis} is not implemented.",
+    )
+    errorif(
+        outbasis != "theta" and outbasis != "lambda" and outbasis != "delta",
+        NotImplementedError,
+        f"outbasis={outbasis} is not implemented.",
+    )
 
-    def rootfun(theta, target, c_m):
-        c = (jnp.exp(1j * modes * theta) * c_m).real.sum()
-        target_k = theta + c
-        return target_k - target
+    # Root finding for θₖ such that θₖ + (λ−ιω)(ρ,θₖ,ζ) - ε = 0.
+    def rootfun(t, varepsilon, q_m):
+        return t + (jnp.exp(1j * modes * t) * q_m).real.sum() - varepsilon
 
-    def jacfun(theta, target, c_m):
-        dc_dt = ((1j * jnp.exp(1j * modes * theta) * c_m).real * modes).sum()
-        return 1 + dc_dt
+    def jacfun(t, varepsilon, q_m):
+        return 1 - modes.dot((jnp.exp(1j * modes * t) * q_m).imag)
 
     @partial(jnp.vectorize, signature="(),(),(m)->()")
-    def vecroot(guess, target, c_m):
+    def vecroot(guess, varepsilon, q_m):
         return root_scalar(
             rootfun,
             guess,
             jac=jacfun,
-            args=(target, c_m),
+            args=(varepsilon, q_m),
             tol=tol,
             maxiter=maxiter,
             full_output=False,
             **kwargs,
         )
 
-    c_m, modes = _partial_sum(lmbda, L_lmn, None, None, iota)
-    c_m = c_m[:, jnp.newaxis]
-    target = alpha[:, jnp.newaxis] + iota[:, jnp.newaxis, jnp.newaxis] * zeta
-    # Assume λ − ι ω = 0 for default initial guess.
-    return vecroot(setdefault(guess, target), target, c_m)
+    q_m, modes = _partial_sum(lmbda, L_lmn, None, None, None)
+    q_m = q_m[:, None]
+
+    errorif(not OMEGA_IS_0, msg="TODO: 568")
+    omega = 0
+
+    if varepsilon is None:
+        iota = iota[:, None, None]
+        poloidal = poloidal[:, None]
+        if inbasis == "alpha":
+            varepsilon = poloidal + iota * zeta
+        elif inbasis == "vartheta":
+            varepsilon = poloidal - iota * omega
+
+    t = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
+
+    if outbasis == "theta":
+        return t
+    if outbasis == "lambda":
+        vartheta = varepsilon + iota * omega
+        return vartheta - t
+    if outbasis == "delta":
+        alpha = varepsilon - iota * zeta
+        return t - alpha
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -612,6 +648,7 @@ def to_sfl(
     rcond=None,
     copy=False,
     tol=1e-9,
+    maxiter=30,
 ):
     """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -651,6 +688,8 @@ def to_sfl(
     tol : float
         Tolerance for coordinate mapping.
         Default is ``1e-9``.
+    maxiter : int
+        Maximum number of Newton iterations.
 
     Returns
     -------
@@ -670,14 +709,22 @@ def to_sfl(
     data = eq.compute(
         ["R", "Z", "lambda"],
         Grid(
-            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+            eq.map_coordinates(
+                grid_PEST.nodes,
+                ("rho", "theta_PEST", "zeta"),
+                tol=tol,
+                maxiter=maxiter,
+            )
         ),
     )
     data_bdry = eq.compute(
         ["R", "Z", "lambda"],
         Grid(
             eq.map_coordinates(
-                grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+                grid_PEST_bdry.nodes,
+                ("rho", "theta_PEST", "zeta"),
+                tol=tol,
+                maxiter=maxiter,
             )
         ),
     )

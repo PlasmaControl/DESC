@@ -44,9 +44,10 @@ Papers extending DESC functionality
    [`JPP <https://doi.org/10.1017/S0022377824000369>`__]
    [`pdf <https://arxiv.org/abs/2310.18842>`__]
 
-#. R. Gaur, R. Conlin, D. Dickinson, J.F. Parisi, D.W. Dudt,
-   D. Panici, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2024).
-   *Omnigenous stellarator equilibria with enhanced stability*.
+#. R. Gaur, R. Conlin, D. Dickinson, J.F. Parisi, D. Panici,
+   D.W. Dudt, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2024).
+   *Omnigenous stellarators with improved ideal and kinetic ballooning stability*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/ae1e9e>`__]
    [`pdf <https://arxiv.org/abs/2410.04576>`__]
 
 #. R. Conlin, P. Kim, D.W. Dudt, D. Panici, and E. Kolemen. (2024).
@@ -55,7 +56,7 @@ Papers extending DESC functionality
    [`pdf <https://arxiv.org/abs/2403.11033>`__]
 
 #. K.E. Unalmis, R. Gaur, R. Conlin, D. Panici, and E. Kolemen. (2024).
-   *Spectrally accurate reverse-mode differentiable bounce-averaging operator and
+   *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
    its applications*.
    [`pdf <https://arxiv.org/abs/2412.01724>`__]
 

@@ -191,6 +191,13 @@ def vmap_chunked(
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
+    Warnings
+    --------
+    - https://github.com/PlasmaControl/DESC/issues/1599
+    - https://github.com/jax-ml/jax/issues/26689
+    - https://github.com/jax-ml/jax/issues/27591
+    - https://github.com/jax-ml/jax/issues/31919
+
     Parameters
     ----------
     f : callable
@@ -215,9 +222,6 @@ def vmap_chunked(
 
     """
     in_axes, argnums = _parse_in_axes(in_axes)
-    if isinstance(argnums, int):
-        argnums = (argnums,)
-
     f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
@@ -235,7 +239,7 @@ def batch_map(
     vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
     supplied function. This makes compilation faster and avoids the weaknesses of
     applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303
+    dynamic values. For example, this function would be useful for GitHub issue #1303.
 
     Parameters
     ----------

@@ -97,7 +97,7 @@ def _in_epigraph_and(is_intersect, df_dy, /):
     return is_intersect.at[idx[0]].set(edge_case)
 
 
-def bounce_points(pitch_inv, knots, B, num_well=None):
+def bounce_points(pitch_inv, knots, B, num_well=-1):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -1256,7 +1256,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, mask, df_dy
 
-    def intersect1d(self, k=0.0, num_intersect=None):
+    def intersect1d(self, k=0.0, num_intersect=-1):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples

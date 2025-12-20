@@ -1012,7 +1012,7 @@ def get_vander(grid, Y, Y_B, NFP):
     return {"dct spline": chebvander(x, Y_trunc - 1)}
 
 
-@jax.checkpoint
+@partial(jax.checkpoint, prevent_cse=False)
 def _gather_reduce(y, cheb, x_idx):
     """Gather then reduce with checkpointing.
 
@@ -1021,8 +1021,7 @@ def _gather_reduce(y, cheb, x_idx):
     exceeds the cost of flops. By checkpointing, we avoid that in favor of
     recomputing derivatives in the backward pass.
 
-    Lies:
-    https://docs.jax.dev/en/latest/notebooks/autodiff_remat.html#practical-notes
+    On JAX version 0.7.2, enabling CSE did not increase memory.
     """
     Y = cheb.shape[-1]
     return jnp.einsum(
@@ -1032,15 +1031,17 @@ def _gather_reduce(y, cheb, x_idx):
     )
 
 
-@jax.checkpoint
+@partial(jax.checkpoint, prevent_cse=False)
 def _loop(y, cheb, x_idx):
     """Memory efficient Clenshaw recursion.
 
     Checkpointing on a CPU observed a minor reduction in memory usage while not
-    affecting speed. JAX/XLA has poor performance with iterative algorithms compared
-    to languages like Julia. On JAX version 0.7.2, this is slower than the product sum
-    reduction above. Without checkpointing either, this uses signficantly less memory
-    than above.
+    affecting speed. With/without checkpointing, this uses signficantly less
+    memory than non-checkpointed _gather_reduce.
+
+    JAX/XLA is poor at differentiating iterative algorithms compared to Julia.
+    On JAX version 0.7.2, this is slower to differentiate than _gather_reduce.
+    On JAX version 0.7.2, enabling CSE did not increase memory.
     """
 
     def body(i, val):

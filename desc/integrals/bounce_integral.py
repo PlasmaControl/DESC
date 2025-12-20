@@ -948,6 +948,7 @@ class Bounce2D(Bounce):
             as returned by ``Bounce2D.fourier``. Default is false.
         low_ram : bool
             Whether to use a more memory efficient algorithm.
+            This is slower to differentiate.
         quad : tuple[jnp.ndarray]
             Optional quadrature points and weights. If given this overrides
             the quadrature chosen when this object was made.

@@ -1336,3 +1336,600 @@ def _AGNI_eigenfunction(params, transforms, profiles, data, **kwargs):
 
     """
     return data  # noqa: unused dependency
+
+
+@register_compute_fun(
+    name="finite-n lambda2",
+    label="low-\\n \\lambda = \\gamma^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared growth rate"
+    + "using the most compact representation of diffmatrices",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rp|PEST",
+        "g_vv|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
+        "g^rr",
+        "g^rv",
+        "g^rz",
+        "J^theta_PEST",
+        "J^zeta",
+        "|J|",
+        "sqrt(g)_PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
+        "(sqrt(g)_PEST_p)|PEST",
+        "finite-n instability drive",
+        "iota",
+        "psi_r",
+        "psi_rr",
+        "p",
+        "a",
+    ],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    stable_only="bool: for testing only, materialize "
+    + "and eigendecompose the stable part of the matrix",
+)
+def _AGNI2(params, transforms, profiles, data, **kwargs):
+    """
+    AGNI: Analysis of Global Normal-modes in Ideal MHD.
+
+    Based on the original source here:
+    https://github.com/rahulgaur104/AGNI/tree/master
+
+    A finite-n stability eigenvalue solver.
+    Currenly only finds fixed boundary unstable modes at
+    low to medium resolution. Matrix-free!
+
+    This version of the code keeps the derivatives of the form
+    partial_rho (iota psi' xi^rho) more compact which leads to
+    fewer terms and even order derivatives. For this version
+    the PSD version of A is actually very close to PSD ~ 1e-12.
+    B is perfectly PSD.
+    """
+    a_N = data["a"]
+    B_N = params["Psi"] / (jnp.pi * a_N**2)
+
+    # Arbitrary choice. Mostly used to decide the range of eigenvalues of
+    # the mass matrix. Pre-conditioning should remove this factor
+    n0 = 1e2
+
+    axisym = kwargs.get("axisym", False)
+
+    # Large gamma is an alternate way to impose incompressibility
+    gamma = kwargs.get("gamma", 10.0)
+
+    # For axisymmetric equilibria n_mode_axisym will decide the toroidal
+    # mode number to analyze.
+    n_mode_axisym = kwargs.get("n_mode_axisym", 1)
+    incompressible = kwargs.get("incompressible", False)
+
+    def _cT(x):
+        return jnp.conjugate(jnp.transpose(x))
+
+    if axisym:
+        if n_mode_axisym == 0 and incompressible:
+            return NotImplementedError
+        else:
+            # Each componenet of xi can be written as the Fourier sum of
+            # two modes in the toroidal direction
+            D_zeta0 = 1j * n_mode_axisym * jnp.array([[1]])
+    else:
+        D_zeta0 = transforms["diffmat"].D_zeta
+
+    # Get differentiation matrices
+    D_rho0 = transforms["diffmat"].D_rho
+    D_theta0 = transforms["diffmat"].D_theta
+
+    W_rho = transforms["diffmat"].W_rho
+    W_theta = transforms["diffmat"].W_theta
+    W_zeta = transforms["diffmat"].W_zeta
+
+    # Square matrix
+    n_rho = D_rho0.shape[0]
+    n_theta = D_theta0.shape[0]
+    n_zeta = D_zeta0.shape[0]
+
+    def _reshape(u):
+        u.reshape(n_rho, n_theta, n_zeta)
+
+    W = _reshape(jnp.diag(jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))))
+
+    n_total = n_rho * n_theta * n_zeta
+
+    iota = _reshape(data["iota"])
+    psi_r = _reshape(["psi_r"]) / (a_N**2 * B_N)
+
+    psi_r2 = psi_r**2
+    psi_r3 = psi_r**3
+
+    iota_psi_r2 = iota * psi_r2
+
+    # Add a tiny shift because sometimes the pressure can be
+    # slightly negative in the edge
+    p0 = mu_0 * data["p"][:, None] / B_N**2 + 1e-12
+    p0 = _reshape(p0)
+
+    sqrtg = _reshape(data["sqrt(g)_PEST"]) * 1 / a_N**3
+
+    sqrtg_r = _reshape(data["(sqrt(g)_PEST_r)|PEST"]) * 1 / a_N**3
+    sqrtg_v = _reshape(data["(sqrt(g)_PEST_v)|PEST"]) * 1 / a_N**3
+    sqrtg_p = _reshape(data["(sqrt(g)_PEST_p)|PEST"]) * 1 / a_N**3
+
+    partial_z_log_sqrtg = sqrtg_p / sqrtg
+    partial_r_log_sqrtg = sqrtg_r / sqrtg
+    partial_v_log_sqrtg = sqrtg_v / sqrtg
+
+    psi_r_over_sqrtg = psi_r / sqrtg
+
+    g_rr = _reshape(data["g_rr|PEST"]) * 1 / a_N**2
+    g_vv = _reshape(data["g_vv|PEST"]) * 1 / a_N**2
+    g_zz = _reshape(data["g_pp|PEST"]) * 1 / a_N**2  # finite on-axis
+
+    g_rv = _reshape(data["g_rv|PEST"]) * 1 / a_N**2
+    g_rz = _reshape(data["g_rp|PEST"]) * 1 / a_N**2
+    g_vz = _reshape(data["g_vp|PEST"]) * 1 / a_N**2
+
+    g_sup_rr = _reshape(data["g^rr"]) * a_N**2
+    g_sup_rv = _reshape(data["g^rv"]) * a_N**2
+    g_sup_rz = _reshape(data["g^rz"]) * a_N**2
+
+    J2 = _reshape((mu_0 * data["|J|"]) ** 2) * (a_N / B_N) ** 2
+    j_sup_theta = mu_0 * _reshape(data["J^theta_PEST"]) * a_N**2 / B_N
+    j_sup_zeta = mu_0 * _reshape(data["J^zeta"]) * a_N**2 / B_N
+
+    # instability drive term
+    F = -1 * mu_0 * _reshape(data["finite-n instability drive"]) * (1 / B_N) ** 2
+
+    # Define block indices
+    rho_idx = slice(0, n_total)
+    theta_idx = slice(n_total, 2 * n_total)
+    zeta_idx = slice(2 * n_total, 3 * n_total)
+
+    ## Create the full matrix
+    if axisym:
+        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.complex128)
+        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
+    else:
+        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.float64)
+        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.float64)
+
+    def d_dr(D, u):
+        """Calculate the radial derivative of u."""
+        return jnp.einsum("ij,jklc->iklc", D, u)  # (Nr, Nθ, Nζ)
+
+    def d_dv(D, u):
+        return jnp.einsum("ij,kjlc->kilc", D, u)
+
+    def d_dz(D, u):
+        return jnp.einsum("ij,kljc->klic", D, u)
+
+    # TODO: B_blocks will always be real for axisym=True, complex data type
+    # is used to avoid trivial dtype-related errors. Fix later!
+    if axisym:
+        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
+        I3 = jnp.tile(jnp.eye(3, dtype=jnp.complex128), (n_total, 1, 1))
+    else:
+        B_blocks = jnp.zeros((n_total, 3, 3))
+        I3 = jnp.tile(jnp.eye(3), (n_total, 1, 1))
+
+    # Mass matrix (must be symmetric positive definite)
+    # Reshaped 9 diagonals each with length n_total -> matrix of size (n_total, 3, 3)
+    B_blocks = B_blocks.at[:, 0, 0].set(
+        jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten())
+    )
+    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
+    B_blocks = B_blocks.at[:, 2, 2].set(
+        jnp.diag(n0 * (W * iota**2 * sqrtg * g_zz).flatten())
+    )
+
+    B_blocks = B_blocks.at[:, 0, 1].set(
+        jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
+    )
+    B_blocks = B_blocks.at[:, 1, 0].set(
+        jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
+    )
+
+    B_blocks = B_blocks.at[:, 2, 0].set(
+        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rz).flatten())
+    )
+    B_blocks = B_blocks.at[:, 0, 2].set(
+        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rz).flatten())
+    )
+
+    B_blocks = B_blocks.at[:, 1, 2].set(
+        jnp.diag(n0 * (W * iota * sqrtg * g_vz).flatten())
+    )
+    B_blocks = B_blocks.at[:, 2, 1].set(
+        jnp.diag(n0 * (W * iota * sqrtg * g_vz).flatten())
+    )
+
+    diagBsqinv = 1 / jnp.sqrt(
+        jnp.concatenate((B_blocks[:, 0, 0], B_blocks[:, 1, 1], B_blocks[:, 2, 2]))
+    )
+
+    # Scale B with D and Cholesky
+    Dblk = (
+        jnp.zeros_like(B_blocks)
+        .at[
+            jnp.arange(B_blocks.shape[0])[:, None],
+            jnp.arange(3)[None, :],
+            jnp.arange(3)[None, :],
+        ]
+        .set(diagBsqinv)
+    )
+
+    B_scaled = jnp.einsum("nis,nsk,nlk->nil", Dblk, B_blocks, Dblk)  # D B D
+    L_D = jnp.linalg.cholesky(B_scaled)
+
+    # Precompute L_D⁻¹ and its transpose once (3x3 per node)
+    I3 = jnp.broadcast_to(jnp.eye(3, dtype=L_D.dtype), L_D.shape)
+    # Reshape to (N,3,3)
+    Linv_D = jax.lax.linalg.triangular_solve(L_D, I3, left_side=True, lower=True)
+    Linv_DT = jnp.swapaxes(Linv_D, -1, -2)
+
+    def Ax(x_flat):
+        # --- solver → physical: u = D · L_D^{-T} · x ---
+        x = jnp.reshape(x_flat, (n_total, 3))
+        x = diagBsqinv * jnp.einsum("nij,nj->ni", Linv_DT, x)  # use Linv_DT here
+        x = x.reshape((n_rho, n_theta, n_zeta, 3))
+
+        # components
+        xr = x[..., 0]
+        xv = x[..., 1]
+        xz = x[..., 2]
+
+        # precomputed forward derivatives (re-used below)
+        xr_v = d_dv(D_theta0, xr)
+        xr_z = d_dz(D_zeta0, xr)
+        xv_v = d_dv(D_theta0, xv)
+        xv_z = d_dz(D_zeta0, xv)
+        xz_v = d_dv(D_theta0, xz)
+        xz_z = d_dz(D_zeta0, xz)
+
+        # combos used many times
+        xr1_r = d_dr(D_rho0, iota_psi_r2 * xr)  # dρ(ι ψ′² xr)
+        xr2_r = d_dr(D_rho0, psi_r2 * xr)  # dρ(  ψ′² xr)
+
+        Ar = jnp.zeros_like(xr)
+        Aur = jnp.zeros_like(xr)
+        Av = jnp.zeros_like(xv)
+        Az = jnp.zeros_like(xz)
+
+        ####################
+        ##------Q²_ρρ-----##
+        ####################
+        Ar = (
+            d_dv(D_theta0.T, (psi_r_over_sqrtg * (iota**2) * psi_r3 * W * g_rr) * xr_v)
+            + d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r3 * W * g_rr) * xr_z)
+            + d_dv(D_theta0.T, (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_z)
+            + d_dz(D_zeta0.T, (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_v)
+        )
+
+        ####################
+        ##-----Q²_ϑϑ------##
+        ####################
+        Av = d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z)
+        -d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z)
+
+        Az = d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z)
+        -d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z)
+
+        # ρρ via dρ(ι ψ′² xr)
+        Ar += iota_psi_r2 * d_dr(
+            D_rho0.T, (psi_r_over_sqrtg * W * g_vv / psi_r) * xr1_r
+        )
+        Ar += -iota_psi_r2 * (
+            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vv) * xv_z)
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vv) * xz_z)
+        )
+
+        # transpose influence from ρ on θ,ζ (keep symmetry in matvec)
+        Av += -d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vv) * xr1_r)
+        Az += d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vv) * xr1_r)
+
+        ####################
+        ##-----Q²_ζζ------##
+        ####################
+        Av += d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_zz) * xv_v)
+        -d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_zz) * xz_v)
+
+        Az += d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_zz) * xz_v)
+        -d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_zz) * xv_v)
+
+        # ρρ via dρ(ψ′² xr), and ρ–θ/ρ–ζ couplings (effect on Ar)
+        Ar += psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_zz / psi_r) * xr2_r)
+        Ar += psi_r2 * (
+            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_zz) * xv_v)
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_zz) * xz_v)
+        )
+
+        # transpose influence from ρ on θ,ζ
+        Av += d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_zz) * xr2_r)
+        Az += -d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_zz) * xr2_r)
+
+        ####################
+        ##-----Q²_ρϑ------##
+        ####################
+        # ρ-ρ diagonal pieces
+        Ar += -d_dv(D_theta0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
+        -d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
+
+        # off-diagonal contributions to ρ from θ,ζ blocks
+        Ar += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+        )
+        Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z)
+        +d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z)
+
+        Av += d_dz(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v) + d_dz(
+            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z
+        )
+        Az += -1 * (
+            d_dz(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z)
+        )
+
+        ####################
+        ##-----Q²_ϑρ------##
+        ####################
+        # ρ-ρ diagonal pieces
+        Ar += -iota_psi_r2 * d_dr(
+            D_rho0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr_v
+        )
+        -iota_psi_r2 * d_dr(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rv) * xr_z)
+
+        # off-diagonal contributions to ρ from θ,ζ blocks
+        Ar += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+        )
+        Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z)
+        +d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z)
+
+        Av += d_dv(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v) + d_dz(
+            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z
+        )
+        Az += -1 * (
+            d_dv(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z)
+        )
+
+        ####################
+        ##------Q²_ρζ-----##
+        ####################
+        # ρ-ρ diagonal pieces
+        Ar += -d_dv(D_theta0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rz) * xr2_r)
+        -d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_rz) * xr2_r)
+
+        # off-diagonal contributions to ρ from θ,ζ blocks
+        Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xz_v) + d_dz(
+            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xz_v
+        )
+        Ar += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xv_v)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xv_v)
+        )
+
+        Av += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_v)
+            + d_dv(D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_z)
+        )
+        Az += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_v) + d_dv(
+            D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_z
+        )
+
+        ####################
+        ##-----Q²_ζρ------##
+        ####################
+        # ρ-ρ diagonal pieces
+        Ar += -psi_r2 * d_dv(
+            D_rho0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rz) * xr_v
+        )
+        -psi_r2 * d_dz(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rz) * xr_z)
+
+        # off-diagonal contributions to ρ from θ,ζ blocks
+        Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xz_v) + d_dz(
+            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xz_v
+        )
+        Ar += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xv_v)
+            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xv_v)
+        )
+
+        Av += -1 * (
+            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_v)
+            + d_dv(D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_z)
+        )
+        Az += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_v) + d_dv(
+            D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rz * xr_z
+        )
+
+        ####################
+        ##-----Q²_ϑζ------##
+        ####################
+        Av += -(
+            d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_v)
+            + d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_z)
+        )
+        Az += -(
+            d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_v)
+            + d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_v)
+        )
+
+        Av += d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_v) + d_dv(
+            D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_z
+        )
+
+        # Transpose of the above term
+        Az += d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_z) + d_dz(
+            D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_v
+        )
+
+        Ar += -psi_r2 * (
+            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xv_z)
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xz_z)
+        )
+        Ar += iota_psi_r2 * (
+            d_dr(D_rho0.T, ((psi_r_over_sqrtg * W * g_vz) * xv_v))
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xz_v)
+        )
+
+        Av += -1 * (
+            d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vz) * xr2_r)
+            - d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_vz) * xr1_r)
+        )
+
+        Az += d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vz) * xr2_r) - d_dv(
+            D_theta0.T, (psi_r_over_sqrtg * W * g_vz) * xr1_r
+        )
+
+        # ρ-ρ term
+        Ar += iota_psi_r2 * d_dr(
+            D_rho0.T, (psi_r_over_sqrtg * W * g_vz / psi_r) * xr2_r
+        )
+        Ar += psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz / psi_r) * xr1_r)
+
+        ####################
+        ##-----Q²_ζϑ------##
+        ####################
+        Av += -(
+            d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_z)
+            + d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_v)
+        )
+        Az += -(
+            d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_z)
+            + d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_v)
+        )
+
+        Av += d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_v) + d_dv(
+            D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xz_z
+        )
+
+        # Transpose of the above term
+        Az += d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_z) + d_dz(
+            D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vz) * xv_v
+        )
+
+        Ar += -psi_r2 * (
+            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xv_z)
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xz_z)
+        )
+        Ar += iota_psi_r2 * (
+            d_dr(D_rho0.T, ((psi_r_over_sqrtg * W * g_vz) * xv_v))
+            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz) * xz_v)
+        )
+
+        Av += -1 * (
+            d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vz) * xr2_r)
+            - d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_vz) * xr1_r)
+        )
+
+        Az += d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vz) * xr2_r) - d_dv(
+            D_theta0.T, (psi_r_over_sqrtg * W * g_vz) * xr1_r
+        )
+
+        ##ρ-ρ term
+        Ar += iota_psi_r2 * d_dr(
+            D_rho0.T, (psi_r_over_sqrtg * W * g_vz / psi_r) * xr2_r
+        )
+        Ar += psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vz / psi_r) * xr1_r)
+
+        # Mixed Q-J term ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐
+        Ar += -(
+            psi_r3
+            * sqrtg
+            * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
+            / g_sup_rr
+            * W
+            * iota
+            * xr_v
+        ) + (
+            psi_r3
+            * sqrtg
+            * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
+            / g_sup_rr
+            * W
+            * xr_z
+        )
+        Ar += (psi_r2 * sqrtg * j_sup_zeta * W * xv_z) - (
+            psi_r2 * sqrtg * j_sup_zeta * W * xz_z
+        )
+        Ar += -(psi_r * sqrtg * j_sup_zeta * W * xr1_r)
+        Ar += -(psi_r2 * sqrtg * j_sup_theta * W * xv_v) + (
+            psi_r2 * sqrtg * j_sup_theta * W * xz_v
+        )
+        Ar += -psi_r * j_sup_theta * sqrtg * xr2_r
+
+        # Mixed Q-J term 𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ
+        Ar += -iota * d_dv(
+            D_theta0.T,
+            psi_r3
+            * sqrtg
+            * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
+            / g_sup_rr
+            * W
+            * iota
+            * xr,
+        ) - d_dz(
+            D_zeta0.T,
+            psi_r3
+            * sqrtg
+            * (j_sup_theta * g_sup_rz + j_sup_zeta * g_sup_rv)
+            / g_sup_rr
+            * W
+            * xr,
+        )
+
+        Av += d_dz(D_zeta0.T, psi_r2 * sqrtg * j_sup_zeta * W * xr)
+        Az += -d_dz(D_zeta0.T, psi_r2 * sqrtg * j_sup_zeta * W * xr)
+
+        Ar += -iota_psi_r2 * d_dr(D_rho0.T, psi_r * sqrtg * j_sup_zeta * W * xr)
+
+        Av += -d_dv(D_theta0.T, psi_r2 * sqrtg * j_sup_theta * W * xr)
+        Az += d_dv(D_theta0.T, psi_r2 * sqrtg * j_sup_theta * W * xr)
+        Ar += -(psi_r2 * sqrtg * j_sup_theta * W * xv_v) + (
+            psi_r2 * sqrtg * j_sup_theta * W * xz_v
+        )
+
+        Ar += -psi_r2 * d_dr(D_rho0.T, psi_r * sqrtg * j_sup_theta * W * xr)
+
+        # |J|² drive
+        Ar += (psi_r2 * W * sqrtg * J2) * xr
+
+        # Adding a diagonal correction
+        Ar += 1e-12 * xr
+        Av += 1e-12 * xv
+        Az += 1e-12 * xz
+
+        # instability drive
+        Aur = (W * psi_r2 * sqrtg * F) * xr
+
+        # y = L_D⁻¹ D A(u)
+        Afull = jnp.stack([Ar + Aur, Av, Az], axis=-1).reshape((n_total, 3))
+        y = jnp.einsum("nij,nj->ni", Linv_D, diagBsqinv * Afull)
+
+        return y.reshape((-1,))
+
+    A = A.at[theta_idx, rho_idx].set(_cT(A[rho_idx, theta_idx]))
+    A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
+    A = A.at[zeta_idx, theta_idx].set(_cT(A[theta_idx, zeta_idx]))
+
+    # Add matfree eigensolver here
+
+    data["finite-n lambda"] = 0.0
+    data["finite-n eigenfunction"] = 0.0
+
+    return data

@@ -167,7 +167,7 @@ class ForceBalance(_Objective):
 
 
 class ForceBalanceDeflated(_Objective):
-    r"""Radial and helical MHD force balance.
+    r"""Deflated radial and helical MHD force balance.
 
     Given force densities:
 
@@ -179,11 +179,27 @@ class ForceBalanceDeflated(_Objective):
 
     𝐞ʰᵉˡⁱ = B^ζ ∇ θ - B^θ ∇ ζ
 
-    Minimizes the magnitude of the forces:
+    and deflation operator:
+
+    M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+
+    (if `deflation_type="power"`)
+
+    or
+
+    M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ
+
+    (if `deflation_type="exp"`)
+
+    Minimizes the magnitude of the deflated forces:
 
     fᵨ = Fᵨ ||∇ ρ|| dV  (N)
 
     fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
+
+    M(𝐱;𝐱₁*)[fᵨ, fₕₑₗᵢ]
+
+    If multiple states are used for deflation, the
 
     Parameters
     ----------
@@ -192,9 +208,9 @@ class ForceBalanceDeflated(_Objective):
     eqs: list of Equilibrium
         list of Equilibrium objects to use in deflation operator.
     sigma: float, optional
-        sigma term in deflation operator
+        shift parameter in deflation operator.
     power: float, optional
-        power parameter in deflation operator.
+        power parameter in deflation operator, ignored if `deflation_type="exp"`.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
@@ -203,9 +219,13 @@ class ForceBalanceDeflated(_Objective):
         state to deflate, defaults to ["Rb_mn","Zb_mn"]
     deflation_type: {"power","exp"}
         What type of deflation to use. If `"power"`, uses the form
-        pioneered by Farrell where M(x;y)=1/|x-y|^p + sigma
-        while `"exp"` uses the form from Riley, where
-        M(x;y) = exp(1/|x-y|) + sigma. Defaults to "power".
+        pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+        while `"exp"` uses the form from Riley 2024, where
+        M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+    multiple_deflation_type: {"prod","sum"}
+        When deflating multiple states, how to reduce the individual deflation
+        terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
+        together, while `"sum"` will add each individual term.
 
     """
 
@@ -215,6 +235,7 @@ class ForceBalanceDeflated(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_params_to_deflate_with",
         "deflation_type",
+        "_multiple_deflation_type",
     ]
 
     _equilibrium = True
@@ -229,6 +250,7 @@ class ForceBalanceDeflated(_Objective):
         eqs,
         sigma=0.05,
         power=2,
+        # TODO: update to pytree like DeflationOperator is
         params_to_deflate_with=["Rb_lmn", "Zb_lmn"],
         target=None,
         bounds=None,
@@ -241,6 +263,7 @@ class ForceBalanceDeflated(_Objective):
         name="force-deflated",
         jac_chunk_size=None,
         deflation_type="power",
+        multiple_deflation_type="prod",
     ):
         if target is None and bounds is None:
             target = 0
@@ -251,6 +274,9 @@ class ForceBalanceDeflated(_Objective):
         self._params_to_deflate_with = params_to_deflate_with
         assert deflation_type in ["power", "exp"]
         self._deflation_type = deflation_type
+        assert multiple_deflation_type in ["prod", "sum"]
+        self._multiple_deflation_type = multiple_deflation_type
+
         super().__init__(
             things=eq,
             target=target,
@@ -359,13 +385,17 @@ class ForceBalanceDeflated(_Objective):
         ]
         diffs = jnp.vstack(diffs)
         if self._deflation_type == "power":
-            deflation_parameter = jnp.prod(
+            M_i = jnp.prod(
                 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
             )
         else:
-            deflation_parameter = jnp.prod(
-                jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
-            )
+            M_i = jnp.prod(jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma)
+
+        if self._multiple_deflation_type == "prod":
+            deflation_parameter = jnp.prod(M_i)
+        else:
+            deflation_parameter = jnp.sum(M_i)
+
         return jnp.concatenate([fr, fb]) * deflation_parameter
 
 

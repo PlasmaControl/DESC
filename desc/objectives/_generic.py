@@ -716,26 +716,28 @@ class DeflationOperator(_Objective):
         Must have the same pytree structure as thing.params_dict.
         The default is to fix all indices of all parameters.
     sigma: float, optional
-        sigma term in deflation operator
+        shift parameter in deflation operator.
     power: float, optional
-        power parameter in deflation operator.
+        power parameter in deflation operator, ignored if `deflation_type="exp"`.
     deflation_type: {"power","exp"}
         What type of deflation to use. If `"power"`, uses the form
-        pioneered by Farrell where M(x;y)=1/|x-y|^p + sigma
-        while `"exp"` uses the form from Riley, where
-        M(x;y) = exp(1/|x-y|) + sigma. Defaults to "power".
-    reduction_type: {"prod","sum"}
-        The type of reduction to use when reducing each individual
-        deflation term M_i(x;y_i) = exp(1/|x-y_i|) + sigma
-        into a single cost. Options are either "prod" which uses the product
-        of each M_i, or "sum" which sums each M_i. Default is "prod"
+        pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+        while `"exp"` uses the form from Riley 2024, where
+        M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+    multiple_deflation_type: {"prod","sum"}
+        When deflating multiple states, how to reduce the individual deflation
+        terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
+        together, while `"sum"` will add each individual term.
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
-    _static_attrs = _Objective._static_attrs + ["_deflation_type", "_reduction_type"]
+    _static_attrs = _Objective._static_attrs + [
+        "_deflation_type",
+        "_multiple_deflation_type",
+    ]
 
     _coordinates = "rtz"
     _units = "~"
@@ -755,16 +757,13 @@ class DeflationOperator(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
         name="Deflation",
         jac_chunk_size=None,
         deflation_type="power",
-        reduction_type="prod",
+        multiple_deflation_type="prod",
     ):
         if target is None and bounds is None:
             target = 0
-        # TODO: recommmend bounds with some lower bound as a large pos constant
-        # following work of Tarek 2022 https://arxiv.org/pdf/2201.11926 ?
         assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
         self._things_to_deflate = things_to_deflate
         self._sigma = sigma
@@ -772,8 +771,8 @@ class DeflationOperator(_Objective):
         self._params_to_deflate_with = params_to_deflate_with
         assert deflation_type in ["power", "exp"]
         self._deflation_type = deflation_type
-        assert reduction_type in ["prod", "sum"]
-        self._reduction_type = reduction_type
+        assert multiple_deflation_type in ["prod", "sum"]
+        self._multiple_deflation_type = multiple_deflation_type
 
         super().__init__(
             things=thing,
@@ -854,11 +853,10 @@ class DeflationOperator(_Objective):
         diffs = jnp.vstack(diffs)
         if self._deflation_type == "power":
             M_i = 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
-
         else:
             M_i = jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
 
-        if self._reduction_type == "prod":
+        if self._multiple_deflation_type == "prod":
             deflation_parameter = jnp.prod(M_i)
         else:
             deflation_parameter = jnp.sum(M_i)

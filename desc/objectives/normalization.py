@@ -45,9 +45,9 @@ def compute_scaling_factors(thing):
         scales["F"] = B_pressure / scales["a"]
         scales["f"] = scales["F"] * scales["V"]
 
-        if thing.pressure is not None:
-            p0 = float(thing.pressure(0)[0])
-        else:
+        p0 = float(thing.pressure(0)[0])
+        if thing.electron_density is not None:
+            # if kinetic profiles exist, then use them for "p" scale
             scales["n"] = float(
                 ((thing.atomic_number(0) + 1) / 2 * thing.electron_density(0))[0]
             )

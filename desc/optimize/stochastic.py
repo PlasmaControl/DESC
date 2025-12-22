@@ -13,12 +13,13 @@ from .utils import (
 )
 
 
-def sgd(
+def generic_sgd(
     fun,
     x0,
     grad,
     args=(),
     method="sgd",
+    x_scale="auto",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
@@ -27,12 +28,40 @@ def sgd(
     callback=None,
     options=None,
 ):
-    """Minimize a scalar function using stochastic gradient descent with momentum.
+    r"""Minimize a scalar function using one of stochastic gradient descent methods.
 
-    Update rule is x_{k+1} = x_{k} - alpha*v_{k}
-                   v_{k}   = beta*v_{k-1} + (1-beta)*grad(x)
+    This is the generic function. The update method is chosen based on the `method`
+    argument.
 
-    Where alpha is the step size and beta is the momentum parameter.
+    Update rule for ``'sgd'``:
+
+    .. math::
+
+        \begin{aligned}
+            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_k) \\
+            x_{k+1} &= x_{k} - \alpha v_{k}
+        \end{aligned}
+
+    Update rule for ``'adam'``:
+
+    .. math::
+
+        \begin{aligned}
+            m_t &= \beta m_{t-1} + (1 - \beta) \nabla f(x_{t-1}) \\
+            v_t &= \beta_2 v_{t-1} + (1 - \beta_2) \nabla f(x_{t-1})^2 \\
+            \hat{m} &= \frac{m_t}{1 - \beta^t} \\
+            \hat{v} &= \frac{v_t}{1 - \beta_2^t} \\
+            x_t &= x_{t-1} - \frac{\alpha \hat{m}}{\sqrt{\hat{v}} + \epsilon}
+        \end{aligned}
+
+    Update rule for ``'rmsprop'``:
+
+    .. math::
+
+        \begin{aligned}
+            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_{k})^2 \\
+            x_{k+1} &= x_{k} - \frac{\alpha \nabla f(x_{k})}{\sqrt{v_{k}} + \epsilon}
+        \end{aligned}
 
     Parameters
     ----------
@@ -45,8 +74,13 @@ def sgd(
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step size update rule. Currently only the default "sgd" is available. Future
-        updates may include RMSProp, Adam, etc.
+        Step size update rule. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+    x_scale : array_like or 'auto', optional
+        Characteristic scale of each variable. Setting x_scale is equivalent to
+        reformulating the problem in scaled variables xs = x / x_scale. Improved
+        convergence may be achieved by setting x_scale such that a step of a given
+        size along any of the scaled variables has a similar effect on the cost
+        function. Defaults to 'auto', meaning no scaling.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function.
         The optimization process is stopped when ``dF < ftol * F``.
@@ -74,11 +108,24 @@ def sgd(
         are the same arguments passed to fun and grad. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
-        dictionary of optional keyword arguments to override default solver settings.
+        dictionary of optional keyword arguments to override default solver settings
+        for the update rule chosen.
 
-        - ``"alpha"`` : (float > 0) Step size parameter. Default
-          ``1e-2 * norm(x)/norm(grad(x))``
-        - ``"beta"`` : (float > 0) Momentum parameter. Default 0.9
+        - ``"alpha"`` : (float > 0) Learning rate. Defaults to
+          1e-1 * ||x_scaled|| / ||g_scaled||.
+        - ``"beta"`` : (float > 0) Exponential decay rate for the first moment
+          estimates. Default 0.9.
+
+        For `'adam'` and `'rmsprop'`, additional options are,
+
+        - ``"epsilon"``: (float > 0) Small constant for numerical stability.
+          Default 1e-8.
+
+        For `'adam'`, additional options are,
+
+        - ``"beta2"`` : (float > 0) Exponential decay rate for the second moment
+          estimates. Default 0.999.
+
 
     Returns
     -------
@@ -88,6 +135,19 @@ def sgd(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+    errorif(
+        method not in ["sgd", "adam", "rmsprop"],
+        f"Available options for method are 'sgd', 'adam' and 'rmsprop', but {method} "
+        "is given.",
+    )
+    errorif(
+        isinstance(x_scale, str) and x_scale not in ["auto"],
+        ValueError,
+        "x_scale should be one of 'auto' or array-like, got {}".format(x_scale),
+    )
+    if isinstance(x_scale, str):
+        x_scale = 1.0
+
     options = {} if options is None else options
     nfev = 0
     ngev = 0
@@ -95,17 +155,27 @@ def sgd(
 
     N = x0.size
     x = x0.copy()
-    v = jnp.zeros_like(x)
     f = fun(x, *args)
     nfev += 1
-    g = grad(x, *args)
+    g = grad(x, *args) / x_scale
     ngev += 1
-
-    maxiter = setdefault(maxiter, N * 100)
-    g_norm = jnp.linalg.norm(g, ord=2)
+    # scaled and unscaled norms
+    g_norm = jnp.linalg.norm(g * x_scale, ord=2)
+    gs_norm = jnp.linalg.norm(g, ord=2)
     x_norm = jnp.linalg.norm(x, ord=2)
-    alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
-    beta = options.pop("beta", 0.9)
+    xs_norm = jnp.linalg.norm(x / x_scale, ord=2)
+    maxiter = setdefault(maxiter, N * 100)
+
+    v = jnp.zeros_like(x)
+    m = None
+    method_options = {}
+    method_options["alpha"] = options.pop("alpha", 1e-1 * xs_norm / gs_norm)
+    method_options["beta"] = options.pop("beta", 0.9)
+    if method in ["adam", "rmsprop"]:
+        method_options["epsilon"] = options.pop("epsilon", 1e-8)
+    if method == "adam":
+        m = jnp.zeros_like(x)
+        method_options["beta2"] = options.pop("beta2", 0.999)
 
     errorif(
         len(options) > 0,
@@ -123,8 +193,8 @@ def sgd(
     if verbose > 2:
         print("Solver options:")
         print("-" * 40)
-        print(f"{'Alpha':<15}: {alpha:.3e}")
-        print(f"{'Beta':<15}: {beta:.3e}")
+        for key, val in method_options.items():
+            print(f"{key:<15}: {val:.3e}")
         print("-" * 40, "\n")
 
     if verbose > 1:
@@ -132,7 +202,7 @@ def sgd(
         print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
-
+    update_rule = {"sgd": _sgd, "adam": _adam, "rmsprop": _rmsprop}[method]
     while True:
         success, message = check_termination(
             df_norm,
@@ -152,16 +222,17 @@ def sgd(
         if success is not None:
             break
 
-        v = beta * v + (1 - beta) * g
-        x = x - alpha * v
-        g = grad(x, *args)
-        ngev += 1
-        step_norm = jnp.linalg.norm(alpha * v, ord=2)
-        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
+        dx, v, m = update_rule(g, v, m, iteration, **method_options)
+        x = x - dx * x_scale
+        g = grad(x, *args) / x_scale
+        g_norm = jnp.linalg.norm(g * x_scale, ord=jnp.inf)
+        step_norm = jnp.linalg.norm(dx * x_scale, ord=2)
         fnew = fun(x, *args)
-        nfev += 1
         df = f - fnew
         f = fnew
+
+        ngev += 1
+        nfev += 1
 
         allx.append(x)
         iteration += 1
@@ -194,3 +265,28 @@ def sgd(
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
 
     return result
+
+
+def _sgd(g, v, m, iteration, alpha, beta):
+    """Update rule for the stochastic gradient descent with momentum."""
+    v = beta * v + (1 - beta) * g
+    dx = alpha * v
+    return dx, v, m
+
+
+def _adam(g, v, m, iteration, alpha, beta, beta2, epsilon):
+    """Update rule for the ADAM optimizer."""
+    t = iteration + 1
+    m = beta * m + (1 - beta) * g
+    v = beta2 * v + (1 - beta2) * (g**2)
+    m_hat = m / (1 - beta**t)
+    v_hat = v / (1 - beta2**t)
+    dx = alpha * m_hat / (jnp.sqrt(v_hat) + epsilon)
+    return dx, v, m
+
+
+def _rmsprop(g, v, m, iteration, alpha, beta, epsilon):
+    """Update rule for the RMSProp optimizer."""
+    v = beta * v + (1 - beta) * g**2
+    dx = alpha * g / (jnp.sqrt(v) + epsilon)
+    return dx, v, m

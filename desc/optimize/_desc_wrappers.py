@@ -7,7 +7,7 @@ from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
-from .stochastic import sgd
+from .stochastic import generic_sgd
 
 
 @register_optimizer(
@@ -376,9 +376,15 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum"
-    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    name=["sgd", "adam", "rmsprop"],
+    description=[
+        "Stochastic gradient descent with Nesterov momentum. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        "ADAM optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        "RMSProp optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -389,7 +395,7 @@ def _optimize_desc_fmin_scalar(
 def _optimize_desc_stochastic(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.sgd.
+    """Wrapper for desc.optimize.generic_sgd.
 
     Parameters
     ----------
@@ -400,15 +406,13 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use.
-    x_scale : array_like or ‘jac’, optional
+        Name of the method to use. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+    x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
-        reformulating the problem in scaled variables xs = x / x_scale. An alternative
-        view is that the size of a trust region along jth dimension is proportional to
-        x_scale[j]. Improved convergence may be achieved by setting x_scale such that
-        a step of a given size along any of the scaled variables has a similar effect
-        on the cost function. If set to ‘jac’, the scale is iteratively updated using
-        the inverse norms of the columns of the Jacobian matrix.
+        reformulating the problem in scaled variables xs = x / x_scale. Improved
+        convergence may be achieved by setting x_scale such that a step of a given
+        size along any of the scaled variables has a similar effect on the cost
+        function. Defaults to 'auto', meaning no scaling.
     verbose : int
         * 0  : work silently.
         * 1 : display a termination report.
@@ -418,7 +422,7 @@ def _optimize_desc_stochastic(
         "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See ``desc.optimize.sgd`` for details.
+        settings. See ``desc.optimize.generic_sgd`` for details.
 
     Returns
     -------
@@ -432,12 +436,13 @@ def _optimize_desc_stochastic(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    result = sgd(
+    result = generic_sgd(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
         args=(objective.constants,),
         method=method,
+        x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],

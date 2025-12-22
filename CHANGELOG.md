@@ -20,6 +20,8 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
 alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- Adds ``"adam"`` and ``"rmsprop"`` optimizer options to the supported stochastic gradient descent options.
+- The ``x_scale`` parameter can now be used with stochastic gradient descent type optimizers.
 
 Bug Fixes
 

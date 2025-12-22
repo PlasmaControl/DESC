@@ -11,6 +11,7 @@ expensive computations.
 
 from functools import partial
 
+from matfree import decomp, eig
 from scipy.constants import mu_0
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
@@ -1296,7 +1297,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         ## Shift the diagonal of A to ensure positive definiteness
         ## The estimate must be accurate. If A is diagonally dominant
         ## use Gerhsgorin theorem to estimate the lowest eigenvalue
-        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-12)
+        A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-13)
 
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
         w, v = jnp.linalg.eigh((A3 + _cT(A3)) / 2)
@@ -1442,14 +1443,14 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     n_zeta = D_zeta0.shape[0]
 
     def _reshape(u):
-        u.reshape(n_rho, n_theta, n_zeta)
+        return u.reshape(n_rho, n_theta, n_zeta)[..., None]
 
     W = _reshape(jnp.diag(jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))))
 
     n_total = n_rho * n_theta * n_zeta
 
     iota = _reshape(data["iota"])
-    psi_r = _reshape(["psi_r"]) / (a_N**2 * B_N)
+    psi_r = _reshape(data["psi_r"]) / (a_N**2 * B_N)
 
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
@@ -1526,51 +1527,29 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
 
     # Mass matrix (must be symmetric positive definite)
     # Reshaped 9 diagonals each with length n_total -> matrix of size (n_total, 3, 3)
-    B_blocks = B_blocks.at[:, 0, 0].set(
-        jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten())
-    )
-    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
-    B_blocks = B_blocks.at[:, 2, 2].set(
-        jnp.diag(n0 * (W * iota**2 * sqrtg * g_zz).flatten())
-    )
+    B_blocks = B_blocks.at[:, 0, 0].set(n0 * (W * psi_r2 * sqrtg * g_rr).flatten())
+    B_blocks = B_blocks.at[:, 1, 1].set(n0 * (W * sqrtg * g_vv).flatten())
+    B_blocks = B_blocks.at[:, 2, 2].set(n0 * (W * iota**2 * sqrtg * g_zz).flatten())
 
-    B_blocks = B_blocks.at[:, 0, 1].set(
-        jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
-    )
-    B_blocks = B_blocks.at[:, 1, 0].set(
-        jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
-    )
+    B_blocks = B_blocks.at[:, 0, 1].set(n0 * (W * psi_r * sqrtg * g_rv).flatten())
+    B_blocks = B_blocks.at[:, 1, 0].set(n0 * (W * psi_r * sqrtg * g_rv).flatten())
 
     B_blocks = B_blocks.at[:, 2, 0].set(
-        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rz).flatten())
+        n0 * (W * psi_r * iota * sqrtg * g_rz).flatten()
     )
     B_blocks = B_blocks.at[:, 0, 2].set(
-        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rz).flatten())
+        n0 * (W * psi_r * iota * sqrtg * g_rz).flatten()
     )
 
-    B_blocks = B_blocks.at[:, 1, 2].set(
-        jnp.diag(n0 * (W * iota * sqrtg * g_vz).flatten())
-    )
-    B_blocks = B_blocks.at[:, 2, 1].set(
-        jnp.diag(n0 * (W * iota * sqrtg * g_vz).flatten())
-    )
+    B_blocks = B_blocks.at[:, 1, 2].set(n0 * (W * iota * sqrtg * g_vz).flatten())
+    B_blocks = B_blocks.at[:, 2, 1].set(n0 * (W * iota * sqrtg * g_vz).flatten())
 
     diagBsqinv = 1 / jnp.sqrt(
-        jnp.concatenate((B_blocks[:, 0, 0], B_blocks[:, 1, 1], B_blocks[:, 2, 2]))
+        jnp.stack((B_blocks[:, 0, 0], B_blocks[:, 1, 1], B_blocks[:, 2, 2]), axis=1)
     )
 
-    # Scale B with D and Cholesky
-    Dblk = (
-        jnp.zeros_like(B_blocks)
-        .at[
-            jnp.arange(B_blocks.shape[0])[:, None],
-            jnp.arange(3)[None, :],
-            jnp.arange(3)[None, :],
-        ]
-        .set(diagBsqinv)
-    )
-
-    B_scaled = jnp.einsum("nis,nsk,nlk->nil", Dblk, B_blocks, Dblk)  # D B D
+    # Scale B with D
+    B_scaled = jnp.einsum("...ij,...i,...j->...ij", B_blocks, diagBsqinv, diagBsqinv)
     L_D = jnp.linalg.cholesky(B_scaled)
 
     # Precompute L_D⁻¹ and its transpose once (3x3 per node)
@@ -1580,15 +1559,18 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
     Linv_DT = jnp.swapaxes(Linv_D, -1, -2)
 
     def Ax(x_flat):
+        ncols = x_flat.shape[-1]
         # --- solver → physical: u = D · L_D^{-T} · x ---
-        x = jnp.reshape(x_flat, (n_total, 3))
-        x = diagBsqinv * jnp.einsum("nij,nj->ni", Linv_DT, x)  # use Linv_DT here
-        x = x.reshape((n_rho, n_theta, n_zeta, 3))
+        x = jnp.reshape(x_flat, (n_total, 3, ncols))
+        x = diagBsqinv[..., None] * jnp.einsum(
+            "lij,ljk->lik", Linv_DT, x
+        )  # use Linv_DT here
+        x = x.reshape((n_rho, n_theta, n_zeta, 3, ncols))
 
         # components
-        xr = x[..., 0]
-        xv = x[..., 1]
-        xz = x[..., 2]
+        xr = x[..., 0, :]
+        xv = x[..., 1, :]
+        xz = x[..., 2, :]
 
         # precomputed forward derivatives (re-used below)
         xr_v = d_dv(D_theta0, xr)
@@ -1602,10 +1584,10 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
         xr1_r = d_dr(D_rho0, iota_psi_r2 * xr)  # dρ(ι ψ′² xr)
         xr2_r = d_dr(D_rho0, psi_r2 * xr)  # dρ(  ψ′² xr)
 
-        Ar = jnp.zeros_like(xr)
-        Aur = jnp.zeros_like(xr)
-        Av = jnp.zeros_like(xv)
-        Az = jnp.zeros_like(xz)
+        Ar = jnp.zeros((n_rho, n_theta, n_zeta, 3, ncols))
+        Aur = jnp.zeros_like(Ar)
+        Av = jnp.zeros_like(Ar)
+        Az = jnp.zeros_like(Ar)
 
         ####################
         ##------Q²_ρρ-----##
@@ -1735,10 +1717,10 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
         ##-----Q²_ζρ------##
         ####################
         # ρ-ρ diagonal pieces
-        Ar += -psi_r2 * d_dv(
+        Ar += -psi_r2 * d_dr(
             D_rho0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rz) * xr_v
         )
-        -psi_r2 * d_dz(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rz) * xr_z)
+        -psi_r2 * d_dr(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rz) * xr_z)
 
         # off-diagonal contributions to ρ from θ,ζ blocks
         Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rz * xz_v) + d_dz(
@@ -1918,18 +1900,25 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
         Aur = (W * psi_r2 * sqrtg * F) * xr
 
         # y = L_D⁻¹ D A(u)
-        Afull = jnp.stack([Ar + Aur, Av, Az], axis=-1).reshape((n_total, 3))
-        y = jnp.einsum("nij,nj->ni", Linv_D, diagBsqinv * Afull)
+        Afull = jnp.stack([Ar + Aur, Av, Az], axis=-2).reshape(
+            (n_total, 3, x_flat.shape[-1])
+        )
 
-        return y.reshape((-1,))
+        y = jnp.einsum("lij,ljk->lik", Linv_D, diagBsqinv[..., None] * Afull)
 
-    A = A.at[theta_idx, rho_idx].set(_cT(A[rho_idx, theta_idx]))
-    A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
-    A = A.at[zeta_idx, theta_idx].set(_cT(A[theta_idx, zeta_idx]))
+        return y.reshape((-1, ncols))
 
     # Add matfree eigensolver here
+    nrows = int(n_total)
+    v0 = jnp.ones((3 * n_total, nrows), dtype=jnp.complex128)
+    num_matvecs = nrows
 
-    data["finite-n lambda"] = 0.0
-    data["finite-n eigenfunction"] = 0.0
+    hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
+    alg = eig.eigh_partial(hessenberg)
+    w, v = alg(lambda v: Ax(v), v0)
+    print(w[:100])
+
+    data["finite-n lambda2"] = w
+    data["finite-n eigenfunction2"] = v
 
     return data

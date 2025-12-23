@@ -1697,3 +1697,30 @@ def test_write_vmec_input(TmpDir):
     np.testing.assert_allclose(W0, W1)
     np.testing.assert_allclose(rho_err, 0, atol=1e-4)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_write_vmec_input_current_power_series(TmpDir):
+    """Test generated VMEC input file gives the original equilibrium profiles."""
+    # write VMEC input file
+    fname = str(TmpDir.join("input.SOLOVEV_current"))
+    eq0 = get("SOLOVEV")
+    current_profile = eq0.get_profile("current", kind="power_series")
+    current_profile.params[0] = 0.0  # zero out the axis current
+    with pytest.warns(UserWarning, match="Setting toroidal"):
+        eq0.current = current_profile
+    VMECIO.write_vmec_input(eq0, fname)
+    eq1 = Equilibrium.from_input_file(fname, spectral_indexing="fringe")
+    # to match the original eq's L, which is not default
+    eq1.change_resolution(L=2 * eq1.M, L_grid=2 * eq1.M_grid)
+
+    # check that loaded eq matches original equilibrium
+    np.testing.assert_allclose(eq0.L, eq1.L)
+    np.testing.assert_allclose(eq0.M, eq1.M)
+    np.testing.assert_allclose(eq0.N, eq1.N)
+    np.testing.assert_allclose(eq0.NFP, eq1.NFP)
+    np.testing.assert_allclose(eq0.Psi, eq1.Psi)
+    np.testing.assert_allclose(eq0.p_l, eq1.p_l)
+    np.testing.assert_allclose(eq0.c_l, eq1.c_l, atol=1e-5)
+    np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
+    np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)

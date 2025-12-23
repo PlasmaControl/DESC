@@ -1101,7 +1101,7 @@ class InputReader:
                 )
             )
         ctype = vmec_indata.get("PCURR_TYPE", "power_series")
-        if ctype.lower() != "power_series":
+        if not ctype.lower() in ["power_series", "power_series_i"]:
             warnings.warn(
                 colored(
                     "current is not a power series! DESC can only read power series"
@@ -1135,7 +1135,11 @@ class InputReader:
         # read current
         curr_tor = vmec_indata.get("CURTOR", None)
         AC = np.atleast_1d(vmec_indata.get("AC", np.array([0.0]))).astype(float)
-        ls = np.arange(0, AC.size) * 2
+        ls = (
+            np.arange(0, AC.size) * 2
+            if ctype.lower == "power_series"
+            else np.arange(1, AC.size + 1) * 2
+        )
         inputs["current"] = np.vstack([ls, AC]).T
 
         # axis
@@ -1511,16 +1515,17 @@ class InputReader:
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
         if not iota_flag:
-            # integrate current profile wrt s=rho^2
-            inputs["current"] = np.pad(
-                np.vstack(
-                    (
-                        inputs["current"][:, 0] + 2,
-                        inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
-                    )
-                ).T,
-                ((1, 0), (0, 0)),
-            )
+            if ctype == "power_series":
+                # integrate current derivative profile wrt s=rho^2
+                inputs["current"] = np.pad(
+                    np.vstack(
+                        (
+                            inputs["current"][:, 0] + 2,
+                            inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
+                        )
+                    ).T,
+                    ((1, 0), (0, 0)),
+                )
             # scale current profile
             if curr_tor is not None:
                 inputs["current"][:, 1] *= curr_tor / (

@@ -9,6 +9,12 @@ from functools import partial
 from desc.vmec_utils import ptolemy_identity_fwd
 from quadcoil import make_rzfourier_mc_ms_nc_ns
 import numpy as np
+# Used in create_source_grid only
+from ..integrals.singularities import best_params, best_ratio
+from desc.grid import LinearGrid
+from desc.compute import get_profiles, get_transforms
+from desc.utils import Timer, warnif
+from desc.integrals import DFTInterpolator, FFTInterpolator
 
 # Data keys needed to calculate Bnormal_plasma.
 _BPLASMA_DATA_KEYS = ['K_vc', 'B', 'R', 'phi', 'Z', 'e^rho', 'n_rho', '|e_theta x e_zeta|']
@@ -40,7 +46,7 @@ def compute_Bnormal_plasma(constants, params_eq, _bplasma_chunk_size):
     )
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data['B'] / 2
-    Bnormal_plasma += jnp.sum(Bplasma * eval_data['n_rho'], axis=1)
+    Bnormal_plasma = jnp.sum(Bplasma * eval_data['n_rho'], axis=1)
     return Bnormal_plasma
 
 def compute_eval_data_coils(constants, params_eq):
@@ -258,3 +264,39 @@ def quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
     modes_M, modes_N, Phi_mn = ptolemy_identity_fwd(mc, nc, phis, phic)
     Phi_mn = Phi_mn.flatten()
     return Phi_mn, modes_M, modes_N
+
+
+def create_source(eq, source_grid_in, plasma_grid_in):
+    if source_grid_in is None:
+        # for axisymmetry we still need to know about toroidal effects, so its
+        # cheapest to pretend there are extra field periods
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP if eq.N > 0 else 64,
+            sym=False,
+        )
+        source_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
+        source_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
+    else:
+        source_grid = source_grid_in
+    # Creating interpolator for Bnormal_plasma
+    ratio_data = eq.compute(
+        ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+    )
+    st, sz, q = best_params(source_grid, best_ratio(ratio_data))
+    try:
+        interpolator = FFTInterpolator(plasma_grid_in, source_grid, st, sz, q)
+    except AssertionError as e:
+        warnif(
+            True,
+            msg="Could not build fft interpolator, switching to dft which is slow."
+            "\nReason: " + str(e),
+        )
+        interpolator = DFTInterpolator(plasma_grid_in, source_grid, st, sz, q)
+    return (
+        source_profiles,
+        source_transforms,
+        interpolator
+    )

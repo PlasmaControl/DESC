@@ -3,7 +3,7 @@ from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.normalization import compute_scaling_factors
 from desc.compute import get_profiles, get_transforms
-from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from desc.integrals import DFTInterpolator, FFTInterpolator
 from ..integrals.singularities import best_params, best_ratio
 from functools import partial
 from jax import jit
@@ -22,6 +22,7 @@ from ._quadcoil_utils import (
     compute_eval_data_coils,
     compute_Bnormal_ext,
     compute_Bnormal,
+    create_source
 )
 
 # ----- A QUADCOIL wrapper -----
@@ -166,7 +167,7 @@ class QuadcoilProxy(_Objective):
             warnings.warn('There are both external coils and net current. '
                           'This is very uncommon (windowpane filaments + winding surface with net current).')
         
-
+        # quadcoil_kwargs_bak = quadcoil_kwargs.copy()
         quadcoil_kwargs = quadcoil_kwargs.copy()
         if target is None and bounds is None:
             target = 0 # default target value
@@ -275,22 +276,15 @@ class QuadcoilProxy(_Objective):
             rho=1.0
         )
         eval_data_keys = []
-        if not self._field:
+        if self._field:
             eval_data_keys = eval_data_keys + _BCOIL_DATA_KEYS
-        if not self._enable_Bnormal_plasma:
+        if self._enable_Bnormal_plasma:
             eval_data_keys = eval_data_keys + _BPLASMA_DATA_KEYS
         eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=plasma_grid)
         eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=plasma_grid)
         self._constants['eval_profiles'] = eval_profiles
         self._constants['eval_transforms'] = eval_transforms
         self._constants['plasma_grid'] = plasma_grid
-        # The grid used to calculate net toroidal current
-        # desc_net_poloidal_current_amperes = (
-        #     -desc_eq.compute("G", grid=LinearGrid(rho=jnp.array(1.0)))["G"][0]
-        #     / mu_0
-        #     * 2
-        #     * jnp.pi
-        # )
         self.nfp = eq.NFP
         self.stellsym = eq.sym
         quadcoil_kwargs['metric_name'] = metric_name
@@ -314,11 +308,11 @@ class QuadcoilProxy(_Objective):
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)
         self._quadcoil_values = jit(_quadcoil_values)
-        self._quadcoil_kwargs = quadcoil_kwargs
+        # self._quadcoil_kwargs_bak = quadcoil_kwargs_bak
         # ----- Setting and registering keyword arguments -----
         self._static_attrs = _Objective._static_attrs + [
             # External-coils related
-            '_quadcoil_kwargs'
+            # '_quadcoil_kwargs_bak'
             '_enable_net_current_plasma',
             '_eq_fixed',
             '_field_fixed',
@@ -429,34 +423,46 @@ class QuadcoilProxy(_Objective):
             if verbose:
                 jax.debug.print('enable_Bnormal_plasma=True, QUADCOIL will no '\
                                 'longer assume zero Bnormal_plasma at the boundary.')
-            if self._source_grid is None:
-                # for axisymmetry we still need to know about toroidal effects, so its
-                # cheapest to pretend there are extra field periods
-                source_grid = LinearGrid(
-                    rho=np.array([1.0]),
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP if eq.N > 0 else 64,
-                    sym=False,
-                )
-                source_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
-                source_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
-            else:
-                source_grid = self._source_grid
-            # Creating interpolator for Bnormal_plasma
-            ratio_data = eq.compute(
-                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+            # if self._source_grid is None:
+            #     # for axisymmetry we still need to know about toroidal effects, so its
+            #     # cheapest to pretend there are extra field periods
+            #     source_grid = LinearGrid(
+            #         rho=np.array([1.0]),
+            #         M=eq.M_grid,
+            #         N=eq.N_grid,
+            #         NFP=eq.NFP if eq.N > 0 else 64,
+            #         sym=False,
+            #     )
+            #     source_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
+            #     source_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
+            # else:
+            #     source_grid = self._source_grid
+            # # Creating interpolator for Bnormal_plasma
+            # ratio_data = eq.compute(
+            #     ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+            # )
+            # st, sz, q = best_params(source_grid, best_ratio(ratio_data))
+            # try:
+            #     interpolator = FFTInterpolator(self._constants['plasma_grid'], source_grid, st, sz, q)
+            # except AssertionError as e:
+            #     warnif(
+            #         True,
+            #         msg="Could not build fft interpolator, switching to dft which is slow."
+            #         "\nReason: " + str(e),
+            #     )
+            #     interpolator = DFTInterpolator(self._constants['plasma_grid'], source_grid, st, sz, q)
+            # self._constants['source_profiles'] = source_profiles
+            # self._constants['source_transforms'] = source_transforms
+            # self._constants['interpolator'] = interpolator
+            (
+                source_profiles,
+                source_transforms,
+                interpolator,
+            ) = create_source(
+                eq=eq, 
+                source_grid_in=self._source_grid, 
+                plasma_grid_in=self._constants['plasma_grid']
             )
-            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
-            try:
-                interpolator = FFTInterpolator(self._constants['plasma_grid'], source_grid, st, sz, q)
-            except AssertionError as e:
-                warnif(
-                    True,
-                    msg="Could not build fft interpolator, switching to dft which is slow."
-                    "\nReason: " + str(e),
-                )
-                interpolator = DFTInterpolator(self._constants['plasma_grid'], source_grid, st, sz, q)
             self._constants['source_profiles'] = source_profiles
             self._constants['source_transforms'] = source_transforms
             self._constants['interpolator'] = interpolator
@@ -670,7 +676,7 @@ class QuadcoilProxy(_Objective):
         _, _, cp_mn, _ = self.compute_full(*all_params, full_mode=True)
         out_qf = QuadcoilField.from_quadcoil_kwargs(
             eq=self._eq, 
-            quadcoil_kwargs=self._quadcoil_kwargs,
+            quadcoil_kwargs=self._quadcoil_kwargs_bak,
             plasma_M_theta=self._plasma_M_theta, 
             plasma_N_phi=self._plasma_N_phi,
             quadcoil_dofs=cp_mn,
@@ -686,7 +692,7 @@ class QuadcoilProxy(_Objective):
             name="QuadcoilProxy output",
             check_orientation=True,
             # Misc
-            bs_chunk_size=self.bs_chunk_size,
-            bplasma_chunk_size=self.bplasma_chunk_size,
+            bs_chunk_size=self._bs_chunk_size,
+            bplasma_chunk_size=self._bplasma_chunk_size,
         )
         return out_qf

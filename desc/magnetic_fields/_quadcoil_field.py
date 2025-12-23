@@ -27,6 +27,7 @@ from desc.objectives._quadcoil_utils import (
     compute_eval_data_coils,
     compute_Bnormal_ext,
     compute_Bnormal,
+    create_source,
 )
 
 
@@ -158,6 +159,8 @@ class QuadcoilField(FourierCurrentPotentialField):
         constraint_value=jnp.array([]),
         # Guesses for the slack variables
         aux_dofs_vals={},
+        # grid for calculating plasma field
+        source_grid=None,
         # External coils - no external coils by default
         field=[],
         field_grid=None,
@@ -189,6 +192,7 @@ class QuadcoilField(FourierCurrentPotentialField):
             field = [field] if not isinstance(field, list) else field
             self._constants['sum_field'] = SumMagneticField(field)
         # Coil and things initialization
+        self._source_grid = source_grid # B_normal grids
         self._enable_net_current_plasma = enable_net_current_plasma
         self._enable_Bnormal_plasma = enable_Bnormal_plasma
         self._eq_fixed = eq_fixed
@@ -413,14 +417,30 @@ class QuadcoilField(FourierCurrentPotentialField):
         # because we the quadrature points must be calculated before generating
         # quadcoil callable, it will be constructed here, instead of in the build().
         eval_data_keys = []
-        if not self._field:
+        if self._field:
             eval_data_keys = eval_data_keys + _BCOIL_DATA_KEYS
-        if not self._enable_Bnormal_plasma:
+        if self._enable_Bnormal_plasma:
             eval_data_keys = eval_data_keys + _BPLASMA_DATA_KEYS
         eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=plasma_grid)
         eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=plasma_grid)
         self._constants['eval_profiles'] = eval_profiles
         self._constants['eval_transforms'] = eval_transforms
+        self._constants['plasma_grid'] = plasma_grid
+
+        # B plasma profiles and transforms
+        if self._enable_Bnormal_plasma:
+            (
+                source_profiles,
+                source_transforms,
+                interpolator,
+            ) = create_source(
+                eq=eq, 
+                source_grid_in=self._source_grid, 
+                plasma_grid_in=self._constants['plasma_grid']
+            )
+            self._constants['source_profiles'] = source_profiles
+            self._constants['source_transforms'] = source_transforms
+            self._constants['interpolator'] = interpolator
 
         # Precomputing magnetic-field related quantites
         if self._eq_fixed:
@@ -438,14 +458,6 @@ class QuadcoilField(FourierCurrentPotentialField):
                 )
                 self._constants['winding_dofs'] = winding_dofs
 
-            # B plasma
-            if self._enable_Bnormal_plasma:
-                self._constants['Bnormal_plasma'] = compute_Bnormal_plasma(
-                    self._constants, 
-                    eq.params_dict, 
-                    self._bplasma_chunk_size
-                )
-
             # Part of external field
             if self._field:
                 coils_x, coils_n_rho = compute_eval_data_coils(self._constants, eq.params_dict)
@@ -457,6 +469,13 @@ class QuadcoilField(FourierCurrentPotentialField):
                         self._constants['sum_field'].params_dict, # params_field, 
                         self._bs_chunk_size
                     )
+            
+            if self._enable_Bnormal_plasma:
+                self._constants['Bnormal_plasma'] = compute_Bnormal_plasma(
+                    self._constants, 
+                    eq.params_dict, 
+                    self._bplasma_chunk_size
+                )
 
         # ----- Initializing auxiliary dofs (slack variables) -----
         # aux_dofs_init is a list of callables that 
@@ -495,6 +514,7 @@ class QuadcoilField(FourierCurrentPotentialField):
         plasma_M_theta, 
         plasma_N_phi,
         quadcoil_dofs=None,
+        source_grid=None,
         field=[],
         field_grid=None,
         enable_net_current_plasma=True,
@@ -560,7 +580,9 @@ class QuadcoilField(FourierCurrentPotentialField):
                 mpol = quadcoil_kwargs['mpol']
                 ntor = quadcoil_kwargs['ntor']
                 m, n = QuadcoilParams.make_mn_helper(mpol, ntor, stellsym)
-                phi_flipped = toroidal_flip(phi_pre_flip, m, n)
+                # TODO: This seems necessary in MUSE but not in Aries. WHY?????
+                # phi_flipped = toroidal_flip(phi_pre_flip, m, n)
+                phi_flipped = phi_pre_flip
                 Phi_mn, modes_M, modes_N = quadcoil_phi_to_desc_phi(
                     phi_mn_quadcoil=phi_flipped, 
                     stellsym=stellsym, 
@@ -658,6 +680,7 @@ class QuadcoilField(FourierCurrentPotentialField):
             # External coils - no external coils by default
             plasma_M_theta=plasma_M_theta, 
             plasma_N_phi=plasma_N_phi,
+            source_grid=source_grid,
             field=field,
             field_grid=field_grid,
             enable_net_current_plasma=enable_net_current_plasma,
@@ -850,7 +873,6 @@ class QuadcoilField(FourierCurrentPotentialField):
         plasma_surface = self.params_to_quadcoil_plasma_surface(params_eq)
         winding_surface = self.params_to_quadcoil_winding_surface(params_eq, params_qf)
 
-        
         # Net fields  
         Bnormal = compute_Bnormal(
             field=self._field, 

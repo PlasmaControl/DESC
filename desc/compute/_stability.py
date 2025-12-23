@@ -11,14 +11,13 @@ expensive computations.
 
 import pdb
 import time
-import numpy as np
 from functools import partial
 
+import numpy as np
+from jax.experimental.sparse.linalg import lobpcg_standard
 from matfree import decomp, eig
 from scipy.constants import mu_0
-from scipy.sparse.linalg import eigsh
-from scipy.sparse.linalg import LinearOperator
-from jax.experimental.sparse.linalg import lobpcg_standard
+from scipy.sparse.linalg import LinearOperator, eigsh
 
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
@@ -1306,30 +1305,28 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A2 = A2.at[jnp.diag_indices_from(A2)].add(1e-12)
 
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
-        A3 = (A3 + _cT(A3))/2
+        A3 = (A3 + _cT(A3)) / 2
 
-    #w, v = eigsh(LinearOperator(shape=(A3.shape[0], A3.shape[0]), matvec=lambda x: A3 @ x, dtype=np.complex128), k=1, sigma=-2.39e-4, which="LM", return_eigenvectors=True)
     tic = time.time()
-    #w, v = eigsh(np.asarray(A3), k=3, sigma=-1e-3, which="LM", return_eigenvectors=True)
-    #print(w)
-    #toc1 = time.time()
-    #print(toc1-tic)
-    #w, v = eigsh(np.asarray(A3), k=1, which="SA", return_eigenvectors=True)
-    #print(w)
-    #toc2 = time.time()
-    #print(toc2-tic)
-    #w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="SA", return_eigenvectors=True)
-    #print(w)
-    #toc3 = time.time()
-    #print(toc1-tic, toc2-tic, toc3-tic)
-    #X = jnp.ones((A3.shape[0], 1), dtype=jnp.complex128)
-    X = jnp.ones((A3.shape[0], 2), dtype=jnp.float64)
-    w, v, i = lobpcg_standard(-A3, X=X, m=64000)
+    w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="LM", return_eigenvectors=True)
     print(w)
-    toc4 = time.time()
-    print(toc4-tic)
+    toc1 = time.time()
+    print(toc1-tic)
+
+    # Add matfree eigensolver here
+    nrows = int(10)
+    n_total = A3.shape[0]
+    v0 = jnp.tile(v, (1, nrows))
+    num_matvecs = nrows
+
+    hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
+    alg = eig.eigh_partial(hessenberg)
+    w, v = alg(lambda v: A3 @ v, v0)
+    print(w)
+    toc5 = time.time()
+    print(toc5 - toc1)
     pdb.set_trace()
-    #print(y, y.shape)
+
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v
@@ -1937,22 +1934,20 @@ def _AGNI2(params, transforms, profiles, data, **kwargs):
 
         return y.reshape((-1, ncols))
 
-
     ## Add matfree eigensolver here
-    #nrows = int(n_total)
-    #v0 = jnp.ones((3 * n_total, nrows), dtype=jnp.complex128)
-    #num_matvecs = nrows
+    # nrows = int(n_total)
+    # v0 = jnp.ones((3 * n_total, nrows), dtype=jnp.complex128)
+    # num_matvecs = nrows
 
-    #hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
-    #alg = eig.eigh_partial(hessenberg)
-    #w, v = alg(lambda v: Ax(v), v0)
-    #print(w[:100])
+    # hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
+    # alg = eig.eigh_partial(hessenberg)
+    # w, v = alg(lambda v: Ax(v), v0)
+    # print(w[:100])
 
     data["finite-n lambda2"] = w
     data["finite-n eigenfunction2"] = v
 
     return data
-
 
 
 @register_compute_fun(
@@ -2175,7 +2170,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     Linv_DT = jnp.swapaxes(Linv_D, -1, -2)
 
     def Ax(x_flat):
-        #ncols = x_flat.shape[-1]
+        # ncols = x_flat.shape[-1]
         # --- solver → physical: u = D · L_D^{-T} · x ---
         x = jnp.reshape(x_flat, (n_total, 3))
         x = diagBsqinv * jnp.einsum("lij,lj->li", Linv_DT, x)  # use Linv_DT here
@@ -2514,22 +2509,26 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         Aur = (W * psi_r2 * sqrtg * F) * xr
 
         # y = L_D⁻¹ D A(u)
-        Afull = jnp.stack([Ar + Aur, Av, Az], axis=-1).reshape(
-            (n_total, 3)
-        )
+        Afull = jnp.stack([Ar + Aur, Av, Az], axis=-1).reshape((n_total, 3))
 
         y = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * Afull)
-        #print(y, y.shape)
-        #pdb.set_trace()
+        # print(y, y.shape)
+        # pdb.set_trace()
         return np.asarray(y.reshape((-1,)))
 
-    v0 = jnp.ones((3*n_total, 100), dtype=jnp.complex128).T
-    #w, v = eigsh(LinearOperator(shape=(3*n_total, 3*n_total), matvec=Ax), v0=v0, k=100, sigma=-1e-3, which="SA", return_eigenvectors=True)
-    #w, v = eigsh(LinearOperator(shape=(3*n_total, 3*n_total), matvec=Ax, dtype=np.complex128), k=100, sigma=-1e-3, which="SA", return_eigenvectors=True)
-    w, v = eigsh(LinearOperator(shape=(3*n_total, 3*n_total), matvec=Ax, dtype=np.complex128), k=100, which="SA", return_eigenvectors=True)
+    v0 = jnp.ones((3 * n_total, 100), dtype=jnp.complex128).T
+    # w, v = eigsh(LinearOperator(shape=(3*n_total, 3*n_total), matvec=Ax), v0=v0, k=100, sigma=-1e-3, which="SA", return_eigenvectors=True)
+    # w, v = eigsh(LinearOperator(shape=(3*n_total, 3*n_total), matvec=Ax, dtype=np.complex128), k=100, sigma=-1e-3, which="SA", return_eigenvectors=True)
+    w, v = eigsh(
+        LinearOperator(
+            shape=(3 * n_total, 3 * n_total), matvec=Ax, dtype=np.complex128
+        ),
+        k=100,
+        which="SA",
+        return_eigenvectors=True,
+    )
     print(y, y.shape)
     data["finite-n lambda3"] = w
     data["finite-n eigenfunction3"] = v
 
     return data
-

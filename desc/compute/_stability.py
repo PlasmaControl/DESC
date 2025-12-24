@@ -1308,7 +1308,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A3 = (A3 + _cT(A3)) / 2
 
     tic = time.time()
-    w, v = eigsh(np.asarray(A3), k=2, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="LM", return_eigenvectors=True)
     print(w)
     toc1 = time.time()
     print(toc1-tic)
@@ -1317,20 +1317,20 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     n_theta = n_theta_max
     n_zeta = n_zeta_max
 
-    print(A3.shape[0])
     # Add matfree eigensolver here
-    # More than 5% change in the guess makes it difficult for the solver to find 
+    # More than 10% change in the guess makes it difficult for the solver to find 
     # the max eigenvalue.
-    nrows = int(200)
+    nrows = int(2)
     n_total = A3.shape[0]
-    v[:(n_rho-2)*n_theta*n_zeta, :] = v[:(n_rho-2)*n_theta*n_zeta, :] * 0.95
-    v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] = v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] * 1.05
-    v[(2*n_rho-2)*n_theta*n_zeta:, :] = v[(2*n_rho-2)*n_theta*n_zeta:, :] * 1.05
-    v0 = jnp.tile(v, (1, int(nrows/2)))
-    num_matvecs = nrows
+    v[:(n_rho-2)*n_theta*n_zeta, :] = v[:(n_rho-2)*n_theta*n_zeta, :] * 0.9
+    v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] = v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] * 1.1
+    v[(2*n_rho-2)*n_theta*n_zeta:, :] = v[(2*n_rho-2)*n_theta*n_zeta:, :] * 1.1
+    v0 = v
+    num_matvecs = 400
 
-    hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
-    alg = eig.eigh_partial(hessenberg)
+    #hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
+    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
+    alg = eig.eigh_partial(tridiag)
     w, v = alg(lambda v: A3 @ v, v0)
     print(w)
     toc5 = time.time()

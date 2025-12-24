@@ -166,6 +166,239 @@ class ForceBalance(_Objective):
         return jnp.concatenate([fr, fb])
 
 
+class ForceBalanceDeflated(_Objective):
+    r"""Deflated radial and helical MHD force balance.
+
+    Given force densities:
+
+    Fᵨ = √g (J^θ B^ζ - J^ζ B^θ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = B^ζ ∇ θ - B^θ ∇ ζ
+
+    and deflation operator:
+
+    M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+
+    (if `deflation_type="power"`)
+
+    or
+
+    M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ
+
+    (if `deflation_type="exp"`)
+
+    Minimizes the magnitude of the deflated forces:
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
+
+    M(𝐱;𝐱₁*)[fᵨ, fₕₑₗᵢ]
+
+    If multiple states are used for deflation, the
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    eqs: list of Equilibrium
+        list of Equilibrium objects to use in deflation operator.
+    sigma: float, optional
+        shift parameter in deflation operator.
+    power: float, optional
+        power parameter in deflation operator, ignored if `deflation_type="exp"`.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+    params_to_deflate_with: list of str
+        Which params to use in the deflation operator to define the
+        state to deflate, defaults to ["Rb_mn","Zb_mn"]
+    deflation_type: {"power","exp"}
+        What type of deflation to use. If `"power"`, uses the form
+        pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+        while `"exp"` uses the form from Riley 2024, where
+        M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+    multiple_deflation_type: {"prod","sum"}
+        When deflating multiple states, how to reduce the individual deflation
+        terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
+        together, while `"sum"` will add each individual term.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_params_to_deflate_with",
+        "deflation_type",
+        "_multiple_deflation_type",
+    ]
+
+    _equilibrium = True
+    _coordinates = "rtz"
+    _units = "(N)"
+    _print_value_fmt = "Force error: "
+
+    # TODO: use a pytree input for params_to_deflate_with
+    def __init__(
+        self,
+        eq,
+        eqs,
+        sigma=0.05,
+        power=2,
+        # TODO: update to pytree like DeflationOperator is
+        params_to_deflate_with=["Rb_lmn", "Zb_lmn"],
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="force-deflated",
+        jac_chunk_size=None,
+        deflation_type="power",
+        multiple_deflation_type="prod",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._eqs = eqs
+        self._sigma = sigma
+        self._power = power
+        self._params_to_deflate_with = params_to_deflate_with
+        assert deflation_type in ["power", "exp"]
+        self._deflation_type = deflation_type
+        assert multiple_deflation_type in ["prod", "sum"]
+        self._multiple_deflation_type = multiple_deflation_type
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = 2 * grid.num_nodes
+        self._data_keys = [
+            "F_rho",
+            "|grad(rho)|",
+            "sqrt(g)",
+            "F_helical",
+            "|e^helical*sqrt(g)|",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["f"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
+        keys = self._params_to_deflate_with
+        # TODO: better to do only surface, or every key? seems like can obtain
+        # very different results depending on if using only surf or every key, but
+        # at same time, only the surface matters as far as closeness of solution
+        # (the surface dictates the equilibrium, more or less)
+        diffs = [
+            jnp.concatenate([params[key] - eq.params_dict[key] for key in keys])
+            for eq in self._eqs
+        ]
+        diffs = jnp.vstack(diffs)
+        if self._deflation_type == "power":
+            M_i = jnp.prod(
+                1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+            )
+        else:
+            M_i = jnp.prod(jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma)
+
+        if self._multiple_deflation_type == "prod":
+            deflation_parameter = jnp.prod(M_i)
+        else:
+            deflation_parameter = jnp.sum(M_i)
+
+        return jnp.concatenate([fr, fb]) * deflation_parameter
+
+
 class ForceBalanceAnisotropic(_Objective):
     """Force balance for anisotropic pressure equilibria.
 

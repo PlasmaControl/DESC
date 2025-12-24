@@ -18,4 +18,5 @@ quadax >= 0.2.2, <= 0.2.11
 scikit-image <= 0.25.2
 scipy >= 1.7.0, <= 1.15.3
 sympy
+f90nml
 termcolor <= 3.2.0

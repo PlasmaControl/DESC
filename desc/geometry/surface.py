@@ -947,9 +947,9 @@ class FourierXYZToroidalSurface(Surface):
 
         if sym == "auto":
             if (
-                np.all(X_lmn[np.where(sign(modes_X[:, 0]) == sign(modes_X[:, 1]))] == 0)
+                np.all(X_lmn[np.where(sign(modes_X[:, 0]) != sign(modes_X[:, 1]))] == 0)
                 and np.all(
-                    Y_lmn[np.where(sign(modes_Y[:, 0]) != sign(modes_Y[:, 1]))] == 0
+                    Y_lmn[np.where(sign(modes_Y[:, 0]) == sign(modes_Y[:, 1]))] == 0
                 )
                 and np.all(
                     Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
@@ -960,10 +960,10 @@ class FourierXYZToroidalSurface(Surface):
                 sym = False
 
         self._X_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
         )
         self._Y_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
@@ -1074,13 +1074,13 @@ class FourierXYZToroidalSurface(Surface):
             Y_modes_old = self.Y_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.X_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else False 
             )
             self.Y_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else False
             )
             self.Z_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else False
             )
             self.X_lmn = copy_coeffs(self.X_lmn, X_modes_old, self.X_basis.modes)
             self.Y_lmn = copy_coeffs(self.Y_lmn, Y_modes_old, self.Y_basis.modes)
@@ -1258,8 +1258,8 @@ class FourierXYZToroidalSurface(Surface):
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
-        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
-        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
 
         if w is None:  # unweighted fit

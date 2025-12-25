@@ -1,8 +1,18 @@
 Changelog
 =========
 
+v0.16.1
+-------
+
 New Features
 
+- [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
+    - Truncation rule to remove aliasing error at the shortest wavelengths where the signal to noise ratio is lowest.
+    - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
+- Method to compute integrals over plasma volume and velocity space in batches is now added to the public API ``Bounce2D.batch``.
+- Method for developers to make adding new bounce integral objectives simpler ``Bounce2D._objective_build``.
+- The resolution parameter for the field line quadrature now corresponds to the resolution for integration over a single field period.
+- Default quadrature over pitch angles in ``Gamma_c`` switched from second to third order method.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:

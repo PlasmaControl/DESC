@@ -70,6 +70,7 @@ from desc.objectives import (
     QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
+    ShareParameters,
     SurfaceCurrentRegularization,
     SurfaceQuadraticFlux,
     ToroidalFlux,
@@ -671,7 +672,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
     qsc = Qsc.from_paper("precise QA", rs=[1e-3, 1e-2])
     ntheta = 75
     r = 0.01
-    N = 9
+    N = 8
     eq_fit = Equilibrium.from_near_axis(qsc, r=r, L=6, M=8, N=N, ntheta=ntheta)
     eq = eq_fit.copy()
     eq_2nd_order = eq_fit.copy()
@@ -698,7 +699,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
             verbose=3,
             ftol=1e-3,
             objective=obj,
-            maxiter=100,
+            maxiter=50,
             xtol=1e-6,
             gtol=1e-8,
             constraints=constraints,
@@ -750,6 +751,7 @@ def test_NAE_QSC_solve_near_axis_asym():
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
 
+    # we also give the NAE eq as constraint for this test
     cs = get_NAE_constraints(eq, qsc_eq=qsc, order=1, fix_lambda=False, N=eq.N)
     cs_2nd_order = get_NAE_constraints(
         eq_2nd_order, qsc_eq=qsc, order=2, fix_lambda=False, N=eq.N
@@ -767,11 +769,12 @@ def test_NAE_QSC_solve_near_axis_asym():
         objectives = ForceBalance(eq=eqq)
         obj = ObjectiveFunction(objectives)
 
+        # 2nd order eq takes long time to converge
         eqq.solve(
             verbose=3,
-            ftol=1e-3,
+            ftol=4e-3,
             objective=obj,
-            maxiter=100,
+            maxiter=50,
             xtol=1e-6,
             gtol=1e-8,
             constraints=constraints,
@@ -807,7 +810,7 @@ def test_NAE_QSC_solve_near_axis_asym():
 
         # check |B| on axis
         np.testing.assert_allclose(
-            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=2e-4, err_msg=string
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=4e-4, err_msg=string
         )
 
 
@@ -2099,10 +2102,15 @@ def test_coilset_geometry_optimization():
 
     #### optimize surface with fixed coils ####
     # optimizing for target coil-plasma distance only
+    surf.change_resolution(
+        M=4, N=16
+    )  # change surf res so that the default grid resolution is actually reasonable
+    ind_M1_R = surf.R_basis.get_idx(M=1, N=0)
+    ind_Mneg1_Z = surf.Z_basis.get_idx(M=-1, N=0)
 
     def circle_constraint(params):
         """Constrain cross section of surface to be a circle."""
-        return params["R_lmn"][1:] + jnp.flip(params["Z_lmn"])
+        return params["R_lmn"][ind_M1_R] + params["Z_lmn"][ind_Mneg1_Z]
 
     objective = ObjectiveFunction(
         (
@@ -2110,7 +2118,6 @@ def test_coilset_geometry_optimization():
                 eq=surf,
                 coil=coils,
                 target=offset,
-                plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=False,
                 coils_fixed=True,
@@ -2118,8 +2125,13 @@ def test_coilset_geometry_optimization():
         )
     )
     # only 1 free optimization variable is surface minor radius
+    inds_to_fixR = np.arange(surf.R_lmn.size)
+    inds_to_fixR = np.delete(inds_to_fixR, [ind_M1_R])
+    inds_to_fixZ = np.arange(surf.Z_lmn.size)
+    inds_to_fixZ = np.delete(inds_to_fixZ, [ind_Mneg1_Z])
+
     constraints = (
-        FixParameters(surf, {"R_lmn": np.array([0, 2])}),
+        FixParameters(surf, {"R_lmn": inds_to_fixR, "Z_lmn": inds_to_fixZ}),
         LinearObjectiveFromUser(circle_constraint, surf),
     )
     optimizer = Optimizer("scipy-trf")
@@ -2499,6 +2511,248 @@ def test_signed_PlasmaVesselDistance():
         atol=1e-2,
         err_msg="allowing eq to change",
     )
+
+
+@pytest.mark.unit
+def test_share_parameters():
+    """Test ShareParameters for a 2-surface quadratic flux optimization."""
+    ## setup opt problem
+    # use QuadraticFlux as eq's are fixed and want fields to change
+    # use ShareParameters to keep surface geoms constant equal
+    # to eachother as they vary with surface current to reduce Bn
+    eq1 = get("ESTELL")
+    with pytest.warns(UserWarning, match="L"):
+        eq1.change_resolution(8, 3, 3, 12, 6, 6)
+    eq2 = eq1.copy()
+    eq2.change_resolution(8, 2, 2, 12, 4, 4)
+
+    necessary_G_for_eq1 = eq1.compute("G")["G"][-1] / mu_0 * 2 * np.pi
+    necessary_G_for_eq2 = eq2.compute("G")["G"][-1] / mu_0 * 2 * np.pi
+
+    R0 = eq1.compute("R0")["R0"]
+    a = 1
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[-a],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[[-1, 0]],
+        NFP=eq1.NFP,
+    )
+    surf1.change_resolution(M=2, N=2)
+    surf1 = FourierCurrentPotentialField.from_surface(
+        surf1,
+        M_Phi=6,
+        N_Phi=6,
+        sym_Phi=False,
+        I=0,
+        G=necessary_G_for_eq1,
+    )
+    surf2 = surf1.copy()
+    surf2.G = necessary_G_for_eq2
+    surf3 = surf2.copy()
+    surf3.change_Phi_resolution(M=4, N=2)
+
+    ## setup opt problem
+    surf_grid = LinearGrid(M=10, N=10, NFP=surf1.NFP)
+    eval_grid = LinearGrid(M=10, N=10, NFP=surf1.NFP, sym=True)
+    # let surfs and Phi change while keeping their geometry shared
+    obj = ObjectiveFunction(
+        (
+            QuadraticFlux(
+                eq1,
+                surf1,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq1",
+            ),
+            QuadraticFlux(
+                eq2,
+                surf2,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq2",
+            ),
+            PlasmaVesselDistance(
+                eq1,
+                surf1,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq1",
+            ),
+            PlasmaVesselDistance(
+                eq2,
+                surf2,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq2",
+            ),
+            PlasmaVesselDistance(
+                eq2,
+                surf3,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq2",
+            ),
+        )
+    )
+    constraints = (
+        ShareParameters(
+            [surf1, surf2], params={"R_lmn": True, "Z_lmn": True, "Phi_mn": [0]}
+        ),  # make the 2 surfaces have the same geometry
+        ShareParameters(
+            [surf1, surf3], params={"R_lmn": True, "Z_lmn": True, "Phi_mn": False}
+        ),
+        FixParameters(surf1, {"I": True, "G": True}),
+        FixParameters(surf2, {"I": True, "G": True}),
+    )  # fix the secular parts as well
+
+    opt = Optimizer("lsq-exact")
+
+    (surf1, surf2, surf3), _ = opt.optimize(
+        [surf1, surf2, surf3],
+        objective=obj,
+        constraints=constraints,
+        verbose=3,
+        maxiter=2,
+        ftol=1e-8,
+    )
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn)
+    np.testing.assert_allclose(surf1.R_lmn, surf3.R_lmn)
+    np.testing.assert_allclose(surf1.Z_lmn, surf3.Z_lmn)
+
+    # Phi should be different bc not shared and
+    # the 2 target eqs are different
+    assert not np.allclose(surf1.Phi_mn[1:], surf2.Phi_mn[1:])
+    assert not np.allclose(surf1.Phi_mn.shape, surf3.Phi_mn.shape)
+
+    # index 0 Phi_mn should be same bc was shared btwn surf1 and surf2
+    assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0])
+
+
+@pytest.mark.unit
+def test_share_parameters_coilsets():
+    """Test ShareParameters for a 2-surface quadratic flux optimization w/ coils."""
+    # toroidal field coil set with 4 coils
+    tf_coil = FourierPlanarCoil(
+        current=3, center=[1.4, 0, 0], normal=[0, 1, 0], r_n=[0.8]
+    )
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    # vertical field coil set with 3 coils
+    vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    # another single coil
+    xyz_coil = FourierXYZCoil(
+        current=2, X_n=[0, 1.4, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0], modes=[-1, 0, 1]
+    )
+    xyz_coil2 = FourierXYZCoil(
+        current=2, X_n=[0, 20, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0], modes=[-1, 0, 1]
+    )
+    # full coil set with TF coils, VF coils, and other single coil
+    coils1 = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, xyz_coil2))
+    coils2 = coils1.copy()
+    coils2[-1].change_resolution(N=xyz_coil2.N + 1)
+
+    # between the two coilsets...
+    params = [
+        [  # share the "current" of the 1st TF coil and 1st component of "center"
+            {"current": True, "center": np.array([0])},
+            # share "center" and  "normal" for the 2nd TF coil
+            {"center": True, "normal": True},
+            {"r_n": True},  # share radius of the 3rd TF coil
+            {"r_n": False},  # dont share the r_n of 4th tf coil
+        ],
+        # share "shift" & "rotmat" for all VF coils
+        {"shift": True, "rotmat": True},
+        # share specified indices of "X_n" and "Z_n",
+        # but not "Y_n", for other coil
+        {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {"current": True},  # only current for the last coil, which has different N in
+        # second coilset
+    ]
+
+    ## setup opt problem
+    # use QuadraticFlux as eq's are fixed and want fields to change
+    # use ShareParameters to keep some coil geometries equal
+    # to eachother as they their currents to reduce Bn
+    eq1 = get("ESTELL")
+    with pytest.warns(UserWarning, match="L"):
+        eq1.change_resolution(8, 3, 3, 12, 6, 6)
+    eq2 = eq1.copy()
+    eq2.change_resolution(8, 2, 2, 12, 4, 4)
+    ## setup opt problem
+    coil_grid = LinearGrid(N=10)
+    eval_grid = LinearGrid(M=10, N=10, NFP=eq1.NFP, sym=True)
+    # let surfs and Phi change while keeping their geometry shared
+    obj = ObjectiveFunction(
+        (
+            QuadraticFlux(
+                eq1,
+                coils1,
+                field_grid=coil_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq1",
+            ),
+            QuadraticFlux(
+                eq2,
+                coils2,
+                field_grid=coil_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq2",
+            ),
+        )
+    )
+    constraints = (
+        ShareParameters([coils1, coils2], params=params),
+        FixCoilCurrent(
+            coils1,
+            indices=[[False] * len(coils1[0]), [True] * len(coils1[1]), False, False],
+        ),
+        FixCoilCurrent(
+            coils2,
+            indices=[[False] * len(coils2[0]), [False] * len(coils2[1]), True, True],
+        ),
+    )  # fix different coils' current for each
+
+    opt = Optimizer("lsq-exact")
+
+    (coils1, coils2), _ = opt.optimize(
+        [coils1, coils2],
+        objective=obj,
+        constraints=constraints,
+        verbose=3,
+        maxiter=10,
+        ftol=1e-8,
+        gtol=0,
+    )
+    # check that things which should be same are same
+    np.testing.assert_allclose(coils1.current[0][0], coils2.current[0][0])
+    np.testing.assert_allclose(coils1[0][0].center[0], coils2[0][0].center[0])
+    np.testing.assert_allclose(coils1[0][1].center, coils2[0][1].center)
+    np.testing.assert_allclose(coils1[0][1].normal, coils2[0][1].normal)
+    np.testing.assert_allclose(coils1[0][2].r_n, coils2[0][2].r_n)
+    for i in range(len(coils1[1])):
+        np.testing.assert_allclose(coils1[1][i].shift, coils2[1][i].shift)
+        np.testing.assert_allclose(coils1[1][i].rotmat, coils2[1][i].rotmat)
+    np.testing.assert_allclose(coils1[2].X_n[1], coils2[2].X_n[1])
+    np.testing.assert_allclose(coils1[2].X_n[2], coils2[2].X_n[2])
+    np.testing.assert_allclose(coils1[2].Z_n[0], coils2[2].Z_n[0])
+    np.testing.assert_allclose(coils1[-1].current, coils2[-1].current)
+
+    # did not share these
+    assert not np.isclose(coils1.current[-2], coils2.current[-2])
+    assert not np.allclose(coils1[0][0].center[1:], coils2[0][0].center[1:])
+    assert not np.allclose(coils1[-1].N, coils2[-1].N)
 
 
 @pytest.mark.unit

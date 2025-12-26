@@ -1074,7 +1074,7 @@ class FourierXYZToroidalSurface(Surface):
             Y_modes_old = self.Y_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.X_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else False 
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else False
             )
             self.Y_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else False

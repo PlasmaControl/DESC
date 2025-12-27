@@ -828,11 +828,12 @@ class Bounce2D(Bounce):
             vec=True,
             eps=nufft_eps,
         )
-        if B.ndim == 2:
-            B, dB_dz, dB_dt = B.reshape(3, *shape, 2)
-        else:
+        B, dB_dz, dB_dt = (
+            B.reshape(3, *shape, 2)
+            if B.ndim == 2
             # reshape before swap to avoid memory copy
-            B, dB_dz, dB_dt = B.reshape(shape[0], 3, *shape[1:], 2).swapaxes(0, 1)
+            else B.reshape(shape[0], 3, *shape[1:], 2).swapaxes(0, 1)
+        )
 
         dz = (B - pitch_inv[..., None, None]) / (dB_dz + dB_dt * dt_dz)
         z = z.reshape(*shape, 2)
@@ -1035,11 +1036,12 @@ class Bounce2D(Bounce):
             vec=True,
             eps=eps,
         )
-        if c.ndim == 2:
-            c = c.reshape(len(data) + 2, *shape)
-        else:
+        c = (
+            c.reshape(len(data) + 2, *shape)
+            if c.ndim == 2
             # reshape before swap to avoid memory copy
-            c = c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
+            else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
+        )
 
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
@@ -1222,10 +1224,13 @@ class Bounce2D(Bounce):
 
         B = self._c["B(z)"]
         if isinstance(B, PiecewiseChebyshevSeries):
-            if B.cheb.ndim == 4:
-                B = PiecewiseChebyshevSeries(B.cheb[l, m], B.domain)
-            elif B.cheb.ndim == 3:
-                B = PiecewiseChebyshevSeries(B.cheb[m], B.domain)
+            domain = B.domain
+            B = B.cheb
+            if B.ndim == 4:
+                B = B[l]
+            if B.ndim == 3:
+                B = B[m]
+            B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
                 z1, z2 = B.intersect1d(pitch_inv)
                 kwargs["z1"] = z1
@@ -1266,11 +1271,13 @@ class Bounce2D(Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        theta = self._theta
-        if theta.cheb.ndim == 4:
-            theta = PiecewiseChebyshevSeries(theta.cheb[l, m], theta.domain)
-        elif theta.cheb.ndim == 3:
-            theta = PiecewiseChebyshevSeries(theta.cheb[m], theta.domain)
+        domain = self._theta.domain
+        theta = self._theta.cheb
+        if theta.ndim == 4:
+            theta = theta[l]
+        if theta.ndim == 3:
+            theta = theta[m]
+        theta = PiecewiseChebyshevSeries(theta, domain)
         kwargs.setdefault(
             "title",
             rf"$\theta \text{{ mod }} (2 \pi)$ "

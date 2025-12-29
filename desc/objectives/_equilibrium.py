@@ -246,7 +246,7 @@ class ForceBalanceDeflated(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Force error: "
+    _print_value_fmt = "Deflated Force error: "
 
     # TODO: use a pytree input for params_to_deflate_with
     def __init__(

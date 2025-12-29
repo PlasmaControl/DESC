@@ -234,7 +234,7 @@ class ForceBalanceDeflated(_Objective):
     )
     _static_attrs = _Objective._static_attrs + [
         "_params_to_deflate_with",
-        "deflation_type",
+        "_deflation_type",
         "_multiple_deflation_type",
     ]
 

@@ -728,6 +728,10 @@ class DeflationOperator(_Objective):
         When deflating multiple states, how to reduce the individual deflation
         terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
         together, while `"sum"` will add each individual term.
+    single_shift: bool,
+        Whether to use a single shift or include the shift in each individual
+        deflation term. i.e. whether to use M = σ + prod(||𝐱−𝐱_i*||⁻ᵖ₂) (if True)
+        or to use M = prod( σ + ||𝐱−𝐱_i*||⁻ᵖ₂). Defaults to False.
 
     """
 
@@ -737,6 +741,7 @@ class DeflationOperator(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_deflation_type",
         "_multiple_deflation_type",
+        "_single_shift",
     ]
 
     _coordinates = "rtz"
@@ -761,6 +766,7 @@ class DeflationOperator(_Objective):
         jac_chunk_size=None,
         deflation_type="power",
         multiple_deflation_type="prod",
+        single_shift=False,
     ):
         if target is None and bounds is None:
             target = 0
@@ -773,6 +779,7 @@ class DeflationOperator(_Objective):
         self._deflation_type = deflation_type
         assert multiple_deflation_type in ["prod", "sum"]
         self._multiple_deflation_type = multiple_deflation_type
+        self._single_shift = single_shift
 
         super().__init__(
             things=thing,
@@ -852,13 +859,17 @@ class DeflationOperator(_Objective):
 
         diffs = jnp.vstack(diffs)
         if self._deflation_type == "power":
-            M_i = 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma
+            M_i = 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma * (
+                not self._single_shift
+            )
         else:
-            M_i = jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma
+            M_i = jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma * (
+                not self._single_shift
+            )
 
         if self._multiple_deflation_type == "prod":
-            deflation_parameter = jnp.prod(M_i)
+            deflation_parameter = jnp.prod(M_i) + self._sigma * (self._single_shift)
         else:
-            deflation_parameter = jnp.sum(M_i)
+            deflation_parameter = jnp.sum(M_i) + self._sigma * (self._single_shift)
 
         return deflation_parameter

@@ -215,9 +215,6 @@ def vmap_chunked(
 
     """
     in_axes, argnums = _parse_in_axes(in_axes)
-    if isinstance(argnums, int):
-        argnums = (argnums,)
-
     f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))

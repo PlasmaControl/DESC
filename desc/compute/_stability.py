@@ -15,6 +15,7 @@ from functools import partial
 
 import numpy as np
 from jax.experimental.sparse.linalg import lobpcg_standard
+from jax.scipy.sparse.linalg import cg
 from matfree import decomp, eig
 from scipy.constants import mu_0
 from scipy.sparse.linalg import LinearOperator, eigsh
@@ -1311,32 +1312,47 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="LM", return_eigenvectors=True)
     print(w)
     toc1 = time.time()
-    print(toc1-tic)
+    print(toc1 - tic)
 
     n_rho = n_rho_max
     n_theta = n_theta_max
     n_zeta = n_zeta_max
 
-    # Add matfree eigensolver here
-    # More than 10% change in the guess makes it difficult for the solver to find 
-    # the max eigenvalue.
-    nrows = int(2)
+    # Scrambling the eigenfunction to start with a bad guess
     n_total = A3.shape[0]
-    v[:(n_rho-2)*n_theta*n_zeta, :] = v[:(n_rho-2)*n_theta*n_zeta, :] * 0.9
-    v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] = v[(n_rho-2)*n_theta*n_zeta: (2*n_rho-2)*n_theta*n_zeta, :] * 1.1
-    v[(2*n_rho-2)*n_theta*n_zeta:, :] = v[(2*n_rho-2)*n_theta*n_zeta:, :] * 1.1
+    v[: (n_rho - 2) * n_theta * n_zeta, :] = (
+        v[: (n_rho - 2) * n_theta * n_zeta, :] * 0.7
+    )
+    v[(n_rho - 2) * n_theta * n_zeta : (2 * n_rho - 2) * n_theta * n_zeta, :] = (
+        v[(n_rho - 2) * n_theta * n_zeta : (2 * n_rho - 2) * n_theta * n_zeta, :] * 1.3
+    )
+    v[(2 * n_rho - 2) * n_theta * n_zeta :, :] = (
+        v[(2 * n_rho - 2) * n_theta * n_zeta :, :] * 2.0
+    )
     v0 = v
-    num_matvecs = 400
+    num_matvecs = 5
 
-    #hessenberg = decomp.hessenberg(num_matvecs, reortho="full")
+    sigma = -5e-4
+
+    def OPinv(b):
+        def Ashift(x):
+            return (A3 @ x) - sigma * x
+
+        # RG: conj-gradient will fail if Ashift is not SPD
+        y, _ = cg(Ashift, b, tol=1e-6, maxiter=4000)
+        return y
+
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
     alg = eig.eigh_partial(tridiag)
-    w, v = alg(lambda v: A3 @ v, v0)
-    print(w)
-    toc5 = time.time()
-    print(toc5 - toc1)
-    pdb.set_trace()
+    mu, vecs = alg(lambda x: OPinv(x), v0)
 
+    sort_idxs = jnp.argsort(mu, descending=True)
+    w = sigma + 1.0 / mu[sort_idxs]
+    v = vecs[sort_idxs][:, :, 0].T
+
+    toc6 = time.time()
+    print(w)
+    print(toc6 - toc1)
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v

@@ -15,24 +15,23 @@ __all__ = ["FourierUmbilicCurve"]
 
 
 class FourierUmbilicCurve(UmbilicCurve):
-    """Curve parameterized by Fourier series for UC in terms of toroidal angle phi.
+    """Umbilic curve parameterized by Fourier series in terms of toroidal angle phi.
 
     Parameters
     ----------
     UC_n: array-like
-        Fourier coefficients fo Z.
+        Fourier coefficients of Z.
     modes_UC : array-like, optional
-        Mode numbers associated with Z_n, If not given defaults to [-n:n]].
+        Mode numbers associated with Z_n, If not given defaults to [-n:n].
     NFP : int
         Number of field periods.
-    NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+    n_umbilic : int
+        Prefactor of the form 1/n_umbilic modifying NFP.
         This is needed for the umbilic torus design.
     sym : bool
         Whether to enforce stellarator symmetry.
     name : str
         Name for this curve.
-
     """
 
     _io_attrs_ = UmbilicCurve._io_attrs_ + [
@@ -40,7 +39,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         "_UC_basis",
         "_sym",
         "_NFP",
-        "_NFP_umbilic_factor",
+        "_n_umbilic",
     ]
 
     def __init__(
@@ -48,7 +47,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         UC_n=0,
         modes_UC=None,
         NFP=1,
-        NFP_umbilic_factor=1,
+        n_umbilic=1,
         sym="auto",
         name="",
     ):
@@ -78,13 +77,11 @@ class FourierUmbilicCurve(UmbilicCurve):
         NUC = np.max(abs(modes_UC))
         N = NUC
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._n_umbilic = check_posint(n_umbilic, "n_umbilic", False)
         self._UC_basis = FourierSeries(
             N,
             int(NFP),
-            NFP_umbilic_factor=int(NFP_umbilic_factor),
+            n_umbilic=int(n_umbilic),
             sym="sin" if sym else False,
         )
 
@@ -106,13 +103,13 @@ class FourierUmbilicCurve(UmbilicCurve):
         return self._NFP
 
     @property
-    def NFP_umbilic_factor(self):
-        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
-        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+    def n_umbilic(self):
+        """NFP umbilic factor. Effective NFP -> NFP/n_umbilic."""
+        return self.__dict__.setdefault("_n_umbilic", 1)
 
-    def _NFP_umbilic_factor(self):
-        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
-        self._NFP_umbilic_factor = self.NFP_umbilic_factor
+    def _n_umbilic(self):
+        """NFP umbilic factor. Effective NFP -> NFP/n_umbilic."""
+        self._n_umbilic = self.n_umbilic
 
     @property
     def N(self):
@@ -121,6 +118,7 @@ class FourierUmbilicCurve(UmbilicCurve):
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
+        ## TO DO: understand this
         ## CURRENTLY ONLY OUTPUTS COEFFICIENTS FOR NEGATIVE n
         ## values
         n = np.atleast_1d(n).astype(int)
@@ -157,19 +155,20 @@ class FourierUmbilicCurve(UmbilicCurve):
             )
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, NFP_umbilic_factor=1, name="", sym=False):
+    def from_values(cls, coords, N=10, NFP=1, n_umbilic=1, name="", sym=False):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
         ----------
         coords: ndarray, shape (num_coords,2)
+            ## TO DO
             coordinates theta, zeta, the different of which is fit with a FourierSeries
         N : int
             Fourier resolution of the new R,Z representation.
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
-        NFP_umbilic_factor : int
+        n_umbilic : int
             Umbilic factor to fit curves that go around multiple times toroidally before
             closing on themselves.
         sym : bool
@@ -186,7 +185,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         phi = coords[:, 0]
         UC = coords[:, 1]
 
-        grid = LinearGrid(zeta=phi, NFP=1, NFP_umbilic_factor=1, sym=sym)
+        grid = LinearGrid(zeta=phi, NFP=1, n_umbilic=1, sym=sym)
         basis = FourierSeries(N=N, NFP=1, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)
         UC_n = transform.fit(UC)
@@ -194,7 +193,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         return FourierUmbilicCurve(
             UC_n=UC_n,
             NFP=NFP,
-            NFP_umbilic_factor=NFP_umbilic_factor,
+            n_umbilic=n_umbilic,
             modes_UC=basis.modes[:, 2],
             sym=sym,
             name=name,

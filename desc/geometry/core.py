@@ -115,26 +115,19 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP_umbilic_factor = (
-                self.NFP_umbilic_factor
-                if (
-                    hasattr(self, "NFP_umbilic_factor")
-                    and self.NFP_umbilic_factor is not None
-                )
+            n_umbilic = (
+                self.n_umbilic
+                if (hasattr(self, "n_umbilic") and self.n_umbilic is not None)
                 else 1
             )
             grid = LinearGrid(
                 N=2 * self.N * getattr(self, "NFP", 1) + 5,
-                NFP_umbilic_factor=int(NFP_umbilic_factor),
+                n_umbilic=int(n_umbilic),
             )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            NFP_umbilic_factor = (
-                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
-            )
-            grid = LinearGrid(
-                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
-            )
+            n_umbilic = self.n_umbilic if hasattr(self, "n_umbilic") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, n_umbilic=n_umbilic, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:
@@ -220,7 +213,7 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
         )
 
     def to_FourierUmbilic(
-        self, N=10, grid=None, NFP=None, NFP_umbilic_factor=1, sym=False, name=""
+        self, N=10, grid=None, NFP=None, n_umbilic=1, sym=False, name=""
     ):
         """Convert Curve to FourierRZCurve representation.
 
@@ -257,7 +250,7 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
             coords,
             N=N,
             NFP=NFP,
-            NFP_umbilic_factor=NFP_umbilic_factor,
+            n_umbilic=n_umbilic,
             basis="rtz",
             name=name,
             sym=sym,
@@ -362,26 +355,19 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP_umbilic_factor = (
-                self.NFP_umbilic_factor
-                if (
-                    hasattr(self, "NFP_umbilic_factor")
-                    and self.NFP_umbilic_factor is not None
-                )
+            n_umbilic = (
+                self.n_umbilic
+                if (hasattr(self, "n_umbilic") and self.n_umbilic is not None)
                 else 1
             )
             grid = LinearGrid(
                 N=2 * self.N * getattr(self, "NFP", 1) + 5,
-                NFP_umbilic_factor=int(NFP_umbilic_factor),
+                n_umbilic=int(n_umbilic),
             )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            NFP_umbilic_factor = (
-                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
-            )
-            grid = LinearGrid(
-                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
-            )
+            n_umbilic = self.n_umbilic if hasattr(self, "n_umbilic") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, n_umbilic=n_umbilic, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:

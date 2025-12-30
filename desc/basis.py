@@ -31,7 +31,7 @@ class _Basis(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        # --no-verify "_NFP_umbilic_factor",
+        # --no-verify "_n_umbilic",
         "_modes",
         "_sym",
         "_spectral_indexing",
@@ -232,9 +232,9 @@ class _Basis(IOAble, ABC):
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
-    def NFP_umbilic_factor(self):
+    def n_umbilic(self):
         """int: Umbilic factor field periods."""
-        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+        return self.__dict__.setdefault("_n_umbilic", 1)
 
     @property
     def sym(self):
@@ -478,7 +478,7 @@ class FourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         number of field periods
-    NFP_umbilic_factor : int
+    n_umbilic : int
         Prefactor of the form 1/NFP_umbilic_fac.
         This is needed for the umbilic torus design.
         * ``'cos'`` for cos(n*z) symmetry
@@ -491,15 +491,13 @@ class FourierSeries(_Basis):
     _fft_poloidal = True
     _fft_toroidal = True
 
-    def __init__(self, N, NFP=1, NFP_umbilic_factor=1, sym=False):
+    def __init__(self, N, NFP=1, n_umbilic=1, sym=False):
 
         self._L = 0
         self._M = 0
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._n_umbilic = check_posint(n_umbilic, "n_umbilic", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
@@ -573,7 +571,7 @@ class FourierSeries(_Basis):
             z[:, np.newaxis],
             n,
             self.NFP,
-            self.NFP_umbilic_factor,
+            self.n_umbilic,
             derivatives[2],
         )
 
@@ -581,7 +579,7 @@ class FourierSeries(_Basis):
 
         return toroidal
 
-    def change_resolution(self, N, NFP=None, NFP_umbilic_factor=None, sym=None):
+    def change_resolution(self, N, NFP=None, n_umbilic=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -590,8 +588,8 @@ class FourierSeries(_Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
-        NFP_umbilic_factor : float
-            Prefactor of the form 1/NFP_umbilic_factor.
+        n_umbilic : float
+            Prefactor of the form 1/n_umbilic.
             This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
@@ -599,11 +597,7 @@ class FourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        self._NFP_umbilic_factor = (
-            NFP_umbilic_factor
-            if NFP_umbilic_factor is not None
-            else self.NFP_umbilic_factor
-        )
+        self._n_umbilic = n_umbilic if n_umbilic is not None else self.n_umbilic
         if N != self.N or (sym is not None and sym != self.sym):
             self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
@@ -727,14 +721,12 @@ class DoubleFourierSeries(_Basis):
         m = m[midx]
         n = n[nidx]
 
-        poloidal = fourier(
-            t[:, np.newaxis], m, NFP=1, NFP_umbilic_factor=1, dt=derivatives[1]
-        )
+        poloidal = fourier(t[:, np.newaxis], m, NFP=1, n_umbilic=1, dt=derivatives[1])
         toroidal = fourier(
             z[:, np.newaxis],
             n,
             NFP=self.NFP,
-            NFP_umbilic_factor=1,
+            n_umbilic=1,
             dt=derivatives[2],
         )
 
@@ -1365,7 +1357,7 @@ class FourierZernikeBasis(_Basis):
             z[:, np.newaxis],
             n,
             NFP=self.NFP,
-            NFP_umbilic_factor=1,
+            n_umbilic=1,
             dt=derivatives[2],
         )
 
@@ -1913,7 +1905,7 @@ def chebyshev(r, l, dr=0):
 
 
 @jit
-def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
+def fourier(theta, m, NFP=1, n_umbilic=1, dt=0):
     """Fourier series.
 
     Parameters
@@ -1924,8 +1916,8 @@ def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
         poloidal/toroidal mode number(s)
     NFP : int
         number of field periods (Default = 1)
-    NFP_umbilic_factor : int
-        NFP prefactor of the form 1/NFP_umbilic_factor.
+    n_umbilic : int
+        NFP prefactor of the form 1/n_umbilic.
         This is needed for the umbilic torus design.
     dt : int
         order of derivative (Default = 0)
@@ -1936,11 +1928,9 @@ def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta, m, NFP, NFP_umbilic_factor, dt = map(
-        jnp.asarray, (theta, m, NFP, NFP_umbilic_factor, dt)
-    )
+    theta, m, NFP, n_umbilic, dt = map(jnp.asarray, (theta, m, NFP, n_umbilic, dt))
     m_pos = (m >= 0).astype(int)
-    m_abs = jnp.abs(m) * NFP / NFP_umbilic_factor
+    m_abs = jnp.abs(m) * NFP / n_umbilic
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 

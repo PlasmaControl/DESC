@@ -215,9 +215,15 @@ class _CoilObjective(_Objective):
         ]
 
         if self._broadcast_input == "Node":
-            self._dim_f = np.sum([g.num_nodes for g in grid])
+            grid_nodes_unmasked = [
+                g.num_nodes for g in grid[self._coilset_tree["coilset_mask"]]
+            ]
+            self._dim_f = np.sum(grid_nodes_unmasked)
         else:
-            self._dim_f = self._num_coils
+            coils_unmasked = np.ones(self._num_coils)[
+                self._coilset_tree["coilset_mask"]
+            ]
+            self._dim_f = len(coils_unmasked)
 
         # map grid to the same structure as coil and then remove unnecessary members
         grid = tree_unflatten(structure, grid)

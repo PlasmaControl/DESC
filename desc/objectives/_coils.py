@@ -214,12 +214,16 @@ class _CoilObjective(_Objective):
             self._coilset_tree["coilset_mask"]
         ]
 
+        if self._broadcast_input == "Node":
+            self._dim_f = np.sum([g.num_nodes for g in grid])
+        else:
+            self._dim_f = self._num_coils
+
         # map grid to the same structure as coil and then remove unnecessary members
         grid = tree_unflatten(structure, grid)
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
 
-        self._dim_f = len(self._coilset_broadcast(self._coilset_tree["coils"]))
         self._weight = self._coilset_broadcast(self._weight)
         if self._bounds:
             self._bounds = (

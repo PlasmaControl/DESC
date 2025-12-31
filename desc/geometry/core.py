@@ -157,7 +157,7 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
             if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
         calc0d = bool(len(dep0d))
-        # see if the grid we're already using will work for desired qtys
+        # see if the grid we're already using will work for desired quantities
         if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 

@@ -22,7 +22,7 @@ class FourierUmbilicCurve(UmbilicCurve):
     UC_n: array-like
         Fourier coefficients of Z.
     modes_UC : array-like, optional
-        Mode numbers associated with Z_n, If not given defaults to [-n:n].
+        Mode numbers associated with Z_n. If not given defaults to [-n:n].
     NFP : int
         Number of field periods.
     n_umbilic : int
@@ -118,9 +118,6 @@ class FourierUmbilicCurve(UmbilicCurve):
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
-        ## TO DO: understand this
-        ## CURRENTLY ONLY OUTPUTS COEFFICIENTS FOR NEGATIVE n
-        ## values
         n = np.atleast_1d(n).astype(int)
         UC = np.zeros_like(n).astype(float)
 
@@ -156,13 +153,12 @@ class FourierUmbilicCurve(UmbilicCurve):
 
     @classmethod
     def from_values(cls, coords, N=10, NFP=1, n_umbilic=1, name="", sym=False):
-        """Fit coordinates to FourierRZCurve representation.
+        """Fit a FourierUmbilicCurve to given (theta,zeta) values.
 
         Parameters
         ----------
         coords: ndarray, shape (num_coords,2)
-            ## TO DO
-            coordinates theta, zeta, the different of which is fit with a FourierSeries
+            Coordinates theta, zeta along the curve.
         N : int
             Fourier resolution of the new R,Z representation.
         NFP : int

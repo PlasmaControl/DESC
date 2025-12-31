@@ -46,7 +46,7 @@ class FourierRZCurve(Curve):
     modes_R : array-like, optional
         Mode numbers associated with R_n. If not given defaults to [-n:n].
     modes_Z : array-like, optional
-        Mode numbers associated with Z_n, If not given defaults to [-n:n]].
+        Mode numbers associated with Z_n. If not given defaults to [-n:n].
     NFP : int
         Number of field periods.
     sym : bool
@@ -111,13 +111,13 @@ class FourierRZCurve(Curve):
         self._R_basis = FourierSeries(
             N,
             int(NFP),
-            NFP_umbilic_factor=int(1),
+            n_umbilic=int(1),
             sym="cos" if sym else False,
         )
         self._Z_basis = FourierSeries(
             N,
             int(NFP),
-            NFP_umbilic_factor=int(1),
+            n_umbilic=int(1),
             sym="sin" if sym else False,
         )
 
@@ -166,13 +166,13 @@ class FourierRZCurve(Curve):
             self.R_basis.change_resolution(
                 N=N,
                 NFP=self.NFP,
-                NFP_umbilic_factor=1,
+                n_umbilic=1,
                 sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
                 N=N,
                 NFP=self.NFP,
-                NFP_umbilic_factor=1,
+                n_umbilic=1,
                 sym="sin" if self.sym else self.sym,
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
@@ -286,7 +286,7 @@ class FourierRZCurve(Curve):
         sym : bool
             Whether to enforce stellarator symmetry.
         basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "rpz"
+            basis for input coordinates. Defaults to "rpz".
         name : str
             Name for this curve.
 
@@ -445,9 +445,9 @@ class FourierXYZCurve(Curve):
         assert Z_n.size == modes.size, "Z_n and modes must be the same size"
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
-        self._Y_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
-        self._Z_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._X_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
+        self._Y_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
+        self._Z_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
@@ -731,7 +731,7 @@ class FourierPlanarCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._r_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._r_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
         self._basis = basis

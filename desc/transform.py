@@ -83,7 +83,7 @@ class Transform(IOAble):
             and self.basis.N != 0
             and grid.node_pattern != "custom"
             and np.any(self.grid.nodes[:, 2] != 0)
-            or self.grid.NFP_umbilic_factor != self.basis.NFP_umbilic_factor,
+            or self.grid.n_umbilic != self.basis.n_umbilic,
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
         )

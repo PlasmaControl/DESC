@@ -27,7 +27,7 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        "_NFP_umbilic_factor",
+        "_n_umbilic",
         "_sym",
         "_nodes",
         "_spacing",
@@ -178,7 +178,7 @@ class _Grid(IOAble, ABC):
         nodes = put(
             nodes,
             Index[:, 2],
-            nodes[:, 2] % (2 * np.pi / self.NFP * self.NFP_umbilic_factor),
+            nodes[:, 2] % (2 * np.pi / self.NFP * self.n_umbilic),
         )
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
@@ -239,9 +239,9 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
-    def NFP_umbilic_factor(self):
+    def n_umbilic(self):
         """float: Umbilic factor for (toroidal) field periods."""
-        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+        return self.__dict__.setdefault("_n_umbilic", 1)
 
     @property
     def sym(self):
@@ -521,14 +521,14 @@ class _Grid(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, NFP_umbilic_factor = {},\
+            + " (L={}, M={}, N={}, NFP={}, n_umbilic = {},\
                sym={}, node_pattern={}, coordinates={})"
         ).format(
             self.L,
             self.M,
             self.N,
             self.NFP,
-            self.NFP_umbilic_factor,
+            self.n_umbilic,
             self.sym,
             self.node_pattern,
             self.coordinates,
@@ -843,7 +843,7 @@ class Grid(_Grid):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP_umbilic_factor = 1
+        self._n_umbilic = 1
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "custom"
@@ -1072,7 +1072,7 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
-    NFP_umbilic_factor : int
+    n_umbilic : int
         Integer>=1.
         This is needed for the umbilic torus design.
         Change this only if your nodes are placed within one field period
@@ -1116,7 +1116,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=int(1),
+        n_umbilic=int(1),
         sym=False,
         axis=True,
         endpoint=False,
@@ -1131,9 +1131,7 @@ class LinearGrid(_Grid):
         self._M = check_nonnegint(M, "M")
         self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._n_umbilic = check_posint(n_umbilic, "n_umbilic", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
         # these are just default values that may get overwritten in _create_nodes
@@ -1150,7 +1148,7 @@ class LinearGrid(_Grid):
         self._period = (
             np.inf,
             2 * np.pi,
-            2 * np.pi / self._NFP * self._NFP_umbilic_factor,
+            2 * np.pi / self._NFP * self._n_umbilic,
         )
 
         self._nodes, self._spacing = self._create_nodes(
@@ -1158,7 +1156,7 @@ class LinearGrid(_Grid):
             M=M,
             N=N,
             NFP=NFP,
-            NFP_umbilic_factor=NFP_umbilic_factor,
+            n_umbilic=n_umbilic,
             axis=axis,
             endpoint=endpoint,
             rho=rho,
@@ -1184,7 +1182,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=int(1),
+        n_umbilic=int(1),
         axis=True,
         endpoint=False,
         rho=1.0,
@@ -1203,7 +1201,7 @@ class LinearGrid(_Grid):
             Toroidal grid resolution.
         NFP : int
             Number of field periods (Default = 1).
-        NFP_umbilic_factor : float
+        n_umbilic : float
             Rational number of the form 1/integer with integer>=1.
             This is needed for the umbilic torus design.
             Only change this if your nodes are placed within one field period
@@ -1233,13 +1231,11 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._n_umbilic = check_posint(n_umbilic, "n_umbilic", False)
         self._period = (
             np.inf,
             2 * np.pi,
-            2 * np.pi / self._NFP * self._NFP_umbilic_factor,
+            2 * np.pi / self._NFP * self._n_umbilic,
         )
         # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
@@ -1412,7 +1408,7 @@ class LinearGrid(_Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None, NFP_umbilic_factor=None):
+    def change_resolution(self, L, M, N, NFP=None, n_umbilic=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -1425,28 +1421,28 @@ class LinearGrid(_Grid):
             new toroidal grid resolution (N toroidal nodes)
         NFP : int
             Number of field periods.
-        NFP_umbilic_factor : float
+        n_umbilic : float
             Rational number of the form 1/integer.
             This is needed for the umbilic torus design.
 
         """
         if NFP is None:
             NFP = self.NFP
-        if NFP_umbilic_factor is None:
-            NFP_umbilic_factor = self.NFP_umbilic_factor
+        if n_umbilic is None:
+            n_umbilic = self.n_umbilic
         if (
             L != self.L
             or M != self.M
             or N != self.N
             or NFP != self.NFP
-            or NFP_umbilic_factor != self.NFP_umbilic_factor
+            or n_umbilic != self.n_umbilic
         ):
             self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
                 NFP=NFP,
-                NFP_umbilic_factor=NFP_umbilic_factor,
+                n_umbilic=n_umbilic,
                 axis=self.axis.size > 0,
                 endpoint=self.endpoint,
             )

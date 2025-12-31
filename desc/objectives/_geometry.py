@@ -1380,25 +1380,30 @@ class UmbilicHighCurvature(_Objective):
 
     Using the grid defined by the umbilic curve object,
     this class returns the minimum gaussian curvature k2 along that curve
-    which is used by us to ensure a large negative curvature and umbilic-ness.
+    which is used to ensure a large negative curvature and umbilic-ness.
 
     Parameters
     ----------
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    curve: FourierRZCurve
-        Umbilic curve that defines the position of the sharp umbilic boundary
+    curve: FourierUmbilicCurve
+        Umbilic curve that defines the position of the sharp umbilic boundary.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=1``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
+    curve_grid : Grid, optional
+        Collocation grid containing phi values along the curve at
+        which to calculate the objective.
+    eq_fixed: bool, optional
+        Whether the equilibrium is fixed during optimization or not.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1414,10 +1419,6 @@ class UmbilicHighCurvature(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -1440,7 +1441,6 @@ class UmbilicHighCurvature(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
         name="Umbilic high curvature",
     ):
 
@@ -1453,9 +1453,9 @@ class UmbilicHighCurvature(_Objective):
         self._eq_fixed = eq_fixed
         self._curve_grid = curve_grid
 
-        things = [eq, curve]
+        things = [curve] if self._eq_fixed else [curve, eq]
         super().__init__(
-            things=things,  # if not curve_fixed else [eq],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1477,7 +1477,7 @@ class UmbilicHighCurvature(_Objective):
             Level of output.
 
         """
-        curve = self.things[1]
+        curve = self.things[0]
 
         if self._curve_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
@@ -1522,19 +1522,19 @@ class UmbilicHighCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
         ----------
         params_1 : dict
             Dictionary of equilibrium or surface degrees of freedom,
-            eg Equilibrium.params_dict
+            e.g. Equilibrium.params_dict
         params_2 : dict
             Dictionary of curve degrees of freedom,
-            eg curve.params_dict
+            e.g. curve.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
             self.constants
 
         Returns
@@ -1545,12 +1545,14 @@ class UmbilicHighCurvature(_Objective):
         """
         if constants is None:
             constants = self.constants
+        if params_2 is None:
+            params_2 = self.things[0].params_dict
 
         if self._eq_fixed:
-            curve_params = params_1
-        else:
-            equil_params = params_1
             curve_params = params_2
+        else:
+            curve_params = params_2
+            equil_params = params_1 if params_1 else self.things[1].params_dict
 
         curve_data = compute_fun(
             self._curve,
@@ -1726,9 +1728,9 @@ class MirrorRatio(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium or field degrees of freedom,
-            eg Equilibrium.params_dict
+            e.g. Equilibrium.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
             self.constants
 
         Returns

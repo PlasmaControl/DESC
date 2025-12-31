@@ -139,7 +139,7 @@ def test_compute_everything():
             UC_n=[10, 1, 0.2],
             modes_UC=[0, 1, 2],
             NFP=1,
-            NFP_umbilic_factor=3,
+            n_umbilic=3,
         ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(

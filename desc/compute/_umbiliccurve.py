@@ -39,5 +39,5 @@ def _UC_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.umbiliccurve.FourierUmbilicCurve",
 )
 def _phi(params, transforms, profiles, data, **kwargs):
-    data["phi"] = transforms["grid"].nodes[:]
+    data["phi"] = transforms["grid"].nodes[:, 2]
     return data

@@ -14,15 +14,32 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.12']
+        python-version: ["3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'tests/**'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+              - '.github/workflows/memory_benchmarks.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes}}" >> $GITHUB_ENV
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -34,14 +51,15 @@ jobs:
           echo "version=$python_version" >> $GITHUB_ENV
 
       - name: Restore Python environment cache
+        if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
-        if: steps.restore-env.outputs.cache-hit != 'true'
+        if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
           python -m venv .venv-${{ env.version }}
@@ -52,11 +70,13 @@ jobs:
 
       # Add more memory just in case
       - name: Set Swap Space
+        if: env.has_changes == 'true'
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 4
 
       - name: Action Details
+        if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
           which python
@@ -66,27 +86,32 @@ jobs:
           pip list
 
       - name: Benchmark with pytest-benchmark (PR)
+        if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
           python memory_benchmark_cpu.py pr
 
       - name: Checkout current master
-        uses: actions/checkout@v4
+        if: env.has_changes == 'true'
+        uses: actions/checkout@v6
         with:
           ref: master
           clean: false
 
       - name: Checkout benchmarks from PR head
+        if: env.has_changes == 'true'
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
 
       - name: Benchmark with pytest-benchmark (MASTER)
+        if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
           python memory_benchmark_cpu.py master
 
       - name: Compare latest commit results to the master branch results
+        if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
@@ -95,12 +120,14 @@ jobs:
           cat commit_msg.txt
 
       - name: Upload memory comparison plot
-        uses: actions/upload-artifact@v4
+        if: env.has_changes == 'true'
+        uses: actions/upload-artifact@v6
         with:
           name: compare-plot
           path: tests/benchmarks/compare.png
 
       - name: Comment PR with the results
+        if: env.has_changes == 'true'
         uses: thollander/actions-comment-pull-request@v3
         env:
           github-token: ${{ secrets.GITHUB_TOKEN }}

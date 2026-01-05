@@ -11,20 +11,53 @@ from .utils import midpoint_spacing, periodic_spacing
 
 
 class AbstractRTZGrid(AbstractGrid):
-    """Base class for collocation grids."""
+    """Base class for collocation grids in flux coordinates."""
 
-    _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP"]
+    _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP", "_sym", "_axis"]
 
-    _static_attrs = AbstractGrid._static_attrs + ["_NFP"]
+    _static_attrs = AbstractGrid._static_attrs + ["_NFP", "_sym"]
 
-    def get_label(self, label):
-        """Get general label that specifies direction given label."""
-        if label in {"rho", "poloidal", "zeta"}:
-            return label
-        rad = {"r": "rho"}[self.coordinates[0]]
-        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
-        tor = {"z": "zeta"}[self.coordinates[2]]
-        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
+    def __repr__(self):
+        """str: String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + (
+                f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}"
+                + f", NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid})"
+            )
+        )
+
+    def _set_up(self):
+        """Do things after loading."""
+        # ensure things that should be ints are ints
+        self._NFP = int(self._NFP)
+        # backwards compatability
+        if hasattr(self, "_unique_rho_idx"):
+            self._unique_x0_idx = self._unique_rho_idx
+            del self._unique_rho_idx
+        if hasattr(self, "_unique_theta_idx"):
+            self._unique_x1_idx = self._unique_theta_idx
+            del self._unique_theta_idx
+        if hasattr(self, "_unique_poloidal_idx"):
+            self._unique_x1_idx = self._unique_poloidal_idx
+            del self._unique_poloidal_idx
+        if hasattr(self, "_unique_zeta_idx"):
+            self._unique_x2_idx = self._unique_zeta_idx
+            del self._unique_zeta_idx
+        if hasattr(self, "_inverse_rho_idx"):
+            self._inverse_x0_idx = self._inverse_rho_idx
+            del self._inverse_rho_idx
+        if hasattr(self, "_inverse_theta_idx"):
+            self._inverse_x1_idx = self._inverse_theta_idx
+            del self._inverse_theta_idx
+        if hasattr(self, "_inverse_poloidal_idx"):
+            self._inverse_x1_idx = self._inverse_poloidal_idx
+            del self._inverse_theta_idx
+        if hasattr(self, "_inverse_zeta_idx"):
+            self._inverse_x2_idx = self._inverse_zeta_idx
+            del self._inverse_zeta_idx
 
     def _enforce_symmetry(self):
         """Remove unnecessary nodes assuming poloidal symmetry.
@@ -41,12 +74,12 @@ class AbstractRTZGrid(AbstractGrid):
         # indices where poloidal coordinate is off the symmetry line of
         # poloidal coord=0 or π
         off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
-        __, inverse, off_sym_line_per_rho_surf_count = np.unique(
+        _, inverse, off_sym_line_per_rho_surf_count = np.unique(
             self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
         )
         # indices of nodes to be deleted
         to_delete_idx = self.nodes[:, 1] > np.pi
-        __, to_delete_per_rho_surf_count = np.unique(
+        _, to_delete_per_rho_surf_count = np.unique(
             self.nodes[to_delete_idx, 0], return_counts=True
         )
         assert (
@@ -84,6 +117,25 @@ class AbstractRTZGrid(AbstractGrid):
         self._nodes = self.nodes[~to_delete_idx]
         self._spacing = self.spacing[~to_delete_idx]
 
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        self._spacing = self.spacing[sort_idx]
+
+    def _find_axis(self):
+        """Find indices of axis nodes."""
+        return np.nonzero(self.nodes[:, 0] == 0)[0]
+
+    def get_label(self, label):
+        """Get general label that specifies direction given label."""
+        if label in {"rho", "poloidal", "zeta"}:
+            return label
+        rad = {"r": "rho"}[self.coordinates[0]]
+        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
+        tor = {"z": "zeta"}[self.coordinates[2]]
+        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
+
     @property
     def coordinates(self):
         """Coordinates specified by the nodes.
@@ -95,6 +147,137 @@ class AbstractRTZGrid(AbstractGrid):
         rtz : rho, theta, zeta
         """
         return self.__dict__.setdefault("_coordinates", "rtz")
+
+    @property
+    def bounds(self):
+        """Bounds of coordinates."""
+        return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi / self.NFP))
+
+    @property
+    def period(self):
+        """Periodicity of coordinates."""
+        return (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
+
+    @property
+    def num_rho(self):
+        """int: Number of unique rho coordinates."""
+        return self.num_x0
+
+    @property
+    def num_poloidal(self):
+        """int: Number of unique poloidal angle coordinates."""
+        return self.num_x1
+
+    @property
+    def num_alpha(self):
+        """ndarray: Number of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.num_x1
+
+    @property
+    def num_theta(self):
+        """ndarray: Number of unique theta coordinates."""
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.num_x1
+
+    @property
+    def num_theta_PEST(self):
+        """ndarray: Number of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.num_x1
+
+    @property
+    def num_zeta(self):
+        """int: Number of unique zeta coordinates."""
+        return self.num_x2
+
+    @property
+    def unique_rho_idx(self):
+        """ndarray: Indices of unique rho coordinates."""
+        return self.unique_x0_idx
+
+    @property
+    def unique_poloidal_idx(self):
+        """ndarray: Indices of unique poloidal angle coordinates."""
+        return self.unique_x1_idx
+
+    @property
+    def unique_alpha_idx(self):
+        """ndarray: Indices of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.unique_x1_idx
+
+    @property
+    def unique_theta_idx(self):
+        """ndarray: Indices of unique theta coordinates."""
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.unique_x1_idx
+
+    @property
+    def unique_theta_PEST_idx(self):
+        """ndarray: Indices of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.unique_x1_idx
+
+    @property
+    def unique_zeta_idx(self):
+        """ndarray: Indices of unique zeta coordinates."""
+        return self.unique_x2_idx
+
+    @property
+    def inverse_rho_idx(self):
+        """ndarray: Indices that recover the rho coordinates."""
+        return self.inverse_x0_idx
+
+    @property
+    def inverse_poloidal_idx(self):
+        """ndarray: Indices the recover the unique poloidal angle coordinates."""
+        return self.inverse_x1_idx
+
+    @property
+    def inverse_alpha_idx(self):
+        """ndarray: Indices that recover the field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.inverse_x1_idx
+
+    @property
+    def inverse_theta_idx(self):
+        """ndarray: Indices that recover the theta coordinates."""
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.inverse_x1_idx
+
+    @property
+    def inverse_theta_PEST_idx(self):
+        """ndarray: Indices that recover the straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.inverse_x1_idx
+
+    @property
+    def inverse_zeta_idx(self):
+        """ndarray: Indices that recover the zeta coordinates."""
+        return self.inverse_x2_idx
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self.__dict__.setdefault("_NFP", 1)
+
+    @property
+    def sym(self):
+        """bool: ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+
+        Whether the poloidal domain of this grid is truncated to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
+        Still, when stellarator symmetry exists, flux surface integrals and
+        volume integrals are invariant to this truncation.
+        """
+        return self.__dict__.setdefault("_sym", False)
+
+    @property
+    def axis(self):
+        """ndarray: Indices of nodes at magnetic axis."""
+        return self.__dict__.setdefault("_axis", np.array([]))
 
 
 class Grid(AbstractRTZGrid):
@@ -140,8 +323,9 @@ class Grid(AbstractRTZGrid):
 
     # if you're using a custom grid it almost always isnt uniform, or is under jit
     # where we can't properly check this anyways, so just set to false
-    _fft_poloidal = False
-    _fft_toroidal = False
+    _fft_x0 = False
+    _fft_x1 = False
+    _fft_x2 = False
 
     def __init__(
         self,
@@ -151,7 +335,6 @@ class Grid(AbstractRTZGrid):
         coordinates="rtz",
         period=None,
         NFP=1,
-        source_grid=None,
         sort=False,
         is_meshgrid=False,
         jitable=False,
@@ -162,7 +345,6 @@ class Grid(AbstractRTZGrid):
         # define all attributes in their __init__ method.
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
-        self._node_pattern = "custom"
         self._coordinates = coordinates
         self._period = setdefault(
             period,
@@ -172,7 +354,6 @@ class Grid(AbstractRTZGrid):
                 else (np.inf, np.inf, np.inf)
             ),
         )
-        self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
         self._spacing = (
@@ -190,15 +371,15 @@ class Grid(AbstractRTZGrid):
         if sort:
             self._sort_nodes()
         setable_attr = [
-            "_unique_rho_idx",
-            "_unique_poloidal_idx",
-            "_unique_zeta_idx",
-            "_inverse_rho_idx",
-            "_inverse_poloidal_idx",
-            "_inverse_zeta_idx",
+            "_unique_x0_idx",
+            "_unique_x1_idx",
+            "_unique_x2_idx",
+            "_inverse_x0_idx",
+            "_inverse_x1_idx",
+            "_inverse_x2_idx",
         ]
         if jitable:
-            # Don't do anything with symmetry since that changes # of nodes
+            # Don't do anything with symmetry since that changes number of nodes
             # avoid point at the axis, for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
@@ -213,18 +394,50 @@ class Grid(AbstractRTZGrid):
                 kwargs.pop(attr, None)
             self._axis = self._find_axis()
             (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_poloidal_idx,
-                self._inverse_poloidal_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
         # Assign with logic in setter method if possible else 0.
-        self._L = None if hasattr(self, "num_rho") else 0
-        self._M = None if hasattr(self, "num_poloidal") else 0
-        self._N = None if hasattr(self, "num_zeta") else 0
+        self._L = None if hasattr(self, "num_x0") else 0
+        self._M = None if hasattr(self, "num_x1") else 0
+        self._N = None if hasattr(self, "num_x2") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
+
+    def _create_nodes(self, nodes):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        """
+        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
+        # Do not alter nodes given by the user for custom grids.
+        # In particular, do not modulo nodes by 2π or 2π/NFP.
+        return nodes
+
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        try:
+            self._spacing = self.spacing[sort_idx]
+        except AttributeError:
+            pass
+        try:
+            self._weights = self.weights[sort_idx]
+        except AttributeError:
+            pass
 
     @staticmethod
     def create_meshgrid(
@@ -326,52 +539,14 @@ class Grid(AbstractRTZGrid):
             sort=False,
             is_meshgrid=True,
             jitable=jitable,
-            _unique_rho_idx=unique_a_idx,
-            _unique_poloidal_idx=unique_b_idx,
-            _unique_zeta_idx=unique_c_idx,
-            _inverse_rho_idx=inverse_a_idx,
-            _inverse_poloidal_idx=inverse_b_idx,
-            _inverse_zeta_idx=inverse_c_idx,
+            _unique_x0_idx=unique_a_idx,
+            _unique_x1_idx=unique_b_idx,
+            _unique_x2_idx=unique_c_idx,
+            _inverse_x0_idx=inverse_a_idx,
+            _inverse_x1_idx=inverse_b_idx,
+            _inverse_x2_idx=inverse_c_idx,
             **kwargs,
         )
-
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        try:
-            self._spacing = self.spacing[sort_idx]
-        except AttributeError:
-            pass
-        try:
-            self._weights = self.weights[sort_idx]
-        except AttributeError:
-            pass
-
-    def _create_nodes(self, nodes):
-        """Allow for custom node creation.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        """
-        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2π or 2π/NFP.
-        return nodes
-
-    @property
-    def source_grid(self):
-        """Coordinates from which this grid was mapped from."""
-        errorif(self._source_grid is None, AttributeError)
-        return self._source_grid
 
 
 class LinearGrid(AbstractRTZGrid):
@@ -420,10 +595,9 @@ class LinearGrid(AbstractRTZGrid):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractGrid._io_attrs_ + [
-        "_toroidal_endpoint",
-        "_poloidal_endpoint",
-    ]
+    _io_attrs_ = AbstractGrid._io_attrs_ + ["_poloidal_endpoint", "_toroidal_endpoint"]
+
+    _is_meshgrid = True
 
     def __init__(
         self,
@@ -450,14 +624,10 @@ class LinearGrid(AbstractRTZGrid):
         # these are just default values that may get overwritten in _create_nodes
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
-        self._fft_poloidal = False
-        self._fft_toroidal = False
+        self._fft_x1 = False
+        self._fft_x2 = False
 
-        self._node_pattern = "linear"
-        self._coordinates = "rtz"
-        self._is_meshgrid = True
         self._can_fft2 = not sym and not endpoint
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -535,7 +705,6 @@ class LinearGrid(AbstractRTZGrid):
         # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
         self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -583,7 +752,7 @@ class LinearGrid(AbstractRTZGrid):
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
             # if custom theta used usually safe to assume its non-uniform so no fft
-            self._fft_poloidal = (not endpoint) and (not self.sym)
+            self._fft_x1 = (not endpoint) and (not self.sym)
         elif theta is not None:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
@@ -638,7 +807,7 @@ class LinearGrid(AbstractRTZGrid):
         else:
             t = np.array(0.0, ndmin=1)
             dt = theta_period * np.ones_like(t)
-            self._fft_poloidal = not self.sym
+            self._fft_x1 = not self.sym
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -657,7 +826,7 @@ class LinearGrid(AbstractRTZGrid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
             # if custom zeta used usually safe to assume its non-uniform so no fft
-            self._fft_toroidal = not endpoint
+            self._fft_x2 = not endpoint
         elif zeta is not None:
             errorif(
                 np.any(np.asarray(zeta) > zeta_period),
@@ -675,7 +844,7 @@ class LinearGrid(AbstractRTZGrid):
         else:
             z = np.array(0.0, ndmin=1)
             dz = zeta_period * np.ones_like(z) * NFP
-            self._fft_toroidal = True  # trivially true
+            self._fft_x2 = True  # trivially true
 
         self._poloidal_endpoint = (
             t.size > 0
@@ -730,12 +899,12 @@ class LinearGrid(AbstractRTZGrid):
             self._sort_nodes()
             self._axis = self._find_axis()
             (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_poloidal_idx,
-                self._inverse_poloidal_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
             self._weights = self._scale_weights()
 
@@ -764,8 +933,9 @@ class QuadratureGrid(AbstractRTZGrid):
 
     """
 
-    _fft_poloidal = True
-    _fft_toroidal = True
+    _is_meshgrid = True
+    _fft_x1 = True
+    _fft_x2 = True
 
     def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
@@ -773,21 +943,17 @@ class QuadratureGrid(AbstractRTZGrid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
-        self._node_pattern = "quad"
-        self._coordinates = "rtz"
-        self._is_meshgrid = True
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._axis = self._find_axis()
         (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_poloidal_idx,
-            self._inverse_poloidal_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
+            self._unique_x0_idx,
+            self._inverse_x0_idx,
+            self._unique_x1_idx,
+            self._inverse_x1_idx,
+            self._unique_x2_idx,
+            self._inverse_x2_idx,
         ) = self._find_unique_inverse_nodes()
         # quadrature weights do not need scaling
         self._weights = self.spacing.prod(axis=1)
@@ -818,7 +984,6 @@ class QuadratureGrid(AbstractRTZGrid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         # floor divide (L+2) by 2 bc only need (L+1)/2  points to
         # integrate L-th order jacobi polynomial exactly, so this
         # ensures we have enough pts for both odd and even L
@@ -868,12 +1033,12 @@ class QuadratureGrid(AbstractRTZGrid):
             self._sort_nodes()
             self._axis = self._find_axis()
             (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_poloidal_idx,
-                self._inverse_poloidal_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
@@ -918,8 +1083,9 @@ class ConcentricGrid(AbstractRTZGrid):
 
     """
 
-    _fft_poloidal = False
-    _fft_toroidal = True
+    _is_meshgrid = False
+    _fft_x1 = False
+    _fft_x2 = True
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
@@ -927,10 +1093,6 @@ class ConcentricGrid(AbstractRTZGrid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
-        self._node_pattern = node_pattern
-        self._coordinates = "rtz"
-        self._is_meshgrid = False
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )
@@ -938,12 +1100,12 @@ class ConcentricGrid(AbstractRTZGrid):
         self._sort_nodes()
         self._axis = self._find_axis()
         (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_poloidal_idx,
-            self._inverse_poloidal_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
+            self._unique_x0_idx,
+            self._inverse_x0_idx,
+            self._unique_x1_idx,
+            self._inverse_x1_idx,
+            self._unique_x2_idx,
+            self._inverse_x2_idx,
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
@@ -985,7 +1147,7 @@ class ConcentricGrid(AbstractRTZGrid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
+        self._node_pattern = node_pattern
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
@@ -1087,11 +1249,16 @@ class ConcentricGrid(AbstractRTZGrid):
             self._sort_nodes()
             self._axis = self._find_axis()
             (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_poloidal_idx,
-                self._inverse_poloidal_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
             self._weights = self._scale_weights()
+
+    @property
+    def node_pattern(self):
+        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
+        return self._node_pattern

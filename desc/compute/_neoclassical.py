@@ -723,7 +723,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Calculate bump function (f_b) and sum over resonances
     f_b_res = jnp.where(
         condition,
-        safediv(jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), q_broad), # clip to avoid overflow warning in jnp.exp()
+        safediv(jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), q_broad**2), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
     f_b = jnp.sum(f_b_res,axis=-1) # := (rho,Bcrit,well)

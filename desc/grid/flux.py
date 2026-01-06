@@ -1122,6 +1122,10 @@ class ConcentricGrid(AbstractRTZGrid):
 
     """
 
+    _io_attrs_ = AbstractRTZGrid._io_attrs_ + ["_node_pattern"]
+
+    _static_attrs = AbstractRTZGrid._static_attrs + ["_node_pattern"]
+
     def __repr__(self):
         """str: String form of the object."""
         return (

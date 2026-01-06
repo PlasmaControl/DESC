@@ -97,17 +97,17 @@ class TestSurfaceIntegral:
         lg = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, endpoint=False)
         q = np.arange(lg.num_nodes) ** 2
         result = surface_integrals(lg, q, surface_label="rho")
-        del lg._unique_rho_idx
+        del lg._unique_x0_idx
         np.testing.assert_allclose(
             surface_integrals(lg, q, surface_label="rho"), result
         )
         result = surface_averages(lg, q, surface_label="theta")
-        del lg._unique_poloidal_idx
+        del lg._unique_x1_idx
         np.testing.assert_allclose(
             surface_averages(lg, q, surface_label="theta"), result
         )
         result = surface_variance(lg, q, surface_label="zeta")
-        del lg._unique_zeta_idx
+        del lg._unique_x2_idx
         np.testing.assert_allclose(
             surface_variance(lg, q, surface_label="zeta"), result
         )

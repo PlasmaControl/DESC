@@ -803,8 +803,8 @@ def get_rtz_grid(
     if inbasis[coordinates[0]] == "rho":
         # Should work as long as inbasis radial coordinate is
         # single variable, monotonic increasing function of rho.
-        idx["_unique_rho_idx"] = grid.unique_rho_idx
-        idx["_inverse_rho_idx"] = grid.inverse_rho_idx
+        idx["_unique_x0_idx"] = grid.unique_rho_idx
+        idx["_inverse_x0_idx"] = grid.inverse_rho_idx
     desc_grid = Grid(
         nodes=rtz_nodes,
         coordinates="rtz",

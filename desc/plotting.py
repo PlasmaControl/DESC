@@ -442,7 +442,7 @@ def _compute_Bn(
             endpoint=False,
         )
         # override attr since we know fft is ok even with custom nodes
-        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        vc_grid._fft_x1 = vc_grid._fft_x2 = True
         source_grid = eval_grid = vc_grid
     else:
         eval_grid = plot_grid

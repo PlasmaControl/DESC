@@ -327,7 +327,12 @@ class AbstractGrid(IOAble, ABC):
 
     @abstractmethod
     def get_label(self, label) -> str:
-        """Get general label that specifies the direction of given label."""
+        """Get general label that specifies the direction of given coordinate label."""
+        pass
+
+    @abstractmethod
+    def get_label_axis(self, label) -> int:
+        """Get node axis index associated with given coordinate label."""
         pass
 
     @property

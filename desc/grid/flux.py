@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import special
 
-from desc.backend import jnp, repeat
+from desc.backend import jnp, put, repeat
 from desc.utils import check_nonnegint, check_posint, errorif, setdefault
 
 from .core import AbstractGrid
@@ -128,13 +128,52 @@ class AbstractRTZGrid(AbstractGrid):
         return np.nonzero(self.nodes[:, 0] == 0)[0]
 
     def get_label(self, label):
-        """Get general label that specifies direction given label."""
+        """Get general label that specifies the direction of given coordinate label."""
         if label in {"rho", "poloidal", "zeta"}:
             return label
         rad = {"r": "rho"}[self.coordinates[0]]
         pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
         tor = {"z": "zeta"}[self.coordinates[2]]
         return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
+
+    def get_label_axis(self, label):
+        """Get node axis index associated with given coordinate label."""
+        label = self.get_label(label)
+        return {"rho": 0, "poloidal": 1, "zeta": 2}[label]
+
+    def replace_at_axis(self, x, y, copy=False, **kwargs):
+        """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
+
+        Parameters
+        ----------
+        x : array-like
+            Values to selectively replace. Should have length ``grid.num_nodes``.
+        y : array-like
+            Replacement values. Should broadcast with arrays of size
+            ``grid.num_nodes``. Can also be a function that returns such an
+            array. Additional keyword arguments are then input to ``y``.
+        copy : bool
+            If some value of ``x`` is to be replaced by some value in ``y``,
+            then setting ``copy`` to true ensures that ``x`` will not be
+            modified in-place.
+
+        Returns
+        -------
+        out : ndarray
+            An array of size ``grid.num_nodes`` where elements at the indices
+            corresponding to the axis of this grid match those of ``y`` and all
+            others match ``x``.
+
+        """
+        if self.axis.size:
+            if callable(y):
+                y = y(**kwargs)
+            x = put(
+                x.copy() if copy else x,
+                self.axis,
+                y[self.axis] if jnp.ndim(y) else y,
+            )
+        return x
 
     @property
     def coordinates(self):
@@ -151,7 +190,7 @@ class AbstractRTZGrid(AbstractGrid):
     @property
     def bounds(self):
         """Bounds of coordinates."""
-        return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi / self.NFP))
+        return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi))
 
     @property
     def period(self):
@@ -321,12 +360,6 @@ class Grid(AbstractRTZGrid):
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
-    # if you're using a custom grid it almost always isnt uniform, or is under jit
-    # where we can't properly check this anyways, so just set to false
-    _fft_x0 = False
-    _fft_x1 = False
-    _fft_x2 = False
-
     def __init__(
         self,
         nodes,
@@ -355,6 +388,10 @@ class Grid(AbstractRTZGrid):
             ),
         )
         self._is_meshgrid = bool(is_meshgrid)
+        # if you're using a custom grid it almost always isnt uniform, or is under jit
+        # where we can't properly check this anyways, so just set to false
+        self._fft_x1 = False
+        self._fft_x2 = False
         self._nodes = self._create_nodes(nodes)
         self._spacing = (
             jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
@@ -402,9 +439,13 @@ class Grid(AbstractRTZGrid):
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
         # Assign with logic in setter method if possible else 0.
-        self._L = None if hasattr(self, "num_x0") else 0
-        self._M = None if hasattr(self, "num_x1") else 0
-        self._N = None if hasattr(self, "num_x2") else 0
+        self._L = self.num_x0 - 1 if hasattr(self, "num_x0") else 0
+        self._M = (
+            (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
+            if hasattr(self, "num_x1")
+            else 0
+        )
+        self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     def _create_nodes(self, nodes):
@@ -597,8 +638,6 @@ class LinearGrid(AbstractRTZGrid):
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_poloidal_endpoint", "_toroidal_endpoint"]
 
-    _is_meshgrid = True
-
     def __init__(
         self,
         L=None,
@@ -621,13 +660,14 @@ class LinearGrid(AbstractRTZGrid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
+        self._is_meshgrid = True
+        self._fft_x1 = False
+        self._fft_x2 = False
+        self._can_fft2 = not sym and not endpoint
         # these are just default values that may get overwritten in _create_nodes
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
-        self._fft_x1 = False
-        self._fft_x2 = False
 
-        self._can_fft2 = not sym and not endpoint
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -643,12 +683,12 @@ class LinearGrid(AbstractRTZGrid):
         self._sort_nodes()
         self._axis = self._find_axis()
         (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_poloidal_idx,
-            self._inverse_poloidal_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
+            self._unique_x0_idx,
+            self._inverse_x0_idx,
+            self._unique_x1_idx,
+            self._inverse_x1_idx,
+            self._unique_x2_idx,
+            self._inverse_x2_idx,
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
@@ -933,16 +973,15 @@ class QuadratureGrid(AbstractRTZGrid):
 
     """
 
-    _is_meshgrid = True
-    _fft_x1 = True
-    _fft_x2 = True
-
     def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "N", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
+        self._is_meshgrid = True
+        self._fft_x1 = True
+        self._fft_x2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
@@ -1083,9 +1122,18 @@ class ConcentricGrid(AbstractRTZGrid):
 
     """
 
-    _is_meshgrid = False
-    _fft_x1 = False
-    _fft_x2 = True
+    def __repr__(self):
+        """str: String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + (
+                f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}"
+                + f", NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid}"
+                + f", node_pattern={self.node_pattern})"
+            )
+        )
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1093,6 +1141,9 @@ class ConcentricGrid(AbstractRTZGrid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
+        self._is_meshgrid = False
+        self._fft_x1 = False
+        self._fft_x2 = True
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )

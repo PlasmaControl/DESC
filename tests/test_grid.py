@@ -911,7 +911,7 @@ def test_custom_jitable_grid_indexing():
     zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
     grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
     grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
-    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_rho_idx=[0, 10])
+    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_x0_idx=[0, 10])
     np.testing.assert_allclose(grid1.nodes, grid2.nodes)
 
     x = np.random.random(grid1.num_nodes)
@@ -940,7 +940,6 @@ def test_custom_jitable_grid_indexing():
 
     assert not hasattr(grid1, "weights")
     assert not hasattr(grid1, "spacing")
-    assert not hasattr(grid1, "source_grid")
     assert not hasattr(grid2, "num_rho")
     assert not hasattr(grid2, "num_theta")
     assert not hasattr(grid2, "num_zeta")

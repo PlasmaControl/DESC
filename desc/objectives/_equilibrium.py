@@ -1,10 +1,12 @@
 """Objectives for solving equilibrium problems."""
 
-from desc.backend import jnp
+import numpy as np
+
+from desc.backend import jnp, tree_leaves, tree_map, tree_structure
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, broadcast_tree, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -187,7 +189,7 @@ class ForceBalanceDeflated(_Objective):
 
     or
 
-    M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ
+    M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ
 
     (if `deflation_type="exp"`)
 
@@ -199,7 +201,10 @@ class ForceBalanceDeflated(_Objective):
 
     M(𝐱;𝐱₁*)[fᵨ, fₕₑₗᵢ]
 
-    If multiple states are used for deflation, the
+    If multiple known states are used for deflation, then M is computed
+    for each deflated state, then either multipled or added together (depending
+    on if `multiple_deflation_type="prod"` or `"sum"`) to
+    form a single scalar which is finally multiplied with the force balance.
 
     Parameters
     ----------
@@ -208,20 +213,25 @@ class ForceBalanceDeflated(_Objective):
     eqs: list of Equilibrium
         list of Equilibrium objects to use in deflation operator.
     sigma: float, optional
-        shift parameter in deflation operator.
+        shift parameter in deflation operator. A larger value tends to result in
+        more robust deflated equilibrium solves.
     power: float, optional
         power parameter in deflation operator, ignored if `deflation_type="exp"`.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
-    params_to_deflate_with: list of str
-        Which params to use in the deflation operator to define the
-        state to deflate, defaults to ["Rb_mn","Zb_mn"]
+    params_to_deflate_with : dict
+        Dict keys are the names of parameters to deflate (str), and dict values are the
+        indices to deflate with for each corresponding parameter (int array).
+        Use True (False) instead of an int array to deflate all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as eq.params_dict.
+        The default is to deflate all indices of all parameters.
     deflation_type: {"power","exp"}
         What type of deflation to use. If `"power"`, uses the form
         pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
         while `"exp"` uses the form from Riley 2024, where
-        M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+        M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
     multiple_deflation_type: {"prod","sum"}
         When deflating multiple states, how to reduce the individual deflation
         terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
@@ -237,7 +247,6 @@ class ForceBalanceDeflated(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
     _static_attrs = _Objective._static_attrs + [
-        "_params_to_deflate_with",
         "_deflation_type",
         "_multiple_deflation_type",
         "_single_shift",
@@ -248,15 +257,13 @@ class ForceBalanceDeflated(_Objective):
     _units = "(N)"
     _print_value_fmt = "Deflated Force error: "
 
-    # TODO: use a pytree input for params_to_deflate_with
     def __init__(
         self,
         eq,
         eqs,
-        sigma=0.05,
+        sigma=100,
         power=2,
-        # TODO: update to pytree like DeflationOperator is
-        params_to_deflate_with=["Rb_lmn", "Zb_lmn"],
+        params_to_deflate_with=None,
         target=None,
         bounds=None,
         weight=1,
@@ -351,6 +358,19 @@ class ForceBalanceDeflated(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["f"]
 
+        # default params for deflation
+        default_params = tree_map(lambda dim: np.arange(dim), eq.dimensions)
+        self._params_to_deflate_with = setdefault(
+            self._params_to_deflate_with, default_params
+        )
+        self._params_to_deflate_with = broadcast_tree(
+            self._params_to_deflate_with, default_params
+        )
+        self._indices = tree_leaves(self._params_to_deflate_with)
+        assert tree_structure(self._params_to_deflate_with) == tree_structure(
+            default_params
+        )
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -381,14 +401,22 @@ class ForceBalanceDeflated(_Objective):
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
-        keys = self._params_to_deflate_with
-        # TODO: better to do only surface, or every key? seems like can obtain
-        # very different results depending on if using only surf or every key, but
-        # at same time, only the surface matters as far as closeness of solution
-        # (the surface dictates the equilibrium, more or less)
+
+        this_thing_params = jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params), self._indices)
+            ]
+        )
         diffs = [
-            jnp.concatenate([params[key] - eq.params_dict[key] for key in keys])
-            for eq in self._eqs
+            this_thing_params
+            - jnp.concatenate(
+                [
+                    jnp.atleast_1d(param[idx])
+                    for param, idx in zip(tree_leaves(t.params_dict), self._indices)
+                ]
+            )
+            for t in self._eqs
         ]
         diffs = jnp.vstack(diffs)
 

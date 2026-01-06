@@ -697,9 +697,18 @@ class DeflationOperator(_Objective):
 
     M(x;xₖ)=(||x−xₖ||₂)⁻ᵖ + σ
 
+    (if `deflation_type="power"`)
+
+    or
+
+    M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ
+
+    (if `deflation_type="exp"`)
+
     where x is the state and xₖ the passed-in known state.
-    Multiple states are handled by computing M for each xₖ and
-    multiplying them all together
+    If multiple known states are used for deflation, then M is computed
+    for each deflated state, then either multipled or added together (depending
+    on if `multiple_deflation_type="prod"` or `"sum"`) to form the final cost.
 
     Parameters
     ----------
@@ -711,10 +720,10 @@ class DeflationOperator(_Objective):
     params_to_deflate_with : nested list of dicts
         Dict keys are the names of parameters to deflate (str), and dict values are the
         indices to deflate with for each corresponding parameter (int array).
-        Use True (False) instead of an int array to fix all (none) of the indices
+        Use True (False) instead of an int array to deflate all (none) of the indices
         for that parameter.
         Must have the same pytree structure as thing.params_dict.
-        The default is to fix all indices of all parameters.
+        The default is to deflate all indices of all parameters.
     sigma: float, optional
         shift parameter in deflation operator.
     power: float, optional
@@ -723,7 +732,7 @@ class DeflationOperator(_Objective):
         What type of deflation to use. If `"power"`, uses the form
         pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
         while `"exp"` uses the form from Riley 2024, where
-        M(𝐱;𝐱₁*) = exp(-||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+        M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
     multiple_deflation_type: {"prod","sum"}
         When deflating multiple states, how to reduce the individual deflation
         terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term

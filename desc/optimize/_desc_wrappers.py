@@ -450,9 +450,9 @@ def _optimize_desc_stochastic(
         Additionally, optax optimizers can be used by specifying the method as
         ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
         optimizer. Hyperparameters for the optax optimizer must be passed via the
-        `optax-options` key of `options` dictionary. A custom optax optimizer can
+        `optax-options` key of `options` dictionary. A custom ``optax`` optimizer can
         be used by specifying the method as ``'optax-custom'`` and passing the
-        optax optimizer via the ``'update-rule'`` key of `optax-options`
+        ``optax`` optimizer via the ``'update-rule'`` key of `optax-options`
         in the `options` dictionary.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to

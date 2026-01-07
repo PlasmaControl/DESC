@@ -1305,7 +1305,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
         A3 = (A3 + _cT(A3)) / 2
 
-    w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="LM", return_eigenvectors=True)
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v
@@ -1499,17 +1499,6 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     # instability drive term
     F = -1 * mu_0 * _reshape(data["finite-n instability drive"]) * (1 / B_N) ** 2
-
-    # Define block indices
-    # --no-verify rho_idx = slice(0, n_total)
-    # --no-verify theta_idx = slice(n_total, 2 * n_total)
-    # --no-verify zeta_idx = slice(2 * n_total, 3 * n_total)
-
-    ## Create the full matrix
-    if axisym:
-        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
-    else:
-        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.float64)
 
     def d_dr(D, u):
         """Calculate the radial derivative of u."""
@@ -1930,7 +1919,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-3, maxiter=240000)
+        y, _ = cg(Ashift, b, tol=1e-3, maxiter=30000)
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)

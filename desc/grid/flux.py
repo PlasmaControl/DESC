@@ -363,6 +363,8 @@ class Grid(AbstractRTZGrid):
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
+    _io_attrs_ = AbstractRTZGrid._io_attrs_ + ["_source_grid"]
+
     def __init__(
         self,
         nodes,
@@ -371,6 +373,7 @@ class Grid(AbstractRTZGrid):
         coordinates="rtz",
         period=None,
         NFP=1,
+        source_grid=None,
         sort=False,
         is_meshgrid=False,
         jitable=False,
@@ -390,6 +393,7 @@ class Grid(AbstractRTZGrid):
                 else (np.inf, np.inf, np.inf)
             ),
         )
+        self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         # if you're using a custom grid it almost always isnt uniform, or is under jit
         # where we can't properly check this anyways, so just set to false
@@ -592,6 +596,12 @@ class Grid(AbstractRTZGrid):
             **kwargs,
         )
 
+    @property
+    def source_grid(self):
+        """Coordinates from which this grid was mapped from."""
+        errorif(self._source_grid is None, AttributeError)
+        return self._source_grid
+
 
 class LinearGrid(AbstractRTZGrid):
     """Grid in which the nodes are linearly spaced in each coordinate.
@@ -639,7 +649,12 @@ class LinearGrid(AbstractRTZGrid):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractGrid._io_attrs_ + ["_poloidal_endpoint", "_toroidal_endpoint"]
+    _io_attrs_ = AbstractRTZGrid._io_attrs_ + [
+        "_poloidal_endpoint",
+        "_toroidal_endpoint",
+    ]
+
+    _static_attrs = AbstractRTZGrid._static_attrs + ["_endpoint"]
 
     def __init__(
         self,

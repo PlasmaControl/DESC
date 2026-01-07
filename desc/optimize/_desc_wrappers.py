@@ -10,13 +10,8 @@ from .optimizer import register_optimizer
 from .stochastic import sgd
 
 # List of all optax optimizers to register
-# Optax doesn't have a specific module for optimizers, and there is no specific
-# base class for optimizers, so we have to manually create the list. The class
-# optax.GradientTransformationExtraArgs is the closest thing, but there are
-# some other classes that inherit from it that are not optimizers. Since the
-# optimizers are actually a function that returns an instance of
-# optax.GradientTransformationExtraArgs, having an automated loop is prone to
-# errors/warnings for input arguments.
+# test_available_optax_optimizers in tests/test_optimizer.py ensures this
+# list is up to date
 _all_optax_optimizers = [
     "adabelief",
     "adadelta",
@@ -28,7 +23,6 @@ _all_optax_optimizers = [
     "adamw",
     "adan",
     "amsgrad",
-    "freeze",
     "fromage",
     "lamb",
     "lars",
@@ -38,7 +32,6 @@ _all_optax_optimizers = [
     "nadamw",
     "noisy_sgd",
     "novograd",
-    "optimistic_adam",
     "optimistic_adam_v2",
     "optimistic_gradient_descent",
     "polyak_sgd",
@@ -49,6 +42,8 @@ _all_optax_optimizers = [
     "sign_sgd",
     "sm3",
     "yogi",
+    # will be available in the release after 0.2.6
+    # "signum",   # noqa E501
 ]
 
 

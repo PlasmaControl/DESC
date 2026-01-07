@@ -365,7 +365,7 @@ class TestSGD:
 
     @pytest.mark.unit
     def test_optax_lbfgs_desc(self):
-        """Test running optimization using optax L-BFGS."""
+        """Test running optimization using optax."""
         eq = desc.examples.get("DSHAPE")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 0, 4, 4, 0)

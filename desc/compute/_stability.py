@@ -1924,7 +1924,11 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
+<<<<<<< HEAD
         y, _ = cg(Ashift, b, tol=1e-3, maxiter=240000)
+=======
+        y, info = cg(Ashift, b, tol=1e-5, maxiter=100000)
+>>>>>>> be168d2a32e19ab5173271c43c54b398e8e77329
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)

@@ -121,7 +121,7 @@ class AbstractGrid(IOAble, ABC):
         # span the surface.
         return weights
 
-    def compress(self, x, surface_label):
+    def compress(self, x, surface_label="rho"):
         """Return elements of ``x`` at indices of unique surface label values.
 
         Parameters
@@ -140,13 +140,16 @@ class AbstractGrid(IOAble, ABC):
             corresponds to the value associated with the largest surface.
 
         """
-        surface_label = self.get_label(surface_label)
+        surface_label_axis = self.get_label_axis(surface_label)
         errorif(len(x) != self.num_nodes)
         return take(
-            x, getattr(self, f"unique_{surface_label}_idx"), axis=0, unique_indices=True
+            x,
+            getattr(self, f"unique_x{surface_label_axis}_idx"),
+            axis=0,
+            unique_indices=True,
         )
 
-    def expand(self, x, surface_label):
+    def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
 
         Parameters
@@ -167,9 +170,9 @@ class AbstractGrid(IOAble, ABC):
             ``x`` expanded to match the grid's pattern.
 
         """
-        surface_label = self.get_label(surface_label)
-        errorif(len(x) != getattr(self, f"num_{surface_label}"))
-        return x[getattr(self, f"inverse_{surface_label}_idx")]
+        surface_label_axis = self.get_label(surface_label)
+        errorif(len(x) != getattr(self, f"num_x{surface_label_axis}"))
+        return x[getattr(self, f"inverse_x{surface_label_axis}_idx")]
 
     def meshgrid_reshape(self, x, order):
         """Reshape data to match grid coordinates. Inverse of grid.meshgrid_flatten.

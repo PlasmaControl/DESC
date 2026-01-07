@@ -430,7 +430,7 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
 
     """
     grid = lmbda.grid
-    errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
+    errorif(not grid.fft_x1, NotImplementedError, msg="See note in docstring.")
     # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
     # TODO: (#568)
     warnif(

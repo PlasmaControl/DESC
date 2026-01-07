@@ -195,7 +195,10 @@ class AbstractRTZGrid(AbstractGrid):
     @property
     def period(self):
         """Periodicity of coordinates."""
-        return (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
+        if self.coordinates == "rtz":
+            return (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
+        else:
+            return (np.inf, np.inf, np.inf)
 
     @property
     def num_rho(self):

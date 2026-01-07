@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
@@ -144,6 +144,14 @@ class VacuumBoundaryError(_Objective):
         data = eq.compute(["p", "current"])
         pres = np.max(np.abs(data["p"]))
         curr = np.max(np.abs(data["current"]))
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(grid)
+            ),
+        )
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -552,6 +560,20 @@ class BoundaryError(_Objective):
 
         self._use_same_grid = eval_grid.equiv(source_grid)
 
+        errorif(
+            not isinstance(source_grid, AbstractGridFlux),
+            ValueError,
+            msg="source_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(source_grid)
+            ),
+        )
+        errorif(
+            not isinstance(eval_grid, AbstractGridFlux),
+            ValueError,
+            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(eval_grid)
+            ),
+        )
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,

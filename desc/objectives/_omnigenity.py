@@ -6,7 +6,7 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -102,6 +102,11 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
         warnif(
             grid.num_theta < 2 * eq.M,
@@ -286,6 +291,11 @@ class QuasisymmetryTwoTerm(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
@@ -442,6 +452,12 @@ class QuasisymmetryTripleProduct(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
@@ -927,6 +943,12 @@ class Isodynamicity(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]

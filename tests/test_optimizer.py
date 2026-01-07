@@ -363,6 +363,15 @@ class TestSGD:
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
+    @pytest.mark.unit
+    def test_optax_lbfgs_desc(self):
+        """Test running optimization using optax L-BFGS."""
+        eq = desc.examples.get("DSHAPE")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 0, 4, 4, 0)
+        optimizer = Optimizer("optax-adam")
+        eq.solve(maxiter=1, optimizer=optimizer, verbose=3)
+
 
 class TestLSQTR:
     """Tests for least squares optimizer."""

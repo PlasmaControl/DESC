@@ -426,8 +426,6 @@ def _optimize_desc_fmin_scalar(
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
         "RMSProp optimizer. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
-        "For OPTAX wrappers see "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
     ]
     + [
         f"OPTAX optimizer wrapper for {opt}. See "

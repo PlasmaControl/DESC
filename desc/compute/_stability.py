@@ -1345,8 +1345,8 @@ def _AGNI_eigenfunction(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="finite-n lambda3",
-    label="low-\\n \\lambda3 = \\gamma^2",
+    name="finite-n lambda matfree",
+    label="low-\\n \\lambda = \\gamma^2",
     units="~",
     units_long="None",
     description="Normalized squared growth rate"
@@ -1389,14 +1389,14 @@ def _AGNI_eigenfunction(params, transforms, profiles, data, **kwargs):
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
 )
-def _AGNI3(params, transforms, profiles, data, **kwargs):
+def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     """
     AGNI: Analysis of Global Normal-modes in Ideal MHD.
 
     Based on the original source here:
     https://github.com/rahulgaur104/AGNI/tree/master
 
-    A finite-n stability eigenvalue solver.
+    A finite-n stability eigenvalue solver. Matrix-free version.
     Currenly only finds fixed boundary unstable modes at
     low to medium resolution. Matrix-free!
 
@@ -1942,7 +1942,40 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     # --no-verify eigval = y[idxs]/v[idxs]
     # --no-verify print(max(eigval), min(eigval), np.mean(eigval), np.median(eigval))
 
-    data["finite-n lambda3"] = w
-    data["finite-n eigenfunction3"] = v
+    data["finite-n lambda matfree"] = w
+    data["finite-n eigenfunction matfree"] = v
 
     return data
+
+
+@register_compute_fun(
+    name="finite-n eigenfunction matfree",
+    label="\\xi",
+    units="~",
+    units_long="None",
+    description="Finite-n eigenfunction from the matrix free solver",
+    dim=5,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda matfree"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    stable_only="bool: for testing only, materialize "
+    + "and eigendecompose the stable part of the matrix",
+    v_guess="ndarray: eigenfunction guess to initialize the "
+    + "iterative eigenvalue solver",
+)
+def _AGNI_eigenfunction_matfree(params, transforms, profiles, data, **kwargs):
+    """Eigenfunctions of finite-n stability solver.
+
+    Returns
+    -------
+    Finite-n lambda eigenfunctions
+        Shape (num_eigenvalues, num rho, num theta, num zeta, 3).
+
+    """
+    return data  # noqa: unused dependency

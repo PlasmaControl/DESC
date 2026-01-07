@@ -147,7 +147,6 @@ def sgd(  # noqa: C901
     maxiter = setdefault(maxiter, N * 100)
 
     v = jnp.zeros_like(x)
-    m = None
     method_options = {}
     method_options["alpha"] = options.pop("alpha", 1e-2 * xs_norm / gs_norm)
     # check for zero or nan step size
@@ -219,7 +218,7 @@ def sgd(  # noqa: C901
             break
 
         if "optax-" not in method:
-            dxs, v, m = update_rule(gs, v, m, iteration, **method_options)
+            dxs, v = update_rule(gs, v, **method_options)
         else:
             dxs, opt_state = optax_method.update(
                 gs, opt_state, x / x_scale, value=f, grad=gs, value_fn=optax_fun
@@ -271,8 +270,8 @@ def sgd(  # noqa: C901
     return result
 
 
-def _sgd(g, v, m, iteration, alpha, beta):
+def _sgd(g, v, alpha, beta):
     """Update rule for the stochastic gradient descent with momentum."""
     v = beta * v + (1 - beta) * g
     dx = -alpha * v
-    return dx, v, m
+    return dx, v

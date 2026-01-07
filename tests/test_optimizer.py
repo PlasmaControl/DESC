@@ -301,6 +301,44 @@ class TestSGD:
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
     @pytest.mark.unit
+    def test_optax_custom(self):
+        """Test custom optax optimizers work."""
+        eq = desc.examples.get("DSHAPE")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+        # Optimizer
+        opt = optax.chain(
+            optax.sgd(learning_rate=1.0),
+            optax.scale_by_zoom_linesearch(max_linesearch_steps=15),
+        )
+        optimizer = Optimizer("optax-custom")
+        eq.solve(
+            optimizer=optimizer,
+            options={"optax-options": {"update_rule": opt}},
+            verbose=3,
+            maxiter=2,
+        )
+
+        with pytest.raises(ValueError):
+            # bad 'update_rule' type
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": "not-an-optax-optimizer"}},
+                verbose=3,
+                maxiter=2,
+            )
+
+        with pytest.raises(ValueError):
+            # extra hyperparameters
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": opt, "learning_rate": 0.1}},
+                verbose=3,
+                maxiter=2,
+            )
+
+    @pytest.mark.unit
     def test_available_optax_optimizers(self):
         """Test that all optax optimizers are included in _all_optax_optimizers."""
         optimizers = []
@@ -724,7 +762,9 @@ class TestAllOptimizers:
     econ = get_fixed_boundary_constraints(eq=eqe)
     fcon = get_fixed_boundary_constraints(eq=eqf)
 
-    scalar_methods = [opt for opt in optimizers if optimizers[opt]["scalar"]]
+    scalar_methods = [
+        opt for opt in optimizers if optimizers[opt]["scalar"] and opt != "optax-custom"
+    ]
     lsq_methods = [opt for opt in optimizers if not optimizers[opt]["scalar"]]
 
     @pytest.mark.unit

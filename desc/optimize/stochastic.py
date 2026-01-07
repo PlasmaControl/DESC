@@ -55,11 +55,14 @@ def sgd(  # noqa: C901
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step update rule. Available options are `'sgd'`.
+        Name of the method to use. Available options are `'sgd'`.
         Additionally, optax optimizers can be used by specifying the method as
         ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
         optimizer. Hyperparameters for the optax optimizer must be passed via the
-        `optax-options` key of `options` dictionary.
+        `optax-options` key of `options` dictionary. A custom optax optimizer can
+        be used by specifying the method as ``'optax-custom'`` and passing the
+        optax optimizer via the ``'update-rule'`` key of `optax-options`
+        in the `options` dictionary.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
@@ -111,6 +114,26 @@ def sgd(  # noqa: C901
         Important attributes are: ``x`` the solution array, ``success`` a
         Boolean flag indicating if the optimizer exited successfully.
 
+    Examples
+    --------
+    One can use custom ``optax`` optimizers as follows:
+
+    .. code-block:: python
+
+        import optax
+        from desc.optimize import Optimizer
+        from desc.examples import get
+
+        eq = get("DSHAPE")
+
+        # Optimizer
+        opt = optax.chain(
+            optax.sgd(learning_rate=1.0),
+            optax.scale_by_zoom_linesearch(max_linesearch_steps=15),
+        )
+        optimizer = Optimizer("optax-custom")
+        eq.solve(optimizer=optimizer, options={"optax-options": {"update_rule": opt}})
+
     """
     errorif(
         method not in ["sgd"] and "optax-" not in method,
@@ -153,7 +176,7 @@ def sgd(  # noqa: C901
     if method_options["alpha"] == 0 or jnp.isnan(method_options["alpha"]):
         method_options["alpha"] = 1e-3  # default small step size
     method_options["beta"] = options.pop("beta", 0.9)
-    if "optax-" in method:
+    if "optax-" in method and method != "optax-custom":
         alpha_default = method_options.pop("alpha")
         method_options = options.pop("optax-options", {})
         if method not in ["optax-lbfgs", "optax-polyak_sgd"]:
@@ -164,6 +187,26 @@ def sgd(  # noqa: C901
         if method == "optax-noisy_sgd":
             # noisy_sgd requires a key for random number generation
             method_options["key"] = method_options.get("key", 0)
+    elif method == "optax-custom":
+        method_options = options.pop("optax-options", {})
+        errorif(
+            "update_rule" not in method_options,
+            ValueError,
+            "For 'optax-custom' method, 'update_rule' must be provided in "
+            "'optax-options' of options dictionary.",
+        )
+        optax_method = method_options.pop("update_rule")
+        errorif(
+            not (hasattr(optax_method, "init") and hasattr(optax_method, "update")),
+            ValueError,
+            "'update_rule' must be a valid optax optimizer with 'init' and "
+            "'update' methods.",
+        )
+        errorif(
+            len(method_options) > 0,
+            ValueError,
+            "Cannot pass hyperparameters for custom optax optimizer.",
+        )
 
     errorif(
         len(options) > 0,
@@ -194,7 +237,10 @@ def sgd(  # noqa: C901
         # select the update rule that we implemented
         update_rule = {"sgd": _sgd}[method]
     else:
-        optax_method = getattr(optax, method.replace("optax-", ""))(**method_options)
+        if method != "optax-custom":
+            optax_method = getattr(optax, method.replace("optax-", ""))(
+                **method_options
+            )
         opt_state = optax_method.init(x)
         optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
 

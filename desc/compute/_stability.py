@@ -1913,18 +1913,19 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
         y = ys.T + yus.T
 
-        return y.flatten()
+        return np.asarray(y.flatten())
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
-    num_matvecs = 4
-    sigma = -5e-4
+    sigma = kwargs.get("sigma", -5e-5)
+    num_matvecs = 1
 
     def OPinv(b):
         def Ashift(x):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-6, maxiter=6000)
+        y, info = cg(Ashift, b, tol=1e-5, maxiter=50000)
+        print(info)
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
@@ -1934,6 +1935,13 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     sort_idxs = jnp.argsort(mu, descending=True)
     w = sigma + 1.0 / mu[sort_idxs]
     v = vecs[sort_idxs][0, :]
+
+    # --no-verify v = v0.copy()
+    # --no-verify idxs = jnp.where(jnp.abs(v) > 1e-4)[0]
+    # --no-verify y = Ax(v)
+
+    # --no-verify eigval = y[idxs]/v[idxs]
+    # --no-verify print(max(eigval), min(eigval), np.mean(eigval), np.median(eigval))
 
     data["finite-n lambda3"] = w
     data["finite-n eigenfunction3"] = v

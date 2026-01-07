@@ -41,7 +41,7 @@ def _get_grid_surface(grid, surface_label):
     """
     assert isinstance(grid, AbstractRTZGrid)
     assert surface_label in ["rho", "poloidal", "zeta"]
-    surface_label_axis = grid.get_label_idx(surface_label)
+    surface_label_axis = grid.get_label_axis(surface_label)
     if surface_label == "rho":
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
@@ -394,7 +394,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
-    surface_label_axis = grid.get_label_idx(surface_label)
+    surface_label_axis = grid.get_label_axis(surface_label)
     has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
         grid, f"_inverse_x{surface_label_axis}_idx"
     )
@@ -535,7 +535,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    surface_label_axis = grid.get_label_idx(surface_label)
+    surface_label_axis = grid.get_label_axis(surface_label)
     has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
         grid, f"_inverse_x{surface_label_axis}_idx"
     )

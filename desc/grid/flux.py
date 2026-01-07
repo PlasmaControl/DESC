@@ -949,6 +949,27 @@ class LinearGrid(AbstractRTZGrid):
             self._weights = self._scale_weights()
 
     @property
+    def L(self):
+        """int: Radial coordinate resolution."""
+        if self._L is None:
+            self._L = self.num_rho - 1
+        return self._L
+
+    @property
+    def M(self):
+        """int: Poloidal coordinate resolution."""
+        if self._M is None:
+            self._M = self.num_poloidal - 1 if self.sym else self.num_poloidal // 2
+        return self._M
+
+    @property
+    def N(self):
+        """int: Toroidal coordinate resolution."""
+        if self._N is None:
+            self._N = self.num_zeta // 2
+        return self._N
+
+    @property
     def endpoint(self):
         """bool: Whether the grid is made of open or closed intervals."""
         return self.__dict__.setdefault("_endpoint", False)

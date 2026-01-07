@@ -170,7 +170,7 @@ class AbstractGrid(IOAble, ABC):
             ``x`` expanded to match the grid's pattern.
 
         """
-        surface_label_axis = self.get_label(surface_label)
+        surface_label_axis = self.get_label_axis(surface_label)
         errorif(len(x) != getattr(self, f"num_x{surface_label_axis}"))
         return x[getattr(self, f"inverse_x{surface_label_axis}_idx")]
 

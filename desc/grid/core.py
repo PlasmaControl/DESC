@@ -276,7 +276,7 @@ class AbstractGrid(IOAble, ABC):
         x = x.reshape(shape, order="F")
         return x
 
-    def copy_data_from_other(self, x, other_grid, surface_label, tol=1e-14):
+    def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
 
         Given data x corresponding to nodes of other_grid, copy data to a new array that

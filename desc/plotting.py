@@ -3616,19 +3616,16 @@ def plot_grid(grid, return_data=False, **kwargs):
         ]
     )
     ax.set_yticklabels([])
-    if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
+    if grid.__class__.__name__ in ["Grid", "LinearGrid", "QuadratureGrid"]:
         ax.set_title(
-            "{}, $L={}$, $M={}, pattern: {}$".format(
-                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
-            ),
+            "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
             pad=20,
+            fontsize=title_fontsize,
         )
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
-            "{}, $M={}$, pattern: {}".format(
-                grid.__class__.__name__,
-                grid.M,
-                grid.node_pattern,
+            "{}, $L={}$, $M={}, pattern: {}$".format(
+                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
             ),
             pad=20,
             fontsize=title_fontsize,

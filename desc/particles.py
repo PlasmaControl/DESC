@@ -100,23 +100,16 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
 
 class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
-    r"""Guiding center trajectories in vacuum, conserving energy and mu.
+    """Guiding center trajectories in vacuum, conserving energy and mu.
 
-    Solves the following ODEs:
+    Solves the following ODEs,
 
-    .. math::
+    d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
 
-        \begin{aligned}
-            \frac{d\mathbf{R}}{dt} &= v_{\parallel} \mathbf{b} + \frac{m}{q B^2}
-            \left( v_{\parallel}^2 + \frac{1}{2} v_{\perp}^2 \right)
-            (\mathbf{b} \times \nabla B) \\
-            \frac{dv_{\parallel}}{dt} &= - \frac{v_{\perp}^2}{2B}
-            (\mathbf{b} \cdot \nabla B)
-        \end{aligned}
+    dv∥/dt = − (v⊥² / 2B) ( 𝐛 ⋅ ∇B )
 
-    where :math:`\mathbf{B}` is the magnetic field vector at position
-    :math:`\mathbf{R}`, :math:`B` is the magnitude of the magnetic field, and
-    :math:`\mathbf{b}` is the unit magnetic field vector :math:`\mathbf{B}/B`.
+    where 𝐁 is the magnetic field vector at position 𝐑, B is the magnitude of
+    the magnetic field and 𝐛 is the unit magnetic field 𝐁/B.
 
     Parameters
     ----------

@@ -36,33 +36,8 @@ def sgd(  # noqa: C901
 
     Update rule for ``'sgd'``:
 
-    .. math::
-
-        \begin{aligned}
-            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_k) \\
-            x_{k+1} &= x_{k} - \alpha v_{k}
-        \end{aligned}
-
-    Update rule for ``'adam'``:
-
-    .. math::
-
-        \begin{aligned}
-            m_t &= \beta m_{t-1} + (1 - \beta) \nabla f(x_{t-1}) \\
-            v_t &= \beta_2 v_{t-1} + (1 - \beta_2) \nabla f(x_{t-1})^2 \\
-            \hat{m} &= \frac{m_t}{1 - \beta^t} \\
-            \hat{v} &= \frac{v_t}{1 - \beta_2^t} \\
-            x_t &= x_{t-1} - \frac{\alpha \hat{m}}{\sqrt{\hat{v}} + \epsilon}
-        \end{aligned}
-
-    Update rule for ``'rmsprop'``:
-
-    .. math::
-
-        \begin{aligned}
-            v_{k}   &= \beta v_{k-1} + (1-\beta) \nabla f(x_{k})^2 \\
-            x_{k+1} &= x_{k} - \frac{\alpha \nabla f(x_{k})}{\sqrt{v_{k}} + \epsilon}
-        \end{aligned}
+    v_k     =  β * v_{k-1} + (1-β) ∇f(x_k)
+    x_{k+1} =  x_k - α * v_k
 
     Additionally, optax optimizers can be used by specifying the method as
     ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
@@ -80,7 +55,7 @@ def sgd(  # noqa: C901
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step update rule. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+        Step update rule. Available options are `'sgd'`.
         Additionally, optax optimizers can be used by specifying the method as
         ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
         optimizer. Hyperparameters for the optax optimizer must be passed via the
@@ -126,19 +101,8 @@ def sgd(  # noqa: C901
         - ``"beta"`` : (float > 0) Exponential decay rate for the first moment
           estimates. Default 0.9.
 
-        For `'adam'` and `'rmsprop'`, additional options are,
-
-        - ``"epsilon"``: (float > 0) Small constant for numerical stability.
-          Default 1e-8.
-
-        For `'adam'`, additional options are,
-
-        - ``"beta2"`` : (float > 0) Exponential decay rate for the second moment
-          estimates. Default 0.999.
-
         For optax optimizers, hyperparameters specific to the chosen optimizer
         must be passed via the `optax-options` key of `options` dictionary.
-
 
     Returns
     -------
@@ -149,8 +113,8 @@ def sgd(  # noqa: C901
 
     """
     errorif(
-        method not in ["sgd", "adam", "rmsprop"] and "optax-" not in method,
-        "Available options for method are 'sgd', 'adam' and 'rmsprop' or "
+        method not in ["sgd"] and "optax-" not in method,
+        "Available options for method are 'sgd' or "
         f"any optax optimizer wrapper by 'optax-', but {method} "
         "is given.",
     )
@@ -190,11 +154,6 @@ def sgd(  # noqa: C901
     if method_options["alpha"] == 0 or jnp.isnan(method_options["alpha"]):
         method_options["alpha"] = 1e-3  # default small step size
     method_options["beta"] = options.pop("beta", 0.9)
-    if method in ["adam", "rmsprop"]:
-        method_options["epsilon"] = options.pop("epsilon", 1e-8)
-    if method == "adam":
-        m = jnp.zeros_like(x)
-        method_options["beta2"] = options.pop("beta2", 0.999)
     if "optax-" in method:
         alpha_default = method_options.pop("alpha")
         method_options = options.pop("optax-options", {})
@@ -233,7 +192,8 @@ def sgd(  # noqa: C901
 
     allx = [x]
     if "optax-" not in method:
-        update_rule = {"sgd": _sgd, "adam": _adam, "rmsprop": _rmsprop}[method]
+        # select the update rule that we implemented
+        update_rule = {"sgd": _sgd}[method]
     else:
         optax_method = getattr(optax, method.replace("optax-", ""))(**method_options)
         opt_state = optax_method.init(x)
@@ -315,22 +275,4 @@ def _sgd(g, v, m, iteration, alpha, beta):
     """Update rule for the stochastic gradient descent with momentum."""
     v = beta * v + (1 - beta) * g
     dx = -alpha * v
-    return dx, v, m
-
-
-def _adam(g, v, m, iteration, alpha, beta, beta2, epsilon):
-    """Update rule for the ADAM optimizer."""
-    t = iteration + 1
-    m = beta * m + (1 - beta) * g
-    v = beta2 * v + (1 - beta2) * (g**2)
-    m_hat = m / (1 - beta**t)
-    v_hat = v / (1 - beta2**t)
-    dx = -alpha * m_hat / (jnp.sqrt(v_hat) + epsilon)
-    return dx, v, m
-
-
-def _rmsprop(g, v, m, iteration, alpha, beta, epsilon):
-    """Update rule for the RMSProp optimizer."""
-    v = beta * v + (1 - beta) * g**2
-    dx = -alpha * g / (jnp.sqrt(v) + epsilon)
     return dx, v, m

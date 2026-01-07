@@ -413,18 +413,14 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name=["sgd", "adam", "rmsprop"] + ["optax-" + opt for opt in _all_optax_optimizers],
+    name=["sgd"] + ["optax-" + opt for opt in _all_optax_optimizers],
     description=[
         "Stochastic gradient descent with Nesterov momentum. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
-        "ADAM optimizer. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
-        "RMSProp optimizer. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
     ]
     + [
-        f"OPTAX optimizer wrapper for {opt}. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html"  # noqa: E501
+        f"``optax`` wrapper for {opt}. See "
+        + f"https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.{opt}"  # noqa: E501
         for opt in _all_optax_optimizers
     ],
     scalar=True,
@@ -448,7 +444,11 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+        Name of the method to use. Available options are `'sgd'`.
+        Additionally, optax optimizers can be used by specifying the method as
+        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
+        optimizer. Hyperparameters for the optax optimizer must be passed via the
+        `optax-options` key of `options` dictionary.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved

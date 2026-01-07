@@ -1917,14 +1917,14 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -5e-5)
-    num_matvecs = 4
+    num_matvecs = 3
 
     def OPinv(b):
         def Ashift(x):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-3, maxiter=240000)
+        y, _ = cg(Ashift, b, tol=1e-3, maxiter=160000)
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)

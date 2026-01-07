@@ -198,7 +198,7 @@ def sgd(  # noqa: C901
     if "optax-" in method:
         alpha_default = method_options.pop("alpha")
         method_options = options.pop("optax-options", {})
-        if not method == "optax-lbfgs":
+        if method not in ["optax-lbfgs", "optax-polyak_sgd"]:
             # L-BFGS uses its own line search, so don't set learning rate if not given
             method_options["learning_rate"] = method_options.get(
                 "learning_rate", alpha_default

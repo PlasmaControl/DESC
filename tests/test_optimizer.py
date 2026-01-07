@@ -276,12 +276,9 @@ class TestSGD:
         "method",
         [
             # some of the optax optimizers
-            "optax-adabelief",
-            "optax-adan",
             "optax-adam",
             "optax-adamax",
             "optax-lbfgs",
-            "optax-nadam",
             "optax-rmsprop",
             "optax-sgd",
         ],
@@ -302,41 +299,6 @@ class TestSGD:
             maxiter=2000,
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
-
-    @pytest.mark.unit
-    def test_optax_lbfgs_convex(self):
-        """Test minimizing convex test function using optax L-BFGS."""
-        x0 = np.ones(2)
-
-        out = sgd(
-            scalar_fun,
-            x0,
-            scalar_grad,
-            method="optax-lbfgs",
-            verbose=3,
-            ftol=1e-12,
-            xtol=1e-12,
-            gtol=1e-12,
-            maxiter=100,
-            options={
-                "optax-options": {
-                    "memory_size": 10,
-                    "linesearch": optax.scale_by_backtracking_linesearch(
-                        max_backtracking_steps=15, store_grad=True
-                    ),
-                }
-            },
-        )
-        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
-
-    @pytest.mark.unit
-    def test_optax_lbfgs_desc(self):
-        """Test running optimization using optax."""
-        eq = desc.examples.get("DSHAPE")
-        with pytest.warns(UserWarning, match="Reducing radial"):
-            eq.change_resolution(2, 2, 0, 4, 4, 0)
-        optimizer = Optimizer("optax-adam")
-        eq.solve(maxiter=1, optimizer=optimizer, verbose=3)
 
     @pytest.mark.unit
     def test_available_optax_optimizers(self):

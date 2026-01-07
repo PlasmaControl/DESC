@@ -122,7 +122,7 @@ def sgd(  # noqa: C901
         for the update rule chosen.
 
         - ``"alpha"`` : (float > 0) Learning rate. Defaults to
-          1e-1 * ||x_scaled|| / ||g_scaled||.
+          1e-2 * ||x_scaled|| / ||g_scaled||.
         - ``"beta"`` : (float > 0) Exponential decay rate for the first moment
           estimates. Default 0.9.
 

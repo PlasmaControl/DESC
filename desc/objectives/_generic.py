@@ -685,7 +685,12 @@ class ObjectiveFromUser(_Objective):
 
 
 class DeflationOperator(_Objective):
-    r"""Deflation operator to be added to objective to find new solutions.
+    r"""Deflation wrapper to be added to or to wrap objective to find new solutions.
+
+    If DeflationOperator is created while passing in an objective, the cost will be M*f
+    where f is the objective's computed value.
+    If DeflationOperator is created without passing in an objective, the cost will be
+    only M
 
     Deflation is done on the passed-in list of parameters. This objective
     value will be large if the current state is close to one of the already-found
@@ -709,6 +714,8 @@ class DeflationOperator(_Objective):
     If multiple known states are used for deflation, then M is computed
     for each deflated state, then either multipled or added together (depending
     on if `multiple_deflation_type="prod"` or `"sum"`) to form the final cost.
+    If an objective was passed in, this will then be multiplied by that objective's
+    compute.
 
     Parameters
     ----------
@@ -717,13 +724,18 @@ class DeflationOperator(_Objective):
     things_to_deflate: list of Equilibrium
         list of objects to use in deflation operator. Should be same type
         as thing.
-    params_to_deflate_with : nested list of dicts
+    params_to_deflate_with : nested list of dicts, optional
         Dict keys are the names of parameters to deflate (str), and dict values are the
         indices to deflate with for each corresponding parameter (int array).
         Use True (False) instead of an int array to deflate all (none) of the indices
         for that parameter.
         Must have the same pytree structure as thing.params_dict.
         The default is to deflate all indices of all parameters.
+    objective: _Objective, optional
+        Objective to wrap with the DeflationWrapper. If not None, the cost will
+        be M(x;xₖ)f(x) where f(x) is the Objective's cost. If None, then the cost
+        returned will be M(x;xₖ). The objective must accept only one optimizable
+        thing, and it must be the same as the thing passed to the DeflationWrapper
     sigma: float, optional
         shift parameter in deflation operator.
     power: float, optional
@@ -751,6 +763,7 @@ class DeflationOperator(_Objective):
         "_deflation_type",
         "_multiple_deflation_type",
         "_single_shift",
+        "_objective",
     ]
 
     _coordinates = "rtz"
@@ -762,6 +775,7 @@ class DeflationOperator(_Objective):
         thing,
         things_to_deflate,
         params_to_deflate_with=None,
+        objective=None,
         sigma=1.0,
         power=2,
         target=None,
@@ -777,6 +791,8 @@ class DeflationOperator(_Objective):
         multiple_deflation_type="prod",
         single_shift=False,
     ):
+        from desc.objectives import ObjectiveFunction
+
         if target is None and bounds is None:
             target = 0
         assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
@@ -789,6 +805,21 @@ class DeflationOperator(_Objective):
         assert multiple_deflation_type in ["prod", "sum"]
         self._multiple_deflation_type = multiple_deflation_type
         self._single_shift = single_shift
+        self._objective = objective
+        if self._objective is not None:
+            assert not isinstance(self._objective, ObjectiveFunction), (
+                "objective passed in must not be an ObjectiveFunction! Do not wrap "
+                "the objective in an ObjectiveFunction, simply pass the"
+                " sub-objective"
+            )
+            assert len(objective.things) == 1
+            assert isinstance(objective.things[0], type(thing))
+            assert objective.things[0] == thing
+            name = "Deflated " + self._objective._name
+            self._units = self._objective._units
+            self._scalar = self._objective._scalar
+            self._equilibrium = self._objective._equilibrium
+            self._print_value_fmt = "Deflated " + self._objective._print_value_fmt
 
         super().__init__(
             things=thing,
@@ -829,7 +860,14 @@ class DeflationOperator(_Objective):
             default_params
         )
 
-        self._dim_f = 1
+        if self._objective is not None:
+            self._objective.build()
+            self._dim_f = self._objective._dim_f
+            self._normalization = self._objective._normalization
+            self._constants = self._objective._constants
+        else:
+            self._dim_f = 1
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -881,4 +919,9 @@ class DeflationOperator(_Objective):
         else:
             deflation_parameter = jnp.sum(M_i) + self._sigma * (self._single_shift)
 
-        return deflation_parameter
+        if self._objective is not None:
+            f = self._objective.compute(params)
+        else:
+            f = 1.0
+
+        return deflation_parameter * f

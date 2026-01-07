@@ -62,7 +62,6 @@ from desc.objectives import (
     ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
-    ForceBalanceDeflated,
     FusionPower,
     GammaC,
     GenericObjective,
@@ -3213,7 +3212,6 @@ class TestComputeScalarResolution:
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
         DeflationOperator,
-        ForceBalanceDeflated,
         # need to avoid blowup near the axis
         MercierStability,
         # we do not test these since they depend too much on what the user wants
@@ -3570,9 +3568,10 @@ class TestComputeScalarResolution:
                 N_grid=int(self.eq.N * res),
             )
             obj = ObjectiveFunction(
-                ForceBalanceDeflated(
-                    eq=self.eq,
-                    eqs=[eq0],
+                DeflationOperator(
+                    thing=self.eq,
+                    things_to_deflate=[eq0],
+                    objective=ForceBalance(self.eq),
                 ),
                 use_jit=False,
             )
@@ -3737,7 +3736,6 @@ class TestObjectiveNaNGrad:
         CoilTorsion,
         EffectiveRipple,
         ForceBalanceAnisotropic,
-        ForceBalanceDeflated,
         DeflationOperator,
         FusionPower,
         GammaC,
@@ -3772,12 +3770,14 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ForceBalanceDeflated(self):
-        """ForceBalanceDeflated."""
+        """Deflation operator on force balance."""
         eq = Equilibrium(L=2, M=2, N=2)
         eq2 = eq.copy()
         eq.R_n = eq.R_n * 1.1
         eq.set_initial_guess()
-        obj = ObjectiveFunction(ForceBalanceDeflated(eq, [eq2]), use_jit=False)
+        obj = ObjectiveFunction(
+            DeflationOperator(eq, [eq2], objective=ForceBalance(eq)), use_jit=False
+        )
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "deflated force balance"

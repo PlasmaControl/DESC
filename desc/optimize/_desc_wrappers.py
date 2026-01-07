@@ -9,6 +9,48 @@ from .least_squares import lsqtr
 from .optimizer import register_optimizer
 from .stochastic import sgd
 
+# List of all optax optimizers to register
+# Optax doesn't have a specific module for optimizers, and there is no specific
+# base class for optimizers, so we have to manually create the list. The class
+# optax.GradientTransformationExtraArgs is the closest thing, but there are
+# some other classes that inherit from it that are not optimizers. Since the
+# optimizers are actually a function that returns an instance of
+# optax.GradientTransformationExtraArgs, having an automated loop is prone to
+# errors/warnings for input arguments.
+_all_optax_optimizers = [
+    "adabelief",
+    "adadelta",
+    "adafactor",
+    "adagrad",
+    "adam",
+    "adamax",
+    "adamaxw",
+    "adamw",
+    "adan",
+    "amsgrad",
+    "freeze",
+    "fromage",
+    "lamb",
+    "lars",
+    "lbfgs",
+    "lion",
+    "nadam",
+    "nadamw",
+    "noisy_sgd",
+    "novograd",
+    "optimistic_adam",
+    "optimistic_adam_v2",
+    "optimistic_gradient_descent",
+    "polyak_sgd",
+    "radam",
+    "rmsprop",
+    "rprop",
+    "sgd",
+    "sign_sgd",
+    "sm3",
+    "yogi",
+]
+
 
 @register_optimizer(
     name=["fmin-auglag", "fmin-auglag-bfgs"],
@@ -376,7 +418,7 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name=["sgd", "adam", "rmsprop"],
+    name=["sgd", "adam", "rmsprop"] + ["optax-" + opt for opt in _all_optax_optimizers],
     description=[
         "Stochastic gradient descent with Nesterov momentum. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
@@ -384,6 +426,13 @@ def _optimize_desc_fmin_scalar(
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
         "RMSProp optimizer. See "
         + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+        "For OPTAX wrappers see "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    ]
+    + [
+        f"OPTAX optimizer wrapper for {opt}. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html"  # noqa: E501
+        for opt in _all_optax_optimizers
     ],
     scalar=True,
     equality_constraints=False,

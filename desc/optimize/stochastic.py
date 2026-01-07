@@ -1,5 +1,6 @@
 """Function for minimizing a scalar function of multiple variables."""
 
+import optax
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
@@ -13,7 +14,7 @@ from .utils import (
 )
 
 
-def sgd(
+def sgd(  # noqa: C901
     fun,
     x0,
     grad,
@@ -63,6 +64,11 @@ def sgd(
             x_{k+1} &= x_{k} - \frac{\alpha \nabla f(x_{k})}{\sqrt{v_{k}} + \epsilon}
         \end{aligned}
 
+    Additionally, optax optimizers can be used by specifying the method as
+    ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
+    optimizer. Hyperparameters for the optax optimizer must be passed via the
+    `optax-options` key of `options` dictionary.
+
     Parameters
     ----------
     fun : callable
@@ -74,7 +80,11 @@ def sgd(
     args : tuple
         additional arguments passed to fun and grad
     method : str
-        Step size update rule. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+        Step update rule. Available options are `'sgd'`, `'adam'`, `'rmsprop'`.
+        Additionally, optax optimizers can be used by specifying the method as
+        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
+        optimizer. Hyperparameters for the optax optimizer must be passed via the
+        `optax-options` key of `options` dictionary.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved
@@ -126,6 +136,9 @@ def sgd(
         - ``"beta2"`` : (float > 0) Exponential decay rate for the second moment
           estimates. Default 0.999.
 
+        For optax optimizers, hyperparameters specific to the chosen optimizer
+        must be passed via the `optax-options` key of `options` dictionary.
+
 
     Returns
     -------
@@ -136,8 +149,9 @@ def sgd(
 
     """
     errorif(
-        method not in ["sgd", "adam", "rmsprop"],
-        f"Available options for method are 'sgd', 'adam' and 'rmsprop', but {method} "
+        method not in ["sgd", "adam", "rmsprop"] and "optax-" not in method,
+        "Available options for method are 'sgd', 'adam' and 'rmsprop' or "
+        f"any optax optimizer wrapper by 'optax-', but {method} "
         "is given.",
     )
     errorif(
@@ -181,6 +195,14 @@ def sgd(
     if method == "adam":
         m = jnp.zeros_like(x)
         method_options["beta2"] = options.pop("beta2", 0.999)
+    if "optax-" in method:
+        alpha_default = method_options.pop("alpha")
+        method_options = options.pop("optax-options", {})
+        if not method == "optax-lbfgs":
+            # L-BFGS uses its own line search, so don't set learning rate if not given
+            method_options["learning_rate"] = method_options.get(
+                "learning_rate", alpha_default
+            )
 
     errorif(
         len(options) > 0,
@@ -199,7 +221,7 @@ def sgd(
         print("Solver options:")
         print("-" * 40)
         for key, val in method_options.items():
-            print(f"{key:<15}: {val:.3e}")
+            print(f"{key:<15}: {val}")
         print("-" * 40, "\n")
 
     if verbose > 1:
@@ -207,7 +229,13 @@ def sgd(
         print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
-    update_rule = {"sgd": _sgd, "adam": _adam, "rmsprop": _rmsprop}[method]
+    if "optax-" not in method:
+        update_rule = {"sgd": _sgd, "adam": _adam, "rmsprop": _rmsprop}[method]
+    else:
+        optax_method = getattr(optax, method.replace("optax-", ""))(**method_options)
+        opt_state = optax_method.init(x)
+        optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
+
     while True:
         success, message = check_termination(
             df_norm,
@@ -227,9 +255,14 @@ def sgd(
         if success is not None:
             break
 
-        dxs, v, m = update_rule(gs, v, m, iteration, **method_options)
+        if "optax-" not in method:
+            dxs, v, m = update_rule(gs, v, m, iteration, **method_options)
+        else:
+            dxs, opt_state = optax_method.update(
+                gs, opt_state, x / x_scale, value=f, grad=gs, value_fn=optax_fun
+            )
         dx = dxs * x_scale
-        x = x - dx
+        x = x + dx
         gs = grad(x, *args) * x_scale
         g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
         step_norm = jnp.linalg.norm(dx, ord=2)
@@ -278,7 +311,7 @@ def sgd(
 def _sgd(g, v, m, iteration, alpha, beta):
     """Update rule for the stochastic gradient descent with momentum."""
     v = beta * v + (1 - beta) * g
-    dx = alpha * v
+    dx = -alpha * v
     return dx, v, m
 
 
@@ -289,12 +322,12 @@ def _adam(g, v, m, iteration, alpha, beta, beta2, epsilon):
     v = beta2 * v + (1 - beta2) * (g**2)
     m_hat = m / (1 - beta**t)
     v_hat = v / (1 - beta2**t)
-    dx = alpha * m_hat / (jnp.sqrt(v_hat) + epsilon)
+    dx = -alpha * m_hat / (jnp.sqrt(v_hat) + epsilon)
     return dx, v, m
 
 
 def _rmsprop(g, v, m, iteration, alpha, beta, epsilon):
     """Update rule for the RMSProp optimizer."""
     v = beta * v + (1 - beta) * g**2
-    dx = alpha * g / (jnp.sqrt(v) + epsilon)
+    dx = -alpha * g / (jnp.sqrt(v) + epsilon)
     return dx, v, m

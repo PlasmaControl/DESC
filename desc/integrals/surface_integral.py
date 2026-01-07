@@ -5,7 +5,7 @@ https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html.
 """
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import AbstractRTZGrid, ConcentricGrid, LinearGrid
+from desc.grid import AbstractGridFlux, ConcentricGrid, LinearGrid
 from desc.utils import errorif, warnif
 
 # TODO (#1389): Make the surface integral stuff objects with a callable method instead
@@ -39,7 +39,7 @@ def _get_grid_surface(grid, surface_label):
         Whether the grid knows the number of unique nodes and inverse idx.
 
     """
-    assert isinstance(grid, AbstractRTZGrid)
+    assert isinstance(grid, AbstractGridFlux)
     assert surface_label in ["rho", "poloidal", "zeta"]
     surface_label_axis = grid.get_label_axis(surface_label)
     if surface_label == "rho":

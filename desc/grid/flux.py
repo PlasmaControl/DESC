@@ -10,7 +10,7 @@ from .core import AbstractGrid
 from .utils import midpoint_spacing, periodic_spacing
 
 
-class AbstractRTZGrid(AbstractGrid):
+class AbstractGridFlux(AbstractGrid):
     """Base class for collocation grids in flux coordinates."""
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP", "_sym", "_axis"]
@@ -322,7 +322,7 @@ class AbstractRTZGrid(AbstractGrid):
         return self.__dict__.setdefault("_axis", np.array([]))
 
 
-class Grid(AbstractRTZGrid):
+class Grid(AbstractGridFlux):
     """Collocation grid with custom node placement.
 
     Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
@@ -363,7 +363,7 @@ class Grid(AbstractRTZGrid):
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
-    _io_attrs_ = AbstractRTZGrid._io_attrs_ + ["_source_grid"]
+    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_source_grid"]
 
     def __init__(
         self,
@@ -603,7 +603,7 @@ class Grid(AbstractRTZGrid):
         return self._source_grid
 
 
-class LinearGrid(AbstractRTZGrid):
+class LinearGrid(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -649,12 +649,12 @@ class LinearGrid(AbstractRTZGrid):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractRTZGrid._io_attrs_ + [
+    _io_attrs_ = AbstractGridFlux._io_attrs_ + [
         "_poloidal_endpoint",
         "_toroidal_endpoint",
     ]
 
-    _static_attrs = AbstractRTZGrid._static_attrs + ["_endpoint"]
+    _static_attrs = AbstractGridFlux._static_attrs + ["_endpoint"]
 
     def __init__(
         self,
@@ -993,7 +993,7 @@ class LinearGrid(AbstractRTZGrid):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(AbstractRTZGrid):
+class QuadratureGrid(AbstractGridFlux):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -1121,7 +1121,7 @@ class QuadratureGrid(AbstractRTZGrid):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(AbstractRTZGrid):
+class ConcentricGrid(AbstractGridFlux):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more
@@ -1161,9 +1161,9 @@ class ConcentricGrid(AbstractRTZGrid):
 
     """
 
-    _io_attrs_ = AbstractRTZGrid._io_attrs_ + ["_node_pattern"]
+    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_node_pattern"]
 
-    _static_attrs = AbstractRTZGrid._static_attrs + ["_node_pattern"]
+    _static_attrs = AbstractGridFlux._static_attrs + ["_node_pattern"]
 
     def __repr__(self):
         """str: String form of the object."""

@@ -1,7 +1,7 @@
 """Classes for representing collocation grids of coordinates."""
 
 from .core import AbstractGrid
-from .flux import AbstractRTZGrid, ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from .flux import AbstractGridFlux, ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from .utils import (
     cf_to_dec,
     dec_to_cf,

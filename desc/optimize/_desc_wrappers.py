@@ -7,7 +7,7 @@ from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
-from .stochastic import generic_sgd
+from .stochastic import sgd
 
 
 @register_optimizer(
@@ -379,11 +379,11 @@ def _optimize_desc_fmin_scalar(
     name=["sgd", "adam", "rmsprop"],
     description=[
         "Stochastic gradient descent with Nesterov momentum. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
         "ADAM optimizer. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
         "RMSProp optimizer. See "
-        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.generic_sgd.html",  # noqa: E501
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=False,
@@ -395,7 +395,7 @@ def _optimize_desc_fmin_scalar(
 def _optimize_desc_stochastic(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.generic_sgd.
+    """Wrapper for desc.optimize.sgd.
 
     Parameters
     ----------
@@ -422,7 +422,7 @@ def _optimize_desc_stochastic(
         "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See ``desc.optimize.generic_sgd`` for details.
+        settings. See ``desc.optimize.sgd`` for details.
 
     Returns
     -------
@@ -436,7 +436,7 @@ def _optimize_desc_stochastic(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    result = generic_sgd(
+    result = sgd(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,

@@ -66,10 +66,10 @@ from desc.optimize import (
     ProximalProjection,
     fmin_auglag,
     fmintr,
-    generic_sgd,
     lsq_auglag,
     lsqtr,
     optimizers,
+    sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
 from desc.utils import get_all_instances
@@ -255,7 +255,7 @@ class TestSGD:
         """Test minimizing convex test function using sgd with momentum."""
         x0 = np.ones(2)
 
-        out = generic_sgd(
+        out = sgd(
             scalar_fun,
             x0,
             scalar_grad,
@@ -273,7 +273,7 @@ class TestSGD:
         """Test minimizing convex test function using ADAM."""
         x0 = np.ones(2)
 
-        out = generic_sgd(
+        out = sgd(
             scalar_fun,
             x0,
             scalar_grad,
@@ -291,7 +291,7 @@ class TestSGD:
         """Test minimizing convex test function using RMSProp."""
         x0 = np.ones(2)
 
-        out = generic_sgd(
+        out = sgd(
             scalar_fun,
             x0,
             scalar_grad,

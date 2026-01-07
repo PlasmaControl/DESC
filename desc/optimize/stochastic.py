@@ -13,7 +13,7 @@ from .utils import (
 )
 
 
-def generic_sgd(
+def sgd(
     fun,
     x0,
     grad,
@@ -157,11 +157,13 @@ def generic_sgd(
     x = x0.copy()
     f = fun(x, *args)
     nfev += 1
-    g = grad(x, *args) / x_scale
+    # Scaled state xs = x / x_scale
+    # Scaled gradient df/dxs = df/dx * dx/dxs = df/dx * x_scale
+    gs = grad(x, *args) * x_scale
     ngev += 1
     # scaled and unscaled norms
-    g_norm = jnp.linalg.norm(g * x_scale, ord=2)
-    gs_norm = jnp.linalg.norm(g, ord=2)
+    g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
+    gs_norm = jnp.linalg.norm(gs, ord=2)
     x_norm = jnp.linalg.norm(x, ord=2)
     xs_norm = jnp.linalg.norm(x / x_scale, ord=2)
     maxiter = setdefault(maxiter, N * 100)
@@ -169,7 +171,10 @@ def generic_sgd(
     v = jnp.zeros_like(x)
     m = None
     method_options = {}
-    method_options["alpha"] = options.pop("alpha", 1e-1 * xs_norm / gs_norm)
+    method_options["alpha"] = options.pop("alpha", 1e-2 * xs_norm / gs_norm)
+    # check for zero or nan step size
+    if method_options["alpha"] == 0 or jnp.isnan(method_options["alpha"]):
+        method_options["alpha"] = 1e-3  # default small step size
     method_options["beta"] = options.pop("beta", 0.9)
     if method in ["adam", "rmsprop"]:
         method_options["epsilon"] = options.pop("epsilon", 1e-8)
@@ -222,13 +227,16 @@ def generic_sgd(
         if success is not None:
             break
 
-        dx, v, m = update_rule(g, v, m, iteration, **method_options)
-        x = x - dx * x_scale
-        g = grad(x, *args) / x_scale
-        g_norm = jnp.linalg.norm(g * x_scale, ord=jnp.inf)
-        step_norm = jnp.linalg.norm(dx * x_scale, ord=2)
+        dxs, v, m = update_rule(gs, v, m, iteration, **method_options)
+        dx = dxs * x_scale
+        x = x - dx
+        gs = grad(x, *args) * x_scale
+        g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
+        step_norm = jnp.linalg.norm(dx, ord=2)
         fnew = fun(x, *args)
         df = f - fnew
+        df_norm = jnp.abs(df)
+        x_norm = jnp.linalg.norm(x, ord=2)
         f = fnew
 
         ngev += 1
@@ -246,7 +254,7 @@ def generic_sgd(
         x=x,
         success=success,
         fun=f,
-        grad=g,
+        grad=gs / x_scale,
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

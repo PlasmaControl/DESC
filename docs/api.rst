@@ -299,7 +299,7 @@ Optimize
    desc.optimize.lsq_auglag
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
-   desc.optimize.generic_sgd
+   desc.optimize.sgd
 
 Particles
 *********

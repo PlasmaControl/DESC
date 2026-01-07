@@ -241,7 +241,7 @@ with a direct interface similar to ``scipy.optimize.minimize``:
    desc.optimize.fmintr
    desc.optimize.fmin_auglag
    desc.optimize.lsq_auglag
-   desc.optimize.generic_sgd
+   desc.optimize.sgd
 
 DESC also allows you to use custom optimizers by creating a wrapper function and
 registering it using ``desc.optimize.register_optimizer``. See `Adding optimizers <https://desc-docs.readthedocs.io/en/stable/adding_optimizers.html>`_

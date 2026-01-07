@@ -212,6 +212,7 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
             + " (name={})".format(self.name)
         )
 
+    # TO DO: Determine if this function is necessary
     def to_FourierUmbilic(
         self, N=10, grid=None, NFP=None, n_umbilic=1, sym=False, name=""
     ):

@@ -479,8 +479,9 @@ class FourierSeries(_Basis):
     NFP : int
         number of field periods
     n_umbilic : int
-        Prefactor of the form 1/NFP_umbilic_fac.
+        Prefactor of the form 1/n_umbilic.
         This is needed for the umbilic torus design.
+    sym:
         * ``'cos'`` for cos(n*z) symmetry
         * ``'sin'`` for sin(n*z) symmetry
         * ``'no n=0'`` for no n=0 mode

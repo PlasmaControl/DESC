@@ -678,7 +678,7 @@ class Omnigenity(_Objective):
         )
         errorif(
             jnp.any(field.B_lm[: field.M_B] < 0),
-            "|B| on axis must be positive! Check B_lm input.",
+            msg="|B| on axis must be positive! Check B_lm input.",
         )
 
         timer = Timer()

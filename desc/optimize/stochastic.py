@@ -203,6 +203,9 @@ def sgd(  # noqa: C901
             method_options["learning_rate"] = method_options.get(
                 "learning_rate", alpha_default
             )
+        if method == "optax-noisy_sgd":
+            # noisy_sgd requires a key for random number generation
+            method_options["key"] = method_options.get("key", 0)
 
     errorif(
         len(options) > 0,

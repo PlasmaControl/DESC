@@ -1913,7 +1913,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
         y = ys.T + yus.T
 
-        return np.asarray(y.flatten())
+        return y.flatten()
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -5e-5)
@@ -1924,8 +1924,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, info = cg(Ashift, b, tol=1e-5, maxiter=50000)
-        print(info)
+        y, info = cg(Ashift, b, tol=1e-5, maxiter=100000)
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)

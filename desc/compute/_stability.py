@@ -1599,75 +1599,77 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         ###-----Q²_ρρ----###
         ####################
         Ar = (
-            d_dv(D_theta0.T, (psi_r_over_sqrtg * (iota**2) * psi_r3 * W * g_rr) * xr_v)
-            + d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r3 * W * g_rr) * xr_z)
-            + d_dv(D_theta0.T, (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_z)
-            + d_dz(D_zeta0.T, (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_v)
+            d_dv(
+                _cT(D_theta0), (psi_r_over_sqrtg * (iota**2) * psi_r3 * W * g_rr) * xr_v
+            )
+            + d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * psi_r3 * W * g_rr) * xr_z)
+            + d_dv(_cT(D_theta0), (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_z)
+            + d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * xr_v)
         )
 
         #####################
         ###-----Q²_ϑϑ-----###
         #####################
-        Av = d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z) - d_dz(
-            D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z
+        Av = d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z) - d_dz(
+            _cT(D_zeta0), (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z
         )
 
-        Az = d_dz(D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z) - d_dz(
-            D_zeta0.T, (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z
+        Az = d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * psi_r * W * g_vv) * xz_z) - d_dz(
+            _cT(D_zeta0), (psi_r_over_sqrtg * psi_r * W * g_vv) * xv_z
         )
 
         # ρρ via dρ(ι ψ′² xr)
         Ar += iota_psi_r2 * d_dr(
-            D_rho0.T, (psi_r_over_sqrtg * W * g_vv / psi_r) * xr1_r
+            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vv / psi_r) * xr1_r
         )
 
         Ar += iota_psi_r2 * (
-            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vv) * xz_z)
-            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vv) * xv_z)
+            d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vv) * xz_z)
+            - d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vv) * xv_z)
         )
 
         # transpose of the term above
-        Av += -d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vv) * xr1_r)
-        Az += d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vv) * xr1_r)
+        Av += -d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * W * g_vv) * xr1_r)
+        Az += d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * W * g_vv) * xr1_r)
 
         #####################
         ###-----Q²_ζζ------##
         #####################
-        Av += d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_pp) * xv_v) - d_dv(
-            D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_pp) * xz_v
+        Av += d_dv(_cT(D_theta0), (psi_r_over_sqrtg * psi_r * W * g_pp) * xv_v) - d_dv(
+            _cT(D_theta0), (psi_r_over_sqrtg * psi_r * W * g_pp) * xz_v
         )
 
-        Az += d_dv(D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_pp) * xz_v) - d_dv(
-            D_theta0.T, (psi_r_over_sqrtg * psi_r * W * g_pp) * xv_v
+        Az += d_dv(_cT(D_theta0), (psi_r_over_sqrtg * psi_r * W * g_pp) * xz_v) - d_dv(
+            _cT(D_theta0), (psi_r_over_sqrtg * psi_r * W * g_pp) * xv_v
         )
 
         # ρρ via dρ(ψ′² xr), and ρ–θ/ρ–ζ couplings (effect on Ar)
-        Ar += psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_pp / psi_r) * xr2_r)
+        Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_pp / psi_r) * xr2_r)
         Ar += psi_r2 * (
-            d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_pp) * xv_v)
-            - d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_pp) * xz_v)
+            d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_pp) * xv_v)
+            - d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_pp) * xz_v)
         )
 
         # transpose influence from ρ on θ,ζ
-        Av += d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_pp) * xr2_r)
-        Az += -d_dv(D_theta0.T, (psi_r_over_sqrtg * W * g_pp) * xr2_r)
+        Av += d_dv(_cT(D_theta0), (psi_r_over_sqrtg * W * g_pp) * xr2_r)
+        Az += -d_dv(_cT(D_theta0), (psi_r_over_sqrtg * W * g_pp) * xr2_r)
 
         #####################
         ###-----Q²_ρϑ------##
         #####################
         # ρ-ρ diagonal pieces
         Ar += -(
-            d_dv(D_theta0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
-            + d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
+            d_dv(_cT(D_theta0), (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
+            + d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
         )
 
         Ar += -1 * (
-            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
-            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+            d_dv(_cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
+            + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rv * xz_z)
         )
-        Ar += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z) + d_dz(
-            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z
-        )
+        Ar += d_dv(
+            _cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z
+        ) + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rv * xv_z)
 
         #####################
         ###-----Q²_ϑρ------##
@@ -1675,35 +1677,36 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         # ρ-ρ diagonal pieces
         Ar += -(
             iota_psi_r2
-            * d_dr(D_rho0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr_v)
-            + iota_psi_r2 * d_dr(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rv) * xr_z)
+            * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr_v)
+            + iota_psi_r2
+            * d_dr(_cT(D_rho0), (psi_r * psi_r_over_sqrtg * W * g_rv) * xr_z)
         )
 
         Az += -1 * (
-            d_dz(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v)
-            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z)
+            d_dz(_cT(D_zeta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v)
+            + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z)
         )
 
-        Av += d_dz(D_zeta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v) + d_dz(
-            D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z
-        )
+        Av += d_dz(
+            _cT(D_zeta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_v
+        ) + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rv * xr_z)
         #####################
         ###------Q²_ρζ-----##
         #####################
         # ρ-ρ diagonal pieces
         Ar += -(
-            d_dv(D_theta0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr2_r)
-            + d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_rp) * xr2_r)
+            d_dv(_cT(D_theta0), (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr2_r)
+            + d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_rp) * xr2_r)
         )
 
         # off-diagonal contributions to ρ from θ,ζ blocks
         Ar += -(
-            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xv_v)
-            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rp * xv_v)
+            d_dv(_cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xv_v)
+            + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rp * xv_v)
         )
         Ar += 1 * (
-            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xz_v)
-            + d_dz(D_zeta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rp * xz_v)
+            d_dv(_cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xz_v)
+            + d_dz(_cT(D_zeta0), psi_r2 * psi_r_over_sqrtg * W * g_rp * xz_v)
         )
 
         #####################
@@ -1711,65 +1714,66 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         #####################
         # ρ-ρ diagonal pieces
         Ar += -(
-            psi_r2 * d_dr(D_rho0.T, (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr_v)
-            + psi_r2 * d_dr(D_rho0.T, (psi_r * psi_r_over_sqrtg * W * g_rp) * xr_z)
+            psi_r2
+            * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr_v)
+            + psi_r2 * d_dr(_cT(D_rho0), (psi_r * psi_r_over_sqrtg * W * g_rp) * xr_z)
         )
 
         Av += -(
-            d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_v)
-            + d_dv(D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_z)
+            d_dv(_cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_v)
+            + d_dv(_cT(D_theta0), psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_z)
         )
-        Az += d_dv(D_theta0.T, iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_v) + d_dv(
-            D_theta0.T, psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_z
-        )
+        Az += d_dv(
+            _cT(D_theta0), iota_psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_v
+        ) + d_dv(_cT(D_theta0), psi_r2 * psi_r_over_sqrtg * W * g_rp * xr_z)
 
         #####################
         ###-----Q²_ϑζ------##
         #####################
         # First two terms lie along the diagonal
-        Av += -(d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_v))
+        Av += -(d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_v))
 
-        Az += -(d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_v))
+        Az += -(d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_v))
 
-        Av += d_dz(D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_v) + d_dv(
-            D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_z
+        Av += d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_v) + d_dv(
+            _cT(D_theta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_z
         )
 
         Ar += -iota_psi_r2 * d_dr(
-            D_rho0.T, (psi_r_over_sqrtg * W * g_vp) * xz_v
-        ) + iota_psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vp) * xv_v)
+            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vp) * xz_v
+        ) + iota_psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp) * xv_v)
 
         Ar += psi_r2 * d_dr(
-            D_rho0.T, (psi_r_over_sqrtg * W * g_vp) * xz_z
-        ) - psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vp) * xv_z)
+            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vp) * xz_z
+        ) - psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp) * xv_z)
 
         # ρ-ρ term
         Ar += iota_psi_r2 * d_dr(
-            D_rho0.T, (psi_r_over_sqrtg * W * g_vp / psi_r) * xr2_r
+            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr2_r
         )
 
         #####################
         ###-----Q²_ζϑ------##
         #####################
         # First two terms lie along the diagonal
-        Av += -(d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_z))
+        Av += -(d_dv(_cT(D_theta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_z))
 
-        Az += -(d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_z))
+        Az += -(d_dv(_cT(D_theta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xz_z))
 
-        Az += d_dv(D_theta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_z) + d_dz(
-            D_zeta0.T, (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_v
+        Az += d_dv(_cT(D_theta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_z) + d_dz(
+            _cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_vp) * xv_v
         )
 
-        Av += -d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vp) * xr2_r) + d_dv(
-            D_theta0.T, (psi_r_over_sqrtg * W * g_vp) * xr1_r
+        Av += -d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * W * g_vp) * xr2_r) + d_dv(
+            _cT(D_theta0), (psi_r_over_sqrtg * W * g_vp) * xr1_r
         )
 
-        Az += d_dz(D_zeta0.T, (psi_r_over_sqrtg * W * g_vp) * xr2_r) - d_dv(
-            D_theta0.T, (psi_r_over_sqrtg * W * g_vp) * xr1_r
+        Az += d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * W * g_vp) * xr2_r) - d_dv(
+            _cT(D_theta0), (psi_r_over_sqrtg * W * g_vp) * xr1_r
         )
 
         ##ρ-ρ term
-        Ar += psi_r2 * d_dr(D_rho0.T, (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
+        Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
         ######################################
         ###----ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐-----###
@@ -1789,7 +1793,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
         # Mixed Q-J term 𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ
         Ar += -iota * d_dv(
-            D_theta0.T,
+            _cT(D_theta0),
             psi_r3
             * sqrtg
             * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
@@ -1797,7 +1801,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             * W
             * xr,
         ) - d_dz(
-            D_zeta0.T,
+            _cT(D_zeta0),
             psi_r3
             * sqrtg
             * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
@@ -1806,15 +1810,15 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             * xr,
         )
 
-        Av += d_dz(D_zeta0.T, psi_r2 * sqrtg * j_sup_zeta * W * xr)
-        Az += -d_dz(D_zeta0.T, psi_r2 * sqrtg * j_sup_zeta * W * xr)
+        Av += d_dz(_cT(D_zeta0), psi_r2 * sqrtg * j_sup_zeta * W * xr)
+        Az += -d_dz(_cT(D_zeta0), psi_r2 * sqrtg * j_sup_zeta * W * xr)
 
-        Ar += -iota_psi_r2 * d_dr(D_rho0.T, psi_r * sqrtg * j_sup_zeta * W * xr)
+        Ar += -iota_psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * j_sup_zeta * W * xr)
 
-        Av += -d_dv(D_theta0.T, psi_r2 * sqrtg * j_sup_theta * W * xr)
-        Az += d_dv(D_theta0.T, psi_r2 * sqrtg * j_sup_theta * W * xr)
+        Av += -d_dv(_cT(D_theta0), psi_r2 * sqrtg * j_sup_theta * W * xr)
+        Az += d_dv(_cT(D_theta0), psi_r2 * sqrtg * j_sup_theta * W * xr)
 
-        Ar += -psi_r2 * d_dr(D_rho0.T, psi_r * sqrtg * j_sup_theta * W * xr)
+        Ar += -psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * j_sup_theta * W * xr)
 
         # |J|² drive
         Ar += (psi_r2 * W * sqrtg * J2) * xr
@@ -1827,21 +1831,21 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
                 * (psi_r * partial_r_log_sqrtg * xr + xr3_r)
             )
             + d_dr(
-                D_rho0.T,
+                _cT(D_rho0),
                 (gamma * sqrtg * W * p0) * (psi_r * partial_r_log_sqrtg * xr + xr3_r),
             )
         )
         Av += partial_v_log_sqrtg * (gamma * sqrtg * W * p0) * (
             partial_v_log_sqrtg * xv + xv_v
         ) + d_dv(
-            D_theta0.T, (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v)
+            _cT(D_theta0), (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v)
         )
         Az += iota * (
             partial_p_log_sqrtg
             * (gamma * sqrtg * W * p0)
             * (iota * partial_p_log_sqrtg * xz + xz1_z)
             + d_dz(
-                D_zeta0.T,
+                _cT(D_zeta0),
                 (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
             )
         )
@@ -1851,7 +1855,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             partial_r_log_sqrtg
             * ((gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v))
             + d_dr(
-                D_rho0.T, (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v)
+                _cT(D_rho0),
+                (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v),
             )
         )
         Av += (
@@ -1859,7 +1864,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             * (gamma * sqrtg * W * p0)
             * (psi_r * partial_r_log_sqrtg * xr + xr3_r)
         ) + d_dv(
-            D_theta0.T,
+            _cT(D_theta0),
             ((gamma * sqrtg * W * p0) * (psi_r * partial_r_log_sqrtg * xr + xr3_r)),
         )
 
@@ -1867,7 +1872,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             partial_r_log_sqrtg
             * ((gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z))
             + d_dr(
-                D_rho0.T,
+                _cT(D_rho0),
                 (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
             )
         )
@@ -1878,7 +1883,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
                 * (psi_r * partial_r_log_sqrtg * xr + xr3_r)
             )
             + d_dz(
-                D_zeta0.T,
+                _cT(D_zeta0),
                 ((gamma * sqrtg * W * p0) * (psi_r * partial_r_log_sqrtg * xr + xr3_r)),
             )
         )
@@ -1886,14 +1891,15 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         Av += partial_v_log_sqrtg * (
             (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z)
         ) + d_dv(
-            D_theta0.T,
+            _cT(D_theta0),
             (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
         )
         Az += iota * (
             partial_p_log_sqrtg
             * ((gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v))
             + d_dz(
-                D_zeta0.T, (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v)
+                _cT(D_zeta0),
+                (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v),
             )
         )
 
@@ -1916,7 +1922,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         return y.flatten()
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
-    sigma = kwargs.get("sigma", -5e-5)
+    sigma = kwargs.get("sigma", -1e-4)
     num_matvecs = 3
 
     def OPinv(b):
@@ -1924,7 +1930,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-3, maxiter=160000)
+        y, _ = cg(Ashift, b, tol=1e-3, maxiter=240000)
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
@@ -1934,13 +1940,6 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     sort_idxs = jnp.argsort(mu, descending=True)
     w = sigma + 1.0 / mu[sort_idxs]
     v = vecs[sort_idxs][0, :]
-
-    # --no-verify v = v0.copy()
-    # --no-verify idxs = jnp.where(jnp.abs(v) > 1e-4)[0]
-    # --no-verify y = Ax(v)
-
-    # --no-verify eigval = y[idxs]/v[idxs]
-    # --no-verify print(max(eigval), min(eigval), np.mean(eigval), np.median(eigval))
 
     data["finite-n lambda matfree"] = w
     data["finite-n eigenfunction matfree"] = v

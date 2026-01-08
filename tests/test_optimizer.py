@@ -1,8 +1,10 @@
 """Tests for optimizers and Optimizer class."""
 
+import inspect
 import warnings
 
 import numpy as np
+import optax
 import pytest
 from numpy.random import default_rng
 from scipy.constants import mu_0
@@ -71,6 +73,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.optimize._desc_wrappers import _all_optax_optimizers
 from desc.optimize.optimizer import _parse_x_scale
 from desc.utils import get_all_instances
 
@@ -252,13 +255,14 @@ class TestSGD:
 
     @pytest.mark.unit
     def test_sgd_convex(self):
-        """Test minimizing convex test function using stochastic gradient descent."""
+        """Test minimizing convex test function using sgd with momentum."""
         x0 = np.ones(2)
 
         out = sgd(
             scalar_fun,
             x0,
             scalar_grad,
+            method="sgd",
             verbose=3,
             ftol=0,
             xtol=0,
@@ -266,6 +270,121 @@ class TestSGD:
             maxiter=2000,
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "method",
+        [
+            # some of the optax optimizers
+            "optax-adam",
+            "optax-adamax",
+            "optax-lbfgs",
+            "optax-rmsprop",
+            "optax-sgd",
+        ],
+    )
+    def test_optax_convex(self, method):
+        """Test minimizing convex test function using optax."""
+        x0 = np.ones(2)
+
+        out = sgd(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            method=method,
+            verbose=3,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+            maxiter=2000,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+
+    @pytest.mark.unit
+    def test_optax_custom(self):
+        """Test custom optax optimizers work."""
+        eq = desc.examples.get("DSHAPE")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+        # Optimizer
+        opt = optax.chain(
+            optax.sgd(learning_rate=1.0),
+            optax.scale_by_zoom_linesearch(max_linesearch_steps=15),
+        )
+        optimizer = Optimizer("optax-custom")
+        eq.solve(
+            optimizer=optimizer,
+            options={"optax-options": {"update_rule": opt}},
+            verbose=3,
+            maxiter=2,
+        )
+
+        with pytest.raises(ValueError):
+            # bad 'update_rule' type
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": "not-an-optax-optimizer"}},
+                verbose=3,
+                maxiter=2,
+            )
+
+        with pytest.raises(ValueError):
+            # extra hyperparameters
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": opt, "learning_rate": 0.1}},
+                verbose=3,
+                maxiter=2,
+            )
+
+    @pytest.mark.unit
+    def test_available_optax_optimizers(self):
+        """Test that all optax optimizers are included in _all_optax_optimizers."""
+        optimizers = []
+        # Optax doesn't have a specific module for optimizers, and there is no specific
+        # base class for optimizers, so we have to manually exclude some outliers. The
+        # class optax.GradientTransformationExtraArgs is the closest thing, but there
+        # are some other classes that inherit from it that are not optimizers. Since
+        # the optimizers are actually a function that returns an instance of
+        # optax.GradientTransformationExtraArgs,
+        names_to_exclude = [
+            "GradientTransformationExtraArgs",
+            "freeze",
+            "scale_by_backtracking_linesearch",
+            "scale_by_polyak",
+            "scale_by_zoom_linesearch",
+            "optimistic_adam",  # deprecated
+        ]
+        for name, obj in inspect.getmembers(optax):
+            if name.startswith("_"):
+                continue
+            if callable(obj):
+                try:
+                    sig = inspect.signature(obj)
+                    ins = {
+                        p.name: 0.1
+                        for p in sig.parameters.values()
+                        if p.default is inspect._empty
+                    }
+                    if name == "noisy_sgd":
+                        ins["key"] = 0
+                    out = obj(**ins)
+                    if isinstance(out, optax.GradientTransformationExtraArgs):
+                        if name not in names_to_exclude:
+                            optimizers.append(name)
+                except Exception:
+                    print(f"Could not instantiate: {name}")
+                    pass
+
+        msg = (
+            "Wrapped optax optimizers can be out of date. If the newly added callable "
+            "is not an optimizer, add it to the names_to_exclude list in this test."
+        )
+        print(optimizers)
+        assert len(set(optimizers)) == len(_all_optax_optimizers), msg
+        assert sorted(set(optimizers)) == sorted(_all_optax_optimizers), msg
+        assert len(set(_all_optax_optimizers)) == len(_all_optax_optimizers), msg
 
 
 class TestLSQTR:
@@ -643,7 +762,9 @@ class TestAllOptimizers:
     econ = get_fixed_boundary_constraints(eq=eqe)
     fcon = get_fixed_boundary_constraints(eq=eqf)
 
-    scalar_methods = [opt for opt in optimizers if optimizers[opt]["scalar"]]
+    scalar_methods = [
+        opt for opt in optimizers if optimizers[opt]["scalar"] and opt != "optax-custom"
+    ]
     lsq_methods = [opt for opt in optimizers if not optimizers[opt]["scalar"]]
 
     @pytest.mark.unit

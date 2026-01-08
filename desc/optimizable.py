@@ -126,7 +126,7 @@ class Optimizable(ABC):
         """
         return sorted(set(list(args)))
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -141,6 +141,9 @@ class Optimizable(ABC):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -149,7 +152,7 @@ class Optimizable(ABC):
         """
         # we don't know anything about the object so just assume scale is all 1s.
         # subclasses can implement their own logic.
-        return tree_map(jnp.ones_like, self.params_dict)
+        return tree_map(lambda x: default * jnp.ones_like(x), self.params_dict)
 
 
 class OptimizableCollection(Optimizable):
@@ -233,7 +236,7 @@ class OptimizableCollection(Optimizable):
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -248,13 +251,16 @@ class OptimizableCollection(Optimizable):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
         list of dict of ndarray
             Array of scale values for each parameter
         """
-        return [s._get_ess_scale(alpha, order, min_value) for s in self]
+        return [s._get_ess_scale(alpha, order, min_value, default) for s in self]
 
 
 def optimizable_parameter(f):

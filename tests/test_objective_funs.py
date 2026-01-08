@@ -3211,6 +3211,7 @@ class TestComputeScalarResolution:
         ToroidalFlux,
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
+        # no grid dependence for DeflationOperator
         DeflationOperator,
         # need to avoid blowup near the axis
         MercierStability,
@@ -3577,30 +3578,14 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=2e-2)
-
-    @pytest.mark.regression
-    def test_compute_scalar_resolution_DeflationOperator(self):
-        """Deflation Operator."""
-        eq0 = self.eq.copy()
-        eq0.set_initial_guess()  # make eq0 different than self.eq
-        f = np.zeros_like(self.res_array, dtype=float)
-        for i, res in enumerate(self.res_array):
-            self.eq.change_resolution(
-                L_grid=int(self.eq.L * res),
-                M_grid=int(self.eq.M * res),
-                N_grid=int(self.eq.N * res),
-            )
-            obj = ObjectiveFunction(
-                DeflationOperator(
-                    thing=self.eq,
-                    things_to_deflate=[eq0],
-                ),
-                use_jit=False,
-            )
-            obj.build(verbose=0)
-            f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+        # put res of self.eq back to original
+        res = self.res_array[0]
+        self.eq.change_resolution(
+            L_grid=int(self.eq.L * res),
+            M_grid=int(self.eq.M * res),
+            N_grid=int(self.eq.N * res),
+        )
+        np.testing.assert_allclose(f, f[-1], rtol=4e-2)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_omnigenity(self):

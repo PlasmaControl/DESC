@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.diffmat_utils import DiffMat
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.utils import ResolutionWarning, Timer, setdefault, warnif
 
 from .normalization import compute_scaling_factors
@@ -587,4 +587,225 @@ class BallooningStability(_Objective):
         # shifted ReLU
         lam = (lam - lambda0) * (lam >= lambda0)
         lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
+        return lam
+
+
+class FinitenStability(_Objective):
+    """A type of ideal MHD instability.
+
+    Finite-n ideal MHD ballooning modes are of significant interest.
+    With this class, we optimize MHD equilibria against the finite-n unstable modes.
+
+    Targets the following metric:
+
+    f = w₀ sum(ReLU(λ-λ₀))
+
+    where λ is the negative squared growth rate for each field line (such that λ>0 is
+    unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    grid : float
+        Flux surface to optimize on. Instabilities often peak near the middle.
+    diffmat: DiffMat
+        DiffMat object.
+        Default is an object containing None.
+    lambda0 : float
+        Threshold for penalizing growth rates in metric above.
+    w0 : float
+        Weight for sum and max terms in metric above.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_axisym",
+        "_n_mode_axisym",
+        "_gamma",
+        "_v_guess",
+    ]
+
+    _coordinates = "r"
+    _units = "~"
+    _print_value_fmt = "Finite-n lambda: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        v_guess=None,
+        grid=None,
+        axisym=None,
+        gamma=0.0,
+        n_mode_axisym=1,
+        diffmat=DiffMat(),
+        lambda0=0.0,
+        w0=1.0,
+        name="finite-n lambda matfree",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        self._axisym = axisym
+        self._v_guess = v_guess
+        self._gamma = gamma
+        self._diffmat = diffmat
+        self._grid = grid
+        self._lambda0 = lambda0
+        self._w0 = w0
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        a_grid = LinearGrid(
+            rho=jnp.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        assert not a_grid.axis.size
+
+        self._dim_f = 1
+        transforms = get_transforms(["a"], obj=eq, grid=a_grid)
+        profiles = get_profiles(["a"] + ["finite-n lambda matfree"], eq, a_grid)
+
+        grid_PEST = self._grid
+        n_rho = grid_PEST.num_rho
+        n_theta = grid_PEST.num_theta
+        n_zeta = grid_PEST.num_zeta
+        PEST_nodes = jnp.reshape(
+            grid_PEST.meshgrid_reshape(grid_PEST.nodes, order="rtz"),
+            (n_rho * n_theta * n_zeta, 3),
+        )
+
+        self._constants = {
+            "a_transforms": transforms,
+            "diffmat": self._diffmat,
+            "PEST_nodes": PEST_nodes,
+            "profiles": profiles,
+            "quad_weights": 1.0,
+            "lambda0": self._lambda0,
+            "w0": self._w0,
+        }
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the finite-n stability eigenvalue.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        lam : ndarray
+            Finite-n instability eigenvalue.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        eq = self.things[0]
+
+        a_data = compute_fun(
+            eq,
+            ["a"],
+            params=params,
+            transforms=constants["a_transforms"],
+            profiles=constants["profiles"],
+        )
+
+        data = {"a": a_data["a"]}
+        PEST_nodes = constants["PEST_nodes"]
+
+        DESC_nodes = eq.map_coordinates(
+            PEST_nodes,  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            tol=1e-12,
+            maxiter=50,
+            params=params,
+        )
+        DESC_nodes_spacing = jnp.vstack(
+            (jnp.array([0.0, 0.0, 0.0]), jnp.diff(DESC_nodes, axis=0))
+        )
+        grid = Grid(
+            DESC_nodes,
+            spacing=DESC_nodes_spacing,
+            coordinates="rtz",
+            source_grid=self._grid,
+            sort=False,
+            jitable=True,
+        )
+
+        ## trying to not use constants
+        data = compute_fun(
+            eq,
+            ["finite-n lambda matfree"],
+            params=params,
+            transforms=get_transforms(
+                keys=["finite-n lambda matfree"],
+                obj=eq,
+                grid=grid,
+                diffmat=constants["diffmat"],
+                jitable=True,
+            ),
+            data=data,
+            profiles=constants["profiles"],
+            axisym=self._axisym,
+            v_guess=self._v_guess,
+            gamma=self._gamma,
+        )
+
+        lam = data["finite-n lambda matfree"]
+        lambda0, w0 = constants["lambda0"], constants["w0"]
+        # shifted ReLU
+        lam = w0 * (lam - lambda0) * (lam >= lambda0)
         return lam

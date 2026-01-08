@@ -34,10 +34,13 @@ def sgd(  # noqa: C901
     This is the generic function. The update method is chosen based on the `method`
     argument.
 
-    Update rule for ``'sgd'``:
+    Update rule for ``'sgd'``,
 
-    v_k     =  β * v_{k-1} + (1-β) ∇f(x_k)
+    v_k     =  β * v_{k-1} + (1-β) * ∇f(x_k)
+
     x_{k+1} =  x_k - α * v_k
+
+    where α is the step size and β is the momentum parameter.
 
     Additionally, optax optimizers can be used by specifying the method as
     ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
@@ -56,13 +59,13 @@ def sgd(  # noqa: C901
         additional arguments passed to fun and grad
     method : str
         Name of the method to use. Available options are `'sgd'`.
-        Additionally, optax optimizers can be used by specifying the method as
-        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid optax
-        optimizer. Hyperparameters for the optax optimizer must be passed via the
-        `optax-options` key of `options` dictionary. A custom ``optax`` optimizer can
-        be used by specifying the method as ``'optax-custom'`` and passing the
-        ``optax`` optimizer via the ``'update-rule'`` key of `optax-options`
-        in the `options` dictionary.
+        Additionally, ``optax`` optimizers can be used by specifying the method as
+        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid ``optax``
+        optimizer. Hyperparameters for the ``optax`` optimizer must be passed via the
+        ``'optax-options'`` key of ``options`` dictionary. A custom ``optax``
+        optimizer can be used by specifying the method as ``'optax-custom'`` and
+        passing the ``optax`` optimizer via the ``'update-rule'`` key of
+        ``'optax-options'`` in the ``options`` dictionary.
     x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. Improved

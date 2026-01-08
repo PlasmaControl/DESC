@@ -23,7 +23,6 @@ from ._equilibrium import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
-    ForceBalanceDeflated,
     HelicalForceBalance,
     RadialForceBalance,
 )

@@ -732,10 +732,10 @@ class DeflationOperator(_Objective):
         Must have the same pytree structure as thing.params_dict.
         The default is to deflate all indices of all parameters.
     objective: _Objective, optional
-        Objective to wrap with the DeflationWrapper. If not None, the cost will
+        Objective to wrap with the DeflationOperator. If not None, the cost will
         be M(x;xₖ)f(x) where f(x) is the Objective's cost. If None, then the cost
         returned will be M(x;xₖ). The objective must accept only one optimizable
-        thing, and it must be the same as the thing passed to the DeflationWrapper
+        thing, and it must be the same as the thing passed to the DeflationOperator
     sigma: float, optional
         shift parameter in deflation operator.
     power: float, optional
@@ -790,8 +790,6 @@ class DeflationOperator(_Objective):
         multiple_deflation_type="prod",
         single_shift=False,
     ):
-        from desc.objectives import ObjectiveFunction
-
         if target is None and bounds is None:
             target = 0
         assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
@@ -806,11 +804,9 @@ class DeflationOperator(_Objective):
         self._single_shift = single_shift
         self._objective = objective
         if self._objective is not None:
-            assert not isinstance(self._objective, ObjectiveFunction), (
-                "objective passed in must not be an ObjectiveFunction! Do not wrap "
-                "the objective in an ObjectiveFunction, simply pass the"
-                " sub-objective"
-            )
+            assert isinstance(
+                self._objective, _Objective
+            ), "objective passed in must be an _Objective!"
             assert len(objective.things) == 1
             assert isinstance(objective.things[0], type(thing))
             assert objective.things[0] == thing
@@ -860,7 +856,8 @@ class DeflationOperator(_Objective):
         )
 
         if self._objective is not None:
-            self._objective.build()
+            if not self._objective.built:
+                self._objective.build()
             self._dim_f = self._objective._dim_f
             self._normalization = self._objective._normalization
             self._constants = self._objective._constants

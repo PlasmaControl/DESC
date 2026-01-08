@@ -4,13 +4,27 @@ import re
 
 import numpy as np
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
+from desc.backend import (
+    jnp,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, getsource, jaxify, parse_argname_change, setdefault
+from desc.utils import (
+    broadcast_tree,
+    errorif,
+    getsource,
+    jaxify,
+    parse_argname_change,
+    setdefault,
+)
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
@@ -668,3 +682,245 @@ class ObjectiveFromUser(_Objective):
         )
         f = self._fun_wrapped(data)
         return f
+
+
+class DeflationOperator(_Objective):
+    r"""Deflation wrapper to be added to or to wrap objective to find new solutions.
+
+    If DeflationOperator is created while passing in an objective, the cost will be M*f
+    where f is the objective's computed value.
+    If DeflationOperator is created without passing in an objective, the cost will be
+    only M
+
+    Deflation is done on the passed-in list of parameters. This objective
+    value will be large if the current state is close to one of the already-found
+    states given by `things_to_deflate`, thus enabling new solutions to be found,
+    and guarantees that old solutions are not found (as the objective increases
+    without bound as an already-found solution is approached)
+
+    The deflation operator is defined as:
+
+    M(x;xₖ)=(||x−xₖ||₂)⁻ᵖ + σ
+
+    (if `deflation_type="power"`)
+
+    or
+
+    M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ
+
+    (if `deflation_type="exp"`)
+
+    where x is the state and xₖ the passed-in known state.
+    If multiple known states are used for deflation, then M is computed
+    for each deflated state, then either multipled or added together (depending
+    on if `multiple_deflation_type="prod"` or `"sum"`) to form the final cost.
+    If an objective was passed in, this will then be multiplied by that objective's
+    compute.
+
+    Parameters
+    ----------
+    thing : Optimizable
+        Optimizable that will be optimized to satisfy the Objective.
+    things_to_deflate: list of Equilibrium
+        list of objects to use in deflation operator. Should be same type
+        as thing.
+    params_to_deflate_with : nested list of dicts, optional
+        Dict keys are the names of parameters to deflate (str), and dict values are the
+        indices to deflate with for each corresponding parameter (int array).
+        Use True (False) instead of an int array to deflate all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as thing.params_dict.
+        The default is to deflate all indices of all parameters.
+    objective: _Objective, optional
+        Objective to wrap with the DeflationWrapper. If not None, the cost will
+        be M(x;xₖ)f(x) where f(x) is the Objective's cost. If None, then the cost
+        returned will be M(x;xₖ). The objective must accept only one optimizable
+        thing, and it must be the same as the thing passed to the DeflationWrapper
+    sigma: float, optional
+        shift parameter in deflation operator.
+    power: float, optional
+        power parameter in deflation operator, ignored if `deflation_type="exp"`.
+    deflation_type: {"power","exp"}
+        What type of deflation to use. If `"power"`, uses the form
+        pioneered by Farrell where M(𝐱;𝐱₁*) = ||𝐱−𝐱₁*||⁻ᵖ₂ + σ
+        while `"exp"` uses the form from Riley 2024, where
+        M(𝐱;𝐱₁*) = exp(1/||𝐱−𝐱₁*||₂) + σ. Defaults to "power".
+    multiple_deflation_type: {"prod","sum"}
+        When deflating multiple states, how to reduce the individual deflation
+        terms Mᵢ(𝐱;𝐱ᵢ*). `"prod"` will multiply each individual deflation term
+        together, while `"sum"` will add each individual term.
+    single_shift: bool,
+        Whether to use a single shift or include the shift in each individual
+        deflation term. i.e. whether to use M = σ + prod(||𝐱−𝐱_i*||⁻ᵖ₂) (if True)
+        or to use M = prod( σ + ||𝐱−𝐱_i*||⁻ᵖ₂). Defaults to False.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_deflation_type",
+        "_multiple_deflation_type",
+        "_single_shift",
+    ]
+
+    _coordinates = "rtz"
+    _units = "~"
+    _print_value_fmt = "Deflation error: "
+
+    def __init__(
+        self,
+        thing,
+        things_to_deflate,
+        params_to_deflate_with=None,
+        objective=None,
+        sigma=1.0,
+        power=2,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name="Deflation",
+        jac_chunk_size=None,
+        deflation_type="power",
+        multiple_deflation_type="prod",
+        single_shift=False,
+    ):
+        from desc.objectives import ObjectiveFunction
+
+        if target is None and bounds is None:
+            target = 0
+        assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
+        self._things_to_deflate = things_to_deflate
+        self._sigma = sigma
+        self._power = power
+        self._params_to_deflate_with = params_to_deflate_with
+        assert deflation_type in ["power", "exp"]
+        self._deflation_type = deflation_type
+        assert multiple_deflation_type in ["prod", "sum"]
+        self._multiple_deflation_type = multiple_deflation_type
+        self._single_shift = single_shift
+        self._objective = objective
+        if self._objective is not None:
+            assert not isinstance(self._objective, ObjectiveFunction), (
+                "objective passed in must not be an ObjectiveFunction! Do not wrap "
+                "the objective in an ObjectiveFunction, simply pass the"
+                " sub-objective"
+            )
+            assert len(objective.things) == 1
+            assert isinstance(objective.things[0], type(thing))
+            assert objective.things[0] == thing
+            name = "Deflated " + self._objective._name
+            self._units = self._objective._units
+            self._scalar = self._objective._scalar
+            self._equilibrium = self._objective._equilibrium
+            self._print_value_fmt = "Deflated " + self._objective._print_value_fmt
+
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params_to_deflate_with = setdefault(
+            self._params_to_deflate_with, default_params
+        )
+        self._params_to_deflate_with = broadcast_tree(
+            self._params_to_deflate_with, default_params
+        )
+        self._indices = tree_leaves(self._params_to_deflate_with)
+        assert tree_structure(self._params_to_deflate_with) == tree_structure(
+            default_params
+        )
+
+        if self._objective is not None:
+            self._objective.build()
+            self._dim_f = self._objective._dim_f
+            self._normalization = self._objective._normalization
+            self._constants = self._objective._constants
+        else:
+            self._dim_f = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deflation error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : scalar
+            Deflation error.
+
+        """
+        this_thing_params = jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params), self._indices)
+            ]
+        )
+        diffs = [
+            this_thing_params
+            - jnp.concatenate(
+                [
+                    jnp.atleast_1d(param[idx])
+                    for param, idx in zip(tree_leaves(t.params_dict), self._indices)
+                ]
+            )
+            for t in self._things_to_deflate
+        ]
+
+        diffs = jnp.vstack(diffs)
+        if self._deflation_type == "power":
+            M_i = 1 / jnp.linalg.norm(diffs, axis=1) ** self._power + self._sigma * (
+                not self._single_shift
+            )
+        else:
+            M_i = jnp.exp(1 / jnp.linalg.norm(diffs, axis=1)) + self._sigma * (
+                not self._single_shift
+            )
+
+        if self._multiple_deflation_type == "prod":
+            deflation_parameter = jnp.prod(M_i) + self._sigma * (self._single_shift)
+        else:
+            deflation_parameter = jnp.sum(M_i) + self._sigma * (self._single_shift)
+
+        if self._objective is not None:
+            f = self._objective.compute(params)
+        else:
+            f = 1.0
+
+        return deflation_parameter * f

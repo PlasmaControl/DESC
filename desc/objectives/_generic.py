@@ -763,7 +763,6 @@ class DeflationOperator(_Objective):
         "_deflation_type",
         "_multiple_deflation_type",
         "_single_shift",
-        "_objective",
     ]
 
     _coordinates = "rtz"

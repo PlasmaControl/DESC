@@ -1051,36 +1051,57 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
     B = B.at[theta_idx, theta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
-    B = B.at[zeta_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
-    )
 
     B = B.at[rho_idx, theta_idx].add(
         jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
     )
-    B = B.at[rho_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
-    )
-    B = B.at[theta_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
-    )
+
+    # typical in magnetic mirrors
+    ismirror = jnp.all(jnp.abs(iota) < 1e-12)
+
+    if ismirror:
+        B = B.at[zeta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_pp).flatten()))
+        B = B.at[rho_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * psi_r * sqrtg * g_rp).flatten())
+        )
+        B = B.at[theta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vp).flatten()))
+    else:
+        B = B.at[zeta_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
+        )
+        B = B.at[rho_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
+        )
+        B = B.at[theta_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
+        )
 
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
         # To improve performance set exact to False
-        exact = True
-        if exact:
-            A = A.at[rho_idx, rho_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+        A = A.at[rho_idx, rho_idx].add(
+            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+        )
+        A = A.at[theta_idx, theta_idx].add(
+            _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
+        )
+        A = A.at[rho_idx, theta_idx].add(
+            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
+        )
+
+        if ismirror:
+            A = A.at[zeta_idx, zeta_idx].add(
+                _cT(C_zeta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
             )
-            A = A.at[theta_idx, theta_idx].add(
-                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
+            A = A.at[rho_idx, zeta_idx].add(
+                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta))
             )
+            A = A.at[theta_idx, zeta_idx].add(
+                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
+            )
+        else:
             A = A.at[zeta_idx, zeta_idx].add(
                 _cT(C_zeta * iota.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
-            )
-            A = A.at[rho_idx, theta_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
             )
             A = A.at[rho_idx, zeta_idx].add(
                 _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))

@@ -3758,7 +3758,7 @@ class TestObjectiveNaNGrad:
         """Deflation operator on force balance."""
         eq = Equilibrium(L=2, M=2, N=2)
         eq2 = eq.copy()
-        eq.R_n = eq.R_n * 1.1
+        eq.R_lmn = eq.R_lmn * 1.1
         eq.set_initial_guess()
         obj = ObjectiveFunction(
             DeflationOperator(eq, [eq2], objective=ForceBalance(eq)), use_jit=False

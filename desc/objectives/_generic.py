@@ -813,7 +813,6 @@ class DeflationOperator(_Objective):
             name = "Deflated " + self._objective._name
             self._units = self._objective._units
             self._scalar = self._objective._scalar
-            self._equilibrium = self._objective._equilibrium
             self._print_value_fmt = "Deflated " + self._objective._print_value_fmt
 
         super().__init__(

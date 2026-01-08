@@ -14,7 +14,7 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import LinearGrid, QuadratureGrid, _Grid
+from desc.grid import AbstractGrid, LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import errorif, reflection_matrix, rotation_matrix
@@ -122,7 +122,7 @@ class Curve(IOAble, Optimizable, ABC):
         elif isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=grid)
         errorif(
-            not isinstance(grid, _Grid),
+            not isinstance(grid, AbstractGrid),
             TypeError,
             f"grid argument must be a Grid object or an integer, got type {type(grid)}",
         )
@@ -526,7 +526,7 @@ class Surface(IOAble, Optimizable, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
-        elif not isinstance(grid, _Grid):
+        elif not isinstance(grid, AbstractGrid):
             raise TypeError(
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"

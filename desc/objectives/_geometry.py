@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import AbstractGridFlux, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -111,6 +111,12 @@ class AspectRatio(_Objective):
                 )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
@@ -256,6 +262,12 @@ class Elongation(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
 
@@ -396,6 +408,12 @@ class Volume(_Objective):
                 )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 1
         self._data_keys = ["V"]
@@ -909,6 +927,12 @@ class MeanCurvature(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
 
@@ -1049,6 +1073,12 @@ class PrincipalCurvature(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
 
@@ -1178,6 +1208,12 @@ class BScaleLength(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
@@ -1311,6 +1347,12 @@ class GoodCoordinates(_Objective):
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = ["sqrt(g)", "g_rr", "rho"]
@@ -1463,6 +1505,12 @@ class MirrorRatio(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["mirror ratio"]

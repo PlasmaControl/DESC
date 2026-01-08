@@ -81,7 +81,7 @@ class Transform(IOAble):
             method != "jitable"
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
-            and grid.node_pattern != "custom"
+            and not isinstance(grid, Grid)
             and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
@@ -182,7 +182,7 @@ class Transform(IOAble):
             self._method = "direct1"
             return
 
-        if not grid.fft_toroidal:
+        if not grid.fft_x2:
             warnings.warn(
                 colored(
                     "fft method requires compatible grid, got {}".format(grid)
@@ -258,7 +258,7 @@ class Transform(IOAble):
 
         from desc.grid import LinearGrid
 
-        if not (grid.fft_toroidal or isinstance(grid, LinearGrid)):
+        if not (grid.fft_x2 or isinstance(grid, LinearGrid)):
             warnings.warn(
                 colored(
                     "direct2 method requires compatible grid, got {}".format(grid)

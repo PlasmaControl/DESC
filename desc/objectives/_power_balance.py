@@ -2,7 +2,7 @@
 
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
-from desc.grid import QuadratureGrid
+from desc.grid import AbstractGridFlux, QuadratureGrid
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
@@ -101,13 +101,22 @@ class FusionPower(_Objective):
             ValueError,
             "Equilibrium must have an ion temperature profile.",
         )
+
         if self._grid is None:
-            self._grid = QuadratureGrid(
+            grid = QuadratureGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
             )
+        else:
+            grid = self._grid
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = 1
         self._data_keys = ["P_fusion"]
 
@@ -117,8 +126,8 @@ class FusionPower(_Objective):
         timer.start("Precomputing transforms")
 
         self._constants = {
-            "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
-            "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=grid),
+            "transforms": get_transforms(self._data_keys, obj=eq, grid=grid),
         }
 
         timer.stop("Precomputing transforms")
@@ -261,13 +270,22 @@ class HeatingPowerISS04(_Objective):
             ValueError,
             "Equilibrium must have an electron density profile.",
         )
+
         if self._grid is None:
-            self._grid = QuadratureGrid(
+            grid = QuadratureGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
             )
+        else:
+            grid = self._grid
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = 1
         self._data_keys = ["P_ISS04"]
 
@@ -277,8 +295,8 @@ class HeatingPowerISS04(_Objective):
         timer.start("Precomputing transforms")
 
         self._constants = {
-            "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
-            "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=grid),
+            "transforms": get_transforms(self._data_keys, obj=eq, grid=grid),
             "H_ISS04": self._H_ISS04,
             "gamma": self._gamma,
         }

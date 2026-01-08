@@ -8,7 +8,7 @@ from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatte
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, _Grid
+from desc.grid import AbstractGrid, LinearGrid
 from desc.integrals import compute_B_plasma
 from desc.utils import (
     Timer,
@@ -121,10 +121,10 @@ class _CoilObjective(_Objective):
                 grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
-        if isinstance(grid, _Grid):
+        if isinstance(grid, AbstractGrid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
-            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
+            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, AbstractGrid))
 
         errorif(
             len(grid) != len(coils),
@@ -154,7 +154,7 @@ class _CoilObjective(_Objective):
             lambda c, g: get_transforms(self._data_keys, obj=c, grid=g),
             coil,
             grid,
-            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
+            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, AbstractGrid),
         )
 
         self._grid = grid

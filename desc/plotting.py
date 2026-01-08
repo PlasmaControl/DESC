@@ -419,7 +419,7 @@ def _compute_Bn(
 
     theta_endpoint = zeta_endpoint = False
 
-    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+    if plot_grid.fft_x1 and plot_grid.fft_x2:
         source_grid = eval_grid = plot_grid
     # often plot_grid is still linearly spaced but includes endpoints. In that case
     # make a temp grid that just leaves out the endpoint so we can FFT
@@ -442,7 +442,7 @@ def _compute_Bn(
             endpoint=False,
         )
         # override attr since we know fft is ok even with custom nodes
-        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        vc_grid._fft_x1 = vc_grid._fft_x2 = True
         source_grid = eval_grid = vc_grid
     else:
         eval_grid = plot_grid
@@ -1337,7 +1337,7 @@ def plot_fsa(  # noqa: C901
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-    grid : _Grid
+    grid : AbstractGrid
         Grid to compute name on. If provided, the parameters
         ``rho``, ``M``, and ``N`` are ignored.
     compute_kwargs : dict, optional
@@ -3616,19 +3616,16 @@ def plot_grid(grid, return_data=False, **kwargs):
         ]
     )
     ax.set_yticklabels([])
-    if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
+    if grid.__class__.__name__ in ["Grid", "LinearGrid", "QuadratureGrid"]:
         ax.set_title(
-            "{}, $L={}$, $M={}, pattern: {}$".format(
-                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
-            ),
+            "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
             pad=20,
+            fontsize=title_fontsize,
         )
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
-            "{}, $M={}$, pattern: {}".format(
-                grid.__class__.__name__,
-                grid.M,
-                grid.node_pattern,
+            "{}, $L={}$, $M={}, pattern: {}$".format(
+                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
             ),
             pad=20,
             fontsize=title_fontsize,

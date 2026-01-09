@@ -563,7 +563,9 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         c=b,
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
-        sentinel=-1.0,
+        # choose sentinel as 0 so that junk values are in the domain which
+        # ensures B(junk value) cannot be less than minimum of B on domain.
+        sentinel=0.0,
     )
     b = b[..., None, :]
     b = flatten_mat((2 * b[..., 0] * mins + b[..., 1] > 0) & (mins > 0))

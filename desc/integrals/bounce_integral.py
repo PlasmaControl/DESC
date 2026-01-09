@@ -24,9 +24,9 @@ from desc.backend import jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    _sentinel,
     PiecewiseChebyshevSeries,
     Y_B_rule,
+    _sentinel,
     argmin,
     bounce_points,
     broadcast_for_bounce,

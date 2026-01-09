@@ -40,7 +40,7 @@ from desc.integrals._bounce_utils import (
     PiecewiseChebyshevSeries,
     bounce_points,
     check_bounce_points,
-    get_extrema,
+    get_mins,
 )
 from desc.integrals.quad_utils import (
     automorphism_sin,
@@ -868,24 +868,25 @@ class TestBouncePoints:
         np.testing.assert_allclose(z2, intersect[[2, 4, 6]], rtol=1e-5)
 
     @pytest.mark.unit
-    def test_get_extrema(self):
-        """Test computation of extrema of |B|."""
+    def test_get_mins(self):
+        """Test computation of minima of |B|."""
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
-        ext, B_ext = get_extrema(k, B.c.T)
-        mask = ~np.isnan(ext)
-        ext, B_ext = ext[mask], B_ext[mask]
-        idx = np.argsort(ext)
+        mins, B_mins = get_mins(k, B.c.T, fill_value=np.nan)
+        mask = ~np.isnan(mins)
+        mins, B_mins = mins[mask], B_mins[mask]
+        idx = np.argsort(mins)
 
         ext_scipy = np.sort(B.derivative().roots(extrapolate=False))
+        ext_scipy = ext_scipy[B.derivative(2)(ext_scipy) >= 0]
         B_ext_scipy = B(ext_scipy)
-        assert ext.size == ext_scipy.size
-        np.testing.assert_allclose(ext[idx], ext_scipy)
-        np.testing.assert_allclose(B_ext[idx], B_ext_scipy)
+        assert mins.size == ext_scipy.size
+        np.testing.assert_allclose(mins[idx], ext_scipy)
+        np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
 
     @pytest.mark.unit
     def test_z1_first_chebyshev(self):

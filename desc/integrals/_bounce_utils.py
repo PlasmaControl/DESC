@@ -526,46 +526,63 @@ def _plot_intersect(
         )
 
 
-def get_extrema(knots, g, sentinel=jnp.nan):
-    """Return extrema (z*, g(z*)).
+def get_mins(knots, B, num_mins=-1, fill_value=0.0):
+    """Return minima of (z*, B(z*)) within open interval defined by knots.
 
     Parameters
     ----------
     knots : jnp.ndarray
         Shape (N, ).
         ζ coordinates of spline knots. Must be strictly increasing.
-    g : jnp.ndarray
+    B : jnp.ndarray
         Shape (..., N - 1, 4).
-        Polynomial coefficients of the spline of g in local power basis.
+        Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    sentinel : float
-        Value with which to pad array to return fixed shape.
+    num_mins : jnp.ndarray
+        Number of minima to return. Otherwise returns maximum possible.
+    fill_value : float
+        If there were less than ``num_mins`` minima detected, then the result
+        is padded with ``fill_value``.
 
     Returns
     -------
-    ext, g_ext : jnp.ndarray
-        Shape (..., (N - 1) * 2).
-        First array enumerates z*. Second array enumerates g(z*)
+    mins, B_mins : jnp.ndarray
+        Shape (..., num mins).
+        First array enumerates z*. Second array enumerates B(z*).
         Sorting order of extrema is arbitrary.
 
     """
-    ext = polyroot_vec(
-        c=g[..., :-1] * jnp.arange(g.shape[-1] - 1, 0, -1),
+    if num_mins < 0 or num_mins > B.shape[-2]:
+        # The number of interior minima for C¹ continuous cubic spline must be < N,
+        # and every minima must be a simple root.
+        num_mins = B.shape[-2]
+
+    b = B[..., :-1] * jnp.arange(B.shape[-1] - 1, 0, -1)
+    mins = polyroot_vec(
+        c=b,
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
-        sentinel=sentinel,
+        sentinel=-1.0,
     )
-    g_ext = flatten_mat(cubic_val(x=ext, c=g[..., None, :]))
-    # Transform out of local power basis expansion.
-    ext = flatten_mat(ext + knots[:-1, None])
-    assert ext.shape == g_ext.shape
-    assert ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
-    return ext, g_ext
+    b = b[..., None, :]
+    b = flatten_mat((2 * b[..., 0] * mins + b[..., 1] > 0) & (mins > 0))
+    mins = flatten_mat(
+        jnp.stack(
+            [
+                # Transform out of local power basis expansion.
+                mins + knots[:-1, None],
+                cubic_val(x=mins, c=B[..., None, :]),
+            ]
+        )
+    )
+    mins, b = take_mask(mins, b, size=num_mins, fill_value=fill_value)
+    assert mins.shape[-1] == num_mins
+    return mins, b
 
 
-def argmin(z1, z2, f, ext, g_ext):
-    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns f(A).
+def argmin(z1, z2, f, mins, B_mins):
+    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
 
     Parameters
     ----------
@@ -574,27 +591,27 @@ def argmin(z1, z2, f, ext, g_ext):
         Boundaries to detect argmin between.
         ``z1`` (``z2``) stores left (right) boundaries.
     f : jnp.ndarray
-        Function interpolated to ``ext``.
-        Shape (..., num extrema).
+        Function interpolated to ``mins``.
+        Shape (..., num mins).
 
     Returns
     -------
     f : jnp.ndarray
         Shape (..., num pitch, num well).
-        ``f`` at the minimum extrema of ``g`` between ``z1`` and ``z2``.
+        ``f`` at the minimum of ``B`` between ``z1`` and ``z2``.
 
     """
     assert z1.ndim > 1 and z2.ndim > 1
-    assert f.shape == ext.shape == g_ext.shape
+    assert f.shape == mins.shape == B_mins.shape
     # We can use the non-differentiable argmin because we actually want the gradients
     # to accumulate through only the minimum since we are differentiating how our
     # physics objective changes wrt equilibrium perturbations not wrt which of the
     # extrema get interpolated to.
     where = jnp.argmin(
         jnp.where(
-            (z1[..., None] < ext[..., None, None, :])
-            & (ext[..., None, None, :] < z2[..., None]),
-            g_ext[..., None, None, :],
+            (z1[..., None] < mins[..., None, None, :])
+            & (mins[..., None, None, :] < z2[..., None]),
+            B_mins[..., None, None, :],
             jnp.inf,
         ),
         axis=-1,
@@ -1200,7 +1217,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         cheb = setdefault(cheb, self.cheb)
         x_idx, y = self._isomorphism_to_C2(z)
-        y = bijection_to_disc(y, self.domain[0], self.domain[-1])
+        y = bijection_to_disc(y, *self.domain)
 
         if loop and self.Y >= 3:
             return _loop(y, cheb, x_idx)
@@ -1254,7 +1271,7 @@ class PiecewiseChebyshevSeries(IOAble):
                 self.cheb * n,
             )
         )
-        y = bijection_from_disc(y, self.domain[0], self.domain[-1])
+        y = bijection_from_disc(y, *self.domain)
         return y, mask, df_dy
 
     def intersect1d(self, k=0.0, num_intersect=-1):

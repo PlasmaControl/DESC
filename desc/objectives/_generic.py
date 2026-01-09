@@ -721,9 +721,17 @@ class DeflationOperator(_Objective):
     ----------
     thing : Optimizable
         Optimizable that will be optimized to satisfy the Objective.
-    things_to_deflate: list of Equilibrium
+    things_to_deflate: list containing elements of type {Optimizable, None}
         list of objects to use in deflation operator. Should be same type
-        as thing.
+        as thing. Can also contain None elements, in which case those will be ignored.
+        The utility of allowing the None element and ignoring them is if one is using
+        this objective in a loop with a pre-determined number of iterations and adding
+        each result of the loop iterate to the things_to_deflate, it may trigger
+        recompilation of the objective's compute and jac/grad functions each time,
+        which is wasteful. You can instead pass in a list containing None elements
+        padding the list out to the max length it will attain. In this way, no
+        recompilations will be triggered, and the entire loop will be completed
+        much more quickly.
     params_to_deflate_with : nested list of dicts, optional
         Dict keys are the names of parameters to deflate (str), and dict values are the
         indices to deflate with for each corresponding parameter (int array).
@@ -792,7 +800,9 @@ class DeflationOperator(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        assert np.all([isinstance(t, type(thing)) for t in things_to_deflate])
+        assert np.all(
+            [isinstance(t, type(thing)) or t is None for t in things_to_deflate]
+        )
         self._things_to_deflate = things_to_deflate
         self._sigma = sigma
         self._power = power
@@ -863,6 +873,26 @@ class DeflationOperator(_Objective):
         else:
             self._dim_f = 1
 
+        self._is_none_mask = []
+        self._is_not_none_mask = []
+        self._not_all_things_to_deflate_are_None = not np.all(
+            [t is None for t in self._things_to_deflate]
+        )
+        self._not_all_things_to_deflate_are_None = float(
+            self._not_all_things_to_deflate_are_None
+        )
+        for i, t in enumerate(self._things_to_deflate):
+            if t is None:
+                self._is_none_mask.append(1.0)
+                self._is_not_none_mask.append(0.0)
+                self._things_to_deflate[i] = thing
+            else:
+                self._is_none_mask.append(0.0)
+                self._is_not_none_mask.append(1.0)
+
+        self._is_none_mask = np.array(self._is_none_mask)
+        self._is_not_none_mask = np.array(self._is_not_none_mask)
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -890,13 +920,14 @@ class DeflationOperator(_Objective):
         )
         diffs = [
             this_thing_params
-            - jnp.concatenate(
+            - self._is_not_none_mask[i]
+            * jnp.concatenate(
                 [
                     jnp.atleast_1d(param[idx])
                     for param, idx in zip(tree_leaves(t.params_dict), self._indices)
                 ]
             )
-            for t in self._things_to_deflate
+            for i, t in enumerate(self._things_to_deflate)
         ]
 
         diffs = jnp.vstack(diffs)
@@ -910,9 +941,22 @@ class DeflationOperator(_Objective):
             )
 
         if self._multiple_deflation_type == "prod":
-            deflation_parameter = jnp.prod(M_i) + self._sigma * (self._single_shift)
+            # self._is_none_mask is 1.0 if a specific element was None originally,
+            # and 0.0 if a specific element was not None
+            # we want to ignore those elements in our final product deflation metric so
+            # we will make their values M_i=1.0 by subtracting M_i and adding 1.0
+            M_i = M_i + self._is_none_mask * (1 - M_i)
+            deflation_parameter = jnp.prod(M_i) * (
+                self._not_all_things_to_deflate_are_None
+            ) + self._sigma * (self._single_shift)
         else:
-            deflation_parameter = jnp.sum(M_i) + self._sigma * (self._single_shift)
+            # self._is_not_none_mask is 0.0 if a specific element was None originally,
+            # and 1.0 if a specific element was not None
+            # we want to ignore those elements in our final sum deflation metric so
+            # we will just multiply the mask for M_i before summing
+            deflation_parameter = jnp.sum(
+                M_i * self._is_not_none_mask
+            ) + self._sigma * (self._single_shift)
 
         if self._objective is not None:
             f = self._objective.compute(params)

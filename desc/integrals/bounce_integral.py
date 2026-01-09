@@ -24,6 +24,7 @@ from desc.backend import jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
+    _sentinel,
     PiecewiseChebyshevSeries,
     Y_B_rule,
     argmin,
@@ -1099,6 +1100,10 @@ class Bounce2D(Bounce):
             self._c["knots"],
             self._c["B(z)"],
             num_mins=num_transit * max(K_z, 5),  # liberal heuristic
+            # We set fill value to 0 since we chose our coordinates
+            # such that all bounce points are at ζ >= 0; and therefore,
+            # junk values in B_mins cannot be selected in argmin.
+            fill_value=0.0,
         )
         t = self._theta.eval1d(mins)
 
@@ -1819,7 +1824,10 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        mins, B_mins = get_mins(self._zeta, self._B)
+        # We set fill value to sentinel since all bounce points are at
+        # ζ > sentinel (as documented in Bounce1D docstring); and
+        # therefore, junk values in B_mins cannot be selected in argmin.
+        mins, B_mins = get_mins(self._zeta, self._B, fill_value=_sentinel)
         return argmin(
             *points, interp1d_vec(mins, self._zeta, f, method=method), mins, B_mins
         )

@@ -374,7 +374,7 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
         )
 
     return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for 64 bit precision.
+        # Tests catch failure here if eps < 1e-12 for double precision.
         jnp.abs(a) <= eps,
         _concat_sentinel(
             _root_quadratic(b, c, d, sentinel, eps, distinct),
@@ -410,7 +410,7 @@ def _root_linear(a, b, sentinel, eps, distinct=False):
 
 
 def _concat_sentinel(r, sentinel, num=1):
-    """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
+    """Concatenate ``sentinel`` ``num`` times to ``r`` on first axis."""
     return jnp.concatenate((r, jnp.broadcast_to(sentinel, (num, *r.shape[1:]))))
 
 

@@ -26,6 +26,7 @@ from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
     PiecewiseChebyshevSeries,
     Y_B_rule,
+    _sentinel,
     argmin,
     bounce_points,
     broadcast_for_bounce,
@@ -33,7 +34,7 @@ from desc.integrals._bounce_utils import (
     check_interp,
     fast_chebyshev,
     fast_cubic_spline,
-    get_extrema,
+    get_mins,
     get_vander,
     mmt_for_bounce,
     move,
@@ -1093,12 +1094,22 @@ class Bounce2D(Bounce):
         if not is_fourier:
             f = Bounce2D.fourier(f)
 
-        ext, B_ext = get_extrema(self._c["knots"], self._c["B(z)"], sentinel=0.0)
-        t = self._theta.eval1d(ext)
+        num_transit = self._theta.X // self._NFP
+        K_z = self._num_z // 2 * self._NFP
+        mins, B_mins = get_mins(
+            self._c["knots"],
+            self._c["B(z)"],
+            num_mins=num_transit * max(K_z, 5),  # liberal heuristic
+            # We set fill value to 0 since we chose our coordinates
+            # such that all bounce points are at ζ >= 0; and therefore,
+            # junk values in B_mins cannot be selected in argmin.
+            fill_value=0.0,
+        )
+        t = self._theta.eval1d(mins)
 
         if nufft_eps < 1e-14:
             f = irfft2_mmt_pos(
-                ext,
+                mins,
                 t,
                 f[..., None, :, :],
                 self._num_z,
@@ -1106,17 +1117,17 @@ class Bounce2D(Bounce):
                 (0, 2 * jnp.pi / self._NFP),
             )
         else:
-            shape = (*ext.shape[:-2], -1)
+            shape = (*mins.shape[:-2], -1)
             t = t.reshape(shape)
             f = nufft2d2r(
-                ext.reshape(shape),
+                mins.reshape(shape),
                 t,
                 f.squeeze(-3),
                 (0, 2 * jnp.pi / self._NFP),
                 eps=nufft_eps,
-            ).reshape(ext.shape)
+            ).reshape(mins.shape)
 
-        return argmin(*points, f, ext, B_ext)
+        return argmin(*points, f, mins, B_mins)
 
     def compute_fieldline_length(self, quad=None):
         """Compute the (mean) proper length of the field line ∫ dℓ / B.
@@ -1813,9 +1824,12 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        ext, g_ext = get_extrema(self._zeta, self._B, sentinel=0.0)
+        # We set fill value to sentinel since all bounce points are at
+        # ζ > sentinel (as documented in Bounce1D docstring); and
+        # therefore, junk values in B_mins cannot be selected in argmin.
+        mins, B_mins = get_mins(self._zeta, self._B, fill_value=_sentinel)
         return argmin(
-            *points, interp1d_vec(ext, self._zeta, f, method=method), ext, g_ext
+            *points, interp1d_vec(mins, self._zeta, f, method=method), mins, B_mins
         )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):

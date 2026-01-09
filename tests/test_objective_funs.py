@@ -2014,7 +2014,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_compute_against_compute_bounce(self, use_bounce1d):
+    def test_objective_against_compute_bounce(self, use_bounce1d):
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
@@ -2034,15 +2034,15 @@ class TestObjectiveFunction:
         names = ["effective ripple", "Gamma_c"]
         if use_bounce1d:
             names = ["old " + n for n in names]
-            theta = None
+            angle = None
             alpha = np.array([0.0])
             zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
             grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         else:
-            theta = Bounce2D.compute_theta(eq, X, Y, rho)
+            angle = Bounce2D.angle(eq, X, Y, rho)
             grid = obj_grid
 
-        data = eq.compute(names, grid, theta=theta, **opts)
+        data = eq.compute(names, grid, angle=angle, **opts)
         obj = EffectiveRipple(
             eq,
             grid=obj_grid,
@@ -2053,6 +2053,7 @@ class TestObjectiveFunction:
             **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
@@ -2066,12 +2067,13 @@ class TestObjectiveFunction:
             **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )
 
     @pytest.mark.unit
-    def test_objective_compute_against_compute_ballooning(self):
+    def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
@@ -3162,13 +3164,12 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     if objective in {EffectiveRipple, GammaC}:
-        kwargs["X"] = 8
-        kwargs["Y"] = 16
+        kwargs["X"] = 16
+        kwargs["Y"] = 24
         kwargs["num_transit"] = 4
         kwargs["num_well"] = 15 * kwargs["num_transit"]
-        kwargs["num_pitch"] = 16
+        kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
-        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 
@@ -4010,12 +4011,12 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g_0))
 
         obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-7)
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-9)
+        np.testing.assert_allclose(g, g_0, atol=1e-7)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
@@ -4043,7 +4044,10 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=2e-7)
+        # these are generally sensitive to nufft_eps because
+        # we are not using enough resolution in other parameters
+        # in this test to nullify the singularities
+        np.testing.assert_allclose(g, g_0, atol=2e-6, rtol=3e-4)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)

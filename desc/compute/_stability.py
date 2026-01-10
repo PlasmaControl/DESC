@@ -1051,57 +1051,36 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
     B = B.at[theta_idx, theta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
+    B = B.at[zeta_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
+    )
 
     B = B.at[rho_idx, theta_idx].add(
         jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
     )
-
-    # typical in magnetic mirrors
-    ismirror = jnp.all(jnp.abs(iota) < 1e-12)
-
-    if ismirror:
-        B = B.at[zeta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_pp).flatten()))
-        B = B.at[rho_idx, zeta_idx].add(
-            jnp.diag(n0 * (W * psi_r * sqrtg * g_rp).flatten())
-        )
-        B = B.at[theta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vp).flatten()))
-    else:
-        B = B.at[zeta_idx, zeta_idx].add(
-            jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
-        )
-        B = B.at[rho_idx, zeta_idx].add(
-            jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
-        )
-        B = B.at[theta_idx, zeta_idx].add(
-            jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
-        )
+    B = B.at[rho_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
+    )
+    B = B.at[theta_idx, zeta_idx].add(
+        jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
+    )
 
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
         # To improve performance set exact to False
-        A = A.at[rho_idx, rho_idx].add(
-            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
-        )
-        A = A.at[theta_idx, theta_idx].add(
-            _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
-        )
-        A = A.at[rho_idx, theta_idx].add(
-            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
-        )
-
-        if ismirror:
-            A = A.at[zeta_idx, zeta_idx].add(
-                _cT(C_zeta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
+        exact = True
+        if exact:
+            A = A.at[rho_idx, rho_idx].add(
+                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
             )
-            A = A.at[rho_idx, zeta_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta))
+            A = A.at[theta_idx, theta_idx].add(
+                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
             )
-            A = A.at[theta_idx, zeta_idx].add(
-                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
-            )
-        else:
             A = A.at[zeta_idx, zeta_idx].add(
                 _cT(C_zeta * iota.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
+            )
+            A = A.at[rho_idx, theta_idx].add(
+                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
             )
             A = A.at[rho_idx, zeta_idx].add(
                 _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
@@ -1326,7 +1305,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
         A3 = (A3 + _cT(A3)) / 2
 
-    w, v = eigsh(np.asarray(A3), k=1, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v
@@ -1461,9 +1440,10 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     D_rho0 = transforms["diffmat"].D_rho
     D_theta0 = transforms["diffmat"].D_theta
 
-    W_rho = transforms["diffmat"].W_rho
-    W_theta = transforms["diffmat"].W_theta
-    W_zeta = transforms["diffmat"].W_zeta
+    # RG: Will fail for non-diagonal weight matrices
+    w_rho = jnp.diagonal(transforms["diffmat"].W_rho)
+    w_theta = jnp.diagonal(transforms["diffmat"].W_theta)
+    w_zeta = jnp.diagonal(transforms["diffmat"].W_zeta)
 
     # Square matrix
     n_rho = D_rho0.shape[0]
@@ -1473,7 +1453,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     def _reshape(u):
         return u.reshape(n_rho, n_theta, n_zeta)
 
-    W = _reshape(jnp.diag(jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))))
+    W = _reshape(jnp.kron(w_rho, jnp.kron(w_theta, w_zeta)))
 
     n_total = n_rho * n_theta * n_zeta
 
@@ -1932,15 +1912,15 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         return y.flatten()
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
-    sigma = kwargs.get("sigma", -1e-4)
-    num_matvecs = 3
+    sigma = kwargs.get("sigma", -2e-4)
+    num_matvecs = 10
 
     def OPinv(b):
         def Ashift(x):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-3, maxiter=30000)
+        y, _ = cg(Ashift, b, tol=5e-4, maxiter=int(2 * n_total))
         return y
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
@@ -1950,6 +1930,11 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     sort_idxs = jnp.argsort(mu, descending=True)
     w = sigma + 1.0 / mu[sort_idxs]
     v = vecs[sort_idxs][0, :]
+
+    test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
+    test1 = Ax(v) / jnp.linalg.norm(Ax(v))
+
+    print(jnp.sort(jnp.abs(test0 - test1), descending=True)[:80])
 
     data["finite-n lambda matfree"] = w
     data["finite-n eigenfunction matfree"] = v

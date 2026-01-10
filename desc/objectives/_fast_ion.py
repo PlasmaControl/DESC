@@ -78,9 +78,8 @@ class GammaC(_Objective):
         Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        Something like 100 is usually sufficient.
-        This is the number of knots per toroidal transit over
-        to approximate B with cubic splines.
+        A reference value is 100.
+        The bounce points are found with up to 8th order accuracy in this parameter.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.

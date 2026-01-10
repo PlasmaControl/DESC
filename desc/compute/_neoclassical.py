@@ -18,6 +18,9 @@ _bounce_doc = {
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
         A reference value is 100.
+        If the option ``spline`` is ``True``, the bounce points are found with up to
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).

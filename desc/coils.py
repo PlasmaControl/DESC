@@ -251,6 +251,9 @@ def biot_savart_vector_potential_quad(
         eval_pts, coil_pts, current * tangents, chunk_size=chunk_size
     )
 
+class _Dipole(_MagneticField, Optimizable, ABC):
+    """Implements ideal dipole that can be used in place of _Coil in a MixedCoilSet"""
+    pass
 
 class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.

@@ -211,6 +211,9 @@ class Bounce2D(Bounce):
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         A reference value is 100.
+        If the option ``spline`` is ``True``, the bounce points are found with up to
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
@@ -252,7 +255,7 @@ class Bounce2D(Bounce):
         Optional. Reference length scale for normalization.
     spline : bool
         Whether to use cubic splines to compute bounce points instead of
-        Chebyshev series. Default is true.
+        Chebyshev series. Default is ``True``.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 

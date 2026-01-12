@@ -23,10 +23,8 @@ class AbstractGridFlux(AbstractGrid):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + (
-                f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}"
-                + f", NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid})"
-            )
+            + f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}, "
+            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid})"
         )
 
     def _set_up(self):
@@ -1171,11 +1169,9 @@ class ConcentricGrid(AbstractGridFlux):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + (
-                f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}"
-                + f", NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid}"
-                + f", node_pattern={self.node_pattern})"
-            )
+            + f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}, "
+            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid}, "
+            + f"node_pattern={self.node_pattern})"
         )
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):

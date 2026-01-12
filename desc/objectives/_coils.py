@@ -63,7 +63,7 @@ class _CoilObjective(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
-    _static_attrs = _Objective._static_attrs + ["_coilset_tree"]
+    _static_attrs = _Objective._static_attrs + ["_coilset_tree", "_broadcast_input"]
 
     def __init__(
         self,
@@ -889,10 +889,7 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
-    _static_attrs = _Objective._static_attrs + [
-        "_dist_chunk_size",
-        "_use_softmin",
-    ]
+    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
 
     _scalar = False
     _units = "(m)"

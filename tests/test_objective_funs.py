@@ -3756,10 +3756,23 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_ForceBalanceDeflated(self):
         """Deflation operator on force balance."""
-        eq = Equilibrium(L=2, M=2, N=2)
-        eq2 = eq.copy()
-        eq.R_lmn = eq.R_lmn * 1.1
-        eq.set_initial_guess()
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            surface=FourierRZToroidalSurface(
+                R_lmn=[10, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+            ),
+        )
+        eq2 = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            surface=FourierRZToroidalSurface(
+                R_lmn=[11, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+            ),
+        )
+
         obj = ObjectiveFunction(
             DeflationOperator(eq, [eq2], objective=ForceBalance(eq)), use_jit=False
         )

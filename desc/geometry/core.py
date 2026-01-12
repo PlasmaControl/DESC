@@ -212,51 +212,6 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
             + " (name={})".format(self.name)
         )
 
-    # TO DO: Determine if this function is necessary
-    def to_FourierUmbilic(
-        self, N=10, grid=None, NFP=None, n_umbilic=1, sym=False, name=""
-    ):
-        """Convert Curve to FourierRZCurve representation.
-
-        Note that some types of curves may not be representable in this basis.
-
-        Parameters
-        ----------
-        N : int
-            Fourier resolution of the new A representation.
-        grid : Grid, int or None
-            Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
-            If an integer, uses that many equally spaced points.
-        NFP : int
-            Number of field periods, the curve will have a discrete toroidal symmetry
-            according to NFP.
-        sym : bool, optional
-            Whether the curve is stellarator-symmetric or not. Default is False.
-        name : str
-            name for this curve
-
-        Returns
-        -------
-        curve : FourierRZCurve
-            New representation of the curve parameterized by Fourier series for R,Z.
-
-        """
-        from .umbiliccurve import FourierUmbilicCurve
-
-        NFP = 1 or NFP
-        if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
-        coords = self.compute("A", grid=grid, basis="rtz")["A"]
-        return FourierUmbilicCurve.from_values(
-            coords,
-            N=N,
-            NFP=NFP,
-            n_umbilic=n_umbilic,
-            basis="rtz",
-            name=name,
-            sym=sym,
-        )
-
 
 class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""

@@ -1478,6 +1478,7 @@ class UmbilicHighCurvature(_Objective):
 
         """
         curve = self.things[0]
+        eq = self._eq
 
         if self._curve_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
@@ -1492,7 +1493,7 @@ class UmbilicHighCurvature(_Objective):
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._curve_data_keys = ["UC"]
+        self._curve_data_keys = ["phi", "theta"]
         self._equil_data_keys = ["curvature_k2_rho"]
 
         timer = Timer()
@@ -1518,12 +1519,13 @@ class UmbilicHighCurvature(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = 1.0
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params_1=None, params_2=None, constants=None):
-        """Compute max absolute principal curvature.
+        """Compute minimum Gaussian curvature.
 
         Parameters
         ----------
@@ -1540,7 +1542,7 @@ class UmbilicHighCurvature(_Objective):
         Returns
         -------
         k : ndarray
-            Max absolute principal curvature at each point (m^-1).
+            Minimum Gaussian curvature at each point (m^-1).
 
         """
         if constants is None:
@@ -1561,15 +1563,11 @@ class UmbilicHighCurvature(_Objective):
             transforms=constants["curve_transforms"],
             profiles={},
         )
-        curve_grid = constants["curve_grid"]
-
-        curve_UC = curve_data["UC"]
-        curve_phi = curve_grid.nodes[:, 2]
-
-        theta_points = (-self._curve.NFP * curve_phi + curve_UC) / self._curve.n_umbilic
+        curve_phi = curve_data["phi"]
+        curve_theta = curve_data["theta"]
 
         umbilic_edge_grid = Grid(
-            jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
+            jnp.array([jnp.ones_like(curve_theta), curve_theta, curve_phi]).T,
             jitable=True,
         )
 

@@ -2671,11 +2671,16 @@ class Equilibrium(IOAble, Optimizable):
 
         scales["Ra_n"] = axis_scale["R_n"]
         scales["Za_n"] = axis_scale["Z_n"]
-        scales["Rb_lmn"] = bdry_scale["R_lmn"]
-        scales["Zb_lmn"] = bdry_scale["Z_lmn"]
-        scales["Rp_lmn"] = xsec_scale["R_lmn"]
-        scales["Zp_lmn"] = xsec_scale["Z_lmn"]
-        scales["Lp_lmn"] = xsec_scale["L_lmn"]
+        if "Rb_lmn" in self.optimizable_params:
+            scales["Rb_lmn"] = bdry_scale["R_lmn"]
+        if "Zb_lmn" in self.optimizable_params:
+            scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        if "Rp_lmn" in self.optimizable_params:
+            scales["Rp_lmn"] = xsec_scale["R_lmn"]
+        if "Zp_lmn" in self.optimizable_params:
+            scales["Zp_lmn"] = xsec_scale["Z_lmn"]
+        if "Lp_lmn" in self.optimizable_params:
+            scales["Lp_lmn"] = xsec_scale["L_lmn"]
         if hasattr(self.surface, "Phi_mn"):
             scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales

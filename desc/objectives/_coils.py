@@ -1486,7 +1486,7 @@ class QuadraticFlux(_Objective):
         B_plasma_chunk_size=None,
         **kwargs,
     ):
-        from desc.geometry import FourierRZToroidalSurface
+        from desc.geometry import FourierRZToroidalSurface, FourierXYZToroidalSurface
 
         if target is None and bounds is None:
             target = 0
@@ -1974,7 +1974,7 @@ class ToroidalFlux(_Objective):
             Level of output.
 
         """
-        from desc.geometry import FourierRZToroidalSurface
+        from desc.geometry import FourierRZToroidalSurface, FourierXYZToroidalSurface
 
         eq = self._eq
         self._use_vector_potential = True
@@ -2009,7 +2009,8 @@ class ToroidalFlux(_Objective):
         )
         if self._normalize:
             self._normalization = 1.0 if not hasattr(eq, "Psi") else eq.Psi
-        if not isinstance(eq, FourierRZToroidalSurface):
+        # if not isinstance(eq, FourierRZToroidalSurface):
+        if not isinstance(eq, FourierXYZToroidalSurface):
             # ensure vacuum eq, as is unneeded for finite beta
             pres = np.max(np.abs(eq.compute("p")["p"]))
             curr = np.max(np.abs(eq.compute("current")["current"]))
@@ -2849,7 +2850,8 @@ class BoozerLS(_Objective):
         if self._normalize:
             scales = compute_scaling_factors(surface)
             Bscale = 1.0  # surface has no inherent B scale
-            self._normalization = Bscale * scales["R0"] * scales["a"]
+            # self._normalization = Bscale * scales["R0"] * scales["a"]
+            self._normalization = Bscale * 0.1
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -2902,9 +2904,9 @@ class BoozerLS(_Objective):
 
         B2 = jnp.reshape(dot(B_ext, B_ext), (-1, 1))
 
-        # Check if G and iota can be accessed from params?
+        # G and iota can be accessed from params?
         G = params_1["G"][0]
         iota = params_1["iota"][0]
-        res = G * B_ext * mu_0 / (2 * jnp.pi) - B2 * (Xz + iota * Xt)
+        res = G * B_ext - B2 * (Xz + iota * Xt)
 
         return dot(res, res, axis=-1)

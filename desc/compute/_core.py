@@ -1257,6 +1257,82 @@ def _X_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+### Gradients of X from FourierXYZToroidalSurface ###
+@register_compute_fun(
+    name="X",
+    label="X",
+    units="m",
+    units_long="meters",
+    description="Cartesian X",
+    dim=1,
+    params=["X_lmn"],
+    transforms={
+        "X": [[0, 0, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _X_XYZ(params, transforms, profiles, data, **kwargs):
+    X = transforms["X"].transform(params["X_lmn"], 0, 0, 0)
+
+    data["X"] = X
+    return data
+
+
+@register_compute_fun(
+    name="X_t",
+    label="X_t",
+    units="m",
+    units_long="meters",
+    description="Cartesian X",
+    dim=1,
+    params=["X_lmn"],
+    transforms={
+        "X": [[0, 1, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _Xt_XYZ(params, transforms, profiles, data, **kwargs):
+    X_t = transforms["X"].transform(params["X_lmn"], 0, 1, 0)
+
+    data["X_t"] = X_t
+    return data
+
+
+@register_compute_fun(
+    name="X_z",
+    label="X_z",
+    units="m",
+    units_long="meters",
+    description="Cartesian X",
+    dim=1,
+    params=["X_lmn"],
+    transforms={
+        "X": [[0, 0, 1]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _Xz_XYZ(params, transforms, profiles, data, **kwargs):
+    X_z = transforms["X"].transform(params["X_lmn"], 0, 0, 1)
+
+    data["X_z"] = X_z
+    return data
+
+
 @register_compute_fun(
     name="Y",
     label="Y = R \\sin{\\phi}",
@@ -1350,6 +1426,82 @@ def _Y_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+### Gradients of X from FourierXYZToroidalSurface ###
+@register_compute_fun(
+    name="Y",
+    label="Y",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y",
+    dim=1,
+    params=["Y_lmn"],
+    transforms={
+        "Y": [[0, 0, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _Y_XYZ(params, transforms, profiles, data, **kwargs):
+    Y = transforms["Y"].transform(params["Y_lmn"], 0, 0, 0)
+
+    data["Y"] = Y
+    return data
+
+
+@register_compute_fun(
+    name="Y_t",
+    label="Y_t",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y",
+    dim=1,
+    params=["Y_lmn"],
+    transforms={
+        "Y": [[0, 1, 0]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _Yt_XYZ(params, transforms, profiles, data, **kwargs):
+    Y_t = transforms["Y"].transform(params["Y_lmn"], 0, 1, 0)
+
+    data["Y_t"] = Y_t
+    return data
+
+
+@register_compute_fun(
+    name="Y_z",
+    label="Y_z",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y",
+    dim=1,
+    params=["Y_lmn"],
+    transforms={
+        "Y": [[0, 0, 1]],
+    },
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.geometry.surface.FourierXYZToroidalSurface",
+    ],
+)
+def _Yz_XYZ(params, transforms, profiles, data, **kwargs):
+    Y_z = transforms["Y"].transform(params["Y_lmn"], 0, 0, 1)
+
+    data["Y_z"] = Y_z
+    return data
+
+
 @register_compute_fun(
     name="Z",
     label="Z",
@@ -1365,6 +1517,7 @@ def _Y_z(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z(params, transforms, profiles, data, **kwargs):
@@ -1803,6 +1956,7 @@ def _Z_rzzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierXYZToroidalSurface",
     ],
 )
 def _Z_t(params, transforms, profiles, data, **kwargs):

@@ -912,6 +912,8 @@ class FourierXYZToroidalSurface(Surface):
         "_Z_basis",
         "_NFP",
         "_rho",
+        "_G",
+        "_iota",
     ]
     _static_attrs = Surface._static_attrs + ["_NFP", "_X_basis", "_Y_basis", "_Z_basis"]
 
@@ -929,6 +931,8 @@ class FourierXYZToroidalSurface(Surface):
         M=None,
         N=None,
         rho=1,
+        G=1.1,
+        iota=0.1,
         name="",
         check_orientation=True,
     ):
@@ -974,6 +978,8 @@ class FourierXYZToroidalSurface(Surface):
         self._M = setdefault(M, max(MR, MY, MZ))
         self._N = setdefault(N, max(NR, NY, NZ))
         self._NFP = NFP
+        self._G = G
+        self._iota = iota
 
         if sym == "auto":
             if (
@@ -1127,7 +1133,7 @@ class FourierXYZToroidalSurface(Surface):
     @X_lmn.setter
     def X_lmn(self, new):
         if len(new) == self.X_basis.num_modes:
-            self.X_lmn = jnp.asarray(new)
+            self._X_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"X_lmn should have the same size as the basis, got {len(new)} for "
@@ -1165,6 +1171,26 @@ class FourierXYZToroidalSurface(Surface):
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        self._G = new
+
+    @optimizable_parameter
+    @property
+    def iota(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._iota
+
+    @iota.setter
+    def iota(self, new):
+        self._iota = new
 
     def get_coeffs(self, m, n=0):
         """Get Fourier coefficients for given mode number(s)."""
@@ -1222,6 +1248,8 @@ class FourierXYZToroidalSurface(Surface):
         M=6,
         N=6,
         NFP=1,
+        G=None,
+        iota=None,
         sym=True,
         check_orientation=True,
         rcond=None,
@@ -1348,6 +1376,8 @@ class FourierXYZToroidalSurface(Surface):
             NFP,
             sym,
             check_orientation=check_orientation,
+            G=G,
+            iota=iota,
         )
         return surf
 

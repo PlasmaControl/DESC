@@ -1219,6 +1219,10 @@ def _X_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_t", "phi", "phi_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _X_t(params, transforms, profiles, data, **kwargs):
     data["X_t"] = (
@@ -1240,6 +1244,10 @@ def _X_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_z", "phi", "phi_z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _X_z(params, transforms, profiles, data, **kwargs):
     data["X_z"] = (
@@ -1263,7 +1271,7 @@ def _X_z(params, transforms, profiles, data, **kwargs):
     data=["R", "phi"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierRZToroidalSurface",
     ],
 )
 def _Y(params, transforms, profiles, data, **kwargs):
@@ -1304,6 +1312,10 @@ def _Y_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_t", "phi", "phi_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _Y_t(params, transforms, profiles, data, **kwargs):
     data["Y_t"] = (
@@ -1325,6 +1337,10 @@ def _Y_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_z", "phi", "phi_z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _Y_z(params, transforms, profiles, data, **kwargs):
     data["Y_z"] = (

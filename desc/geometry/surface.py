@@ -77,6 +77,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_basis",
         "_NFP",
         "_rho",
+        "_G",
+        "_iota",
     ]
     _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
@@ -91,6 +93,8 @@ class FourierRZToroidalSurface(Surface):
         sym="auto",
         M=None,
         N=None,
+        G=0.0,
+        iota=0.5,
         rho=1,
         name="",
         check_orientation=True,
@@ -149,6 +153,8 @@ class FourierRZToroidalSurface(Surface):
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._sym = bool(sym)
+        self._G = G
+        self._iota = iota
         self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
@@ -273,6 +279,26 @@ class FourierRZToroidalSurface(Surface):
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        self._G = new
+
+    @optimizable_parameter
+    @property
+    def iota(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._iota
+
+    @iota.setter
+    def iota(self, new):
+        self._iota = new
 
     def get_coeffs(self, m, n=0):
         """Get Fourier coefficients for given mode number(s)."""
@@ -447,6 +473,8 @@ class FourierRZToroidalSurface(Surface):
         N=6,
         NFP=1,
         sym=True,
+        G=None,
+        iota=None,
         check_orientation=True,
         rcond=None,
         w=None,
@@ -560,6 +588,8 @@ class FourierRZToroidalSurface(Surface):
             NFP,
             sym,
             check_orientation=check_orientation,
+            G=G,
+            iota=iota,
         )
         return surf
 

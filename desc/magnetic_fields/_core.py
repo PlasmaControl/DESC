@@ -50,6 +50,86 @@ from desc.utils import (
 )
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
+def dipole_field(re, rs, m, chunk_size=None):
+    """Field of a static magnetic dipole in vector form.
+
+    Parameters
+    ----------
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    m : ndarray
+        Shape (n_src_pts, 3).
+        Vector dipole moment, in cartesian.
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    B : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic field from dipole in cartesian components at specified points.
+
+    """
+    re, rs, m = map(jnp.asarray, (re, rs, m))
+
+    def dipole(re):
+        dr = re - rs
+        r = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        rhat = safediv(dr, r)
+        m_dot_rhat = jnp.sum(m * rhat, axis=-1, keepdims=True)
+        num = 3 * m_dot_rhat * rhat - m
+        den = r ** 3
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+
+    return batch_map(dipole, re[..., jnp.newaxis, :], chunk_size)
+
+
+def dipole_vector_potential(
+    re, rs, m, chunk_size=None
+):
+    """Field of a static magnetic dipole in vector form.
+
+    Parameters
+    ----------
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    m : ndarray
+        Shape (n_src_pts, 3).
+        Vector dipole moment, in cartesian.
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    A : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic vector potential from dipole in cartesian components at specified points.
+
+    """
+    re, rs, m = map(jnp.asarray, (re, rs, m))
+
+    def dipole(re):
+        dr = re - rs
+        r = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        rhat = safediv(dr, r)
+        num = jnp.cross(m, rhat, axis=-1)
+        den = r ** 2
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+
+    return batch_map(dipole, re[..., jnp.newaxis, :], chunk_size)
+
 
 def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     """Biot-Savart law for arbitrary sources.

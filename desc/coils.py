@@ -35,6 +35,8 @@ from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
     biot_savart_general_vector_potential,
+    dipole_field,
+    dipole_vector_potential
 )
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import (
@@ -250,6 +252,62 @@ def biot_savart_vector_potential_quad(
     return biot_savart_general_vector_potential(
         eval_pts, coil_pts, current * tangents, chunk_size=chunk_size
     )
+
+
+
+
+@partial(jit, static_argnames=["chunk_size"])
+def magnetic_dipole_field(
+    eval_pts, mag_points, phi, theta, m, *, chunk_size=None
+):
+    m_x = m * jnp.sin(theta) * jnp.cos(phi)
+    m_y = m * jnp.sin(theta) * jnp.sin(phi)
+    m_z = m * jnp.cos(theta)
+    m_vector = jnp.array([m_x, m_y, m_z])
+    return dipole_field(
+        eval_pts, mag_points, m_vector, chunk_size=chunk_size
+    )
+
+
+@partial(jit, static_argnames=["chunk_size"])
+def magnetic_dipole_vector_field(
+    eval_pts, mag_points, phi, theta, m, *, chunk_size=None
+):
+    m_x = m * jnp.sin(theta) * jnp.cos(phi)
+    m_y = m * jnp.sin(theta) * jnp.sin(phi)
+    m_z = m * jnp.cos(theta)
+    m_vector = jnp.array([m_x, m_y, m_z])
+    return dipole_vector_potential(
+        eval_pts, mag_points, m_vector, chunk_size=chunk_size
+    )
+
+def test_magnetic_dipole():
+    mu_0 = 4 * np.pi * 1e-7
+    
+    # single dipole at origin, pointing in z-direction
+    mag_points = jnp.array([[0.0, 0.0, 0.0]])
+    m_magnitude = 1.0  
+    theta = 0.0 # +z
+    phi = 0.0
+    
+    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
+    
+    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    
+    r = 1.0
+    B_expected_mag = (mu_0 / (4 * np.pi)) * (2 * m_magnitude / r**3)
+    B_expected = jnp.array([[0.0, 0.0, B_expected_mag]])
+    A_expected = jnp.array([[0.0, 0.0, 0.0]])
+    
+    print(B[0])
+    print(B_expected[0])
+    print(A[0])
+    print(A_expected[0])
+
+
+if __name__ == "__main__":
+    test_magnetic_dipole()
 
 class _Dipole(_MagneticField, Optimizable, ABC):
     """Implements ideal dipole that can be used in place of _Coil in a MixedCoilSet"""

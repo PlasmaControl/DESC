@@ -4266,3 +4266,99 @@ def test_nae_coefficients_asym():
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+
+
+def test_deflation_operator_Nones():
+    """Test DeflationOperator when passing Nones and with different modes."""
+    surf = FourierRZToroidalSurface()
+    surf2 = surf.copy()
+    surf.R_lmn = surf.R_lmn * 1.1
+    surf3 = surf.copy()
+    surf3.R_lmn = surf3.R_lmn * 1.2
+    things_to_deflate_with_None = [surf2, surf3, None]
+
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            [surf2, surf3],
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_scalar(obj1.x(surf))
+    val2 = obj2.compute_scalar(obj2.x(surf))
+
+    correct_value = (
+        np.sum(
+            [1 / np.linalg.norm(surf.R_lmn - s.R_lmn) ** 2 + 1 for s in [surf2, surf3]]
+        )
+        ** 2
+        / 2
+    )
+
+    # make sure values are identical and correct
+    np.testing.assert_allclose(val1, val2)
+    np.testing.assert_allclose(val1, correct_value)
+    # make sure that the objective did not modify the original list
+    assert things_to_deflate_with_None[0] == surf2
+    assert things_to_deflate_with_None[1] == surf3
+    assert things_to_deflate_with_None[2] is None
+
+    ## same thing but using exponential
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            [surf2, surf3],
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_scalar(obj1.x(surf))
+    val2 = obj2.compute_scalar(obj2.x(surf))
+
+    correct_value = (
+        np.sum(
+            [np.exp(1 / np.linalg.norm(surf.R_lmn - s.R_lmn)) for s in [surf2, surf3]]
+        )
+        + 1
+    ) ** 2 / 2
+
+    # make sure values are identical and correct
+    np.testing.assert_allclose(val1, val2)
+    np.testing.assert_allclose(val1, correct_value)
+    # make sure that the objective did not modify the original list
+    assert things_to_deflate_with_None[0] == surf2
+    assert things_to_deflate_with_None[1] == surf3
+    assert things_to_deflate_with_None[2] is None

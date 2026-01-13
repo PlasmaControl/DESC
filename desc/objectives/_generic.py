@@ -803,7 +803,7 @@ class DeflationOperator(_Objective):
         assert np.all(
             [isinstance(t, type(thing)) or t is None for t in things_to_deflate]
         )
-        self._things_to_deflate = things_to_deflate
+        self._things_to_deflate = things_to_deflate.copy()
         self._sigma = sigma
         self._power = power
         self._params_to_deflate_with = params_to_deflate_with

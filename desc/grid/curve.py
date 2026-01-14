@@ -83,7 +83,7 @@ class AbstractGridCurve(AbstractGrid):
 
 
 class LinearGridCurve(AbstractGridCurve):
-    """Grid in which the nodes are linearly spaced in the x2 coordinate.
+    """Grid in which the nodes are linearly spaced in the curve coordinate.
 
     Parameters
     ----------
@@ -95,8 +95,8 @@ class LinearGridCurve(AbstractGridCurve):
         If True, s=0 is duplicated after a full period.
         Should be False for use with FFT. (Default = False).
         This boolean is ignored if an array is given for s.
-    s : int or ndarray of float, optional
-        Coordinates values (Default = 0.0).
+    angle : int or ndarray of float, optional
+        Curve coordinate angles (Default = 0.0).
         Alternatively, the number of coordinates (if an integer).
         Note that if supplied the values may be reordered in the resulting grid.
     """
@@ -110,9 +110,9 @@ class LinearGridCurve(AbstractGridCurve):
         N=None,
         NFP=1,
         endpoint=False,
-        s=None,
+        angle=None,
     ):
-        assert (N is None) or (s is None), "cannot specify both N and s"
+        assert (N is None) or (angle is None), "cannot specify both N and s"
         self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
         self._endpoint = bool(endpoint)
@@ -125,7 +125,7 @@ class LinearGridCurve(AbstractGridCurve):
         self._toroidal_endpoint = False
 
         self._nodes, self._spacing = self._create_nodes(
-            N=N, NFP=NFP, endpoint=endpoint, s=s
+            N=N, NFP=NFP, endpoint=endpoint, angle=angle
         )
         # symmetry handled in create_nodes()
         self._sort_nodes()
@@ -139,7 +139,7 @@ class LinearGridCurve(AbstractGridCurve):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
-    def _create_nodes(self, N=None, NFP=1, endpoint=False, s=0.0):  # noqa: C901
+    def _create_nodes(self, N=None, NFP=1, endpoint=False, angle=0.0):  # noqa: C901
         """Create grid nodes and weights.
 
         Parameters
@@ -152,15 +152,15 @@ class LinearGridCurve(AbstractGridCurve):
             If True, s=0 is duplicated after a full period.
             Should be False for use with FFT. (Default = False).
             This boolean is ignored if an array is given for s.
-        s : int or ndarray of float, optional
-            Coordinates values (Default = 0.0).
+        angle : int or ndarray of float, optional
+            Curve coordinate angles (Default = 0.0).
             Alternatively, the number of coordinates (if an integer).
             Note that if supplied the values may be reordered in the resulting grid.
 
         Returns
         -------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,s)
+            node coordinates, in (_,_,s)
         spacing : ndarray of float, size(num_nodes,3)
             node spacing, based on local volume around the node
 
@@ -169,68 +169,55 @@ class LinearGridCurve(AbstractGridCurve):
         endpoint = bool(endpoint)
         s_period = self.period[2]
 
-        # s
-        # note: dz spacing should not depend on NFP
-        # spacing corresponds to a node's weight in an integral --
-        # such as integral = sum(dt * dz * data["B"]) -- not the node's coordinates
+        # curve coordinate s
+        # note: ds spacing should not depend on NFP
+        # spacing corresponds to a node's weight in an integral, not the coordinates
         if N is not None:
             self._N = check_nonnegint(N, "N")
-            s = 2 * N + 1
-        if np.isscalar(s) and (int(s) == s) and s > 0:
-            s = int(s)
-            z = np.linspace(0, s_period, s, endpoint=endpoint)
-            dz = 2 * np.pi / z.size * np.ones_like(z)
-            if endpoint and z.size > 1:
+            angle = 2 * N + 1
+        if np.isscalar(angle) and (int(angle) == angle) and angle > 0:
+            angle = int(angle)
+            s = np.linspace(0, s_period, angle, endpoint=endpoint)
+            ds = 2 * np.pi / s.size * np.ones_like(s)
+            if endpoint and s.size > 1:
                 # increase node weight to account for duplicate node
-                dz *= z.size / (z.size - 1)
-                # scale_weights() will reduce endpoint (dz[0] and dz[-1])
+                ds *= s.size / (s.size - 1)
+                # scale_weights() will reduce endpoint (ds[0] and ds[-1])
                 # duplicate node weight
             # if custom s used usually safe to assume its non-uniform so no fft
             self._fft_x2 = not endpoint
-        elif s is not None:
+        elif angle is not None:
             errorif(
-                np.any(np.asarray(s) > s_period),
+                np.any(np.asarray(angle) > s_period),
                 msg="LinearGrid should be defined on 1 field period.",
             )
-            z, dz = periodic_spacing(s, s_period, sort=True, jnp=np)
-            dz = dz * NFP
-            if z[0] == 0 and z[-1] == s_period:
+            s, ds = periodic_spacing(angle, s_period, sort=True, jnp=np)
+            ds = ds * NFP
+            if s[0] == 0 and s[-1] == s_period:
                 # periodic_spacing above correctly weights
                 # the duplicate node spacing at s = 0 and 2π/NFP.
                 # However, scale_weights() is not aware of this, so we
                 # counteract the reduction that will be done there.
-                dz[0] += dz[-1]
-                dz[-1] = dz[0]
+                ds[0] += ds[-1]
+                ds[-1] = ds[0]
         else:
-            z = np.array(0.0, ndmin=1)
-            dz = s_period * np.ones_like(z) * NFP
+            s = np.array(0.0, ndmin=1)
+            ds = s_period * np.ones_like(s) * NFP
             self._fft_x2 = True  # trivially true
 
-        r = np.zeros_like(z)
-        t = np.zeros_like(z)
-        dr = np.zeros_like(dz)
-        dt = np.zeros_like(dz)
+        _ = np.zeros(1)
+        d_ = np.zeros_like(_)
 
-        self._toroidal_endpoint = (
-            z.size > 0
-            and np.isclose(z[0], 0, atol=1e-12)
-            and np.isclose(z[-1], s_period, atol=1e-12)
+        self._toroidal_endpoint = np.isclose(s[0], 0, atol=1e-12) and np.isclose(
+            s[-1], s_period, atol=1e-12
         )
-        # if only one theta or one s point, can have endpoint=True
-        # if the other one is a full array
-        self._endpoint = (t.size == 1 and z.size > 1) and (
-            self._toroidal_endpoint or (z.size == 1 and t.size > 1)
-        )
-        self._can_fft2 = (
-            self._can_fft2
-            and not self._poloidal_endpoint
-            and not self._toroidal_endpoint
-        )
+        self._endpoint = (s.size > 1) and self._toroidal_endpoint
+        self._can_fft2 = self._can_fft2 and not self._toroidal_endpoint
 
-        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
-        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
-        nodes = np.column_stack([r, t, z])
-        spacing = np.column_stack([dr, dt, dz])
+        _, _, s = map(np.ravel, np.meshgrid(_, _, s, indexing="ij"))
+        d_, d_, ds = map(np.ravel, np.meshgrid(d_, d_, ds, indexing="ij"))
+        nodes = np.column_stack([_, _, s])
+        spacing = np.column_stack([d_, d_, ds])
 
         return nodes, spacing
 

@@ -8,7 +8,7 @@ from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatte
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGrid, LinearGrid
+from desc.grid import AbstractGrid, LinearGrid, LinearGridCurve
 from desc.integrals import compute_B_plasma
 from desc.utils import (
     Timer,
@@ -120,7 +120,7 @@ class _CoilObjective(_Objective):
             for c in coils:
                 grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=self._grid)
+            grid = LinearGridCurve(N=self._grid)
         if isinstance(grid, AbstractGrid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
@@ -131,6 +131,14 @@ class _CoilObjective(_Objective):
             ValueError,
             "grid input must be broadcastable to the coil structure.",
         )
+        warnif(
+            np.any([not isinstance(g, LinearGridCurve) for g in grid]),
+            DeprecationWarning,
+            "Using a LinearGrid for coil objectives is deprecated and will be removed "
+            + "in a future DESC version, use a LinearGridCurve instead.",
+        )
+        # TODO: can replace this check with a check for LinearGridCurve instead,
+        # once other grids are deprecated
         errorif(
             np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
             ValueError,
@@ -207,7 +215,7 @@ class CoilLength(_CoilObjective):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -311,7 +319,7 @@ class CoilCurvature(_CoilObjective):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -410,7 +418,7 @@ class CoilTorsion(_CoilObjective):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -509,7 +517,7 @@ class CoilCurrentLength(CoilLength):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -617,7 +625,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5, endpoint=True)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5, endpoint=True)``
 
     """
 
@@ -1295,7 +1303,7 @@ class CoilArclengthVariance(_CoilObjective):
         Coil(s) that are to be optimized
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -2355,7 +2363,7 @@ class CoilSetLinkingNumber(_Objective):
         Coil(s) that are to be optimized.
     grid : Grid, list, optional
         Collocation grid used to discretize each coil. Defaults to
-        ``LinearGrid(N=50)``
+        ``LinearGridCurve(N=50)``
 
     """
 
@@ -2418,7 +2426,7 @@ class CoilSetLinkingNumber(_Objective):
 
         """
         coilset = self.things[0]
-        grid = self._grid or LinearGrid(N=50)
+        grid = self._grid or LinearGridCurve(N=50)
 
         self._dim_f = coilset.num_coils
         self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}

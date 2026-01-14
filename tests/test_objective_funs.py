@@ -4268,6 +4268,7 @@ def test_nae_coefficients_asym():
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
 
 
+@pytest.mark.unit
 def test_deflation_operator_Nones():
     """Test DeflationOperator when passing Nones and with different modes."""
     surf = FourierRZToroidalSurface()

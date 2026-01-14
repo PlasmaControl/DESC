@@ -14,13 +14,61 @@ from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
 from desc.utils import dot
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
+from desc.io import load
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 
-#eq = get("precise_QH")
-#eq = get("precise_QA")
-eq = get("W7-X")
+# make or load an ultra high aspect-ratio tokamak (essentially a screw pinch)
+from desc.equilibrium import Equilibrium
+from desc.continuation import solve_continuation_automatic
+from desc.geometry import FourierRZToroidalSurface
+from desc.profiles import PowerSeriesProfile
+from desc.grid import QuadratureGrid
+import os
+
+# Input parameters
+I = 1e5  # Toroidal plasma current
+R = 2  # Major radius
+aspect_ratio = 200  # Aspect ratio of the tokamak
+a = R / aspect_ratio  # Minor radius
+save_path = "./high_aspect_ratio_tokamak/"
+save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
+os.makedirs(save_path, exist_ok=True)
+
+if os.path.exists(save_path + save_name):
+    eq = load(save_path + save_name)
+else:
+    p_coeffs = np.array([1.8e4, 0, -3.6e4, 0, 1.8e4])  # Pressure profile coefficients
+    # Create a very high aspect ratio tokamak
+    eq = Equilibrium(
+        L=5,
+        M=5,
+        N=0,
+        surface=FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R,
+            aspect_ratio=aspect_ratio,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=2,
+            sym=True,
+        ),
+        NFP=2,
+        current=PowerSeriesProfile([0, 0, I]),
+        #iota = PowerSeriesProfile([0.3, 0.0, 0.2]),
+        pressure=PowerSeriesProfile(p_coeffs),
+        Psi=1.0,
+    )
+
+    # Solve equilbrium
+    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
+    eq.save(save_path + save_name)
+
+# resolution for low-res solve
 n_rho = 26
 n_theta = 32
 n_zeta = 9
@@ -239,4 +287,6 @@ xi_sup_zeta_final = np.reshape(v[2*n_total:], (n_rho, n_theta, n_zeta))
 
 toc = time.time()
 print(f"matrix free took {toc-tic} s.")
+
+print(v.min())
 

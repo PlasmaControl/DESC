@@ -118,10 +118,10 @@ class _CoilObjective(_Objective):
         if grid is None:
             grid = []
             for c in coils:
-                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
+                grid.append(LinearGridCurve(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
             grid = LinearGridCurve(N=self._grid)
-        if isinstance(grid, AbstractGrid):
+        if isinstance(grid, AbstractGrid):  # TODO: change to AbstractGridCurve
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
             grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, AbstractGrid))
@@ -140,7 +140,7 @@ class _CoilObjective(_Objective):
         # TODO: can replace this check with a check for LinearGridCurve instead,
         # once other grids are deprecated
         errorif(
-            np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
+            np.any([g.num_x0 > 1 or g.num_x1 > 1 for g in grid]),
             ValueError,
             "Only use toroidal resolution for coil grids.",
         )

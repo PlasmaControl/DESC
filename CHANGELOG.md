@@ -14,7 +14,7 @@ New Features
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
-- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- Adds utility functions ``desc.external.paraview.export_surface_to_paraview``, ``desc.external.paraview.export_volume_to_paraview`` and ``desc.external.paraview.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
 - The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
 - Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
@@ -22,6 +22,7 @@ alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Restructures the grid classes to allow for new grids in other coordinate systems besides flux coordinates. No change to the public API.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
+- Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 
 Bug Fixes
 

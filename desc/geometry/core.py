@@ -640,10 +640,16 @@ class Surface(IOAble, Optimizable, ABC):
         )
 
 
-class UmbilicCurve(IOAble, Optimizable, ABC):
-    """Abstract base class for 1D umbilic curves in 3D space."""
+class FluxSurfaceCurve(IOAble, Optimizable, ABC):
+    """Abstract base class for 3D closed curves contained in flux surfaces.
+
+    Subclasses should allow for computation of (theta,zeta) coordinates along
+    curve. Computing lab coordinates (x,y,z) requires an additional equilibrium
+    object and specification of a flux surface.
+    """
 
     _io_attrs_ = ["_name"]
+    _static_attrs = Optimizable._static_attrs + ["_name"]
 
     def __init__(self, name=""):
         self._name = name
@@ -652,36 +658,6 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
         """Set things after loading."""
         if hasattr(self, "_NFP"):
             self._NFP = int(self._NFP)
-        if not hasattr(self, "_shift"):
-            self.shift
-        if not hasattr(self, "_rotmat"):
-            self.rotmat
-
-    @optimizable_parameter
-    @property
-    def shift(self):
-        """Displacement of curve in X, Y, Z."""
-        return self.__dict__.setdefault("_shift", jnp.array([0, 0, 0], dtype=float))
-
-    @shift.setter
-    def shift(self, new):
-        if len(new) == 3:
-            self._shift = jnp.asarray(new)
-        else:
-            raise ValueError("shift should be a 3 element vector, got {}".format(new))
-
-    @optimizable_parameter
-    @property
-    def rotmat(self):
-        """Rotation matrix of curve in X, Y, Z."""
-        return self.__dict__.setdefault("_rotmat", jnp.eye(3, dtype=float).flatten())
-
-    @rotmat.setter
-    def rotmat(self, new):
-        if len(new) == 9:
-            self._rotmat = jnp.asarray(new)
-        else:
-            self._rotmat = jnp.asarray(new.flatten())
 
     @property
     def name(self):
@@ -735,19 +711,19 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            n_umbilic = (
-                self.n_umbilic
-                if (hasattr(self, "n_umbilic") and self.n_umbilic is not None)
+            N_scaling = (
+                self.N_scaling
+                if (hasattr(self, "N_scaling") and self.N_scaling is not None)
                 else 1
             )
             grid = LinearGrid(
                 N=2 * self.N * getattr(self, "NFP", 1) + 5,
-                n_umbilic=int(n_umbilic),
+                N_scaling=int(N_scaling),
             )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            n_umbilic = self.n_umbilic if hasattr(self, "n_umbilic") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, n_umbilic=n_umbilic, endpoint=False)
+            N_scaling = self.N_scaling if hasattr(self, "N_scaling") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, N_scaling=N_scaling, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:
@@ -812,16 +788,6 @@ class UmbilicCurve(IOAble, Optimizable, ABC):
             **kwargs,
         )
         return data
-
-    def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
-        self.shift = self.shift + jnp.asarray(displacement)
-
-    def flip(self, normal=[0, 0, 1]):
-        """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
-        F = reflection_matrix(normal)
-        self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
-        self.shift = self.shift @ F.T
 
     def __repr__(self):
         """Get the string form of the object."""

@@ -9,22 +9,23 @@ from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
 from desc.utils import check_posint, copy_coeffs
 
-from .core import UmbilicCurve
+from .core import FluxSurfaceCurve
 
 __all__ = ["FourierUmbilicCurve"]
 
 
-class FourierUmbilicCurve(UmbilicCurve):
-    r"""Umbilic curve parameterized by Fourier series in terms of toroidal angle zeta.
+class FourierUmbilicCurve(FluxSurfaceCurve):
+    r"""Curve parameterized by Fourier series in terms of toroidal angle zeta.
 
-    Curve parameterized in DESC coordinates via
+    Specific parameterization introduced for study of umbilic curves in [1].
+    Given in DESC coordinates by
     \theta = (m_umbilic/n_umbilic*NFP)\\zeta
                     + (1/n_umbilic)\\sum_{n=0}^{N} a_n cos( (n*NFP/n_umbilic) zeta)
                     + (1/n_umbilic)\\sum_{n=-N}^{-1} a_n sin( (|n|*NFP/n_umbilic) zeta)
 
     References
     ----------
-    https://arxiv.org/abs/2505.04211.
+    [1] https://arxiv.org/abs/2505.04211.
     Omnigenous Umbilic Stellarators.
     R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis,
     Y. Elmacioglu. D. Dudt, R. Conlin, E. Kolemen.
@@ -54,7 +55,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         Name for this curve.
     """
 
-    _io_attrs_ = UmbilicCurve._io_attrs_ + [
+    _io_attrs_ = FluxSurfaceCurve._io_attrs_ + [
         "_a_n",
         "_UC_basis",
         "_sym",
@@ -100,6 +101,7 @@ class FourierUmbilicCurve(UmbilicCurve):
         self._NFP = check_posint(NFP, "NFP", False)
         self._n_umbilic = check_posint(n_umbilic, "n_umbilic", False)
         self._m_umbilic = check_posint(m_umbilic, "m_umbilic", False)
+        self._N_scaling = self._n_umbilic
         self._UC_basis = FourierSeries(
             N,
             int(NFP),
@@ -216,8 +218,8 @@ class FourierUmbilicCurve(UmbilicCurve):
         zeta = coords[:, 1]
         UC = n_umbilic * theta - m_umbilic * NFP * zeta
 
-        grid = LinearGrid(zeta=zeta, NFP=1, n_umbilic=1, sym=sym)
-        basis = FourierSeries(N=N, NFP=1, sym=sym)
+        grid = LinearGrid(zeta=zeta, NFP=NFP, N_scaling=n_umbilic, sym=sym)
+        basis = FourierSeries(N=N, NFP=NFP, N_scaling=n_umbilic, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)
         a_n = transform.fit(UC)
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from .data_index import register_compute_fun
 
 
@@ -16,7 +14,7 @@ from .data_index import register_compute_fun
     profiles=[],
     coordinates="",
     data=[],
-    parameterization="desc.geometry.umbiliccurve.FourierUmbilicCurve",
+    parameterization="desc.geometry.fluxsurfacecurve.FourierUmbilicCurve",
 )
 def _UC_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
     # If the grid is non-uniform, the transform has to be modified
@@ -36,7 +34,7 @@ def _UC_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="phi",
     data=[],
-    parameterization="desc.geometry.umbiliccurve.FourierUmbilicCurve",
+    parameterization="desc.geometry.fluxsurfacecurve.FourierUmbilicCurve",
 )
 def _phi(params, transforms, profiles, data, **kwargs):
     data["phi"] = transforms["grid"].nodes[:, 2]
@@ -55,7 +53,7 @@ def _phi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="phi",
     data=["UC", "phi"],
-    parameterization="desc.geometry.umbiliccurve.FourierUmbilicCurve",
+    parameterization="desc.geometry.fluxsurfacecurve.FourierUmbilicCurve",
 )
 def _theta(params, transforms, profiles, data, **kwargs):
     data["theta"] = (

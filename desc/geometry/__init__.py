@@ -8,5 +8,5 @@ from .curve import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
+from .fluxsurfacecurve import FourierUmbilicCurve
 from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from .umbiliccurve import FourierUmbilicCurve

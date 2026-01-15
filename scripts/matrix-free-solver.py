@@ -29,14 +29,14 @@ import os
 
 # Input parameters
 I = 1e5  # Toroidal plasma current
-R = 2  # Major radius
-aspect_ratio = 10  # Aspect ratio of the tokamak
+R = 4  # Major radius
+aspect_ratio = 4  # Aspect ratio of the tokamak
 a = R / aspect_ratio  # Minor radius
 save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
 os.makedirs(save_path, exist_ok=True)
 
-"""w7x = get("W7-X")
+solovev = get("solovev")
 override = True
 if os.path.exists(save_path + save_name) and not override:
     eq = load(save_path + save_name)
@@ -46,7 +46,7 @@ else:
     eq = Equilibrium(
         L=12,
         M=12,
-        N=3,
+        N=0,
         surface=FourierRZToroidalSurface.from_shape_parameters(
             major_radius=R,
             aspect_ratio=aspect_ratio,
@@ -56,21 +56,21 @@ else:
             eccentricity=0,
             torsion=0,
             twist=0,
-            NFP=2,
-            sym=True,
+            NFP=solovev.NFP,
+            sym=solovev.sym,
         ),
-        NFP=2,
+        NFP=1,
         #current=PowerSeriesProfile([0, 0, I]),
-        iota = w7x.iota.copy(),#PowerSeriesProfile([0.3, 0.0, 0.2]),
-        pressure=w7x.pressure.copy(),#PowerSeriesProfile(p_coeffs),
-        Psi=1.0,
+        iota = solovev.iota.copy(),#PowerSeriesProfile([0.3, 0.0, 0.2]),
+        pressure=solovev.pressure.copy(),#PowerSeriesProfile(p_coeffs),
+        Psi=solovev.Psi,
     )
 
     # Solve equilbrium
     eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
     eq.save(save_path + save_name)
-"""
-eq = get("SOLOVEV")
+
+#eq = get("SOLOVEV")
 
 # resolution for low-res solve
 n_rho = 26

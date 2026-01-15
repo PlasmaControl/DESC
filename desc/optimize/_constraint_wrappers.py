@@ -661,6 +661,7 @@ class ProximalProjection(ObjectiveFunction):
                 "Za_n",
                 "Rb_lmn",
                 "Zb_lmn",
+                "Lp_Lmn",
             ]
         # the eq optimizable variables for proximal are the Rb, Zb and profile
         # coefficients (or Poincare). Once these are chosen, we will solve the eq

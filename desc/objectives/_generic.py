@@ -81,7 +81,8 @@ class ExternalObjective(_Objective):
             eq.save(path)
             eq = load(path)
             data = eq.compute("<beta>_vol")
-            return data["<beta>_vol"]
+            # needs to return a 1d array, not a scalar
+            return jnp.atleast_1d(data["<beta>_vol"])
 
         myobj = ExternalObjective(
             eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,

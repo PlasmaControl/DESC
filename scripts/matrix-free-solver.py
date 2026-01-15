@@ -36,7 +36,7 @@ save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
 os.makedirs(save_path, exist_ok=True)
 
-w7x = get("W7-X")
+"""w7x = get("W7-X")
 override = True
 if os.path.exists(save_path + save_name) and not override:
     eq = load(save_path + save_name)
@@ -69,6 +69,8 @@ else:
     # Solve equilbrium
     eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
     eq.save(save_path + save_name)
+"""
+eq = get("SOLOVEV")
 
 # resolution for low-res solve
 n_rho = 26

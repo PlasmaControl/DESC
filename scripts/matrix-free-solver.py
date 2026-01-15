@@ -30,7 +30,7 @@ import os
 # Input parameters
 I = 1e5  # Toroidal plasma current
 R = 2  # Major radius
-aspect_ratio = 200  # Aspect ratio of the tokamak
+aspect_ratio = 10  # Aspect ratio of the tokamak
 a = R / aspect_ratio  # Minor radius
 save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
@@ -46,7 +46,7 @@ else:
     eq = Equilibrium(
         L=12,
         M=12,
-        N=0,
+        N=3,
         surface=FourierRZToroidalSurface.from_shape_parameters(
             major_radius=R,
             aspect_ratio=aspect_ratio,
@@ -73,7 +73,7 @@ else:
 # resolution for low-res solve
 n_rho = 26
 n_theta = 32
-n_zeta = 1
+n_zeta = 9
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -177,7 +177,7 @@ xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 
 n_rho = 64
 n_theta = 64
-n_zeta = 1#12
+n_zeta = 12
 
 x, w = leggauss_lob(n_rho)
 

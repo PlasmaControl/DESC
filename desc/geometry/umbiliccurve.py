@@ -225,6 +225,7 @@ class FourierUmbilicCurve(UmbilicCurve):
             a_n=a_n,
             NFP=NFP,
             n_umbilic=n_umbilic,
+            m_umbilic=m_umbilic,
             modes_UC=basis.modes[:, 2],
             sym=sym,
             name=name,

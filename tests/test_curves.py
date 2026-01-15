@@ -1270,3 +1270,12 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))
+
+
+class TestFourierUmbilicCurve:
+    """Tests for FourierUmbilicCurve class."""
+
+    @pytest.mark.unit
+    def test_parameterization(self):
+        """Verify the parameterization of curves in DESC coordinates."""
+        pass

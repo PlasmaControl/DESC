@@ -13,6 +13,7 @@ from desc.utils import (
     parse_argname_change,
     rpz2xyz,
     safenorm,
+    setdefault,
     warnif,
 )
 
@@ -1493,7 +1494,7 @@ class UmbilicHighCurvature(_Objective):
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._curve_data_keys = ["phi", "theta"]
+        self._curve_data_keys = ["theta"]
         self._equil_data_keys = ["curvature_k2_rho"]
 
         timer = Timer()
@@ -1530,14 +1531,13 @@ class UmbilicHighCurvature(_Objective):
         Parameters
         ----------
         params_1 : dict
-            Dictionary of equilibrium or surface degrees of freedom,
-            e.g. Equilibrium.params_dict
+            Dictionary of curve degrees of freedom, e.g. curve.params_dict.
         params_2 : dict
-            Dictionary of curve degrees of freedom,
-            e.g. curve.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            e.g. Equilibrium.params_dict.
         constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
-            self.constants
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to self.constants.
 
         Returns
         -------
@@ -1545,16 +1545,11 @@ class UmbilicHighCurvature(_Objective):
             Minimum Gaussian curvature at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
-        if params_2 is None:
-            params_2 = self.things[0].params_dict
-
+        constants = setdefault(constants, self.constants)
+        params_1 = setdefault(params_1, self.things[0].params_dict)
+        curve_params = params_1
         if self._eq_fixed:
-            curve_params = params_2
-        else:
-            curve_params = params_2
-            equil_params = params_1 if params_1 else self.things[1].params_dict
+            equil_params = setdefault(params_2, self.things[1].params_dict)
 
         curve_data = compute_fun(
             self._curve,
@@ -1586,23 +1581,15 @@ class UmbilicHighCurvature(_Objective):
         )
 
         # now compute the curvature
-        if not self._eq_fixed:
-            data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._equil_data_keys,
-                params=equil_params,
-                profiles=equil_profiles,
-                transforms=equil_transforms,
-            )
-        else:
-            data = compute_fun(
-                self._eq,
-                self._equil_data_keys,
-                params=equil_params,
-                profiles=equil_profiles,
-                transforms=equil_transforms,
-            )
-
+        data = compute_fun(
+            setdefault(
+                self._eq, "desc.equilibrium.equilibrium.Equilibrium", self._eq_fixed
+            ),
+            self._equil_data_keys,
+            params=equil_params,
+            profiles=equil_profiles,
+            transforms=equil_transforms,
+        )
         return data["curvature_k2_rho"]
 
 

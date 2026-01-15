@@ -136,10 +136,7 @@ def test_compute_everything():
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
         # umbilic curve
         "desc.geometry.umbiliccurve.FourierUmbilicCurve": FourierUmbilicCurve(
-            UC_n=[10, 1, 0.2],
-            modes_UC=[0, 1, 2],
-            NFP=1,
-            n_umbilic=3,
+            a_n=[10, 1, 0.2], modes_UC=[0, 1, 2], NFP=1, n_umbilic=3, m_umbilic=2
         ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(

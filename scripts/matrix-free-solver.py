@@ -36,14 +36,16 @@ save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
 os.makedirs(save_path, exist_ok=True)
 
-if os.path.exists(save_path + save_name):
+w7x = get("W7-X")
+override = True
+if os.path.exists(save_path + save_name) and not override:
     eq = load(save_path + save_name)
 else:
     p_coeffs = np.array([1.8e4, 0, -3.6e4, 0, 1.8e4])  # Pressure profile coefficients
     # Create a very high aspect ratio tokamak
     eq = Equilibrium(
-        L=5,
-        M=5,
+        L=12,
+        M=12,
         N=0,
         surface=FourierRZToroidalSurface.from_shape_parameters(
             major_radius=R,
@@ -58,9 +60,9 @@ else:
             sym=True,
         ),
         NFP=2,
-        current=PowerSeriesProfile([0, 0, I]),
-        #iota = PowerSeriesProfile([0.3, 0.0, 0.2]),
-        pressure=PowerSeriesProfile(p_coeffs),
+        #current=PowerSeriesProfile([0, 0, I]),
+        iota = w7x.iota.copy(),#PowerSeriesProfile([0.3, 0.0, 0.2]),
+        pressure=w7x.pressure.copy(),#PowerSeriesProfile(p_coeffs),
         Psi=1.0,
     )
 
@@ -71,7 +73,7 @@ else:
 # resolution for low-res solve
 n_rho = 26
 n_theta = 32
-n_zeta = 9
+n_zeta = 1
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -175,7 +177,7 @@ xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 
 n_rho = 64
 n_theta = 64
-n_zeta = 12
+n_zeta = 1#12
 
 x, w = leggauss_lob(n_rho)
 

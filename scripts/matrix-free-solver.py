@@ -30,7 +30,7 @@ import os
 # Input parameters
 I = 1e5  # Toroidal plasma current
 R = 4  # Major radius
-aspect_ratio = 50  # Aspect ratio of the tokamak
+aspect_ratio = 25  # Aspect ratio of the tokamak
 a = R / aspect_ratio  # Minor radius
 save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"

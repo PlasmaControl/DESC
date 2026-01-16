@@ -36,6 +36,7 @@ save_path = "./high_aspect_ratio_tokamak/"
 save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
 os.makedirs(save_path, exist_ok=True)
 
+print("solving equilibrium")
 solovev = get("solovev")
 override = True
 if os.path.exists(save_path + save_name) and not override:
@@ -70,6 +71,7 @@ else:
     eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
     eq.save(save_path + save_name)
 
+print("equilibrium solved")
 #eq = get("SOLOVEV")
 
 # resolution for low-res solve
@@ -81,7 +83,7 @@ n_zeta = 9
 #n_rho = 48
 #n_theta = 32
 #n_zeta = 10
-
+print("making input grid and diffmats")
 x, w = leggauss_lob(n_rho)
 
 rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
@@ -115,6 +117,8 @@ diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=
 reshaped_nodes = jnp.reshape(
     grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
 )
+print("mapping coordinates")
+
 rtz_nodes = map_coordinates(
     eq,
     reshaped_nodes,  # (ρ,θ_PEST,ζ)
@@ -124,8 +128,13 @@ rtz_nodes = map_coordinates(
     tol=1e-12,
     maxiter=50,
 )
+
+print("coordinates mapped")
+
+print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
 
+print("computing eigenmode at low res")
 data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100)
 
 print(data["finite-n lambda"])
@@ -162,7 +171,6 @@ psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
 #plt.plot(theta, xi_sup_rho[:, :, 0].T * psi_r[:, :, 0].T, "-og")
 ##plt.plot(theta, xi_sup_rho[:, :, 0].T, '-og');
 #plt.show()
-
 # SAVE low-res grids & eigenfunction components (to upscale later)
 rho_low = rho
 theta_low = np.concatenate((theta, np.array([2*np.pi])))
@@ -177,11 +185,13 @@ xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 ###----Interpolate and upscale the eigenfunction----###
 #######################################################
 
+print("making high-res grid and diffmats")
 n_rho = 64
 n_theta = 64
 n_zeta = 12
 
 x, w = leggauss_lob(n_rho)
+
 
 rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
 dx_f = jax.vmap(
@@ -215,6 +225,8 @@ reshaped_nodes = jnp.reshape(
     grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
 )
 
+
+print("mapping coordinates to high-res grid")
 # These nodes are in DESC coordinates
 rtz_nodes = map_coordinates(
     eq,
@@ -270,7 +282,7 @@ v_guess = jnp.concatenate(
     axis=0,
 )
 v_guess = v_guess/jnp.linalg.norm(v_guess)
-
+print("computing eigenmode at high res with matrix-free method")
 tic = time.time()
 data = eq.compute(
     "finite-n lambda matfree",

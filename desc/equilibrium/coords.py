@@ -430,7 +430,7 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
 
     """
     grid = lmbda.grid
-    errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
+    errorif(not grid.fft_x1, NotImplementedError, msg="See note in docstring.")
     # TODO(#1243): assert grid.sym==eq.sym once basis is padded for partial sum
     # TODO: (#568)
     warnif(
@@ -803,8 +803,8 @@ def get_rtz_grid(
     if inbasis[coordinates[0]] == "rho":
         # Should work as long as inbasis radial coordinate is
         # single variable, monotonic increasing function of rho.
-        idx["_unique_rho_idx"] = grid.unique_rho_idx
-        idx["_inverse_rho_idx"] = grid.inverse_rho_idx
+        idx["_unique_x0_idx"] = grid.unique_rho_idx
+        idx["_inverse_x0_idx"] = grid.inverse_rho_idx
     desc_grid = Grid(
         nodes=rtz_nodes,
         coordinates="rtz",

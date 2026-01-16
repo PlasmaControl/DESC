@@ -29,7 +29,7 @@ from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, LinearGridCurve, QuadratureGrid
 from desc.integrals import Bounce2D
 from desc.io import load
 from desc.magnetic_fields import (
@@ -950,7 +950,7 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = LinearGrid(N=5)  # single grid
+        grid = LinearGridCurve(N=5)  # single grid
 
         test(coil)
         test(coils)
@@ -977,7 +977,7 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = [LinearGrid(N=5)] * 5  # single list of grids
+        grid = [LinearGridCurve(N=5)] * 5  # single list of grids
 
         test(coil)
         test(coils)
@@ -1004,7 +1004,8 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = [[LinearGrid(N=5)] * 3, [LinearGrid(N=5)] * 2]  # nested list of grids
+        # nested list of grids
+        grid = [[LinearGridCurve(N=5)] * 3, [LinearGridCurve(N=5)] * 2]
 
         test(coil)
         test(coils)
@@ -3631,7 +3632,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGridCurve(N=int(5 + 3 * res))),
                 use_jit=False,
             )
             obj.build(verbose=0)

@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGrid
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
@@ -116,6 +116,11 @@ class BootstrapRedlConsistency(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,

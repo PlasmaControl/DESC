@@ -996,10 +996,10 @@ class FourierXYZToroidalSurface(Surface):
                 sym = False
 
         self._X_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            M=self._M, N=self._N, NFP=1, sym="cos" if sym else False
         )
         self._Y_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            M=self._M, N=self._N, NFP=1, sym="sin" if sym else False
         )
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
@@ -1316,8 +1316,8 @@ class FourierXYZToroidalSurface(Surface):
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
-        X_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
-        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        X_basis = DoubleFourierSeries(M=M, N=N, NFP=1, sym="cos" if sym else False)
+        Y_basis = DoubleFourierSeries(M=M, N=N, NFP=1, sym="sin" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
 
         if w is None:  # unweighted fit

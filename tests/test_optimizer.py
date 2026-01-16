@@ -1912,8 +1912,12 @@ def test_get_ess_scale():  # noqa: C901
         zsurf_scale["Z_lmn"],
         np.exp(-alpha * np.linalg.norm(zsurf.Z_basis.modes, axis=1)) / np.exp(-alpha),
     )
+    np.testing.assert_allclose(
+        zsurf_scale["L_lmn"],
+        np.exp(-alpha * np.linalg.norm(zsurf.L_basis.modes, axis=1)) / np.exp(-alpha),
+    )
     for key in zsurf_scale.keys():
-        if key in ["R_lmn", "Z_lmn"]:
+        if key in ["R_lmn", "Z_lmn", "L_lmn"]:
             continue
         np.testing.assert_allclose(zsurf_scale[key], 1)
 

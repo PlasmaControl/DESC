@@ -81,6 +81,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     if isinstance(objective, ProximalProjection):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
         # see desc.optimize._constraint_wrappers.ProximalProjection._set_eq_state_vector
+        # if Poincare section is used, also removes "Lp_lmn"
         c = 0
         cols = np.array([], dtype=int)
         for t in objective.things:

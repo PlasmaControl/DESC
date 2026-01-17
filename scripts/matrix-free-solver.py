@@ -77,7 +77,7 @@ print("equilibrium solved")
 # resolution for low-res solve
 n_rho = 26
 n_theta = 32
-n_zeta = 9
+n_zeta = 1#9
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -135,7 +135,7 @@ print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
 
 print("computing eigenmode at low res")
-data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100)
+data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100, axisym=True)
 
 print(data["finite-n lambda"])
 X = data["finite-n eigenfunction"]
@@ -188,7 +188,7 @@ xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 print("making high-res grid and diffmats")
 n_rho = 64
 n_theta = 64
-n_zeta = 12
+n_zeta = 1#12
 
 x, w = leggauss_lob(n_rho)
 
@@ -291,6 +291,7 @@ data = eq.compute(
     incompressible=False,
     gamma=100,
     v_guess=v_guess,
+    axisym=True
 )
 
 print(data["finite-n lambda matfree"])

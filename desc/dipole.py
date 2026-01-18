@@ -200,7 +200,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @optimizable_parameter
     @property
     def m0(self):
-        """float: Magnitude of magnetic dipole moment."""
+        """float: Magnitude of magnetic dipole moment in (Amp * meters ^2)."""
         return self._m0
 
     @m0.setter
@@ -211,7 +211,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @optimizable_parameter
     @property
     def rho(self):
-        """float: Optimization parameter in range (-1, 1)."""
+        """float: Dimensionless optimization parameter in range (-1, 1)."""
         return self._rho
 
     @rho.setter
@@ -237,6 +237,11 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     def position(self):
         """ndarray: Position of dipole as [x, y, z]."""
         return jnp.array([self._x, self._y, self._z])
+    
+    @property
+    def M(self):
+        """float: ."""
+        return self._m0 * self._rho
 
 
     def _compute_A_or_B(
@@ -274,12 +279,14 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
         dipole_pos = jnp.array([[x, y, z]])
 
+        M = m0 * rho
+
         AB = op(
             coords,
             dipole_pos,
             phi,
             theta,
-            m0,
+            M,
             chunk_size=chunk_size,
         )
 

@@ -23,13 +23,6 @@ from desc.backend import (
 )
 from desc.compute import get_params
 from desc.compute.utils import _compute as compute_fun
-from desc.geometry import (
-    FourierPlanarCurve,
-    FourierRZCurve,
-    FourierXYCurve,
-    FourierXYZCurve,
-    SplineXYZCurve,
-)
 from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (

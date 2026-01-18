@@ -35,8 +35,6 @@ from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
     biot_savart_general_vector_potential,
-    dipole_field,
-    dipole_vector_potential
 )
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import (

@@ -28,12 +28,13 @@ from desc.grid import QuadratureGrid
 import os
 
 # Input parameters
-I = 1e5  # Toroidal plasma current
+p_multiplier = 2 # Factor to multiply solovev pressure profile by
 R = 4  # Major radius
-aspect_ratio = 10  # Aspect ratio of the tokamak
+aspect_ratio = 25  # Aspect ratio of the tokamak
 a = R / aspect_ratio  # Minor radius
 save_path = "./high_aspect_ratio_tokamak/"
-save_name = f"tokamak_AR{aspect_ratio}_I{I}_R{R}.h5"
+save_tag = f"axisym_AR{aspect_ratio}_p{p_multiplier}_R{R}"
+save_name = f"equilibrium_{save_tag}.h5"
 os.makedirs(save_path, exist_ok=True)
 
 print("solving equilibrium")
@@ -63,7 +64,7 @@ else:
         NFP=1,
         #current=PowerSeriesProfile([0, 0, I]),
         iota = solovev.iota.copy(),#PowerSeriesProfile([0.3, 0.0, 0.2]),
-        pressure=solovev.pressure.copy(),#PowerSeriesProfile(p_coeffs),
+        pressure=p_multiplier * solovev.pressure.copy(),#PowerSeriesProfile(p_coeffs),
         Psi=solovev.Psi,
     )
 
@@ -135,7 +136,10 @@ print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
 
 print("computing eigenmode at low res")
+tic = time.time()
 data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100, axisym=True)
+toc = time.time()
+print(f"matrix full took {toc-tic} s.")
 
 print(data["finite-n lambda"])
 X = data["finite-n eigenfunction"]
@@ -305,5 +309,9 @@ xi_sup_zeta_final = np.reshape(v[2*n_total:], (n_rho, n_theta, n_zeta))
 toc = time.time()
 print(f"matrix free took {toc-tic} s.")
 
-print(v.min())
+print(data["finite-n lambda matfree"].min())
 
+np.save(save_path + f"xi_rho_{save_tag}.npy", xi_sup_rho_final)
+np.save(save_path + f"xi_theta_{save_tag}.npy", xi_sup_theta_final)
+np.save(save_path + f"xi_zeta_{save_tag}.npy", xi_sup_zeta_final)
+np.save(save_path + f"lambda_{save_tag}.npy", data["finite-n lambda matfree"])

@@ -483,16 +483,21 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     q_max = kwargs.get("q_max",5)
     res_range_min = kwargs.get("res_range_min",-4)
     res_range_max = kwargs.get("res_range_max",4)
-    bt_filter_flag = kwargs.get("bt_filter_flag",True)
-    rt_filter_flag = kwargs.get("rt_filter_flag",True)
-    include_zero_res = kwargs.get("include_zero_res",True)
     pitch_invs = kwargs.get("pitch_invs",None)
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
     Psi = kwargs.get("Psi",None)
-    wd_blur = kwargs.get('wd_blur',3)
-    QS_flag = kwargs.get('QS_flag',False) # True for QS
+    wd_blur = kwargs.get("wd_blur",3)
+
+    # Flags
+    bt_filter_flag = kwargs.get("bt_filter_flag",True)
+    rt_filter_flag = kwargs.get("rt_filter_flag",True)
+    include_zero_res = kwargs.get("include_zero_res",True)
+    STAB_SACRIFICE = kwargs.get("STAB_SACRIFICE",True)
+    QS_flag = kwargs.get("QS_flag",False) # True for QS (QA, QH configurations, not QI)
+    LOSS_FRAC_WEIGHT = kwargs.get("LOSS_FRAC_WEIGHT",True)
+
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -627,6 +632,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         return jnp.sqrt(jnpmean_nz(sq_diff,axis=axis))
 
 
+    ##### PARTICLE FILTERING #####
+
     # Barely trapped filtering (if bt_filter_flag==True)
     def tb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Perform barely trapped filter
         points_0 = points[0][:][:][:][:]
@@ -652,19 +659,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     alpha_drift_out, psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std)
 
 
-    # Sum psi_drift_out term over alpha
-    psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
+    ##### BUMP FUNCTION TERM #####
 
-
-    # # Omega eta calculation (currently for one energy only), average over alphas
-    # tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
-    # iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
-    # # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * (N*nfp-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    # # omega_arr_test1 = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out
-    # omega_arr_test = (tau_arr*nfp / (2*jnp.pi * ((N*nfp)-iotas_omega))) * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    # # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
-    # omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
-        # Omega eta calculation (currently for one energy only), average over alphas
+    # Omega eta calculation (currently for one energy only), average over alphas
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
     def tb_QS(nfp,N,iotas_omega):
@@ -673,16 +670,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         return jnp.ones(iotas_omega.shape)
     QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
     omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
-    # omega_arr = jnp.broadcast_to(omega_arr[...,None],(omega_arr.shape[0],omega_arr.shape[1],omega_arr.shape[2],omega_arr.shape[3],len(KE_frac))) * v2 # :=(rho,alpha,Bcrit,well,energy)
     omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
-
-    # Bump function calculation #
-
-    # Misc parameters
-    w=1 # width and amplitude parameter, recommended to keep =1
-
-    # Setting wd
+    # Setting wd (wd=DeltaOmega)
     def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
         def body_fun(i, carry):
             max_val, max_idx = carry
@@ -704,6 +694,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (Bcrit,well,rho)
     wd = jnp.transpose(wd,(2,0,1)) # := (rho,Bcrit,well)
 
+    # wd_max = 
+    # wd_min = 
+
     # Setting up resonance arrays
     res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)
     res_broad = jnp.broadcast_to(res_broad, (ado_shape[0], ado_shape[2], ado_shape[3], res_arr.shape[0])) # := (rho,Bcrit,well,res)
@@ -716,17 +709,42 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     y = omega_broad - res_broad
     condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
 
-    # Create q array for division into bump function
-    q_broad = q_arr[None,None,None,:] # make 4D array with q values on axis=3
-    q_broad = jnp.broadcast_to(q_broad, (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
-
-    # Calculate bump function (f_b) and sum over resonances
-    f_b_res = jnp.where(
+    # Calculate bump function (f_b)
+    w=1 # width and amplitude parameter, recommended to keep =1
+    f_b = jnp.where(
         condition,
-        safediv(jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), q_broad**2), # clip to avoid overflow warning in jnp.exp()
+        jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
-    f_b = jnp.sum(f_b_res,axis=-1) # := (rho,Bcrit,well)
+    
+
+    ##### ISLAND WIDTH TERM #####
+    # Sum psi_drift_out term over alpha
+    psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
+    psi_drift_out = jnp.broadcast_to(psi_drift_out[...,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Create n array for island width - make 4D array with q values on axis=3
+    q_broad = jnp.broadcast_to(q_arr[None,None,None,:], (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+
+    # Calculate island width or modified island width
+    if STAB_SACRIFICE:
+        Deltarho_4 = safediv(psi_drift_out , q_broad**2) # := (rho,Bcrit,well,res)
+    else:
+        omega_prime = jnp.gradient(omega_arr,rho_res,axis=0) # := (rho,Bcrit,well), omega_arr is :=(rho,Bcrit,well)
+        omega_prime = jnp.broadcast_to(omega_prime[...,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+        Deltarho_4 = safediv(psi_drift_out , omega_prime*(q_broad**2)) # := (rho,Bcrit,well,res)
+
+
+    ##### WEIGHTING BASED ON PLASMA EDGE VICINITY #####
+    if LOSS_FRAC_WEIGHT:
+        rhos = grid.nodes[:,0] # := (rho)
+        rho_max = jnp.broadcast_to(rhos[...,:,:,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+    else:
+        rho_max=1 # no weighting
+
+
+    ##### PHASE-SPACE AVERAGING #####
+    f_b = jnp.sum( (rho_max**2) * f_b * Deltarho_4 ,axis=-1) # := (rho,Bcrit,well)
 
     # First sum over rho
     iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)

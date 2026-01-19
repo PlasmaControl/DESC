@@ -63,7 +63,7 @@ else:
         ),
         NFP=1,
         #current=PowerSeriesProfile([0, 0, I]),
-        iota = solovev.iota.copy(),#PowerSeriesProfile([0.3, 0.0, 0.2]),
+        iota = PowerSeriesProfile([1, 0.0, 0.2]),#PowerSeriesProfile([0.3, 0.0, 0.2]),
         pressure=p_multiplier * solovev.pressure.copy(),#PowerSeriesProfile(p_coeffs),
         Psi=solovev.Psi,
     )

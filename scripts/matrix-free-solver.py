@@ -28,7 +28,7 @@ from desc.grid import QuadratureGrid
 import os
 
 # Input parameters
-p_multiplier = 2 # Factor to multiply solovev pressure profile by
+p_multiplier = 1/2 # Factor to multiply solovev pressure profile by
 R = 4  # Major radius
 aspect_ratio = 25  # Aspect ratio of the tokamak
 a = R / aspect_ratio  # Minor radius

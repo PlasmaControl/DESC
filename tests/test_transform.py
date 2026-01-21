@@ -465,7 +465,7 @@ class TestTransform:
 
         g = LinearGrid(rho=2, M=2, N=2)
         b = DoubleFourierSeries(M=1, N=3)
-        with pytest.warns(UserWarning, match="can not undersample in zeta"):
+        with pytest.warns(UserWarning, match="can not undersample in x2"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 

@@ -1726,7 +1726,9 @@ class Equilibrium(IOAble, Optimizable):
         self._pressure = ensure_consistent_profile_eq_resolution(
             self._pressure, self, name="pressure"
         )
-        has_kinetic = any([hasattr(self, name) for name in _kinetic_profile_names])
+        has_kinetic = any(
+            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
+        )
         warnif(
             has_kinetic,
             UserWarning,
@@ -1789,7 +1791,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         warnif(
-            hasattr(self, "_pressure"),
+            self._pressure is not None,
             UserWarning,
             "Electron temperature profile is being assigned to an "
             "equilibrium which already has an existing pressure profile. The default "
@@ -1830,7 +1832,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         warnif(
-            hasattr(self, "_pressure"),
+            self._pressure is not None,
             UserWarning,
             "Electron density profile is being assigned to an "
             "equilibrium which already has an existing pressure profile. The default "
@@ -1870,7 +1872,7 @@ class Equilibrium(IOAble, Optimizable):
             self._ion_temperature, self, name="ion temperature"
         )
         warnif(
-            hasattr(self, "_pressure"),
+            self._pressure is not None,
             UserWarning,
             "Ion density profile is being assigned to an "
             "equilibrium which already has an existing pressure profile. The default "
@@ -1909,7 +1911,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         warnif(
-            hasattr(self, "_pressure"),
+            self._pressure is not None,
             UserWarning,
             "Atomic number profile is being assigned to an "
             "equilibrium which already has an existing pressure profile. The default "

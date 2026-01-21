@@ -4,6 +4,7 @@ import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
 from desc.geometry import Curve
+from desc.utils import warnif
 
 
 def compute_scaling_factors(thing):
@@ -45,13 +46,14 @@ def compute_scaling_factors(thing):
         scales["F"] = B_pressure / scales["a"]
         scales["f"] = scales["F"] * scales["V"]
 
-        p0 = float(thing.pressure(0)[0])
+        has_kinetic = False
         if (
             thing.electron_density is not None
             and thing.electron_temperature is not None
             and thing.atomic_number is not None
             and thing.ion_temperature is not None
         ):
+            has_kinetic = True
             # if kinetic profiles exist, then use them for "p" scale
             scales["n"] = float(
                 ((thing.atomic_number(0) + 1) / 2 * thing.electron_density(0))[0]
@@ -60,6 +62,16 @@ def compute_scaling_factors(thing):
                 [thing.electron_temperature(0), thing.ion_temperature(0)]
             )
             p0 = elementary_charge * 2 * scales["n"] * scales["T"]
+        if thing.pressure is not None:
+            p0 = float(thing.pressure(0)[0])
+            warnif(
+                has_kinetic,
+                UserWarning,
+                "Equilibrium has both kinetic and pressure profiles assigned to it."
+                " By default, the pressure profile will be used for the normalization "
+                "and the computation of pressure, which may lead to unexpected "
+                "results when kinetic profiles are also present.",
+            )
         if p0 < 1:  # vacuum
             scales["p"] = B_pressure
         else:

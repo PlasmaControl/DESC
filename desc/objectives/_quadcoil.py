@@ -127,7 +127,7 @@ class QuadcoilProxy(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        verbose=False,
+        verbose=0,
         name="QUADCOIL Proxy",
         Bnormal_plasma_chunk_size=None,
         source_grid=None,

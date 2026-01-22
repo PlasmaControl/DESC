@@ -950,7 +950,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         )
     
     def from_simsopt(coil_simsopt, name=""):
-        current = coil_simsopt.current.get_dofs()
+        current = coil_simsopt.current.get_value()
         curve = FourierXYZCurve.from_simsopt(coil_simsopt.curve)
         return FourierXYZCoil(
             current=current,

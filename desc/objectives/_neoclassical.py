@@ -476,7 +476,7 @@ class TrappedResonance(_Objective):
         deriv_mode="auto",
         rho=np.linspace(0.1, 0.9, 3),
         alpha=np.linspace(0,2*np.pi,10),
-        KE_frac=np.array([0.00000001]),
+        KE_frac=np.array([1]), # currently only supporting one KE_frac
         Psi=None,
         *,
         num_transit=3,
@@ -489,8 +489,19 @@ class TrappedResonance(_Objective):
         name="TrappedResonance",
         jac_chunk_size=None,
         pitch_invs=None,
-        N=0,
-        QS_flag=True
+        N=0, # QA is default
+        QS_flag=True,
+        m_max = 5,
+        n_max = 5,
+        res_range_min = -4,
+        res_range_max = 4,
+        INCLUDE_ZERO_RES = True,
+        bt_filter_flag = True,
+        rt_filter_flag = True,
+        STAB_SACRIFICE = True,
+        LOSS_FRAC_WEIGHT = True,
+        verbose = False,
+        wd_blur = 1.25
     ):
         # assign attributes and store inputs. No expensive calculations
                 # we don't have to do much here, mostly just call ``super().__init__()``
@@ -517,14 +528,28 @@ class TrappedResonance(_Objective):
             "KE_frac": KE_frac,
             "pitch_invs": pitch_invs,
             "N": N,
+            "QS_flag": QS_flag,
+            "m_max": m_max,
+            "n_max": n_max,
+            "res_range_min": res_range_min,
+            "res_range_max": res_range_max,
+            "INCLUDE_ZERO_RES": INCLUDE_ZERO_RES,
+            "bt_filter_flag": bt_filter_flag,
+            "rt_filter_flag": rt_filter_flag,
+            "STAB_SACRIFICE": STAB_SACRIFICE,
+            "LOSS_FRAC_WEIGHT": LOSS_FRAC_WEIGHT,
+            "verbose": verbose,
+            "wd_blur": wd_blur
+        }
+        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        self._key = "f_tr2"
+        self._params2 = { # other non-static params       
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
             "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
             "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
             "Psi": Psi,
-            "QS_flag": QS_flag
         }
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "f_tr2"
+
 
         super().__init__( 
             things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium
@@ -571,6 +596,40 @@ class TrappedResonance(_Objective):
         self._constants["profiles"] = get_profiles(
             self._keys_1dr + [self._key], eq, self._grid_1dr
         )
+
+        # Setup rational array
+        m_max = self._hyperparameters["m_max"]
+        n_max = self._hyperparameters["m_max"]
+        INCLUDE_ZERO_RES = self._hyperparameters["INCLUDE_ZERO_RES"]
+        res_range_min = self._hyperparameters["res_range_min"]
+        res_range_max = self._hyperparameters["res_range_max"]
+
+        res_arr = np.full(2*m_max*n_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+        n_arr = np.full(2*m_max*n_max + 1, 1)
+
+        res_arr_set = 0
+
+        if INCLUDE_ZERO_RES:
+            res_arr[0] = 0
+            n_arr[0] = 1
+            res_arr_set+=1
+
+        for m in range(1,m_max+1):
+            for n in range(1,n_max+1):
+                condition = np.logical_and(
+                    ~np.isin(m/n, res_arr),
+                    np.logical_and(m/n >= res_range_min, m/n <= res_range_max)
+                    )
+                if condition:
+                    res_arr[res_arr_set] = m/n
+                    res_arr[res_arr_set+1] = -m/n
+                    n_arr[res_arr_set] = n
+                    n_arr[res_arr_set+1] = n
+                    res_arr_set+=2
+        
+
+        self._hyperparameters['q_arr'] = n_arr
+        self._hyperparameters['res_arr'] = res_arr
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -644,10 +703,9 @@ class TrappedResonance(_Objective):
             data=data,
             quad=constants["quad"],
             nfp=eq.NFP,
-            bt_filter_flag=True,
-            rt_filter_flag=True,
             **quad2,
             **self._hyperparameters, # passes pitch inv as well as other parameters
+            **self._params2,
         )
         # return grid.compress(data[self._key]) # return the value of the objective function evaluated at each point on the grid
 

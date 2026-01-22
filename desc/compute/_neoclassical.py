@@ -9,7 +9,7 @@ from desc.backend import imap, jax, jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
 # from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv
+from ..utils import safediv, softmin, softmax
 from .data_index import register_compute_fun
 
 from ..integrals.quad_utils import (
@@ -469,7 +469,7 @@ _bounce1D_doc = {
     public=False,
     **_bounce1D_doc,
 )
-# @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging
+# @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"]) # uncomment after debugging, maybe not
 def f_tr2(params, transforms, profiles, data, **kwargs):
     
     # Import kwargs
@@ -479,24 +479,28 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     N = kwargs.get("N",0) # default is QA, N=0
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
-    p_max = kwargs.get("p_max",5)
-    q_max = kwargs.get("q_max",5)
-    res_range_min = kwargs.get("res_range_min",-4)
-    res_range_max = kwargs.get("res_range_max",4)
+    # p_max = kwargs.get("p_max",5)
+    # q_max = kwargs.get("q_max",5)
+    # res_range_min = kwargs.get("res_range_min",-4)
+    # res_range_max = kwargs.get("res_range_max",4)
     pitch_invs = kwargs.get("pitch_invs",None)
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
     Psi = kwargs.get("Psi",None)
-    wd_blur = kwargs.get("wd_blur",3)
+    wd_blur = kwargs.get("wd_blur",1.25)
+    res_arr = kwargs.get("res_arr",None)
+    q_arr = kwargs.get("q_arr",None)
+    quad = kwargs.get("quad",None)
 
     # Flags
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
-    include_zero_res = kwargs.get("include_zero_res",True)
+    # include_zero_res = kwargs.get("include_zero_res",True)
     STAB_SACRIFICE = kwargs.get("STAB_SACRIFICE",True)
     QS_flag = kwargs.get("QS_flag",False) # True for QS (QA, QH configurations, not QI)
     LOSS_FRAC_WEIGHT = kwargs.get("LOSS_FRAC_WEIGHT",True)
+    verbose = kwargs.get("verbose",False)
 
 
     # Setup energies
@@ -509,69 +513,68 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Setup iotas
     iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
 
-    # Setup resonances
-    def tb_zr(res_arr_set,res_arr,q_arr):
-        res_arr = res_arr.at[0].set(0)
-        q_arr = q_arr.at[0].set(1)
-        return res_arr_set+1,res_arr,q_arr
-    def fb_zr(res_arr_set,res_arr,q_arr):
-        return res_arr_set, res_arr, q_arr
-    def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
-        return res_arr_set, res_arr, q_arr
-    def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
-        res_arr = res_arr.at[res_arr_set].set(p/q)
-        res_arr = res_arr.at[res_arr_set+1].set(-p/q)
-        q_arr = q_arr.at[res_arr_set].set(q)
-        q_arr = q_arr.at[res_arr_set+1].set(q)
-        return res_arr_set+2, res_arr, q_arr
-    res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
-    q_arr = jnp.full(2*p_max*q_max + 1, 1)
-    res_arr_set = 0
-    res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
-    # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
-    for p in range(1,p_max+1): # include the zero resonance
-        for q in range(1,q_max+1):
-            condition = jnp.logical_and(
-                ~jnp.isin(p/q, res_arr),
-                jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
-                )
-            res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
+    # # Setup rationals - moving to build()
+    # def tb_zr(res_arr_set,res_arr,q_arr):
+    #     res_arr = res_arr.at[0].set(0)
+    #     q_arr = q_arr.at[0].set(1)
+    #     return res_arr_set+1,res_arr,q_arr
+    # def fb_zr(res_arr_set,res_arr,q_arr):
+    #     return res_arr_set, res_arr, q_arr
+    # def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
+    #     return res_arr_set, res_arr, q_arr
+    # def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
+    #     res_arr = res_arr.at[res_arr_set].set(p/q)
+    #     res_arr = res_arr.at[res_arr_set+1].set(-p/q)
+    #     q_arr = q_arr.at[res_arr_set].set(q)
+    #     q_arr = q_arr.at[res_arr_set+1].set(q)
+    #     return res_arr_set+2, res_arr, q_arr
+    # res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+    # q_arr = jnp.full(2*p_max*q_max + 1, 1)
+    # res_arr_set = 0
+    # res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
+    # # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
+    # for p in range(1,p_max+1): # include the zero resonance
+    #     for q in range(1,q_max+1):
+    #         condition = jnp.logical_and(
+    #             ~jnp.isin(p/q, res_arr),
+    #             jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
+    #             )
+    #         res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
 
-    # Setup quadratures
-    # noqa: unused dependency
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
+    # quad = (
+    #     kwargs["quad"]
+    #     if "quad" in kwargs
+    #     else get_quadrature(
+    #         leggauss(kwargs.get("num_quad", 32)),
+    #         (automorphism_sin, grad_automorphism_sin),
+    #     )
+    # )
 
     # Setup grid and resolutions
     grid = transforms["grid"].source_grid
 
     # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
-    def alpha_drift(data):
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    def drifts(data):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau, _alpha_drift = bounce.integrate(
-            [_v_tau, _poloidal_drift],
+        v_tau, _alpha_drift, _psi_drift = bounce.integrate(
+            [_v_tau, _poloidal_drift, _radial_drift],
             data["pitch_inv"],
             data,
-            ["gbdrift"],
+            ["gbdrift","cvdrift0"],
             num_well=num_well,
         )
         _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
-        count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
-        count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
+        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+        # count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
+        # count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
 
-        return _alpha_drift, points, v_tau, count_nz, data["pitch_inv"]
-    alpha_drift_out, points, vtau_out, count_nz, pitch_inv = ( # alpha_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in later
+        return _alpha_drift, _psi_drift, points, v_tau
+    alpha_drift_out, psi_drift_out, points, vtau_out = ( # *_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in at some other time
         _compute(
-            alpha_drift, 
-            {"gbdrift": data["gbdrift"]},
+            drifts, 
+            {"gbdrift": data["gbdrift"],"cvdrift0": data["cvdrift0"]},
             data,
             grid,
             num_pitch,
@@ -583,30 +586,30 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
 
-    def psi_drift(data):
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        v_tau, _psi_drift = bounce.integrate(
-            [_v_tau, _radial_drift],
-            data["pitch_inv"],
-            data,
-            ["cvdrift0"],
-            num_well=num_well,
-        )
-        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+    # def psi_drift(data):
+    #     bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+    #     v_tau, _psi_drift = bounce.integrate(
+    #         [_v_tau, _radial_drift],
+    #         data["pitch_inv"],
+    #         data,
+    #         ["cvdrift0"],
+    #         num_well=num_well,
+    #     )
+    #     _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
 
-        return _psi_drift
+    #     return _psi_drift
 
-    psi_drift_out = ( # psi_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
-        _compute(
-            psi_drift, 
-            {"cvdrift0": data["cvdrift0"]},
-            data,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            pitch_invs=pitch_invs
-        )
-    ) 
+    # psi_drift_out = ( # psi_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
+    #     _compute(
+    #         psi_drift, 
+    #         {"cvdrift0": data["cvdrift0"]},
+    #         data,
+    #         grid,
+    #         num_pitch,
+    #         surf_batch_size,
+    #         pitch_invs=pitch_invs
+    #     )
+    # ) 
 
     
     # Setup array allocations
@@ -640,7 +643,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         points_1 = points[1][:][:][:][:]
         iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
         delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
-        return jnp.where(delta_chi < float(2*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
+        return jnp.where(delta_chi < float(2.5*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2.5*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
     def fb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Do nothing
         return alpha_drift_out, psi_drift_out
     alpha_drift_out,psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out,psi_drift_out)
@@ -669,33 +672,52 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     def fb_QS(nfp,N,iotas_omega):
         return jnp.ones(iotas_omega.shape)
     QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
-    omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well) ONLY CONSIDERING ONE ENERGY
+    omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well)
     omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
 
     # Setting wd (wd=DeltaOmega)
-    def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
-        def body_fun(i, carry):
-            max_val, max_idx = carry
-            new_val = arr[i]
-            cond = new_val > max_val
+    # def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
+    #     def body_fun(i, carry):
+    #         max_val, max_idx = carry
+    #         new_val = arr[i]
+    #         cond = new_val > max_val
 
-            # jnp.where chooses elementwise between two values
-            max_val = jnp.where(cond, new_val, max_val)
-            max_idx = jnp.where(cond, i, max_idx)
-            return (max_val, max_idx)
+    #         # jnp.where chooses elementwise between two values
+    #         max_val = jnp.where(cond, new_val, max_val)
+    #         max_idx = jnp.where(cond, i, max_idx)
+    #         return (max_val, max_idx)
         
-        carry_init = (arr[0], 0)
-        max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
-        return {'max_i': max_idx, 'max_num': max_val}
+    #     carry_init = (arr[0], 0)
+    #     max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
+    #     return {'max_i': max_idx, 'max_num': max_val}
     # wd takes a different value for each (Bcrit,well) combination
-    max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
-    wd = max_rhospace(omega_arr) # := (Bcrit,well)
-    wd = wd_blur*wd['max_num']
+    # max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
+    # wd_max = max_rhospace(omega_arr) # := (Bcrit,well)
+    # wd_max = wd_max['max_num']
+    # wd = wd_blur*wd_max['max_num']
+
+
+    # Setting wd (wd=DeltaOmega)
+    # wd takes a different value for each (Bcrit,well) combination
+    domega_arr = jnp.abs(omega_arr[1:,:,:] - omega_arr[:-1,:,:]) # := (rho-1,Bcrit,well)
+    wd = wd_blur * softmax(domega_arr,alpha=100,axis=0) # := (Bcrit,well)
+
+    # Check if wd needs to be cropped if resolution or shear issues
+    wd_max = softmax(omega_arr,alpha=100,axis=0) # := (Bcrit,well)
+    wd_max = jnp.ones(wd_max.shape) * 0.10 * wd_max # if all elements needed to be cropped
+    wd_min = softmin(omega_arr,alpha=100,axis=0) # := (Bcrit,well)
+    wd_min = jnp.ones(wd_min.shape) * 0.01 * wd_max # if all elements needed to be cropped
+    wd = jnp.where(wd > wd_max,wd_max,wd) # limit max size of wd based on 10% of wd_max
+    wd = jnp.where(wd < wd_min,wd_min,wd) # limit min size of wd based on 1% of wd_max
+
+    # Could include these warnings by checking if wd is the same before and after the jnp.where lines
+    # if verbose:
+    #     jax.debug.print("WARNING: Delta_Omega may be too small to capture all rational crossings! Try increasing wd_blur.")
+    # if verbose:
+    #     jax.debug.print("WARNING: Delta_Omega may be too big and not capturing individual rational crossings well! Try decreasing wd_blur or increasing rho resolution.")
+
     wd = jnp.broadcast_to(wd[...,None],(wd.shape[0],wd.shape[1],ado_shape[0])) # := (Bcrit,well,rho)
     wd = jnp.transpose(wd,(2,0,1)) # := (rho,Bcrit,well)
-
-    # wd_max = 
-    # wd_min = 
 
     # Setting up resonance arrays
     res_broad = res_arr[None,None,None,:] # := (rho,Bcrit,well,res)

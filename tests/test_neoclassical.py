@@ -6,7 +6,7 @@ import pytest
 from tests.test_plotting import tol_1d
 
 from desc.examples import get
-from desc.external import NeoIO
+from desc.external.neo import NeoIO
 from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
 

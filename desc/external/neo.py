@@ -1,3 +1,5 @@
+"""A class to interface with the NEO code."""
+
 from datetime import datetime
 
 import numpy as np

@@ -13,7 +13,8 @@ from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
-from ..integrals import surface_averages_map
+from ..integrals.surface_integral import surface_averages_map
+from ..profiles import PowerSeriesProfile
 from .data_index import register_compute_fun
 
 
@@ -421,20 +422,21 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].compress(data["<J*B> Redl"])
         / transforms["grid"].compress(data["<|B|^2>"])
     )
-    degree = kwargs.get(
-        "degree",
-        min(
-            (
-                profiles["current"].basis.L
-                if profiles["current"] is not None
-                else transforms["grid"].num_rho - 1
+    if isinstance(profiles["current"], PowerSeriesProfile):
+        degree = kwargs.get(
+            "degree",
+            min(
+                profiles["current"].basis.L,
+                transforms["grid"].num_rho - 1,
             ),
-            transforms["grid"].num_rho - 1,
-        ),
-    )
+        )
+    else:
+        degree = kwargs.get("degree", transforms["grid"].num_rho - 1)
+
     XX = jnp.vander(rho, degree + 1)[:, :-1]  # remove constant term
     c_l_r = jnp.pad(jnp.linalg.lstsq(XX, current_r)[0], (0, 1))  # manual polyfit
     c_l = jnp.polyint(c_l_r)
     current = jnp.polyval(c_l, rho)
+
     data["current Redl"] = transforms["grid"].expand(current)
     return data

@@ -3,7 +3,7 @@
 from scipy.optimize import BFGS, NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -28,7 +28,7 @@ from .utils import (
 )
 
 
-def fmin_auglag(  # noqa: C901 - FIXME: simplify this
+def fmin_auglag(  # noqa: C901
     fun,
     x0,
     grad,
@@ -189,7 +189,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
           problem dimension. Set it to ``"auto"`` in order to use an automatic heuristic
           for choosing the initial scale. The heuristic is described in [2]_, p.143.
           By default uses ``"auto"``.
-
+        - ``"scaled_termination"`` : Whether to evaluate termination criteria for
+          ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
     Returns
     -------
@@ -252,6 +253,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         hess_wrapped = BFGS(
             hess_exception_strategy, hess_min_curvature, hess_init_scale
         )
+
     if isinstance(hess_wrapped, BFGS):
         bfgs = True
         if hasattr(hess_wrapped, "n"):  # assume its already been initialized
@@ -312,18 +314,6 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
-    # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
-    omega = options.pop("omega", 1.0)
-    eta = options.pop("eta", 1.0)
-    alpha_omega = options.pop("alpha_omega", 1.0)
-    beta_omega = options.pop("beta_omega", 1.0)
-    alpha_eta = options.pop("alpha_eta", 0.1)
-    beta_eta = options.pop("beta_eta", 0.9)
-    tau = options.pop("tau", 10)
-
-    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
-    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
-
     L = lagfun(f, c, y, mu)
     g = laggrad(z, y, mu, *args)
     ngev += 1
@@ -338,12 +328,15 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter = setdefault(maxiter, z.size * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
+    scaled_termination = options.pop("scaled_termination", True)
 
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
-        x_scale = jnp.broadcast_to(x_scale, z.shape)
+        x_scale = jnp.broadcast_to(x_scale, x0.shape)
+        # add ones for slack variables
+        x_scale = jnp.concatenate([x_scale, jnp.ones(z0.size - x0.size)])
         scale, scale_inv = x_scale, 1 / x_scale
 
     v, dv = cl_scaling_vector(z, g, lb, ub)
@@ -352,18 +345,30 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
-    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+
+    # TODO: place this function under JIT (#1669)
+    # doing operation H = d * H * d[:, None]
+    H *= d[:, None]
+    H *= d
+
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    H_h = H
+    del H
+    g_norm = jnp.linalg.norm(
+        (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+    )
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
+    tr_scipy = jnp.linalg.norm(z * scale_inv / v**0.5)
+    conngould = safediv(g_h @ g_h, abs(g_h @ H_h @ g_h))
     init_tr = {
-        "scipy": jnp.linalg.norm(z * scale_inv / v**0.5),
-        "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
-        "mix": jnp.sqrt(
-            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(z * scale_inv / v**0.5)
-        ),
+        "scipy": tr_scipy,
+        "conngould": conngould,
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "conngould")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
@@ -399,7 +404,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     )
     subproblem = methods[tr_method]
 
-    z_norm = jnp.linalg.norm(z, ord=2)
+    z_norm = jnp.linalg.norm(((z * scale_inv) if scaled_termination else z), ord=2)
     success = None
     message = None
     step_norm = jnp.inf
@@ -411,6 +416,41 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     alltr = [trust_radius]
     if g_norm < gtol and constr_violation < ctol:
         success, message = True, STATUS_MESSAGES["gtol"]
+
+    # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
+    omega = options.pop("omega", min(g_norm, 1e-2) if scaled_termination else 1.0)
+    eta = options.pop("eta", min(constr_violation, 1e-2) if scaled_termination else 1.0)
+    alpha_omega = options.pop("alpha_omega", 1.0)
+    beta_omega = options.pop("beta_omega", 1.0)
+    alpha_eta = options.pop("alpha_eta", 0.1)
+    beta_eta = options.pop("beta_eta", 0.9)
+    tau = options.pop("tau", 10)
+
+    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
+    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print(f"{'Alpha Omega':<35}: {alpha_omega:.3e}")
+        print(f"{'Beta Omega':<35}: {beta_omega:.3e}")
+        print(f"{'Alpha Eta':<35}: {alpha_eta:.3e}")
+        print(f"{'Beta Eta':<35}: {beta_eta:.3e}")
+        print(f"{'Omega':<35}: {omega:.3e}")
+        print(f"{'Eta':<35}: {eta:.3e}")
+        print(f"{'Tau':<35}: {beta_eta:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
@@ -493,7 +533,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             success, message = check_termination(
                 actual_reduction,
                 f,
-                step_norm,
+                (step_h_norm if scaled_termination else step_norm),
                 z_norm,
                 g_norm,
                 Lreduction_ratio,
@@ -536,10 +576,12 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 scale, scale_inv = compute_hess_scale(H)
             v, dv = cl_scaling_vector(z, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)
-            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+            g_norm = jnp.linalg.norm(
+                (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+            )
 
             # updating augmented lagrangian params
-            if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
+            if g_norm < gtolk:
                 y = jnp.where(jnp.abs(c) < ctolk, y - mu * c, y)
                 mu = jnp.where(jnp.abs(c) >= ctolk, tau * mu, mu)
                 if constr_violation < ctolk:
@@ -565,13 +607,26 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
                 v, dv = cl_scaling_vector(z, g, lb, ub)
                 v = jnp.where(dv != 0, v * scale_inv, v)
-                g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+                g_norm = jnp.linalg.norm(
+                    (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+                )
 
-            z_norm = jnp.linalg.norm(z, ord=2)
+            z_norm = jnp.linalg.norm(
+                ((z * scale_inv) if scaled_termination else z), ord=2
+            )
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            H_h = d * H * d[:, None]
+
+            # doing operation H = d * H * d[:, None]
+            H *= d[:, None]
+            H *= d
+
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it to avoid carrying so many H-sized matrices
+            # in memory, which can be large
+            H_h = H
+            del H
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -580,7 +635,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = actual_reduction = 0
+            step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:

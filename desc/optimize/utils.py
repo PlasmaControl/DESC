@@ -381,12 +381,12 @@ def print_iteration_nonlinear(
     if cost is None or abs(cost) == np.inf:
         cost = " " * 15
     else:
-        cost = "{: ^15.3e}".format(cost)
+        cost = "{:^15.3e}".format(cost)
 
     if cost_reduction is None or abs(cost_reduction) == np.inf:
         cost_reduction = " " * 15
     else:
-        cost_reduction = "{: ^15.3e}".format(cost_reduction)
+        cost_reduction = "{:^15.3e}".format(cost_reduction)
 
     if step_norm is None or abs(step_norm) == np.inf:
         step_norm = " " * 15
@@ -450,11 +450,11 @@ def check_termination(
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
-            message += "\n" + STATUS_MESSAGES["ftol"]
+            message += "\n" + STATUS_MESSAGES["ftol"] + f" ({ftol=:.2e})"
         if xtol_satisfied:
-            message += "\n" + STATUS_MESSAGES["xtol"]
+            message += "\n" + STATUS_MESSAGES["xtol"] + f" ({xtol=:.2e})"
         if gtol_satisfied:
-            message += "\n" + STATUS_MESSAGES["gtol"]
+            message += "\n" + STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
     elif iteration >= maxiter:
         success = False
         message = STATUS_MESSAGES["maxiter"]

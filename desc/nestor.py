@@ -5,6 +5,7 @@ Rewritten to use JAX by DESC team.
 """
 
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
 from desc.grid import LinearGrid
@@ -141,7 +142,7 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
 
     axis = jnp.moveaxis(copy_vector_periods(axis, zeta_fp), -1, 1).reshape((3, -1))
     coords = {}
-    coords["R"] = jnp.sqrt(axis[0] ** 2 + axis[1] ** 2)
+    coords["R"] = jnp.hypot(axis[0], axis[1])
     coords["phi"] = jnp.arctan2(axis[1], axis[0])
     coords["Z"] = axis[2]
     return coords
@@ -250,8 +251,14 @@ def biot_savart(eval_pts, coil_pts, current):
     )
     Ri_p_Rf = Ri + Rf
 
-    # 1.0e-7 == mu_0/(4 pi)
-    Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+    Bmag = (
+        mu_0
+        / (4 * jnp.pi)
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+    )
 
     # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
     vec = jnp.cross(dvec, Ri_vec, axis=0)
@@ -861,14 +868,14 @@ def compute_scalar_magnetic_potential(
         [g_mnmn[:, :, : mf + 1, : nf + 1].imag, g_mnmn[:, :, : mf + 1, -nf:].imag],
         axis=-1,
     )
-    # scale amatrix by (2 pi)^2 (#TODO: why ?) copied from fortran
+    # scale amatrix by (2 pi)^2, copied from fortran
     amatrix_4d *= (2.0 * jnp.pi) ** 2
     m, n = jnp.meshgrid(jnp.arange(mf + 1), jnp.arange(2 * nf + 1), indexing="ij")
-    # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?) from fortran
+    # zero out (m=0, n<0, m', n') modes for all m', n', from fortran
     amatrix_4d = jnp.where(
         jnp.logical_and(m == 0, n > nf)[:, :, jnp.newaxis, jnp.newaxis], 0, amatrix_4d
     )
-    # add diagonal terms (#TODO: why 4*pi^3 instead of 1 ?) copied from fortran
+    # add diagonal terms, copied from fortran
     amatrix_4d = put(
         amatrix_4d, Index[m, n, m, n], amatrix_4d[m, n, m, n] + 4.0 * jnp.pi**3
     )
@@ -877,7 +884,7 @@ def compute_scalar_magnetic_potential(
 
     # combine with contribution from analytic integral; available here in I_mn
     bvec = h_mn + I_mn
-    # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?) from fortran
+    # final fixup from fouri: zero out (m=0, n<0) components, from fortran
     bvec = put(bvec, Index[0, nf + 1 :], 0.0).flatten()
 
     phi_mn = jnp.linalg.solve(amatrix, bvec).reshape([mf + 1, 2 * nf + 1])
@@ -945,8 +952,6 @@ def compute_vacuum_magnetic_field(
     Btot["B_theta"] = Btot["Bpot_theta"] + Btot["Bex_theta"]
     Btot["B_zeta"] = Btot["Bpot_zeta"] + Btot["Bex_zeta"]
 
-    # TODO: for now, simply copied over from fortran code; have to understand what is
-    # actually done here!
     h_tz = NFP * jacobian["g_tz"]
     h_zz = jacobian["g_zz"] * NFP**2
     det = 1.0 / (jacobian["g_tt"] * h_zz - h_tz**2)
@@ -1004,6 +1009,8 @@ class Nestor(IOAble):
     field_grid : Grid, optional
         Grid used to discretize external field.
     """
+
+    _static_attrs = ["M", "N", "ntheta", "nzeta", "sym", "NFP"]
 
     def __init__(
         self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None, field_grid=None

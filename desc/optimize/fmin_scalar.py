@@ -3,7 +3,7 @@
 from scipy.optimize import BFGS, OptimizeResult
 
 from desc.backend import jnp
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -27,7 +27,7 @@ from .utils import (
 )
 
 
-def fmintr(  # noqa: C901 - FIXME: simplify this
+def fmintr(  # noqa: C901
     fun,
     x0,
     grad,
@@ -159,6 +159,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
           problem dimension. Set it to ``"auto"`` in order to use an automatic heuristic
           for choosing the initial scale. The heuristic is described in [2]_, p.143.
           By default uses ``"auto"``.
+        - ``"scaled_termination"`` : Whether to evaluate termination criteria for
+          ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
     Returns
     -------
@@ -222,6 +224,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         maxiter = N * 100
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
+    scaled_termination = options.pop("scaled_termination", True)
 
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     if hess_scale:
@@ -236,18 +239,29 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
-    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    # TODO: place this function under JIT (#1669)
+    # doing operation H = d * H * d[:, None]
+    H *= d[:, None]
+    H *= d
+    H_h = H
+    del H
+
+    g_norm = jnp.linalg.norm(
+        (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+    )
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
+    tr_scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
+    conngould = safediv(g_h @ g_h, abs(g_h @ H_h @ g_h))
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
-        "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
-        "mix": jnp.sqrt(
-            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(x * scale_inv / v**0.5)
-        ),
+        "scipy": tr_scipy,
+        "conngould": conngould,
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
@@ -283,12 +297,28 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     )
     subproblem = methods[tr_method]
 
-    x_norm = jnp.linalg.norm(x, ord=2)
+    x_norm = jnp.linalg.norm(((x * scale_inv) if scaled_termination else x), ord=2)
     success = None
     message = None
     step_norm = jnp.inf
     actual_reduction = jnp.inf
     reduction_ratio = 1
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear()
@@ -366,7 +396,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             success, message = check_termination(
                 actual_reduction,
                 f,
-                step_norm,
+                (step_h_norm if scaled_termination else step_norm),
                 x_norm,
                 g_norm,
                 reduction_ratio,
@@ -408,10 +438,22 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             diag_h = g * dv * scale
 
             g_h = g * d
-            H_h = d * H * d[:, None]
 
-            x_norm = jnp.linalg.norm(x, ord=2)
-            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
+            # matrices in memory, which can be large
+            # doing operation H = d * H * d[:, None]
+            H *= d[:, None]
+            H *= d
+            H_h = H
+            del H
+
+            x_norm = jnp.linalg.norm(
+                ((x * scale_inv) if scaled_termination else x), ord=2
+            )
+            g_norm = jnp.linalg.norm(
+                (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+            )
 
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -421,7 +463,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
             allx.append(x)
         else:
-            step_norm = actual_reduction = 0
+            step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:
@@ -440,7 +482,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         fun=f,
         grad=g,
         v=v,
-        hess=H,
+        hess=H_h / d[:, None] / d,  # unscale the hessian
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

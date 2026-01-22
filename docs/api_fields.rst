@@ -41,6 +41,18 @@ There are also classes for representing a current potential on a winding surface
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
 
+``desc.magnetic_fields`` also has a function which can solve a regularized least-squares problem
+in order to find the optimal surface current distribution which minimizes the normal field on a
+given plasma boundary, ``desc.magnetic_fields.solve_regularized_surface_current``, which can
+be used in a similar way as the REGCOIL code:
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.solve_regularized_surface_current
+
 There is also a class for representing omnigenous magnetic fields:
 
 .. autosummary::
@@ -71,7 +83,6 @@ the BNORM code:
     desc.magnetic_fields.read_BNORM_file
 
 
-
 Coils
 *****
 ``Coil`` objects in ``desc.coils`` are themselves subclasses of ``MagneticField``, allowing
@@ -87,6 +98,7 @@ classes, can also use the same ``Curve`` conversion methods to convert between c
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.FourierXYCoil
     desc.coils.SplineXYZCoil
 
 There are also objects for holding a collection of coils with efficient methods for
@@ -105,3 +117,15 @@ another ``CoilSet``).
 DESC ``CoilSet`` or ``MixedCoilSet`` objects can also be created from MAKEGRID-formatted coil text files via
 the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-formatted text file with
 the `save_in_makegrid_format` method.
+
+There are also utility functions for getting an initial guess for coil optimization using modular, helical, or
+saddle coils:
+
+.. autosummary::
+    :toctree: _api/coils/
+    :recursive:
+    :template: class.rst
+
+    desc.coils.initialize_modular_coils
+    desc.coils.initialize_helical_coils
+    desc.coils.initialize_saddle_coils

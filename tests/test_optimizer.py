@@ -17,25 +17,38 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
+    CoilLength,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixIota,
     FixParameters,
     FixPressure,
     FixPsi,
-    FixSumCoilCurrent,
     ForceBalance,
     GenericObjective,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
@@ -44,6 +57,7 @@ from desc.objectives import (
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -57,6 +71,8 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.optimize.optimizer import _parse_x_scale
+from desc.utils import get_all_instances
 
 
 @jit
@@ -325,6 +341,44 @@ def test_no_iterations():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_scalar():
+    """Test that proximal scalar optimization works."""
+    # test fix for GH issue #1403
+
+    # optimize to reduce DSHAPE volume from 100 m^3 to 90 m^3
+    eq = desc.examples.get("DSHAPE")
+    optimizer = Optimizer("proximal-fmintr")  # proximal scalar optimizer
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(Volume(eq=eq, target=90))  # scalar objective function
+    constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+        ForceBalance(eq=eq),  # force balance constraint for proximal projection
+    )
+    [eq], _ = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        verbose=3,
+    )
+    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.optimize
 def test_overstepping():
@@ -362,7 +416,8 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled_error = lambda x, *args: objective._jac_scaled_error(
+    objective.build()
+    objective.jac_scaled_error = lambda x, *args: objective.jac_scaled_error(
         x
     ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
 
@@ -400,7 +455,13 @@ def test_overstepping():
         options={
             "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0, "order": 1},
-            "solve_options": {"verbose": 0, "maxiter": 2},
+            "solve_options": {
+                "verbose": 0,
+                "maxiter": 2,
+                # Hidden kwarg just for debug/tests, to not solve
+                # during build
+                "solve_during_proximal_build": False,
+            },
         },
     )
 
@@ -657,6 +718,8 @@ def test_scipy_constrained_solve():
     obj = ObjectiveFunction(ForceBalance(eq=eq))
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        warnings.filterwarnings("ignore", message=".*no equil.*")
+
         eq2, result = eq.optimize(
             objective=obj,
             constraints=constraints,
@@ -837,9 +900,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -854,9 +917,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares", "tr_method": "cho"},
@@ -881,9 +944,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -1136,15 +1199,16 @@ def test_proximal_jacobian():
         deriv_mode="batched",
         use_jit=False,
     )
-    obj2 = ObjectiveFunction(
-        (
-            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
-            AspectRatio(eq2, deriv_mode="fwd"),
-            Volume(eq2, deriv_mode="fwd"),
-        ),
-        deriv_mode="looped",
-        use_jit=False,
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
     obj3 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
@@ -1172,8 +1236,8 @@ def test_proximal_jacobian():
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1185,8 +1249,8 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1233,6 +1297,81 @@ def test_proximal_jacobian():
 
 @pytest.mark.slow
 @pytest.mark.regression
+def test_proximal_grad():
+    """Test that manual VJP gives the same direct VJP for proximal grad."""
+    eq = desc.examples.get("HELIOTRON")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1), use_jit=False)
+    con2 = ObjectiveFunction(ForceBalance(eq2), use_jit=False)
+    con3 = ObjectiveFunction(ForceBalance(eq3), use_jit=False)
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+        use_jit=False,
+    )
+    perturb_options = {"order": 1}
+    solve_options = {"maxiter": 1}
+    prox1 = ProximalProjection(obj1, con1, eq1, perturb_options, solve_options)
+    prox2 = ProximalProjection(obj2, con2, eq2, perturb_options, solve_options)
+    prox3 = ProximalProjection(obj3, con3, eq3, perturb_options, solve_options)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    # current implementation uses single vjp
+    x = prox1.x(eq)
+    g1 = prox1.grad(x)
+    g2 = prox2.grad(x)
+    g3 = prox3.grad(x)
+
+    # old version had multiple jvps and a manual vjp to get the grad
+    f1 = jnp.atleast_1d(prox1.compute_scaled_error(x))
+    J1 = prox1.jac_scaled_error(x)
+    vjp1 = f1.T @ J1
+
+    f2 = jnp.atleast_1d(prox2.compute_scaled_error(x))
+    J2 = prox2.jac_scaled_error(x)
+    vjp2 = f2.T @ J2
+
+    f3 = jnp.atleast_1d(prox3.compute_scaled_error(x))
+    J3 = prox3.jac_scaled_error(x)
+    vjp3 = f3.T @ J3
+
+    # check that both methods agree
+    np.testing.assert_allclose(g1, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g2, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(g3, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
@@ -1245,9 +1384,10 @@ def test_LinearConstraint_jacobian():
     obj1 = ObjectiveFunction(
         ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched", use_jit=False
     )
-    obj2 = ObjectiveFunction(
-        ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
+        )
     obj3 = ObjectiveFunction(
         ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked", use_jit=False
     )
@@ -1365,17 +1505,450 @@ def test_optimize_coil_currents(DummyCoilSet):
         coil.current = current / coils.num_coils
 
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
-    constraints = FixSumCoilCurrent(coils)
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
     optimizer = Optimizer("lsq-exact")
-    [coils_opt], _ = optimizer.optimize(
-        things=coils,
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
+    # check that on average optimized coil currents changed by more than
+    # 15% from initial values
+    np.testing.assert_array_less(
+        np.asarray(coils.current).mean() * 0.15,
+        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
+    )
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_eq_at_once():
+    """Test optimizing 3 equilibria at the same time."""
+    # default equilibrium is axisymmetric with R0=10
+    eq1 = Equilibrium(M=2, sym=True)
+    eq2 = eq1.copy()
+    eq3 = Equilibrium(
+        M=2,
+        sym=True,
+        surface=FourierRZToroidalSurface(
+            R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        ),
+    )
+    cons = (
+        get_fixed_boundary_constraints(eq1)
+        + get_fixed_boundary_constraints(eq2)
+        + get_fixed_boundary_constraints(eq3)
+    )
+    for eq in [eq1, eq2, eq3]:
+        cons = maybe_add_self_consistency(eq, cons)
+    bdryR_cons = get_all_instances(cons, BoundaryRSelfConsistency)
+    bdryZ_cons = get_all_instances(cons, BoundaryZSelfConsistency)
+    assert len(bdryR_cons) == 3
+    assert len(bdryZ_cons) == 3
+
+    obj = ObjectiveFunction((ForceBalance(eq1), ForceBalance(eq2), ForceBalance(eq3)))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        eq1,
+        eq2,
+        eq3,
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=2)
+
+    assert eq1.equiv(eq2)
+    assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_coil_at_once():
+    """Test optimizing 3 coils at the same time."""
+    coilset = MixedCoilSet(
+        FourierXYZCoil(), FourierRZCoil(), FourierPlanarCoil(), check_intersection=False
+    )
+    for c in coilset:
+        c.change_resolution(N=1)
+    coil1 = coilset
+    coil2 = coil1.coils[0].copy()
+    coil3 = coilset.coils[2].copy()
+    shift0 = coil2.shift
+    rotmat0 = coil2.rotmat
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil1, target=13),
+            CoilLength(coil2, target=10),
+            CoilLength(coil3, target=10),
+        )
+    )
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
+    for coil in [coil1, coil2, coil3]:
+        cons = maybe_add_self_consistency(coil, cons)
+    shift_cons = get_all_instances(cons, FixCurveShift)
+    rotation_cons = get_all_instances(cons, FixCurveRotation)
+    assert len(shift_cons) == 3
+    assert len(rotation_cons) == 3
+    # now undo the above and try an optimization to ensure
+    # it gets automatically handled correctly
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        coil1,
+        coil2,
+        coil3,
+    ], _ = opt.optimize(
+        [coil1, coil2, coil3],
+        objective=obj,
+        constraints=cons,
+        maxiter=20,
+        ftol=0,
+        gtol=1e-10,
+        xtol=0,
+    )
+
+    np.testing.assert_allclose(coil2.shift, shift0)
+    np.testing.assert_allclose(coil2.rotmat, rotmat0)
+    np.testing.assert_allclose(coil2.compute("length")["length"], 10)
+
+    np.testing.assert_allclose(coil3.shift, shift0)
+    np.testing.assert_allclose(coil3.rotmat, rotmat0)
+    np.testing.assert_allclose(coil3.compute("length")["length"], 10)
+    for c in coil1:
+        np.testing.assert_allclose(c.shift, shift0)
+        np.testing.assert_allclose(c.rotmat, rotmat0)
+        np.testing.assert_allclose(c.compute("length")["length"], 13)
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_with_proximal():
+    """Test exponential spectral scaling (ESS) with ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        ForceBalance(eq=eq),  # triggers ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
         objective=objective,
         constraints=constraints,
-        verbose=2,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
+        copy=True,
+        options={
+            "perturb_options": {"verbose": 0, "order": 1},
+            "solve_options": {"verbose": 0, "maxiter": 2},
+        },
+    )
+
+    assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_without_proximal():
+    """Test exponential spectral scaling (ESS) without ProximalProjection."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(eq=eq, target=6),
+            Volume(eq=eq, target=100),
+        )
+    )
+    constraints = (
+        # No ForceBalance, so no ProximalProjection
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("lsq-exact")
+    eq_new, out = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        x_scale="ess",
+        maxiter=3,
+        verbose=0,
         copy=True,
     )
-    # check that optimized coil currents changed by more than 15% from initial values
-    np.testing.assert_array_less(
-        np.asarray(coils.current) * 0.15,
-        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)),
+
+    assert out["success"] is not None
+    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+
+
+@pytest.mark.unit
+def test_parse_x_scale(DummyCoilSet):
+    """Test for parsing dict/list of scales into single array."""
+    eq = Equilibrium()
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+
+    dim_eq = eq.dim_x
+    dim_coil = coils.dim_x
+    assert _parse_x_scale("auto", [eq], {}) == "auto"
+    assert _parse_x_scale("auto", [eq, coils], {}) == "auto"
+
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1], [eq, coils], {})
+    with pytest.raises(AssertionError):
+        _parse_x_scale([1, 2], [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
+    with pytest.raises(ValueError):
+        _parse_x_scale("foo", [eq], {})
+    with pytest.raises(TypeError):
+        _parse_x_scale(["foo", "bar"], [eq, coils], {})
+
+    xsc = _parse_x_scale(1, [eq], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale(1, [eq, coils], {})
+    assert (xsc == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+    xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 2).all()
+
+    xsc = _parse_x_scale(eq.params_dict, [eq], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc == eq.pack_params(eq.params_dict)).all()
+    assert xsc.shape == (dim_eq,)
+
+    xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
+    xsc = np.concatenate(xsc)
+    assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
+    assert (xsc[:dim_eq] == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+
+@pytest.mark.unit
+def test_get_ess_scale():  # noqa: C901
+    """Test that ESS scale for different objects is computed correctly."""
+    alpha = 1.5
+    order = 2
+    eq = Equilibrium()
+    eq.change_resolution(3, 4, 5)
+
+    surf = eq.surface
+    axis = eq.axis
+
+    zsurf = ZernikeRZToroidalSection()
+    zsurf.change_resolution(3, 4)
+
+    planar_coil = FourierPlanarCoil()
+    planar_coil.change_resolution(5)
+
+    xy_coil = FourierXYCoil()
+    xy_coil.change_resolution(5)
+
+    xyz_coil = FourierXYZCoil()
+    xyz_coil.change_resolution(5)
+
+    rz_coil = FourierRZCoil()
+    rz_coil.change_resolution(5)
+
+    eq_scale = eq._get_ess_scale(alpha, order)
+    surf_scale = surf._get_ess_scale(alpha, order)
+    axis_scale = axis._get_ess_scale(alpha, order)
+    zsurf_scale = zsurf._get_ess_scale(alpha, order)
+    planar_coil_scale = planar_coil._get_ess_scale(alpha, order)
+    xy_coil_scale = xy_coil._get_ess_scale(alpha, order)
+    xyz_coil_scale = xyz_coil._get_ess_scale(alpha, order)
+    rz_coil_scale = rz_coil._get_ess_scale(alpha, order)
+
+    # FourierRZCoil
+    assert rz_coil_scale.keys() == set(rz_coil.optimizable_params)
+    np.testing.assert_allclose(
+        rz_coil_scale["R_n"],
+        np.exp(-alpha * np.linalg.norm(rz_coil.R_basis.modes, axis=1)) / np.exp(-alpha),
     )
+    np.testing.assert_allclose(
+        rz_coil_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(rz_coil.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in rz_coil_scale.keys():
+        if key in ["R_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(rz_coil_scale[key], 1)
+
+    # FourierPlanarCoil
+    assert planar_coil_scale.keys() == set(planar_coil.optimizable_params)
+    np.testing.assert_allclose(
+        planar_coil_scale["r_n"],
+        np.exp(-alpha * np.linalg.norm(planar_coil.r_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    for key in planar_coil_scale.keys():
+        if key in ["r_n"]:
+            continue
+        np.testing.assert_allclose(planar_coil_scale[key], 1)
+
+    # FourierXYCoil
+    assert xy_coil_scale.keys() == set(xy_coil.optimizable_params)
+    np.testing.assert_allclose(
+        xy_coil_scale["X_n"],
+        np.exp(-alpha * np.linalg.norm(xy_coil.X_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xy_coil_scale["Y_n"],
+        np.exp(-alpha * np.linalg.norm(xy_coil.Y_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in xy_coil_scale.keys():
+        if key in ["X_n", "Y_n"]:
+            continue
+        np.testing.assert_allclose(xy_coil_scale[key], 1)
+
+    # FourierXYZCoil
+    assert xyz_coil_scale.keys() == set(xyz_coil.optimizable_params)
+    np.testing.assert_allclose(
+        xyz_coil_scale["X_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.X_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xyz_coil_scale["Y_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.Y_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        xyz_coil_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(xyz_coil.Z_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    for key in xyz_coil_scale.keys():
+        if key in ["X_n", "Y_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(xyz_coil_scale[key], 1)
+
+    # FourierRZCurve
+    assert axis_scale.keys() == set(axis.optimizable_params)
+    np.testing.assert_allclose(
+        axis_scale["R_n"],
+        np.exp(-alpha * np.linalg.norm(axis.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        axis_scale["Z_n"],
+        np.exp(-alpha * np.linalg.norm(axis.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in axis_scale.keys():
+        if key in ["R_n", "Z_n"]:
+            continue
+        np.testing.assert_allclose(axis_scale[key], 1)
+
+    # FourierRZToroidalSurface
+    assert surf_scale.keys() == set(surf.optimizable_params)
+    np.testing.assert_allclose(
+        surf_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(surf.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        surf_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(surf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in surf_scale.keys():
+        if key in ["R_lmn", "Z_lmn"]:
+            continue
+        np.testing.assert_allclose(surf_scale[key], 1)
+
+    # ZernikeRZToroidalSection
+    assert zsurf_scale.keys() == set(zsurf.optimizable_params)
+    np.testing.assert_allclose(
+        zsurf_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(zsurf.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        zsurf_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(zsurf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    for key in zsurf_scale.keys():
+        if key in ["R_lmn", "Z_lmn"]:
+            continue
+        np.testing.assert_allclose(zsurf_scale[key], 1)
+
+    # Equilibrium
+    assert eq_scale.keys() == set(eq.optimizable_params)
+    np.testing.assert_allclose(
+        eq_scale["R_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.R_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        eq_scale["Z_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.Z_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(
+        eq_scale["L_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.L_basis.modes, axis=1)) / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(eq_scale["Ra_n"], axis_scale["R_n"])
+    np.testing.assert_allclose(eq_scale["Za_n"], axis_scale["Z_n"])
+    np.testing.assert_allclose(eq_scale["Rb_lmn"], surf_scale["R_lmn"])
+    np.testing.assert_allclose(eq_scale["Zb_lmn"], surf_scale["Z_lmn"])
+    for key in eq_scale.keys():
+        if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
+            continue
+        np.testing.assert_allclose(eq_scale[key], 1)
+
+    eq2 = eq.copy()
+    eq2.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+    eq2.surface.change_Phi_resolution(3, 4)
+    eq2_scale = eq2._get_ess_scale(alpha, order)
+    assert eq2_scale.keys() == set(eq_scale.keys()).union({"I", "G", "Phi_mn"})
+    np.testing.assert_allclose(
+        eq2_scale["Phi_mn"],
+        np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
+        / np.exp(-alpha),
+    )
+    np.testing.assert_allclose(eq2_scale["I"], 1)
+    np.testing.assert_allclose(eq2_scale["G"], 1)

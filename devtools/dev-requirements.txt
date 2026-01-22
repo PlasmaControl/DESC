@@ -1,37 +1,42 @@
 # standard install requirements
 -r ../requirements.txt
 
+# notes on versioning:
+# "major" packages like sphinx, flake8, pytest etc are pinned to a compatible major
+# version, eg ~8.0 includes 8.0.0, 8.0.2 etc. We assume these are more careful
+# with their versioning since they are primary infrastructure for lots of stuff
+# "minor" packages (all the other ones) are pinned to a maximum specific version
+# which will need to be updated regularly, but we don't want to do so without testing.
+
 # building the docs
-nbsphinx == 0.8.12
-sphinx > 3.0.0
-# TODO: Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
-# <https://github.com/sphinx-doc/sphinx-argparse/issues/56>
-sphinx-argparse < 0.5.0
-sphinx_copybutton
-sphinx-rtd-theme >= 1.0, < 2.0
-sphinx-github-style >= 1.0, < 2.0
+nbsphinx >= 0.8.12, <= 0.9.8
+sphinx >= 5.0, <= 8.2.3
+sphinx-argparse >= 0.4.0, != 0.5.0, <= 0.5.2
+sphinx_copybutton <= 0.5.2
+sphinx-rtd-theme >= 1.0, <= 3.1.0
+sphinx-github-style >= 1.0, <= 1.2.2
+sphinx-design
 
 
 # linting
-black[jupyter] == 24.3.0
-flake8 >= 5.0.0, <6.0.0
-flake8-docstrings >= 1.0.0, <2.0.0
-flake8-eradicate >= 1.0.0, <2.0.0
-flake8-isort >=5.0.0, < 6.0.0
-pre-commit
+black[jupyter] == 24.10.0
+flake8 ~= 7.3
+flake8-docstrings >= 1.0.0, <= 1.7.0
+flake8-eradicate >= 1.0.0, <= 1.5.0
+flake8-isort >= 5.0.0, <= 6.1.1
+pre-commit <= 4.5.1
 
 # testing and benchmarking
-markupsafe == 2.0.1
-nbmake
-pytest ~= 8.0.0
-pytest-benchmark
-pytest-cov >= 2.6.0
-pytest-monitor
+nbmake <= 1.5.5
+pytest ~= 8.4
+pytest-benchmark <= 5.2.3
+pytest-cov >= 2.6.0, <= 7.0.0
+pytest-monitor <= 1.6.6
 pytest-mpl == 0.16.1
-pytest-split == 0.8.2
+pytest-split >= 0.8.2, <= 0.10.0
 qicna @ git+https://github.com/rogeriojorge/pyQIC/
-qsc
-shapely >= 1.8.2
+qsc <= 0.1.3
+shapely >= 1.8.2, <= 2.1.2
 
 # building
 build

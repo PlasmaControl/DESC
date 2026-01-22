@@ -63,7 +63,10 @@ def register_compute_fun(  # noqa: C901
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
+    grid_requirement=None,
     source_grid_requirement=None,
+    *,
+    public=True,
     **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -110,6 +113,11 @@ def register_compute_fun(  # noqa: C901
         If the computation simply performs pointwise operations, instead of a
         reduction (such as integration) over a coordinate, then an empty string may
         be used to indicate no requirements.
+    grid_requirement : dict
+        Attributes of the grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
+        As an example, quantities that require tensor product grids over 2 or more
+        coordinates may specify ``grid_requirement={"is_meshgrid": True}``.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
@@ -120,6 +128,9 @@ def register_compute_fun(  # noqa: C901
         which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
         ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
         zeta coordinates in ``transforms["grid"]``.
+    public : bool
+        Whether to include this quantity in the public documentation.
+        Default is true.
 
     Notes
     -----
@@ -130,6 +141,8 @@ def register_compute_fun(  # noqa: C901
         aliases = []
     if source_grid_requirement is None:
         source_grid_requirement = {}
+    if grid_requirement is None:
+        grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
     if not isinstance(aliases, (tuple, list)):
@@ -168,7 +181,9 @@ def register_compute_fun(  # noqa: C901
             "dependencies": deps,
             "aliases": aliases,
             "resolution_requirement": resolution_requirement,
+            "grid_requirement": grid_requirement,
             "source_grid_requirement": source_grid_requirement,
+            "public": public,
         }
         for p in parameterization:
             flag = False
@@ -228,6 +243,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.FourierXYCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
@@ -249,6 +267,10 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.coils.FourierXYCoil": [
+        "desc.geometry.curve.FourierXYCurve",
+        "desc.geometry.core.Curve",
+    ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
@@ -268,6 +290,11 @@ _class_inheritance = {
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = {"basis"}
+# dictionary of {deprecated_name: new_name} for deprecated compute quantities
+deprecated_names = {
+    "sqrt(g)_B": "sqrt(g)_Boozer_DESC",
+    "|B|_mn": "|B|_mn_B",
+}
 
 
 def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
@@ -289,7 +316,7 @@ def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
 
 
 def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    """Is name constant over toroidal sections and needs full section to compute?."""
     return (
         data_index[p][name]["coordinates"] == "z"
         and data_index[p][name]["resolution_requirement"] == "rt"

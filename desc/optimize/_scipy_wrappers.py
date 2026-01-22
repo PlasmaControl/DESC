@@ -22,6 +22,7 @@ from .utils import (
 @register_optimizer(
     name=[
         "scipy-bfgs",
+        "scipy-l-bfgs-b",
         "scipy-CG",
         "scipy-Newton-CG",
         "scipy-dogleg",
@@ -31,6 +32,8 @@ from .utils import (
     ],
     description=[
         "BFGS quasi-newton method with line search. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
+        "L-BFGS-B quasi-newton method with line search. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
         "Nonlinear conjugate gradient method. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-cg.html",
@@ -49,10 +52,10 @@ from .utils import (
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[False, False, True, True, True, True, True],
+    hessian=[False, False, False, True, True, True, True, True],
     GPU=False,
 )
-def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_minimize(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
@@ -100,9 +103,14 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     options.setdefault("maxiter", stoptol["maxiter"])
     options.setdefault("disp", False)
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
-    if isinstance(x_scale, str) and x_scale == "auto":
+    # don't call hess if the method is approximating the hessian, since we probably
+    # are avoiding it due to it being expensive
+    use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
+    if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
         H = hess(x0)
         scale, _ = compute_hess_scale(H)
+    elif isinstance(x_scale, str):
+        scale = 1.0  # don't do any auto scaling if our optimizer does not use hessian
     else:
         scale = x_scale
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
@@ -158,7 +166,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
-    hess_wrapped = None if method in ["scipy-bfgs", "scipy-CG"] else hess_wrapped
+    hess_wrapped = None if not use_hessian else hess_wrapped
 
     def callback(xs):
         x1 = xs * scale
@@ -306,7 +314,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     hessian=False,
     GPU=False,
 )
-def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_least_squares(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
@@ -506,7 +514,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     hessian=[True, False],
     GPU=False,
 )
-def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_constrained(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.

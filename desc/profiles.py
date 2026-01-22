@@ -35,7 +35,8 @@ class _Profile(IOAble, ABC):
     Subclasses must also implement getter and setter methods for params
     """
 
-    _io_attrs_ = ["_name", "_params"]
+    _io_attrs_ = ["_name"]
+    _static_attrs = ["_name"]
 
     def __init__(self, name=""):
         self.name = name
@@ -244,6 +245,17 @@ class _Profile(IOAble, ABC):
         """Subtract another profile from this one."""
         return self.__add__(-x)
 
+    def __pow__(self, x):
+        """Raise this profile to a power."""
+        if np.isscalar(x):
+            return PowerProfile(x, self)
+        else:
+            raise NotImplementedError()
+
+    def __rpow__(self, x):
+        """Raise this profile to a power."""
+        return self.__pow__(x)
+
 
 class ScaledProfile(_Profile):
     """Profile times a constant value.
@@ -252,10 +264,10 @@ class ScaledProfile(_Profile):
 
     Parameters
     ----------
-    profile : Profile
-        Base profile to scale.
     scale : float
         Scale factor.
+    profile : Profile
+        Base profile to scale.
 
     """
 
@@ -332,6 +344,128 @@ class ScaledProfile(_Profile):
         s = super().__repr__()
         s = s[:-1]
         s += ", scale={})".format(self._scale)
+        return s
+
+
+class PowerProfile(_Profile):
+    """Profile raised to a power.
+
+    f_1(x) = f(x)**a
+
+    Parameters
+    ----------
+    power : float
+        Exponent of the new profile.
+    profile : Profile
+        Base profile to raise to a power.
+
+    """
+
+    _io_attrs_ = _Profile._io_attrs_ + ["_profile", "_power"]
+
+    def __init__(self, power, profile, **kwargs):
+        assert isinstance(
+            profile, _Profile
+        ), "profile in a PowerProfile must be a Profile or subclass, got {}.".format(
+            str(profile)
+        )
+        assert np.isscalar(power), "power must be a scalar."
+
+        self._profile = profile.copy()
+        self._power = power
+
+        self._check_params()
+
+        kwargs.setdefault("name", profile.name)
+        super().__init__(**kwargs)
+
+    def _check_params(self, params=None):
+        """Check params and throw warnings or errors if necessary."""
+        params = self.params if params is None else params
+        power, params = self._parse_params(params)
+        warnif(
+            power < 0,
+            UserWarning,
+            "This profile may be undefined at some points because power < 0.",
+        )
+
+    @property
+    def params(self):
+        """ndarray: Parameters for computation [power, profile.params]."""
+        return jnp.concatenate([jnp.atleast_1d(self._power), self._profile.params])
+
+    @params.setter
+    def params(self, x):
+        self._check_params(x)
+        self._power, self._profile.params = self._parse_params(x)
+
+    def _parse_params(self, x):
+        if x is None:
+            power = self._power
+            params = self._profile.params
+        elif isinstance(x, (tuple, list)) and len(x) == 2:
+            params = x[1]
+            power = x[0]
+        elif np.isscalar(x):
+            power = x
+            params = self._profile.params
+        elif len(x) == len(self._profile.params):
+            power = self._power
+            params = x
+        elif len(x) == len(self.params):
+            power = x[0]
+            params = x[1:]
+        else:
+            raise ValueError("Got wrong number of parameters for PowerProfile")
+        return power, params
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid
+            locations to compute values at.
+        params : array-like
+            Parameters to use. If not given, uses the
+            values given by the self.params attribute.
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta.
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified.
+
+        """
+        if dt > 0 or dz > 0:
+            raise NotImplementedError(
+                "Poloidal and toroidal derivatives of PowerProfile have not been "
+                + "implemented yet."
+            )
+        power, params = self._parse_params(params)
+        f0 = self._profile.compute(grid, params, 0, dt, dz)
+        if dr >= 1:
+            df1 = self._profile.compute(grid, params, 1, dt, dz)  # df/dr
+            fn1 = self.compute(grid, (power - 1, params), 0, dt, dz)  # f^(n-1)
+        if dr >= 2:
+            df2 = self._profile.compute(grid, params, 2, dt, dz)  # d^2f/dr^2
+            fn2 = self.compute(grid, (power - 2, params), 0, dt, dz)  # f^(n-2)
+        if dr == 0:
+            f = f0**power
+        elif dr == 1:
+            f = power * fn1 * df1
+        elif dr == 2:
+            f = power * ((power - 1) * fn2 * df1**2 + fn1 * df2)
+        else:
+            raise NotImplementedError("dr > 2 not implemented for PowerProfile!")
+        return f
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", power={})".format(self._power)
         return s
 
 
@@ -540,7 +674,8 @@ class PowerSeriesProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
+    _static_attrs = _Profile._static_attrs + ["_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", name=""):
         super().__init__(name)
@@ -715,7 +850,7 @@ class TwoPowerProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_
+    _io_attrs_ = _Profile._io_attrs_ + ["_params"]
 
     def __init__(self, params=None, name=""):
         super().__init__(name)
@@ -724,17 +859,24 @@ class TwoPowerProfile(_Profile):
             params = [0, 1, 1]
         self._params = np.atleast_1d(params)
 
+        self._check_params()
+
+    def _check_params(self, params=None):
+        """Check params and throw warnings or errors if necessary."""
+        params = self.params if params is None else params
         errorif(
-            self._params.size != 3, ValueError, "params must be an array of size 3."
+            params.size != 3,
+            ValueError,
+            f"params must be an array of size 3, got {len(params)}.",
         )
         warnif(
-            self._params[1] < 1,
+            params[1] < 1,
             UserWarning,
             "Derivatives of this profile will be infinite at rho=0 "
             + "because params[1] < 1.",
         )
         warnif(
-            self._params[2] < 1,
+            params[2] < 1,
             UserWarning,
             "Derivatives of this profile will be infinite at rho=1 "
             + "because params[2] < 1.",
@@ -748,10 +890,8 @@ class TwoPowerProfile(_Profile):
     @params.setter
     def params(self, new):
         new = jnp.atleast_1d(jnp.asarray(new))
-        if new.size == 3:
-            self._params = jnp.asarray(new)
-        else:
-            raise ValueError(f"params should be an array of size 3, got {len(new)}.")
+        self._check_params(new)
+        self._params = new
 
     def compute(self, grid, params=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -816,7 +956,8 @@ class SplineProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_method"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_knots", "_method"]
+    _static_attrs = _Profile._static_attrs + ["_method"]
 
     def __init__(self, values=None, knots=None, method="cubic2", name=""):
         super().__init__(name)
@@ -910,7 +1051,7 @@ class HermiteSplineProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_params"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_knots"]
 
     def __init__(self, f, df, knots=None, name=""):
         super().__init__(name)
@@ -1010,6 +1151,8 @@ class MTanhProfile(_Profile):
         name of the profile
 
     """
+
+    _io_attrs_ = _Profile._io_attrs_ + ["_params"]
 
     def __init__(self, params=None, name=""):
         super().__init__(name)
@@ -1245,7 +1388,8 @@ class FourierZernikeProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
+    _static_attrs = _Profile._static_attrs + ["_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", NFP=1, name=""):
         super().__init__(name)
@@ -1358,7 +1502,7 @@ class FourierZernikeProfile(_Profile):
         """
         if params is None:
             params = self.params
-        A = self.basis.evaluate(grid.nodes, [dr, dt, dz])
+        A = self.basis.evaluate(grid, [dr, dt, dz])
         return A @ params
 
     @classmethod

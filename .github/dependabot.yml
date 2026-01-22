@@ -1,0 +1,45 @@
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/" # Location of package manifests
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "skip_changelog", "run_benchmarks"]
+    groups:
+      # group similar dependencies together into fewer PRs
+      docs:
+        patterns:
+          - "sphinx"
+      linting:
+        patterns:
+          - "flake8"
+          - "black"
+          - "pre-commit"
+      testing:
+        patterns:
+          - "pytest"
+          - "qic"
+          - "qsc"
+          - "shapely"
+      minor_packages:
+        patterns:
+          - "colorama"
+          - "nvgpu"
+          - "psutil"
+          - "pylatexenc"
+          - "termcolor"
+      jax:
+        patterns:
+          - "jax"
+          - "diffrax"
+          - "interpax"
+          - "orthax"
+          - "quadax"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # Check for updates to GitHub Actions every week
+      interval: "weekly"

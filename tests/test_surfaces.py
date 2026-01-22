@@ -4,11 +4,11 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
+from desc.utils import rpz2xyz
 
 
 class TestFourierRZToroidalSurface:
@@ -514,3 +514,33 @@ def test_surface_orientation():
     assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1
+
+
+@pytest.mark.unit
+def test_surface_change_only_symmetry():
+    """Test that sym correctly changes when only sym is passed to change_resolution."""
+    surf = FourierRZToroidalSurface(sym=False)
+    surf.change_resolution(sym=True)
+    assert surf.sym
+    assert surf.R_basis.sym == "cos"
+    assert surf.Z_basis.sym == "sin"
+
+    surf.change_resolution(sym=False)
+    assert surf.sym is False
+    assert surf.R_basis.sym is False
+    assert surf.Z_basis.sym is False
+
+
+@pytest.mark.unit
+def test_section_change_only_symmetry():
+    """Test that sym correctly changes when only sym is passed to change_resolution."""
+    surf = ZernikeRZToroidalSection(sym=False)
+    surf.change_resolution(sym=True)
+    assert surf.sym
+    assert surf.R_basis.sym == "cos"
+    assert surf.Z_basis.sym == "sin"
+
+    surf.change_resolution(sym=False)
+    assert surf.sym is False
+    assert surf.R_basis.sym is False
+    assert surf.Z_basis.sym is False

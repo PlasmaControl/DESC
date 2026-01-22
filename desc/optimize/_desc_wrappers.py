@@ -87,7 +87,7 @@ def _optimize_desc_aug_lagrangian(
             ub,
             lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
-        # TODO: can't pass constants dict into vjp for now
+        # TODO (#1394): can't pass constants dict into vjp for now
         constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
     else:
         constraint_wrapped = None

@@ -13,14 +13,14 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..integrals import (
+from ..integrals.surface_integral import (
     surface_averages,
     surface_integrals_map,
     surface_max,
     surface_min,
 )
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -106,6 +106,221 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B^phi",
+    label="B^{\\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r/sqrt(g)", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
+)
+def _B_sup_phi(params, transforms, profiles, data, **kwargs):
+    # Written like this, independent of iota, to enable computing without integration.
+    data["B^phi"] = data["psi_r/sqrt(g)"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\theta, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_r",
+        "phi_rz",
+        "theta_PEST_rt",
+        "phi_rt",
+        "theta_PEST_rz",
+    ],
+)
+def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r"] = data["(psi_r/sqrt(g))_r"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_rz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_rt"]
+        - data["phi_rt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_rz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_t",
+    label="\\partial_{\\theta} B^{\\phi} |_{\\rho, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt θ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_t",
+        "phi_tz",
+        "theta_PEST_tt",
+        "phi_tt",
+        "theta_PEST_tz",
+    ],
+)
+def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
+    data["B^phi_t"] = data["(psi_r/sqrt(g))_t"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_tz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tt"]
+        - data["phi_tt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_tz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_z",
+    label="\\partial_{\\zeta} B^{\\phi} |_{\\rho, \\theta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ζ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_z",
+        "phi_zz",
+        "theta_PEST_tz",
+        "phi_tz",
+        "theta_PEST_zz",
+    ],
+)
+def _B_sup_phi_z(params, transforms, profiles, data, **kwargs):
+    data["B^phi_z"] = data["(psi_r/sqrt(g))_z"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_zz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tz"]
+        - data["phi_tz"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_zz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_v|r,p",
+    label="\\partial_{\\vartheta} B^{\\phi} |_{\\rho, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϑ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_v_rp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_v|r,p"] = (
+        data["B^phi_t"] * data["phi_z"] - data["B^phi_z"] * data["phi_t"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_p|r,v",
+    label="\\partial_{\\phi} B^{\\phi} |_{\\rho, \\vartheta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϕ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_p_rv(params, transforms, profiles, data, **kwargs):
+    data["B^phi_p|r,v"] = (
+        data["B^phi_z"] * data["theta_PEST_t"] - data["B^phi_t"] * data["theta_PEST_z"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r|v,p",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\vartheta, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_r", "B^phi_v|r,p", "B^phi_p|r,v", "theta_PEST_r", "phi_r"],
+)
+def _B_sup_phi_r_vp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r|v,p"] = (
+        data["B^phi_r"]
+        - data["B^phi_v|r,p"] * data["theta_PEST_r"]
+        - data["B^phi_p|r,v"] * data["phi_r"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|B|_r|v,p",
+    label="\\partial_{\\rho} |\\mathbf{B}| |_{\\vartheta, \\phi}",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field norm, derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(|B|)", "e_rho|v,p"],
+)
+def _B_norm_r_vp(params, transforms, profiles, data, **kwargs):
+    data["|B|_r|v,p"] = dot(data["grad(|B|)"], data["e_rho|v,p"])
+    return data
+
+
+@register_compute_fun(
     name="B",
     label="\\mathbf{B}",
     units="T",
@@ -127,7 +342,7 @@ def _B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_R",
-    label="B_{R}",
+    label="B_{R} = \\mathbf{B} \\cdot \\hat{R}",
     units="T",
     units_long="Tesla",
     description="Radial component of magnetic field in lab frame",
@@ -145,7 +360,8 @@ def _B_R(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi",
-    label="B_{\\phi}",
+    label="B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\phi} "
+    "= \\mathbf{B} \\cdot R^{-1} \\mathbf{e}_{\\phi} |_{R, Z}",
     units="T",
     units_long="Tesla",
     description="Toroidal component of magnetic field in lab frame",
@@ -154,16 +370,16 @@ def _B_R(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B"],
+    data=["B^phi", "R"],
 )
 def _B_phi(params, transforms, profiles, data, **kwargs):
-    data["B_phi"] = data["B"][:, 1]
+    data["B_phi"] = data["R"] * data["B^phi"]
     return data
 
 
 @register_compute_fun(
     name="B_Z",
-    label="B_{Z}",
+    label="B_{Z} = \\mathbf{B} \\cdot \\hat{Z}",
     units="T",
     units_long="Tesla",
     description="Vertical component of magnetic field in lab frame",
@@ -1644,7 +1860,7 @@ def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi|r,t",
-    label="B_{\\phi} = B \\dot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
+    label="B_{\\phi} = B \\cdot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Covariant toroidal component of magnetic field in (ρ,θ,ϕ) "
@@ -2269,10 +2485,11 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|B|>_axis",
-    label="\\lange |\\mathbf{B}| \\rangle_{axis}",
+    label="\\langle |\\mathbf{B}| \\rangle_{axis}",
     units="T",
     units_long="Tesla",
-    description="Average magnitude of magnetic field on the magnetic axis",
+    description="Average magnitude of magnetic field on the innermost flux surface "
+    "on the given grid",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -2462,6 +2679,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     data=["|B|_z", "|B|_a", "alpha_z"],
 )
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
+    # Same as grad(|B|) dot e_zeta|r,a but avoids radial derivatives.
     data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
     return data
 
@@ -3394,6 +3612,10 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
@@ -3413,6 +3635,10 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
@@ -3431,6 +3657,10 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["min_tz |B|", "max_tz |B|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _mirror_ratio(params, transforms, profiles, data, **kwargs):
     data["mirror ratio"] = (data["max_tz |B|"] - data["min_tz |B|"]) / (

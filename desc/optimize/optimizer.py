@@ -1,10 +1,13 @@
 """Class for wrapping a number of common optimization methods."""
 
+import contextlib
+import io
 import warnings
 
 import numpy as np
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -13,6 +16,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
+from desc.optimizable import OptimizableCollection
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
@@ -77,7 +81,7 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def optimize(  # noqa: C901 - FIXME: simplify this
+    def optimize(  # noqa: C901
         self,
         things,
         objective,
@@ -120,15 +124,27 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -137,7 +153,27 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the code for more details.
+            settings. Options that are universal to all optimizers are:
+
+            - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
+              to ``LinearConstraintProjection``.
+            - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``perturb_options``.
+            - ``"solve_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``solve_options``.
+
+            - ``"ess_alpha"`` : float, optional
+              Decay rate of the scaling. Default is 1.2.
+            - ``"ess_order"`` : int, optional
+              Order of norm to use for multi-index mode numbers, which can be
+              ``1``, ``2``, or ``np.inf``. Default is ``np.inf``.
+            - ``"ess_min_value"`` : float, optional
+              Minimum allowed scale value. Default is 1e-7.
+
+            See the documentation page [Optimizers
+            Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            for more details on the options available to each specific optimizer.
+
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -152,10 +188,16 @@ class Optimizer(IOAble):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
-        if not isinstance(constraints, (tuple, list)):
+        options = {} if options is None else options
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)
+        elif is_linear_proj:
+            constraints = objective._constraint.objectives
         errorif(
             not isinstance(objective, ObjectiveFunction),
             TypeError,
@@ -163,7 +205,17 @@ class Optimizer(IOAble):
         )
 
         # get unique things
-        things, indices = unique_list(flatten_list(things, flatten_tuple=True))
+        things, indices, unique_indices = unique_list(
+            flatten_list(things, flatten_tuple=True)
+        )
+        if isinstance(x_scale, (list, tuple)):
+            # make sure it stays in sync with things
+            x_scale = flatten_list(x_scale, flatten_tuple=True)
+            assert len(x_scale) == len(
+                indices
+            ), f"expected {len(indices)} x_scales for {len(indices)} things but "
+            f"only got {len(x_scale)}"
+            x_scale = [x_scale[i] for i in unique_indices]
         counts = np.unique(indices, return_counts=True)[1]
         duplicate_idx = np.where(counts > 1)[0]
         warnif(
@@ -171,108 +223,63 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
+        x_scale = _parse_x_scale(x_scale, things, options)
+        # at this point x_scale is either "auto", an array matching with objective.x,
+        # or a list of scales in sync with things
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.objectives import QuadraticFlux, ToroidalFlux
+        from desc.objectives import QuadraticFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
         if eq is not None:
-            # check if stage 2 objectives are here:
-            all_objs = list(constraints) + list(objective.objectives)
-            errorif(
-                is_any_instance(all_objs, QuadraticFlux),
-                ValueError,
-                "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
-                + "is in things to optimize.",
-            )
-            errorif(
-                is_any_instance(all_objs, ToroidalFlux),
-                ValueError,
-                "ToroidalFlux objective assumes Equilibrium is fixed but Equilibrium "
-                + "is in things to optimize.",
-            )
+            if not is_linear_proj:
+                # check if stage 2 objectives are here:
+                all_objs = list(constraints) + list(objective.objectives)
+                errorif(
+                    is_any_instance(all_objs, QuadraticFlux),
+                    ValueError,
+                    "QuadraticFlux objective assumes Equilibrium is fixed but "
+                    + "Equilibrium is in things to optimize.",
+                )
             # save these for later
             eq_params_init = eq.params_dict.copy()
 
-        options = {} if options is None else options
-        # TODO: document options
         timer = Timer()
-        options = {} if options is None else options
         _, method = _parse_method(self.method)
 
         timer.start("Initializing the optimization")
-        # parse and combine constraints into linear & nonlinear objective functions
-        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
-        objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-            eq, objective, nonlinear_constraints, self.method, options
-        )
-        if not isinstance(objective, ProximalProjection):
-            for t in things:
-                linear_constraints = maybe_add_self_consistency(t, linear_constraints)
-        linear_constraint = _combine_constraints(linear_constraints)
-        nonlinear_constraint = _combine_constraints(nonlinear_constraints)
-
-        # make sure everything is built
-        if objective is not None and not objective.built:
-            objective.build(verbose=verbose)
-        if linear_constraint is not None and not linear_constraint.built:
-            linear_constraint.build(verbose=verbose)
-        if nonlinear_constraint is not None and not nonlinear_constraint.built:
-            nonlinear_constraint.build(verbose=verbose)
-
-        # combine arguments from all three objective functions
-        if linear_constraint is not None and nonlinear_constraint is not None:
-            objective, linear_constraint, nonlinear_constraint = combine_args(
-                objective, linear_constraint, nonlinear_constraint
+        if not is_linear_proj:
+            objective, nonlinear_constraint = get_combined_constraint_objectives(
+                eq,
+                constraints,
+                objective,
+                things,
+                self.method,
+                method,
+                verbose,
+                options,
             )
-            assert set(objective.things) == set(linear_constraint.things)
-            assert set(objective.things) == set(nonlinear_constraint.things)
-        elif linear_constraint is not None:
-            objective, linear_constraint = combine_args(objective, linear_constraint)
-            assert set(objective.things) == set(linear_constraint.things)
-        elif nonlinear_constraint is not None:
-            objective, nonlinear_constraint = combine_args(
-                objective, nonlinear_constraint
-            )
-            assert set(objective.things) == set(nonlinear_constraint.things)
-        assert set(objective.things) == set(things)
-
-        # wrap to handle linear constraints
-        if linear_constraint is not None:
-            objective = LinearConstraintProjection(objective, linear_constraint)
-            objective.build(verbose=verbose)
-            if nonlinear_constraint is not None:
-                nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraint
-                )
-                nonlinear_constraint.build(verbose=verbose)
-
-        if linear_constraint is not None and not isinstance(x_scale, str):
-            # need to project x_scale down to correct size
-            Z = objective._Z
-            x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
-            x_scale = np.abs(
-                np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
-            )
-            x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
-
-        if objective.scalar and (not optimizers[method]["scalar"]):
-            warnings.warn(
-                colored(
-                    "method {} is not intended for scalar objective function".format(
-                        ".".join([method])
-                    ),
-                    "yellow",
-                )
-            )
+        else:
+            nonlinear_constraint = None
+            if not objective.built:
+                objective.build(verbose=verbose)
         # we have to use this cumbersome indexing in this method when passing things
         # to objective to guard against the passed-in things having an ordering
         # different from objective.things, to ensure the correct order is passed
         # to the objective
         x0 = objective.x(*[things[things.index(t)] for t in objective.things])
+        if isinstance(x_scale, (list, tuple)):
+            # sort by things to make x_scale match with objective.x
+            x_scale = [x_scale[things.index(t)] for t in objective.things]
+            x_scale = jnp.concatenate(x_scale)
+        # at this point x_scale is either "auto" or an array matching with objective.x
+        # but we may need to project it down if objective got wrapped by
+        # eg LinearConstraintProjection
+
+        x_scale_projected = _project_x_scale(x_scale, objective)
 
         stoptol = _get_default_tols(
             method,
@@ -313,7 +320,7 @@ class Optimizer(IOAble):
             nonlinear_constraint,
             x0,
             method,
-            x_scale,
+            x_scale_projected,
             verbose,
             stoptol,
             options,
@@ -346,6 +353,10 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
+        # this is the un-projected one, that can be passed in to .optimize again if
+        # needed
+        result["x_scale"] = x_scale
+
         # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(objective.things, result["history"][-1]):
             # more indexing here to ensure the correct params are assigned to the
@@ -353,25 +364,14 @@ class Optimizer(IOAble):
             ind = things.index(thing)
             things[ind].params_dict = params
 
+        # we always want to populate result dict with before/after values, but may
+        # not always want to print, so we first capture the output and then decide
+        # what to do about it.
+        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+            result = _print_output(things, things0, objective, constraints, result)
+            text_out = buf.getvalue()
         if verbose > 0:
-            state_0 = [things0[things.index(t)] for t in objective.things]
-            state = [things[things.index(t)] for t in objective.things]
-
-            # put a divider
-            w_divider = 50
-            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
-
-            print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-            objective.print_value(objective.x(*state), objective.x(*state_0))
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
-
-            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+            print(text_out)
 
         if copy:
             # need to swap things and things0, since things should be unchanged
@@ -383,6 +383,121 @@ class Optimizer(IOAble):
             return things0, result
 
         return things, result
+
+
+def _parse_x_scale(x_scale, things, options):
+    """Convert lists/dicts of scales into arrays for all dofs.
+
+    If x_scale is "auto" we just return it since that's passed directly to optimizer
+    If its an array, we assume its already sorted to match objective.x and return it
+    Otherwise, we return a list of x_scale for each thing, which may get re-ordered
+    later before its concatenated.
+    """
+    if isinstance(x_scale, str):
+        if x_scale == "auto":
+            return x_scale
+        if x_scale == "ess":
+            x_scale = ["ess"] * len(things)
+        else:
+            raise ValueError(
+                "only 'auto' and 'ess' are allowed string values for x_scale"
+            )
+    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or (
+        np.isscalar(x_scale) and not isinstance(x_scale, str)
+    ):
+        dimx_all = sum([t.dim_x for t in things])
+        return jnp.broadcast_to(x_scale, (dimx_all,))
+    if len(things) == 1 and not isinstance(x_scale, (list, tuple)):
+        x_scale = [x_scale]
+    assert len(x_scale) == len(
+        things
+    ), f"expected {len(things)} x_scales for {len(things)} things but "
+    f"only got {len(x_scale)}"
+
+    all_scales = []
+    ess_alpha = options.pop("ess_alpha", 1.2)
+    ess_order = options.pop("ess_order", np.inf)
+    ess_min_value = options.pop("ess_min_value", 1e-7)
+
+    for xsc, tng in zip(x_scale, things):
+        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or (
+            np.isscalar(xsc) and not isinstance(xsc, str)
+        ):
+            all_scales.append(jnp.broadcast_to(xsc, (tng.dim_x,)))
+        elif isinstance(xsc, dict) or (
+            isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
+        ):
+            all_scales.append(tng.pack_params(xsc))
+        elif isinstance(xsc, str) and xsc == "ess":
+            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value)
+            all_scales.append(tng.pack_params(scl))
+        else:
+            raise TypeError(
+                f"all x_scales should be either 'ess', array, or dict, got {type(xsc)}"
+            )
+    return all_scales
+
+
+def _project_x_scale(x_scale, objective):
+    """Project x_scale vector to remove fixed DoFs etc."""
+    if isinstance(x_scale, str):
+        return x_scale
+
+    is_prox = isinstance(objective, ProximalProjection) or (
+        isinstance(objective, LinearConstraintProjection)
+        and isinstance(objective._objective, ProximalProjection)
+    )
+    if is_prox:
+        # If we have ProximalProjection, project x_scale through both stages:
+        # (eq.dim_x) -> (dim size post proximal projection)
+        prox_obj = (
+            objective
+            if isinstance(objective, ProximalProjection)
+            else objective._objective
+        )
+        # Split x_scale by things to handle multiple things (eq + coils, etc.)
+        x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
+        # Project equilibrium part: remove excluded parameters
+        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        included_idx = []
+        for arg in prox_obj._eq.optimizable_params:
+            if arg not in excluded_params:
+                included_idx.extend(prox_obj._eq.x_idx[arg])
+        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
+        x_scale = jnp.concatenate(x_scale)
+
+    if isinstance(objective, LinearConstraintProjection):
+        # need to project x_scale down to correct size
+        Z = objective._Z
+        x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
+        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
+        x_scale = jnp.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+    return x_scale
+
+
+def _print_output(things, things0, objective, constraints, result):
+    """Print summary stats after optimization."""
+    state_0 = [things0[things.index(t)] for t in objective.things]
+    state = [things[things.index(t)] for t in objective.things]
+
+    # put a divider
+    w_divider = 50
+    print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+
+    print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
+    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    for con in constraints:
+        arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
+        args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+        args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+        _val = con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+        if con._print_value_fmt in values:
+            values[con._print_value_fmt].append(_val)
+        else:
+            values[con._print_value_fmt] = [_val]
+    print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+    result["Objective values"] = values
+    return result
 
 
 def _parse_method(method):
@@ -495,6 +610,129 @@ def _maybe_wrap_nonlinear_constraints(
         )
         nonlinear_constraints = ()
     return objective, nonlinear_constraints
+
+
+def get_combined_constraint_objectives(  # noqa: C901
+    eq,
+    constraints,
+    objective,
+    things,
+    opt_method,
+    method,
+    verbose,
+    options,
+):
+    """Combine constraints and objective.
+
+    Checks, combines, wraps and builds constraints and objective functions into a single
+    objective and nonlinear constraints that can be passed to the optimizer.
+    """
+    from desc.equilibrium import Equilibrium
+
+    # parse and combine constraints into linear & nonlinear objective functions
+    linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+    objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
+        eq, objective, nonlinear_constraints, opt_method, options
+    )
+    is_prox = isinstance(objective, ProximalProjection)
+    for t in things:
+        if isinstance(t, Equilibrium) and is_prox:
+            # don't add Equilibrium self-consistency if proximal is used
+            # see ProximalProjection._set_eq_state_vector
+            continue
+        linear_constraints = maybe_add_self_consistency(t, linear_constraints)
+    linear_constraint = _combine_constraints(linear_constraints)
+    nonlinear_constraint = _combine_constraints(nonlinear_constraints)
+
+    # make sure everything is built
+    if objective is not None and not objective.built:
+        objective.build(verbose=verbose)
+    if linear_constraint is not None and not linear_constraint.built:
+        linear_constraint.build(verbose=verbose)
+    if nonlinear_constraint is not None and not nonlinear_constraint.built:
+        nonlinear_constraint.build(verbose=verbose)
+
+    # combine arguments from all three objective functions
+    inconsistent_things_error_msg = (
+        "Detected an inconsistency in the "
+        "things passed to the optimizer and/or the things targeted by the objective "
+        "and constraints.\n"
+        "\nOne reason this can happen is if you forgot to pass in every thing \n"
+        "expected by the objectives and constraints (e.g. did not pass in coils for \n"
+        "an optimization where the coils are allowed to change), or if you passed in "
+        "things that were not"
+        " targeted by the objectives or constraints.\n"
+        "\nAnother reason could be that some of the things passed to the optimizer "
+        "are different objects than what the objective was created with. \n"
+        "This may happen if, for example, you are trying to re-use an objective but "
+        "not with the same exact thing it was created with. \nE.g. if you make an"
+        " objective for "
+        "an Equilibrium object, then try to optimize a different Equilibrium object\n"
+        "with that same objective, or you try to optimize a copy of that Equilibrium\n"
+        "object (which has a different Python object ID and therefore is a different"
+        " object), this error will occur.\n"
+        "Check the below inconsistency for things like two of the same object type "
+        "where\nyou only expected one, or for an object that you were not intending "
+        "to allow to be optimizable, etc.\n\n"
+    )
+    if linear_constraint is not None and nonlinear_constraint is not None:
+        objective, linear_constraint, nonlinear_constraint = combine_args(
+            objective, linear_constraint, nonlinear_constraint
+        )
+        assert set(objective.things) == set(linear_constraint.things), (
+            inconsistent_things_error_msg
+            + f"objective+constraints expected things {set(objective.things)}, \n"
+            f"linear constraints expected things {set(linear_constraint.things)} "
+        )
+        assert set(objective.things) == set(nonlinear_constraint.things), (
+            inconsistent_things_error_msg
+            + f"objective+constraints expected things {set(objective.things)}, \n"
+            f"nonlinear constraints expected things {set(nonlinear_constraint.things)}"
+        )
+    elif linear_constraint is not None:
+        objective, linear_constraint = combine_args(objective, linear_constraint)
+        assert set(objective.things) == set(linear_constraint.things), (
+            inconsistent_things_error_msg
+            + f"objective+constraints expected things {set(objective.things)}, \n"
+            f"linear constraints expected things {set(linear_constraint.things)}"
+        )
+    elif nonlinear_constraint is not None:
+        objective, nonlinear_constraint = combine_args(objective, nonlinear_constraint)
+        assert set(objective.things) == set(nonlinear_constraint.things), (
+            inconsistent_things_error_msg
+            + f"objective+constraints expected things {set(objective.things)}, \n"
+            f"nonlinear constraints expected things {set(nonlinear_constraint.things)}"
+        )
+    assert set(objective.things) == set(things), (
+        inconsistent_things_error_msg
+        + f"objective+constraints expected things {set(objective.things)}, \n"
+        f"optimizer got things {set(things)}"
+    )
+
+    # wrap to handle linear constraints
+    if linear_constraint is not None:
+        linear_constraint_options = options.pop("linear_constraint_options", {})
+        objective = LinearConstraintProjection(
+            objective, linear_constraint, **linear_constraint_options
+        )
+        objective.build(verbose=verbose)
+        if nonlinear_constraint is not None:
+            nonlinear_constraint = LinearConstraintProjection(
+                nonlinear_constraint, linear_constraint
+            )
+            nonlinear_constraint.build(verbose=verbose)
+
+    if objective.scalar and (not optimizers[method]["scalar"]):
+        warnings.warn(
+            colored(
+                "method {} is not intended for scalar objective".format(
+                    ".".join([method]) + " function"
+                ),
+                "yellow",
+            )
+        )
+
+    return objective, nonlinear_constraint
 
 
 def _get_default_tols(

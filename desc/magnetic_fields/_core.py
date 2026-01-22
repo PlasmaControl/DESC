@@ -1,21 +1,32 @@
 """Classes for magnetic fields."""
 
+import os
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy.linalg
+from diffrax import (
+    Event,
+    ODETerm,
+    PIDController,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
 from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
+from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.backend import jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
+from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -24,42 +35,107 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
+from desc.utils import (
+    copy_coeffs,
+    dot,
+    errorif,
+    flatten_list,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safediv,
+    setdefault,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV):
+def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
     ----------
-    re : ndarray, shape(n_eval_pts, 3)
-        evaluation points to evaluate B at, in cartesian.
-    rs : ndarray, shape(n_src_pts, 3)
-        source points for current density J, in cartesian.
-    J : ndarray, shape(n_src_pts, 3)
-        current density vector at source points, in cartesian.
-    dV : ndarray, shape(n_src_pts)
-        volume element at source points
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    J : ndarray
+        Shape (n_src_pts, 3).
+        Current density vector at source points, in cartesian.
+    dV : ndarray
+        Shape (n_src_pts, ).
+        Volume element at source points
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
-    B : ndarray, shape(n,3)
-        magnetic field in cartesian components at specified points
+    B : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic field in cartesian components at specified points.
+
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-    assert J.shape == rs.shape
-    JdV = J * dV[:, None]
-    B = jnp.zeros_like(re)
+    JdV = J * dV[:, jnp.newaxis]
+    assert JdV.shape == rs.shape
 
-    def body(i, B):
-        r = re - rs[i, :]
-        num = jnp.cross(JdV[i, :], r, axis=-1)
-        den = jnp.linalg.norm(r, axis=-1) ** 3
-        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
-        return B
+    def biot(re):
+        dr = rs - re
+        num = jnp.cross(dr, JdV, axis=-1)
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+
+
+def biot_savart_general_vector_potential(
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
+):
+    """Biot-Savart law for arbitrary sources for vector potential.
+
+    Parameters
+    ----------
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    J : ndarray
+        Shape (n_src_pts, 3).
+        Current density vector at source points, in cartesian.
+    dV : ndarray
+        Shape (n_src_pts, ).
+        Volume element at source points
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    A : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic vector potential in cartesian components at specified points.
+
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    JdV = J * dV[:, jnp.newaxis]
+    assert JdV.shape == rs.shape
+
+    def biot(re):
+        dr = rs - re
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -148,6 +224,7 @@ class _MagneticField(IOAble, ABC):
     """
 
     _io_attrs_ = []
+    _static_attrs = []
 
     def __mul__(self, x):
         if np.isscalar(x) or len(x) == 1:
@@ -178,7 +255,13 @@ class _MagneticField(IOAble, ABC):
 
     @abstractmethod
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -193,6 +276,12 @@ class _MagneticField(IOAble, ABC):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -201,9 +290,46 @@ class _MagneticField(IOAble, ABC):
 
         """
 
-    def __call__(self, grid, params=None, basis="rpz"):
+    def __call__(self, grid, params=None, basis="rpz", chunk_size=None):
         """Compute magnetic field at a set of points."""
-        return self.compute_magnetic_field(grid, params, basis)
+        return self.compute_magnetic_field(grid, params, basis, chunk_size=chunk_size)
+
+    @abstractmethod
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating A from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
 
     def compute_Bnormal(
         self,
@@ -213,6 +339,8 @@ class _MagneticField(IOAble, ABC):
         vc_source_grid=None,
         params=None,
         basis="rpz",
+        chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -243,13 +371,23 @@ class _MagneticField(IOAble, ABC):
         basis : {"rpz", "xyz"}
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
+        chunk_size : int or None
+            Size to split Biot-Savart computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
-        Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+        Bnormal : ndarray
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -260,26 +398,32 @@ class _MagneticField(IOAble, ABC):
             eq = surface
             surface = eq.surface
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
-            )
+            eval_grid = LinearGrid(M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP)
 
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
-        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
-            coords, basis="rpz", source_grid=source_grid, params=params
+            coords,
+            basis="rpz",
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnormal = dot(B, data["n_rho"])
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-            Bnorm += Bplasma
+            Bnormal += compute_B_plasma(
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=setdefault(B_plasma_chunk_size, chunk_size),
+            )
 
         if basis.lower() == "xyz":
             coords = rpz2xyz(coords)
 
-        return Bnorm, coords
+        return Bnormal, coords
 
     def save_BNORM_file(
         self,
@@ -292,6 +436,8 @@ class _MagneticField(IOAble, ABC):
         params=None,
         sym="sin",
         scale_by_curpol=True,
+        chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
 
@@ -327,9 +473,17 @@ class _MagneticField(IOAble, ABC):
             non-symmetric Bnormal distribution, as only the sin-symmetric modes
             will be saved.
         scale_by_curpol : bool, optional
-            Whether or not to scale the Bnormal coefficients by curpol
+            Whether to scale the Bnormal coefficients by curpol
             which is expected by most other codes that accept BNORM files,
             by default True
+        chunk_size : int or None
+            Size to split Biot-Savart computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
@@ -354,16 +508,19 @@ class _MagneticField(IOAble, ABC):
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
-            )
-
+            eval_grid = LinearGrid(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
+        fname = os.path.expanduser(fname)
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
         # compute Bnormal on the grid
         Bnorm, _ = self.compute_Bnormal(
-            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
 
         # fit Bnorm with Fourier Series
@@ -410,6 +567,10 @@ class _MagneticField(IOAble, ABC):
         nR=101,
         nZ=101,
         nphi=90,
+        NFP=None,
+        save_vector_potential=True,
+        chunk_size=None,
+        source_grid=None,
     ):
         """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
@@ -431,14 +592,33 @@ class _MagneticField(IOAble, ABC):
             Number of grid points in the Z coordinate (default = 101).
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
+        NFP : int, optional
+            Number of toroidal field periods. If not provided, will default to 1 or
+            the field's NFP, if it has that attribute.
+        save_vector_potential : bool, optional
+            Whether to save the magnetic vector potential to the mgrid
+            file, in addition to the magnetic field. Defaults to True.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+        source_grid : Grid
+            What grid to use to discretize the source magnetic field. Will be passed
+            into the ``source_grid`` argument of ``compute_magnetic_field`` and
+            ``compute_magnetic_vector_potential``. If None,
+            defaults to whatever the default is for the given magnetic field,
+            specified in the docstring for that magnetic field.
 
         Returns
         -------
         None
 
         """
+        path = os.path.expanduser(path)
         # cylindrical coordinates grid
-        NFP = self.NFP if hasattr(self, "_NFP") else 1
+        NFP = getattr(self, "_NFP", 1) if NFP is None else NFP
+        if hasattr(self, "_NFP"):
+            warnif(NFP != self.NFP, UserWarning, "NFP input is not equal to field.NFP.")
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
@@ -446,10 +626,23 @@ class _MagneticField(IOAble, ABC):
         grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         # evaluate magnetic field on grid
-        field = self.compute_magnetic_field(grid, basis="rpz")
+        field = self.compute_magnetic_field(
+            grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+        )
         B_R = field[:, 0].reshape(nphi, nZ, nR)
         B_phi = field[:, 1].reshape(nphi, nZ, nR)
         B_Z = field[:, 2].reshape(nphi, nZ, nR)
+
+        # evaluate magnetic vector potential on grid
+        if save_vector_potential:
+            field = self.compute_magnetic_vector_potential(
+                grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+            )
+            A_R = field[:, 0].reshape(nphi, nZ, nR)
+            A_phi = field[:, 1].reshape(nphi, nZ, nR)
+            A_Z = field[:, 2].reshape(nphi, nZ, nR)
+        else:
+            A_R = None
 
         # write mgrid file
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
@@ -537,6 +730,28 @@ class _MagneticField(IOAble, ABC):
         )
         bz_001[:] = B_Z
 
+        if save_vector_potential:
+            ar_001 = file.createVariable("ar_001", np.float64, ("phi", "zee", "rad"))
+            ar_001.long_name = (
+                "A_R = radial component of magnetic vector potential "
+                "in lab frame (T/m)."
+            )
+            ar_001[:] = A_R
+
+            ap_001 = file.createVariable("ap_001", np.float64, ("phi", "zee", "rad"))
+            ap_001.long_name = (
+                "A_phi = toroidal component of magnetic vector potential "
+                "in lab frame (T/m)."
+            )
+            ap_001[:] = A_phi
+
+            az_001 = file.createVariable("az_001", np.float64, ("phi", "zee", "rad"))
+            az_001.long_name = (
+                "A_Z = vertical component of magnetic vector potential "
+                "in lab frame (T/m)."
+            )
+            az_001[:] = A_Z
+
         file.close()
 
 
@@ -559,6 +774,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         Default values for parameters. Defaults to an empty array.
 
     """
+
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_fun"]
 
     def __init__(self, fun, params=None):
         errorif(not callable(fun), ValueError, "fun must be callable")
@@ -586,7 +803,12 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         self._params = params
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -599,7 +821,12 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
-            Unused by this class, only kept for API compatibility
+            Unused by this class, only kept for API compatibility.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -610,6 +837,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
+        elif isinstance(params, dict):
+            params = params["params"]
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -617,6 +846,42 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "MagneticFieldFromUser does not have vector potential calculation "
+            "implemented."
+        )
 
 
 class ScaledMagneticField(_MagneticField, Optimizable):
@@ -634,9 +899,10 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
-        scale = float(np.squeeze(scale))
+        scale = jnp.float64(float(np.squeeze(scale)))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -656,7 +922,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        self._scale = float(np.squeeze(new))
+        self._scale = jnp.float64(float(np.squeeze(new)))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -674,7 +940,13 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         return hasattr(self, attr) or hasattr(self._field, attr)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -691,7 +963,10 @@ class ScaledMagneticField(_MagneticField, Optimizable):
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -700,7 +975,46 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
         """
         return self._scale * self._field.compute_magnetic_field(
-            coords, params, basis, source_grid
+            coords, params, basis, source_grid, chunk_size=chunk_size
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating A from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            scaled magnetic vector potential at specified points
+
+        """
+        return self._scale * self._field.compute_magnetic_vector_potential(
+            coords, params, basis, source_grid, chunk_size=chunk_size
         )
 
 
@@ -714,6 +1028,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     """
 
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
+    _static_attrs = _MagneticField._static_attrs
 
     def __init__(self, *fields):
         fields = flatten_list(fields, flatten_tuple=True)
@@ -724,10 +1039,17 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         )
         self._fields = fields
 
-    def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
     ):
-        """Compute magnetic field at a set of points.
+        """Compute magnetic field or vector potential at a set of points.
 
         Parameters
         ----------
@@ -742,6 +1064,13 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -749,6 +1078,11 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             scaled magnetic field at specified points
 
         """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
         if params is None:
             params = [None] * len(self._fields)
         if isinstance(params, dict):
@@ -770,13 +1104,111 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             # zip does not terminate early
             transforms = transforms * len(self._fields)
 
-        B = 0
-        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
-            B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
-            )
+        op = {"B": "compute_magnetic_field", "A": "compute_magnetic_vector_potential"}[
+            compute_A_or_B
+        ]
 
-        return B
+        AB = 0
+        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
+            AB += getattr(field, op)(
+                coords,
+                params[i % len(params)],
+                basis,
+                source_grid=g,
+                transforms=tr,
+                chunk_size=chunk_size,
+            )
+        return AB
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            sum magnetic field at specified points
+
+        """
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            compute_A_or_B="B",
+            chunk_size=chunk_size,
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating A from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            sum magnetic vector potential at specified points
+
+        """
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            compute_A_or_B="A",
+            chunk_size=chunk_size,
+        )
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -820,10 +1252,11 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0):
-        self.B0 = float(np.squeeze(B0))
-        self.R0 = float(np.squeeze(R0))
+        self.B0 = jnp.float64(float(np.squeeze(B0)))
+        self.R0 = jnp.float64(float(np.squeeze(R0)))
 
     @optimizable_parameter
     @property
@@ -833,7 +1266,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -843,10 +1276,16 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -862,7 +1301,12 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -886,9 +1330,64 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
         return B
 
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        The vector potential is specified assuming the Coulomb Gauge.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for R0 and B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        az = -B0 * R0 * jnp.log(coords[:, 0])
+        arp = jnp.zeros_like(az)
+        A = jnp.array([arp, arp, az]).T
+        # b/c it only has a nonzero z component, no need
+        # to switch bases back if xyz is given
+        return A
+
 
 class VerticalMagneticField(_MagneticField, Optimizable):
     """Uniform magnetic field purely in the vertical (Z) direction.
+
+    The vector potential is specified assuming the Coulomb Gauge.
 
     Parameters
     ----------
@@ -898,6 +1397,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0):
         self.B0 = B0
@@ -910,10 +1410,16 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -929,7 +1435,12 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -940,17 +1451,72 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         params = setdefault(params, {})
         B0 = params.get("B0", self.B0)
 
-        assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
         bz = B0 * jnp.ones_like(coords[:, 2])
         brp = jnp.zeros_like(bz)
         B = jnp.array([brp, brp, bz]).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-
+        # b/c it only has a nonzero z component, no need
+        # to switch bases back if xyz is given
         return B
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+            The vector potential is specified assuming the Coulomb Gauge.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class, only kept for API compatibility.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+
+        if basis == "xyz":
+            coords_xyz = coords
+            coords_rpz = xyz2rpz(coords)
+        else:
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        ax = B0 / 2 * coords_xyz[:, 1]
+        ay = -B0 / 2 * coords_xyz[:, 0]
+
+        az = jnp.zeros_like(ax)
+        A = jnp.array([ax, ay, az]).T
+        if basis == "rpz":
+            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
+
+        return A
 
 
 class PoloidalMagneticField(_MagneticField, Optimizable):
@@ -978,6 +1544,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0, iota):
         self.B0 = B0
@@ -992,7 +1559,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1002,7 +1569,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1012,10 +1579,16 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        self._iota = float(np.squeeze(new))
+        self._iota = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1032,6 +1605,11 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1050,7 +1628,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - R0) ** 2 + Z**2)
+        r = jnp.hypot(R - R0, Z)
         theta = jnp.arctan2(Z, R - R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
@@ -1061,6 +1639,46 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             B = rpz2xyz_vec(B, phi=coords[:, 1])
 
         return B
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "PoloidalMagneticField has nonzero divergence, therefore it can't be "
+            "represented with a vector potential."
+        )
 
 
 class SplineMagneticField(_MagneticField, Optimizable):
@@ -1080,6 +1698,12 @@ class SplineMagneticField(_MagneticField, Optimizable):
         toroidal magnetic field on grid
     BZ : array-like, shape(NR,Nphi,NZ,Ngroups)
         vertical magnetic field on grid
+    AR : array-like, shape(NR,Nphi,NZ,Ngroups)
+        radial magnetic vector potential on grid, optional
+    aphi : array-like, shape(NR,Nphi,NZ,Ngroups)
+        toroidal magnetic vector potential on grid, optional
+    AZ : array-like, shape(NR,Nphi,NZ,Ngroups)
+        vertical magnetic vector potential on grid, optional
     currents : array-like, shape(Ngroups)
         Currents or scaling factors for each field group.
     NFP : int, optional
@@ -1098,6 +1722,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_BR",
         "_Bphi",
         "_BZ",
+        "_AR",
+        "_Aphi",
+        "_AZ",
         "_method",
         "_extrap",
         "_derivs",
@@ -1105,12 +1732,33 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_currents",
         "_NFP",
     ]
-    # by default floats are considered dynamic but for this to work with jit these
-    # need to be static
-    _static_attrs = ["_extrap", "_period"]
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + Optimizable._static_attrs
+        + [
+            "_extrap",
+            "_period",
+            "_method",
+            "_axisym",
+            "_NFP",
+        ]
+    )
 
     def __init__(
-        self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
+        self,
+        R,
+        phi,
+        Z,
+        BR,
+        Bphi,
+        BZ,
+        AR=None,
+        Aphi=None,
+        AZ=None,
+        currents=1.0,
+        NFP=1,
+        method="cubic",
+        extrap=False,
     ):
         R, phi, Z, currents = map(
             lambda x: jnp.atleast_1d(jnp.asarray(x)), (R, phi, Z, currents)
@@ -1152,6 +1800,17 @@ class SplineMagneticField(_MagneticField, Optimizable):
         self._derivs["BR"] = self._approx_derivs(self._BR)
         self._derivs["Bphi"] = self._approx_derivs(self._Bphi)
         self._derivs["BZ"] = self._approx_derivs(self._BZ)
+        if AR is not None and Aphi is not None and AZ is not None:
+            AR, Aphi, AZ = map(_atleast_4d, (AR, Aphi, AZ))
+            assert AR.shape == Aphi.shape == AZ.shape == shape
+            self._AR = AR
+            self._Aphi = Aphi
+            self._AZ = AZ
+            self._derivs["AR"] = self._approx_derivs(self._AR)
+            self._derivs["Aphi"] = self._approx_derivs(self._Aphi)
+            self._derivs["AZ"] = self._approx_derivs(self._AZ)
+        else:
+            self._AR = self._Aphi = self._AZ = None
 
     @property
     def NFP(self):
@@ -1190,8 +1849,170 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 tempdict[key] = val[:, 0, :]
         return tempdict
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute magnetic field or magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points,
+            in cylindrical form [BR, Bphi,BZ]
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        errorif(
+            compute_A_or_B == "A" and self._AR is None,
+            ValueError,
+            "Cannot calculate vector potential"
+            " as no vector potential spline values exist.",
+        )
+        assert basis.lower() in ["rpz", "xyz"]
+        currents = self.currents if params is None else params["currents"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        Rq, phiq, Zq = coords.T
+        if compute_A_or_B == "B":
+            A_or_B_R = self._BR
+            A_or_B_phi = self._Bphi
+            A_or_B_Z = self._BZ
+        elif compute_A_or_B == "A":
+            A_or_B_R = self._AR
+            A_or_B_phi = self._Aphi
+            A_or_B_Z = self._AZ
+
+        if self._axisym:
+            ABRq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_R[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "R"],
+            )
+            ABphiq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_phi[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "phi"],
+            )
+            ABZq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_Z[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "Z"],
+            )
+
+        else:
+            ABRq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_R,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "R"],
+            )
+            ABphiq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_phi,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "phi"],
+            )
+            ABZq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_Z,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "Z"],
+            )
+        # ABRq etc shape(nq, ngroups)
+        AB = jnp.stack([ABRq, ABphiq, ABZq], axis=1)
+        # AB shape(nq, 3, ngroups)
+        AB = jnp.sum(AB * currents, axis=-1)
+        if basis == "xyz":
+            AB = rpz2xyz_vec(AB, phi=coords[:, 1])
+        return AB
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1208,6 +2029,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1215,100 +2040,48 @@ class SplineMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        currents = self.currents if params is None else params["currents"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        Rq, phiq, Zq = coords.T
-        if self._axisym:
-            BRq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._BR[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["BR"],
-            )
-            Bphiq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._Bphi[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["Bphi"],
-            )
-            BZq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._BZ[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["BZ"],
-            )
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
-        else:
-            BRq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._BR,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["BR"],
-            )
-            Bphiq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._Bphi,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["Bphi"],
-            )
-            BZq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._BZ,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["BZ"],
-            )
-        # BRq etc shape(nq, ngroups)
-        B = jnp.stack([BRq, Bphiq, BZq], axis=1)
-        # B shape(nq, 3, ngroups)
-        B = jnp.sum(B * currents, axis=-1)
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-        return B
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_mgrid(cls, mgrid_file, extcur=None, method="cubic", extrap=False):
@@ -1342,10 +2115,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
         jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
         kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
-        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
-        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
-        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
-        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        Rmin = mgrid["rmin"][()].filled()  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()].filled()  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()].filled()  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()].filled()  # Maximum Z coordinate (m)
         nfp = int(mgrid["nfp"][()])  # Number of field periods
         Rgrid = np.linspace(Rmin, Rmax, ir)
         Zgrid = np.linspace(Zmin, Zmax, jz)
@@ -1357,21 +2130,69 @@ class SplineMagneticField(_MagneticField, Optimizable):
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
+            br[:, :, :, i] += mgrid["br_" + coil_id][
+                ()
+            ].filled()  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][
+                ()
+            ].filled()  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][
+                ()
+            ].filled()  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
         bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
         bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
 
+        # sum magnetic vector potentials from each coil
+        ar = np.zeros([kp, jz, ir, nextcur])
+        ap = np.zeros([kp, jz, ir, nextcur])
+        az = np.zeros([kp, jz, ir, nextcur])
+        try:
+            for i in range(nextcur):
+                coil_id = "%03d" % (i + 1,)
+                ar[:, :, :, i] += mgrid["ar_" + coil_id][
+                    ()
+                ].filled()  # A_R radial mag. vec. potential
+                ap[:, :, :, i] += mgrid["ap_" + coil_id][
+                    ()
+                ].filled()  # A_phi toroidal mag. vec. potential
+                az[:, :, :, i] += mgrid["az_" + coil_id][
+                    ()
+                ].filled()  # A_Z vertical mag. vec. potential
+
+            # shift axes to correct order
+            ar = np.moveaxis(ar, (0, 1, 2), (1, 2, 0))
+            ap = np.moveaxis(ap, (0, 1, 2), (1, 2, 0))
+            az = np.moveaxis(az, (0, 1, 2), (1, 2, 0))
+        except IndexError:
+            warnif(
+                True,
+                UserWarning,
+                "mgrid does not appear to contain vector potential information."
+                " Vector potential will not be computable.",
+            )
+            ar = ap = az = None
+
         mgrid.close()
-        return cls(Rgrid, pgrid, Zgrid, br, bp, bz, extcur, nfp, method, extrap)
+        return cls(
+            Rgrid, pgrid, Zgrid, br, bp, bz, ar, ap, az, extcur, nfp, method, extrap
+        )
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls,
+        field,
+        R,
+        phi,
+        Z,
+        params=None,
+        method="cubic",
+        extrap=False,
+        NFP=None,
+        chunk_size=None,
+        source_grid=None,
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1389,14 +2210,41 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods. If not provided, will default to 1 or
+            the provided field's NFP, if it has that attribute.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+        source_grid : Grid, optional
+            Grid used to discretize field. Defaults to the default grid for given field.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
         rr, pp, zz = np.meshgrid(R, phi, Z, indexing="ij")
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
-        BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        BR, BP, BZ = field.compute_magnetic_field(
+            coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+        ).T
+        NFP = getattr(field, "_NFP", 1) if NFP is None else NFP
+        if hasattr(field, "_NFP"):
+            warnif(
+                NFP != field.NFP, UserWarning, "NFP input is not equal to field.NFP."
+            )
+        try:
+            AR, AP, AZ = field.compute_magnetic_vector_potential(
+                coords,
+                params,
+                basis="rpz",
+                chunk_size=chunk_size,
+                source_grid=source_grid,
+            ).T
+            AR = AR.reshape(shp)
+            AP = AP.reshape(shp)
+            AZ = AZ.reshape(shp)
+        except (ValueError, NotImplementedError):
+            AR = AP = AZ = None
         return cls(
             R,
             phi,
@@ -1404,6 +2252,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             BR.reshape(shp),
             BP.reshape(shp),
             BZ.reshape(shp),
+            AR=AR,
+            Aphi=AP,
+            AZ=AZ,
             currents=1.0,
             NFP=NFP,
             method=method,
@@ -1422,15 +2273,33 @@ class ScalarPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
+
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1447,6 +2316,11 @@ class ScalarPotentialField(_MagneticField):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1474,6 +2348,239 @@ class ScalarPotentialField(_MagneticField):
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
 
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "ScalarPotentialField does not have vector potential calculation "
+            "implemented."
+        )
+
+
+class VectorPotentialField(_MagneticField):
+    """Magnetic field due to a vector magnetic potential in cylindrical coordinates.
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the vector potential. Should have a signature of
+        the form potential(R,phi,Z,*params) -> ndarray.
+        R,phi,Z are arrays of cylindrical coordinates.
+    params : dict, optional
+        default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
+
+    """
+
+    _static_attrs = _MagneticField._static_attrs + ["_potential", "_NFP"]
+
+    def __init__(self, potential, params=None, NFP=1):
+        self._potential = potential
+        self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+        chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        coords = coords.astype(float)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+
+        if params is None:
+            params = self._params
+        r, p, z = coords.T
+
+        if compute_A_or_B == "B":
+            funR = lambda x: self._potential(x, p, z, **params)
+            funP = lambda x: self._potential(r, x, z, **params)
+            funZ = lambda x: self._potential(r, p, x, **params)
+
+            ap = self._potential(r, p, z, **params)[:, 1]
+
+            # these are the gradients of each component of A
+            dAdr = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+            dAdp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+            dAdz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+
+            # form the B components with the appropriate combinations
+            B = jnp.array(
+                [
+                    dAdp[:, 2] / r - dAdz[:, 1],
+                    dAdz[:, 0] - dAdr[:, 2],
+                    dAdr[:, 1] + (ap - dAdp[:, 0]) / r,
+                ]
+            ).T
+            if basis == "xyz":
+                B = rpz2xyz_vec(B, phi=coords[:, 1])
+            return B
+        elif compute_A_or_B == "A":
+            A = self._potential(r, p, z, **params)
+            if basis == "xyz":
+                A = rpz2xyz_vec(A, phi=coords[:, 1])
+            return A
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
+
 
 def field_line_integrate(
     r0,
@@ -1484,115 +2591,243 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=None,
+    min_step_size=1e-8,
+    solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
-    decay_accel=1e6,
+    chunk_size=None,
+    bs_chunk_size=None,
+    options=None,
+    return_aux=False,
 ):
-    """Trace field lines by integration.
+    """Trace field lines by integration, using diffrax package.
 
     Parameters
     ----------
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal angle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        geometric toroidal angle values to output r,z at. Can be strictly increasing
+        or decreasing, but must be monotonic.
     field : MagneticField
         source of magnetic field to integrate
-    params: dict
+    params: dict, optional
         parameters passed to field
     source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
-        relative and absolute tolerances for ode integration
-    maxstep : int
-        maximum number of steps between different phis
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        ``stepsize_controller`` is provided.
+    max_steps : int
+        maximum number of steps for the integration. Defaults to
+        abs((phis[-1] - phis[0]) * 1000)
+    min_step_size: float
+        minimum step size (in phi) that the integration can take. default is 1e-8
+    solver: diffrax.Solver
+        diffrax Solver object to use in integration,
+        defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
-        R bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
-        defaults to (0,np.inf)
+        R bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
-        Z bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
-        Defaults to (-np.inf,np.inf)
-    decay_accel : float, optional
-        An extra factor to the exponential that decays the RHS, i.e.
-        the RHS is multiplied by exp(-r * decay_accel), this is to
-        accelerate the decay of the RHS and stop the integration sooner
-        after exiting the bounds. Defaults to 1e6
-
+        Z bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (-np.inf, np.inf)
+    chunk_size : int or None
+        Chunk of field lines to trace at once. If None, traces all at once.
+        Defaults to None.
+    bs_chunk_size: int or None
+        Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
+        evaluates all the source grid points at once. Defaults to None.
+    options : dict, optional
+        Additional arguments to pass to the diffrax diffeqsolve.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (r, z, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
     r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
-
+        arrays of r and z coordinates of the field line, corresponding to the
+        input phis
     """
+    if options is None:
+        options = {}
+
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
-    assert decay_accel > 0, "decay_accel must be positive"
+
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
+    max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
+
+    # diffrax parameters
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
+
+    saveat = options.pop("saveat", SaveAt(ts=phis))
+    event = options.pop("event", Event(default_terminating_event))
+    adjoint = options.pop("adjoint", RecursiveCheckpointAdjoint())
+    stepsize_controller = options.pop(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
+    return _field_line_integrate(
+        r0=r0,
+        z0=z0,
+        phis=phis,
+        field=field,
+        params=params,
+        source_grid=source_grid,
+        solver=solver,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        event=event,
+        adjoint=adjoint,
+        chunk_size=chunk_size,
+        bs_chunk_size=bs_chunk_size,
+        options=options,
+        return_aux=return_aux,
+    )
+
+
+def _field_line_integrate(
+    r0,
+    z0,
+    phis,
+    field,
+    params,
+    source_grid,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    options,
+    chunk_size=None,
+    bs_chunk_size=None,
+    return_aux=False,
+):
+    """JIT/AD friendly field line integrator.
+
+    This function gives more control over the integration and is also JIT and AD
+    friendly. One can use this function inside an objective. All arguments must
+    have a value. For description of the full set of arguments, see
+    ``field_line_integrate``. There won't be any checks on the arguments here,
+    so make sure they are valid before using this function.
+
+    Parameters
+    ----------
+    stepsize_controller : diffrax.StepsizeController
+        Stepsize controller to use for the integration.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify when to save the solution.
+    event : diffrax.Event
+        Event object to specify when to stop the integration.
+    adjoint : diffrax.AbstractAdjoint
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    """
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+    # scale to make toroidal field (bp) positive
+    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
 
-    @jit
-    def odefun(rpz, s):
-        rpz = rpz.reshape((3, -1)).T
-        r = rpz[:, 0]
-        z = rpz[:, 2]
-        # if bounds are given, will decay the magnetic field line eqn
-        # RHS if the trajectory is outside of bounds to avoid
-        # integrating the field line to infinity, which is costly
-        # and not useful in most cases
-        decay_factor = jnp.where(
-            jnp.array(
-                [
-                    jnp.less(r, bounds_R[0]),
-                    jnp.greater(r, bounds_R[1]),
-                    jnp.less(z, bounds_Z[0]),
-                    jnp.greater(z, bounds_Z[1]),
-                ]
-            ),
-            jnp.array(
-                [
-                    # we multiply by decay_accel to accelerate the decay so that the
-                    # integration is stopped soon after the bounds are exited.
-                    jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
-                    jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
-                    jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),
-                    jnp.exp(-(decay_accel * (z - bounds_Z[1]) ** 2)),
-                ]
-            ),
-            1.0,
-        )
-        # multiply all together, the conditions that are not violated
-        # are just one while the violated ones are continuous decaying exponentials
-        decay_factor = jnp.prod(decay_factor, axis=0)
-
-        br, bp, bz = field.compute_magnetic_field(
-            rpz, params, basis="rpz", source_grid=source_grid
-        ).T
-        return (
-            decay_factor
-            * jnp.array(
-                [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-            ).squeeze()
+    # suppress warnings till its fixed upstream:
+    # https://github.com/patrick-kidger/diffrax/issues/445
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="unhashable type")
+        out = vmap_chunked(
+            _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
+        )(
+            x0,
+            field,
+            params,
+            source_grid,
+            phis,
+            scale,
+            solver,
+            max_steps,
+            min_step_size,
+            saveat,
+            stepsize_controller,
+            event,
+            adjoint,
+            bs_chunk_size,
+            options,
         )
 
-    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
-    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
-    r = x[:, :, 0].T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].T.reshape((len(phis), *rshape))
-    return r, z
+    x = out.ys
+    x = jnp.where(jnp.isinf(x), jnp.nan, x)
+    r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
+
+    if return_aux:
+        return r, z, (out.stats, out.result)
+    else:
+        return r, z
+
+
+def _intfun_wrapper(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    bs_chunk_size,
+    options,
+):
+    """Wrapper for field line integration."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid, bs_chunk_size],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    )
+
+
+@jit
+def _odefun(s, rpz, args):
+    field, params, scale, source_grid, bs_chunk_size = args
+    r = rpz[0]
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=bs_chunk_size
+        ).squeeze()
+    )
+    return jnp.array(
+        [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+    ).squeeze()
 
 
 class OmnigenousField(Optimizable, IOAble):
@@ -1652,6 +2887,16 @@ class OmnigenousField(Optimizable, IOAble):
         "_x_lmn",
     ]
 
+    _static_attrs = Optimizable._static_attrs + [
+        "_L_B",
+        "_M_B",
+        "_L_x",
+        "_M_x",
+        "_N_x",
+        "_NFP",
+        "_helicity",
+    ]
+
     def __init__(
         self,
         L_B=0,
@@ -1695,7 +2940,7 @@ class OmnigenousField(Optimizable, IOAble):
             assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
-        # TODO: should we not allow some types of helicity?
+        # TODO (#1390): should we not allow some types of helicity?
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
             self.helicity != (0, self.NFP * helicity_sign)
@@ -1752,7 +2997,7 @@ class OmnigenousField(Optimizable, IOAble):
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
-        transform_rev = scipy.linalg.pinv(transform_fwd)
+        transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])

@@ -1,6 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, is_any_instance, unique_list
+from desc.utils import errorif, flatten_list, get_all_instances, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -29,7 +29,11 @@ from .linear_objectives import (
     FixPsi,
     FixSheetCurrent,
 )
-from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
+from .nae_utils import (
+    calc_zeroth_order_lambda,
+    make_RZ_cons_1st_order,
+    make_RZ_cons_2nd_order,
+)
 from .objective_funs import ObjectiveFunction
 
 _PROFILE_CONSTRAINTS = {
@@ -44,7 +48,7 @@ _PROFILE_CONSTRAINTS = {
 }
 
 
-def get_equilibrium_objective(eq, mode="force", normalize=True):
+def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size="auto"):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -57,6 +61,19 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
         for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
+    jac_chunk_size : int or ``auto``, optional
+        If `"batched"` deriv_mode is used, will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t = t0 + t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        chunk size based off of a heuristic estimate of the memory usage.
+
 
     Returns
     -------
@@ -73,7 +90,10 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
         objectives = (RadialForceBalance(**kwargs), HelicalForceBalance(**kwargs))
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
-    return ObjectiveFunction(objectives)
+    deriv_mode = "batched" if isposint(jac_chunk_size) else "auto"
+    return ObjectiveFunction(
+        objectives, jac_chunk_size=jac_chunk_size, deriv_mode=deriv_mode
+    )
 
 
 def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
@@ -173,6 +193,15 @@ def get_NAE_constraints(
         A list of the linear constraints used in fixed-axis problems.
 
     """
+    if qsc_eq is not None:
+        errorif(
+            qsc_eq.lasym and fix_lambda is not False,
+            NotImplementedError,
+            "NAE Constrained equilibria with lambda constrained "
+            " do not yet work correctly with asymmetric equilibria, "
+            " as the NAE-prescribed lambda may not have the correct "
+            " gauge that DESC enforces (zero flux-surface average).",
+        )
     kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)
@@ -250,6 +279,7 @@ def _get_NAE_constraints(
         Whether to constrain lambda to match that of the NAE near-axis
         if an `int`, fixes lambda up to that order in rho {0,1}
         if `True`, fixes lambda up to the specified order given by `order`
+        (maximum of `order=1`)
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -282,42 +312,58 @@ def _get_NAE_constraints(
 
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 0,
         )
-    if order >= 2:  # 2nd order constraints
-        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
+    if order == 2:  # 2nd order constraints
+        constraints += make_RZ_cons_2nd_order(
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+        )
+    if order > 2:
+        raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")
 
     return constraints
 
 
 def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
+
+    def add_if_multiple(constraints, cls):
+        cons = get_all_instances(constraints, cls)
+        if cons is not None:
+            cons_on_this_thing = [con for con in cons if con.things[0] == thing]
+            if not len(cons_on_this_thing):
+                constraints += (cls(thing),)
+        else:
+            constraints += (cls(thing),)
+        return constraints
+
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
     # Equilibrium
-    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryRSelfConsistency
-    ):
-        constraints += (BoundaryRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryZSelfConsistency
-    ):
-        constraints += (BoundaryZSelfConsistency(eq=thing),)
-    if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=thing),)
-    if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
-        constraints, AxisRSelfConsistency
-    ):
-        constraints += (AxisRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Za_n"} <= params and not is_any_instance(
-        constraints, AxisZSelfConsistency
-    ):
-        constraints += (AxisZSelfConsistency(eq=thing),)
+    if {"R_lmn", "Rb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryRSelfConsistency)
+
+    if {"Z_lmn", "Zb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
+
+    if {"L_lmn"} <= params:
+        constraints = add_if_multiple(constraints, FixLambdaGauge)
+
+    if {"R_lmn", "Ra_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisRSelfConsistency)
+
+    if {"Z_lmn", "Za_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisZSelfConsistency)
 
     # Curve
-    if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):
-        constraints += (FixCurveShift(curve=thing),)
-    if {"rotmat"} <= params and not is_any_instance(constraints, FixCurveRotation):
-        constraints += (FixCurveRotation(curve=thing),)
+    if {"shift"} <= params:
+        constraints = add_if_multiple(constraints, FixCurveShift)
+    if {"rotmat"} <= params:
+        constraints = add_if_multiple(constraints, FixCurveRotation)
 
     return constraints

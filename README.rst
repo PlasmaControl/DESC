@@ -28,7 +28,12 @@ following papers and documented at Theory_. Please cite our work if you use DESC
   [`Journal of Plasma Physics <https://doi.org/10.1017/S0022377823000235>`__]
   [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
 
+A list of papers which feature DESC can be found here_.
+
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
+.. _here: https://desc-docs.readthedocs.io/en/latest/pubs_list.html
+
+
 
 Quick Start
 ===========
@@ -111,12 +116,12 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unit_tests.yml
     :alt: UnitTests
 
-.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_tests.yml
     :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z

@@ -1,4 +1,7 @@
-"""Benchmarks for timing comparison."""
+"""Benchmarks for timing comparison (these will not run on CI).
+
+You may need to append the ``--no-verify`` flag when commiting this file to git.
+"""
 
 import os
 

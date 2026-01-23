@@ -676,6 +676,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     B_N = params["Psi"] / (jnp.pi * a_N**2)
 
     iota = data["iota"][:, None]
+    iotainv = (1 / data["iota"])[:, None]
 
     psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
 
@@ -1051,42 +1052,64 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
     B = B.at[theta_idx, theta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vv).flatten()))
-    B = B.at[zeta_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * iota**2 * sqrtg * g_pp).flatten())
-    )
 
     B = B.at[rho_idx, theta_idx].add(
         jnp.diag(n0 * (W * psi_r * sqrtg * g_rv).flatten())
     )
-    B = B.at[rho_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * psi_r * iota * sqrtg * g_rp).flatten())
-    )
-    B = B.at[theta_idx, zeta_idx].add(
-        jnp.diag(n0 * (W * iota * sqrtg * g_vp).flatten())
-    )
+
+    # typical in magnetic mirrors
+    ismirror = jnp.all(jnp.abs(iota) < 1e-12)
+
+    if ismirror:
+        B = B.at[zeta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_pp).flatten()))
+        B = B.at[rho_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * psi_r * sqrtg * g_rp).flatten())
+        )
+        B = B.at[theta_idx, zeta_idx].add(jnp.diag(n0 * (W * sqrtg * g_vp).flatten()))
+    else:
+        B = B.at[zeta_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * iotainv**2 * sqrtg * g_pp).flatten())
+        )
+        B = B.at[rho_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * psi_r * iotainv * sqrtg * g_rp).flatten())
+        )
+        B = B.at[theta_idx, zeta_idx].add(
+            jnp.diag(n0 * (W * iotainv * sqrtg * g_vp).flatten())
+        )
 
     if incompressible is False:
         # purely stabilizing and doesn't change the marginal stability
         # To improve performance set exact to False
-        exact = True
-        if exact:
-            A = A.at[rho_idx, rho_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
-            )
-            A = A.at[theta_idx, theta_idx].add(
-                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
-            )
+        A = A.at[rho_idx, rho_idx].add(
+            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+        )
+        A = A.at[theta_idx, theta_idx].add(
+            _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
+        )
+        A = A.at[rho_idx, theta_idx].add(
+            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
+        )
+
+        if ismirror:
             A = A.at[zeta_idx, zeta_idx].add(
-                _cT(C_zeta * iota.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
-            )
-            A = A.at[rho_idx, theta_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
+                _cT(C_zeta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
             )
             A = A.at[rho_idx, zeta_idx].add(
-                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
+                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta))
             )
             A = A.at[theta_idx, zeta_idx].add(
-                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_zeta * iota.T))
+                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_zeta))
+            )
+        else:
+            A = A.at[zeta_idx, zeta_idx].add(
+                _cT(C_zeta * iotainv.T)
+                @ ((gamma * sqrtg * W * p0) * (C_zeta * iotainv.T))
+            )
+            A = A.at[rho_idx, zeta_idx].add(
+                _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_zeta * iotainv.T))
+            )
+            A = A.at[theta_idx, zeta_idx].add(
+                _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_zeta * iotainv.T))
             )
 
     ### Instability drive term
@@ -1237,7 +1260,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         d_v = jnp.diag(D)[theta_idx]
         d_z = jnp.diag(D)[zeta_idx]
 
-        C_zeta = (C_zeta * d_z[None, :]) * iota.T
+        C_zeta = (C_zeta * d_z[None, :]) * iotainv.T
         C_rho = (C_rho * d_r[None, :]) * psi_r.T
         C_theta = C_theta * d_v[None, :]
 
@@ -1458,6 +1481,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     n_total = n_rho * n_theta * n_zeta
 
     iota = _reshape(data["iota"])
+    iotainv = _reshape(1 / data["iota"])
     psi_r = _reshape(data["psi_r"]) / (a_N**2 * B_N)
 
     psi_r2 = psi_r**2
@@ -1573,7 +1597,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         xz_v = d_dv(D_theta0, xz)
         xz_z = d_dz(D_zeta0, xz)
 
-        xz1_z = d_dz(D_zeta0, iota * xz)
+        xz1_z = d_dz(D_zeta0, iotainv * xz)
 
         # combos used many times
         xr1_r = d_dr(D_rho0, iota_psi_r2 * xr)  # dρ(ι ψ′² xr)
@@ -1813,7 +1837,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         # |J|² drive
         Ar += (psi_r2 * W * sqrtg * J2) * xr
 
-        # diagonal terms
+        # incompressibility diagonal terms
         Ar += psi_r * (
             (
                 partial_r_log_sqrtg
@@ -1830,13 +1854,13 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         ) + d_dv(
             _cT(D_theta0), (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v)
         )
-        Az += iota * (
+        Az += iotainv * (
             partial_p_log_sqrtg
             * (gamma * sqrtg * W * p0)
-            * (iota * partial_p_log_sqrtg * xz + xz1_z)
+            * (iotainv * partial_p_log_sqrtg * xz + xz1_z)
             + d_dz(
                 _cT(D_zeta0),
-                (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
+                (gamma * sqrtg * W * p0) * (iotainv * partial_p_log_sqrtg * xz + xz1_z),
             )
         )
 
@@ -1860,13 +1884,13 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
         Ar += psi_r * (
             partial_r_log_sqrtg
-            * ((gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z))
+            * ((gamma * sqrtg * W * p0) * (iotainv * partial_p_log_sqrtg * xz + xz1_z))
             + d_dr(
                 _cT(D_rho0),
-                (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
+                (gamma * sqrtg * W * p0) * (iotainv * partial_p_log_sqrtg * xz + xz1_z),
             )
         )
-        Az += iota * (
+        Az += iotainv * (
             (
                 partial_p_log_sqrtg
                 * (gamma * sqrtg * W * p0)
@@ -1879,12 +1903,12 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         )
 
         Av += partial_v_log_sqrtg * (
-            (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z)
+            (gamma * sqrtg * W * p0) * (iotainv * partial_p_log_sqrtg * xz + xz1_z)
         ) + d_dv(
             _cT(D_theta0),
-            (gamma * sqrtg * W * p0) * (iota * partial_p_log_sqrtg * xz + xz1_z),
+            (gamma * sqrtg * W * p0) * (iotainv * partial_p_log_sqrtg * xz + xz1_z),
         )
-        Az += iota * (
+        Az += iotainv * (
             partial_p_log_sqrtg
             * ((gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v))
             + d_dz(
@@ -1913,17 +1937,18 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -2e-4)
-    num_matvecs = 10
+    num_matvecs = 6
 
     def OPinv(b):
         def Ashift(x):
             return Ax(x) - sigma * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=5e-4, maxiter=int(2 * n_total))
+        y, _ = cg(Ashift, b, tol=5e-4, maxiter=2 * n_total)
         return y
 
-    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
+    # --no-verify tridiag = decomp.tridiag_sym(num_matvecs, reortho="full",materialize=True)
+    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=False)
     alg = eig.eigh_partial(tridiag)
     mu, vecs = alg(lambda x: OPinv(x), v0)
 

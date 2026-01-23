@@ -96,6 +96,7 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from ._quadcoil import QuadcoilProxy
 from ._quadcoil_objective import QuadcoilObjective

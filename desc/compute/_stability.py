@@ -740,7 +740,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     D_thetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(_cT(D_theta0), I_zeta0)))
     D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rho0, jnp.kron(I_theta0, _cT(D_zeta0))))
 
-    W = jnp.diag(jnp.kron(W_rho, jnp.kron(W_theta, W_zeta)))[:, None]
+    W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
 
     n_total = n_rho_max * n_theta_max * n_zeta_max
 
@@ -1464,9 +1464,9 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     D_theta0 = transforms["diffmat"].D_theta
 
     # RG: Will fail for non-diagonal weight matrices
-    w_rho = jnp.diagonal(transforms["diffmat"].W_rho)
-    w_theta = jnp.diagonal(transforms["diffmat"].W_theta)
-    w_zeta = jnp.diagonal(transforms["diffmat"].W_zeta)
+    w_rho = transforms["diffmat"].W_rho
+    w_theta = transforms["diffmat"].W_theta
+    w_zeta = transforms["diffmat"].W_zeta
 
     # Square matrix
     n_rho = D_rho0.shape[0]

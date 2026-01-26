@@ -117,7 +117,7 @@ def _compute(
         Shape (num rho, X, Y).
         DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
-    grid : Grid
+    grid : AbstractGrid
         Grid that can expand and compress.
     num_pitch : int
         Resolution for quadrature over velocity coordinate.

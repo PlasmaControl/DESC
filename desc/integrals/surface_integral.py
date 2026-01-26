@@ -19,7 +19,7 @@ def _get_grid_surface(grid, surface_label):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta.
@@ -90,7 +90,7 @@ def line_integrals(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -164,7 +164,7 @@ def surface_integrals(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -198,7 +198,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the integration over.
@@ -328,7 +328,7 @@ def surface_averages(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to average.
@@ -373,7 +373,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the average over.
@@ -490,7 +490,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the integration over.
@@ -597,7 +597,7 @@ def surface_variance(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to compute the sample variance.
@@ -664,7 +664,7 @@ def surface_max(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find max.
@@ -687,7 +687,7 @@ def surface_min(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find min.

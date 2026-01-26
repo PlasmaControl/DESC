@@ -756,9 +756,9 @@ def get_rtz_grid(
         Sorted unique toroidal coordinates.
     coordinates : str
         Input coordinates that are specified by the arguments, respectively.
+        rtz : rho, theta, zeta
         raz : rho, alpha, zeta
         rvp : rho, theta_PEST, phi
-        rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity of the given coordinates.
         Use ``np.inf`` to denote no periodicity.

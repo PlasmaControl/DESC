@@ -31,7 +31,7 @@ class BootstrapRedlConsistency(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Requires poloidal and
         toroidal resolution as the objective must compute flux surface averages.
         Defaults to

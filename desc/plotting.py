@@ -22,7 +22,7 @@ from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, LinearGridCurve
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
 from desc.particles import trace_particles
@@ -311,7 +311,7 @@ def _get_plot_axes(grid):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Grid of coordinates to evaluate at.
 
     Returns
@@ -347,7 +347,7 @@ def _compute(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid
+    grid : AbstractGrid
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
@@ -599,7 +599,7 @@ def plot_1d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -801,7 +801,7 @@ def plot_2d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -1077,7 +1077,7 @@ def plot_3d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -1579,7 +1579,7 @@ def plot_section(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -2088,7 +2088,7 @@ def poincare_plot(
     NFP : int, optional
         Number of field periods. By default attempts to infer from ``field``, otherwise
         uses NFP=1.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid used to discretize ``field``.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -2762,7 +2762,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     ----------
     coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot.
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
@@ -2840,7 +2840,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if not isinstance(color, (list, tuple)):
         color = [color]
     if grid is None:
-        grid = LinearGrid(N=400, endpoint=True)
+        grid = LinearGridCurve(N=400, endpoint=True)
 
     def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
@@ -3144,9 +3144,9 @@ def plot_boozer_surface(
     ----------
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
-    grid_compute : Grid, optional
+    grid_compute : AbstractGridFlux, optional
         Grid to use for computing boozer spectrum
-    grid_plot : Grid, optional
+    grid_plot : AbstractGridFlux, optional
         Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
@@ -3543,7 +3543,7 @@ def plot_grid(grid, return_data=False, **kwargs):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Grid to plot.
     return_data : bool
         If True, return the data plotted as well as fig,ax

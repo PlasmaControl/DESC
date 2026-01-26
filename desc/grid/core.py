@@ -286,7 +286,7 @@ class AbstractGrid(IOAble, ABC):
         ----------
         x : ndarray, shape(other_grid.num_nodes,...)
             Data to copy. Assumed to be constant over the specified surface.
-        other_grid: Grid
+        other_grid: AbstractGrid
             Grid to copy from.
         surface_label : str
             The surface label. Must be one of the elements in self.coordinates.

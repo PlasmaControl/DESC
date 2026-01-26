@@ -14,7 +14,13 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import AbstractGrid, LinearGrid, QuadratureGrid
+from desc.grid import (
+    AbstractGridCurve,
+    AbstractGridFlux,
+    LinearGrid,
+    LinearGridCurve,
+    QuadratureGrid,
+)
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import errorif, reflection_matrix, rotation_matrix
@@ -91,7 +97,7 @@ class Curve(IOAble, Optimizable, ABC):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid or int, optional
+        grid : AbstractGridCurve or int, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
@@ -118,13 +124,14 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            grid = LinearGridCurve(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=grid)
+            grid = LinearGridCurve(N=grid)
         errorif(
-            not isinstance(grid, AbstractGrid),
+            not isinstance(grid, AbstractGridCurve),
             TypeError,
-            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+            "Must pass in an AbstractGridCurve object for argument grid, "
+            + f"but got type {type(grid)}",
         )
 
         if params is None:
@@ -149,11 +156,11 @@ class Curve(IOAble, Optimizable, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGridCurve):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            grid0d = LinearGridCurve(N=2 * self.N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -216,7 +223,7 @@ class Curve(IOAble, Optimizable, ABC):
         ----------
         N : int
             Fourier resolution of the new X,Y,Z representation.
-        grid : Grid, int or None
+        grid : AbstractGridCurve, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
             If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
@@ -236,9 +243,9 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import FourierXYZCurve
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGrid(zeta=s)
+            grid = LinearGridCurve(zeta=s)
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
@@ -256,7 +263,7 @@ class Curve(IOAble, Optimizable, ABC):
             knots. If supplied, should lie in [0,2pi].
             Alternatively, the string "arclength" can be supplied to use the normalized
             distance between points.
-        grid : Grid, int or None
+        grid : AbstractGridCurve, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
         method : str
@@ -278,7 +285,7 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import SplineXYZCurve
 
         if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
-            grid = LinearGrid(zeta=knots)
+            grid = LinearGridCurve(s=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCurve.from_values(
             coords, knots=knots, method=method, name=name, basis="xyz"
@@ -293,7 +300,7 @@ class Curve(IOAble, Optimizable, ABC):
         ----------
         N : int
             Fourier resolution of the new R,Z representation.
-        grid : Grid, int or None
+        grid : AbstractGridCurve, int or None
             Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
             If an integer, uses that many equally spaced points.
         NFP : int
@@ -314,7 +321,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         NFP = 1 or NFP
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCurve.from_values(
             coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym
@@ -331,7 +338,7 @@ class Curve(IOAble, Optimizable, ABC):
         ----------
         N : int
             Fourier resolution of the new FourierPlanarCurve representation.
-        grid : Grid, int or None
+        grid : AbstractGridCurve, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCurve.
             If an integer, uses that many equally spaced points.
         basis : {'xyz', 'rpz'}
@@ -350,7 +357,7 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import FourierPlanarCurve
 
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
 
@@ -365,7 +372,7 @@ class Curve(IOAble, Optimizable, ABC):
         ----------
         N : int
             Fourier resolution of the new FourierXYCurve representation.
-        grid : Grid, int or None
+        grid : AbstractGridCurve, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCurve.
             If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
@@ -389,9 +396,9 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import FourierXYCurve
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGrid(zeta=s)
+            grid = LinearGridCurve(zeta=s)
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierXYCurve.from_values(coords, N=N, s=s, basis=basis, name=name)
 
@@ -492,7 +499,7 @@ class Surface(IOAble, Optimizable, ABC):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : AbstractGridCurve, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
             rho surfaces or a Quadrature grid for constant zeta surfaces.
         params : dict of ndarray
@@ -526,10 +533,10 @@ class Surface(IOAble, Optimizable, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
-        elif not isinstance(grid, AbstractGrid):
+        elif not isinstance(grid, AbstractGridFlux):
             raise TypeError(
-                "must pass in a Grid object or an integer for argument grid!"
-                f" instead got type {type(grid)}"
+                "Must pass in an AbstractGridFlux object for argument grid, "
+                + f"but got type {type(grid)}",
             )
 
         if params is None:

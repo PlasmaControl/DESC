@@ -44,10 +44,10 @@ class VacuumBoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils or other sources outside the plasma.
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field. Defaults to the default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
@@ -409,12 +409,12 @@ class BoundaryError(_Objective):
         If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
     q : int
         Order of integration on the local singular grid.
-    source_grid, eval_grid : Grid, optional
+    source_grid, eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
@@ -946,7 +946,7 @@ class BoundaryErrorNESTOR(_Objective):
         maximum poloidal and toroidal mode numbers to use for NESTOR scalar potential.
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field.
 
     """

@@ -60,7 +60,7 @@ class EffectiveRipple(_Objective):
     ----------
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.

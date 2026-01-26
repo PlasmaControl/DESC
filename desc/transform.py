@@ -16,7 +16,7 @@ class Transform(IOAble):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Collocation grid of real space coordinates
     basis : Basis
         Spectral basis of modes
@@ -555,7 +555,7 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGrid
             Collocation grid of real space coordinates
         basis : Basis
             Spectral basis of modes

@@ -30,7 +30,7 @@ from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import AbstractGrid, LinearGrid
+from desc.grid import AbstractGridFlux, LinearGrid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
@@ -148,7 +148,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     surface : Surface or Equilibrium
         Surface to calculate the magnetic field's Bnormal on.
         If an Equilibrium is supplied, will use its boundary surface.
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Grid of points on the plasma surface to evaluate the Bnormal at,
         if None defaults to a LinearGrid with twice
         the surface grid's poloidal and toroidal resolutions
@@ -273,7 +273,7 @@ class _MagneticField(IOAble, ABC):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -314,7 +314,7 @@ class _MagneticField(IOAble, ABC):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -351,12 +351,12 @@ class _MagneticField(IOAble, ABC):
             If an Equilibrium is supplied, will use its boundary surface,
             and also include the contribution from the equilibrium currents
             using the virtual casing principle.
-        eval_grid : Grid, optional
+        eval_grid : AbstractGridFlux, optional
             Grid of points on the surface to calculate the Bnormal at,
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         vc_source_grid : LinearGrid
@@ -454,12 +454,12 @@ class _MagneticField(IOAble, ABC):
         basis_N : int, optional
             Toroidal resolution of the DoubleFourierSeries used to fit the Bnormal
             on the plasma surface, by default 24
-        eval_grid : Grid, optional
+        eval_grid : AbstractGridFlux, optional
             Grid of points on the surface to calculate the Bnormal at,
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         params : list or tuple of dict, optional
@@ -602,7 +602,7 @@ class _MagneticField(IOAble, ABC):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-        source_grid : Grid
+        source_grid : AbstractGrid
             What grid to use to discretize the source magnetic field. Will be passed
             into the ``source_grid`` argument of ``compute_magnetic_field`` and
             ``compute_magnetic_vector_potential``. If None,
@@ -820,7 +820,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
             Optimizable parameters, defaults to field.params.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this class, only kept for API compatibility.
         chunk_size : int or None
             Unused by this class, only kept for API compatibility.
@@ -865,7 +865,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
@@ -958,7 +958,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -997,7 +997,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -1059,7 +1059,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -1139,7 +1139,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -1184,7 +1184,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
@@ -1297,7 +1297,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Dict of values for R0 and B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1351,7 +1351,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Dict of values for R0 and B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1431,7 +1431,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1480,7 +1480,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1600,7 +1600,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             Dict of values for R0, B0, and iota.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1659,7 +1659,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1869,7 +1869,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2024,7 +2024,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2063,7 +2063,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2216,7 +2216,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
-        source_grid : Grid, optional
+        source_grid : AbstractGrid, optional
             Grid used to discretize field. Defaults to the default grid for given field.
 
         """
@@ -2311,7 +2311,7 @@ class ScalarPotentialField(_MagneticField):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2367,7 +2367,7 @@ class ScalarPotentialField(_MagneticField):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2439,7 +2439,7 @@ class VectorPotentialField(_MagneticField):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2522,7 +2522,7 @@ class VectorPotentialField(_MagneticField):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
+        source_grid : AbstractGrid, int or None
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2561,7 +2561,7 @@ class VectorPotentialField(_MagneticField):
             Dict of values for B0.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGrid, int or None or array-like, optional
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2614,7 +2614,7 @@ def field_line_integrate(
         source of magnetic field to integrate
     params: dict, optional
         parameters passed to field
-    source_grid : Grid, optional
+    source_grid : AbstractGrid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for PID stepsize controller. Not used if
@@ -3041,7 +3041,7 @@ class OmnigenousField(Optimizable, IOAble):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. The grid nodes are given in the usual
             (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
             Defaults to a linearly space grid on the rho=1 surface.
@@ -3073,10 +3073,10 @@ class OmnigenousField(Optimizable, IOAble):
             grid = LinearGrid(
                 theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
             )
-        elif not isinstance(grid, AbstractGrid):
+        elif not isinstance(grid, AbstractGridFlux):
             raise TypeError(
-                "must pass in a Grid object for argument grid!"
-                f" instead got type {type(grid)}"
+                "Must pass in an AbstractGridFlux object for argument grid, "
+                f"but instead got type {type(grid)}."
             )
 
         if params is None:

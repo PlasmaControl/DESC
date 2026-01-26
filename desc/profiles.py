@@ -321,8 +321,8 @@ class ScaledProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -424,8 +424,8 @@ class PowerProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -528,8 +528,8 @@ class SumProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -615,8 +615,8 @@ class ProductProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -767,8 +767,8 @@ class PowerSeriesProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             polynomial coefficients to use, in ascending order. If not given, uses the
             values given by the params attribute
@@ -898,8 +898,8 @@ class TwoPowerProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Power law coefficients to use. Must be an array of size 3.
             If not given, uses the values given by the params attribute.
@@ -1005,8 +1005,8 @@ class SplineProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Values of the function at ``self.knots``.
             If not given, uses ``self.params``.
@@ -1100,8 +1100,8 @@ class HermiteSplineProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             First (second) half stores function (derivative) values at ``knots``.
             If not given, uses ``self.params``.
@@ -1248,8 +1248,8 @@ class MTanhProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             coefficients to use, in order. [ped, offset, sym, width, core_poly]
             If not given, uses the values given by the params attribute
@@ -1486,8 +1486,8 @@ class FourierZernikeProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Fourier-Zernike coefficients to use, in ascending order. If not given,
             uses the values given by the params attribute

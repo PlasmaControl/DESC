@@ -26,7 +26,7 @@ class FusionPower(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     fuel : str, optional
         Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid used to compute the intermediate quantities.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
 
@@ -203,7 +203,7 @@ class HeatingPowerISS04(_Objective):
         ISS04 confinement enhancement factor. Default = 1.
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid used to compute the intermediate quantities.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
 

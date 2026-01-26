@@ -230,7 +230,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -283,7 +283,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -323,7 +323,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -653,7 +653,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -706,7 +706,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -746,7 +746,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : AbstractGridFlux, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1076,7 +1076,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
         current potential field object from which to compute magnetic field.
     coords : array-like shape(N,3)
         cylindrical or cartesian coordinates
-    source_grid : Grid,
+    source_grid : AbstractGridFlux,
         source grid upon which to evaluate the surface current density K
     params : dict, optional
         parameters to pass to compute function
@@ -1246,12 +1246,12 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         whether to use a simple regularization based off of just the single-valued
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
         Defaults to ``"regcoil"``
-    source_grid : Grid, optional
+    source_grid : AbstractGridFlux, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
         LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Grid upon which to evaluate the normal field on the plasma surface, and
         at which the normal field is minimized.
         Defaults to
@@ -1267,7 +1267,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         e.g. can provide a TF coilset to calculate the surface current
         which is needed to minimize Bn given this external coilset providing
         the bulk of the required net toroidal magnetic flux, by default None
-    external_field_grid : Grid, optional
+    external_field_grid : AbstractGrid, optional
         Source grid with which to evaluate the external field when calculating
         its contribution to the normal field on the plasma surface (if it is a type
         that requires a source, like a `CoilSet` or a `CurrentPotentialField`).
@@ -1324,8 +1324,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
                     given `source_grid`. A list of arrays, with list length
                     `lambda_regularization.size`, corresponding to the array
                     of `lambda_regularization`.
-            eval_grid: Grid object that Bn was evaluated at.
-            source_grid: Grid object that Phi and K were evaluated at.
+            eval_grid: AbstractGridFlux object that Bn was evaluated at.
+            source_grid: AbstractGridFlux object that Phi and K were evaluated at.
 
     References
     ----------

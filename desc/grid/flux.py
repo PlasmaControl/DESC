@@ -145,7 +145,7 @@ class AbstractGridFlux(AbstractGrid):
             corresponds to the value associated with the largest surface.
 
         """
-        return self.compress(x, surface_label)
+        return super().compress(x, surface_label)
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -169,7 +169,7 @@ class AbstractGridFlux(AbstractGrid):
             ``x`` expanded to match the grid's pattern.
 
         """
-        return self.expand(x, surface_label)
+        return super().expand(x, surface_label)
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
@@ -181,7 +181,7 @@ class AbstractGridFlux(AbstractGrid):
         ----------
         x : ndarray, shape(other_grid.num_nodes,...)
             Data to copy. Assumed to be constant over the specified surface.
-        other_grid: Grid
+        other_grid: AbstractGridFlux
             Grid to copy from.
         surface_label : str, optional
             The surface label. Must be one of the elements in self.coordinates.
@@ -195,7 +195,7 @@ class AbstractGridFlux(AbstractGrid):
             Data copied to grid2
 
         """
-        return self.copy_data_from_other(x, other_grid, surface_label, tol)
+        return super().copy_data_from_other(x, other_grid, surface_label, tol)
 
     def get_label(self, label):
         """Get general label that specifies the direction of given coordinate label."""
@@ -251,9 +251,9 @@ class AbstractGridFlux(AbstractGrid):
 
         Examples
         --------
-        raz : rho, alpha, zeta
-        rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
+        rvp : rho, theta_PEST, phi
+        raz : rho, alpha, zeta
         """
         return self.__dict__.setdefault("_coordinates", "rtz")
 
@@ -265,7 +265,7 @@ class AbstractGridFlux(AbstractGrid):
     @property
     def period(self):
         """Periodicity of coordinates."""
-        if self.coordinates == "rtz":
+        if self.coordinates in ["rtz", "rvp"]:
             return (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
         else:
             return (np.inf, np.inf, np.inf)
@@ -417,7 +417,7 @@ class Grid(AbstractGridFlux):
     NFP : int
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
-    source_grid : Grid
+    source_grid : AbstractGridFlux
         Grid from which coordinates were mapped from.
     sort : bool
         Whether to sort the nodes for use with FFT method.

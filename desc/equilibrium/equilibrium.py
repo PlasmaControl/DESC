@@ -765,7 +765,7 @@ class Equilibrium(IOAble, Optimizable):
             Name of the quantity to compute.
             If list is given, then two names are expected: the quantity to spline
             and its radial derivative.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
         kind : {"power_series", "spline", "fourier_zernike"}
@@ -848,7 +848,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc

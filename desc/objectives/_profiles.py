@@ -37,7 +37,7 @@ class Pressure(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid)``.
 
@@ -166,7 +166,7 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
@@ -314,7 +314,7 @@ class Shear(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
@@ -458,7 +458,7 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages

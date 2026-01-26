@@ -37,7 +37,7 @@ class TestCoil:
     @pytest.mark.unit
     def test_biot_savart_all_coils(self):
         """Test biot-savart implementation against analytic formula."""
-        coil_grid = LinearGridCurve(angle=100, endpoint=False)
+        coil_grid = LinearGridCurve(s=100, endpoint=False)
 
         R = 2
         y = 1
@@ -188,7 +188,7 @@ class TestCoil:
     @pytest.mark.unit
     def test_biot_savart_vector_potential_all_coils(self):
         """Test biot-savart vec potential implementation against analytic formula."""
-        coil_grid = LinearGridCurve(angle=100, endpoint=False)
+        coil_grid = LinearGridCurve(s=100, endpoint=False)
 
         R = 2
         y = 1
@@ -253,7 +253,7 @@ class TestCoil:
         # "A Magnetic Diagnostic Code for 3D Fusion Equilibria", Lazerson 2013
         # find flux for concentric loops of varying radii to a circular coil
 
-        coil_grid = LinearGridCurve(angle=1000, endpoint=False)
+        coil_grid = LinearGridCurve(s=1000, endpoint=False)
 
         R = 1
         I = 1e7
@@ -276,7 +276,7 @@ class TestCoil:
         # we only evaluate it at theta=np.pi/2 (b/c it is in spherical coords)
         rs = np.linspace(0.1, 3, 10, endpoint=True)
         N = 200
-        curve_grid = LinearGridCurve(angle=N)
+        curve_grid = LinearGridCurve(s=N)
 
         def test(
             coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
@@ -462,7 +462,7 @@ class TestCoil:
         coil5 = coil1.to_FourierXY(N=10, basis="rpz")
         coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
 
-        grid = LinearGridCurve(angle=s)
+        grid = LinearGridCurve(s=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
@@ -996,7 +996,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
         # make sure knots are exactly the same
         np.testing.assert_allclose(c1.knots, c2.knots, err_msg=f"Coil {i}")
 
-        grid = LinearGridCurve(angle=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -1114,7 +1114,7 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
         assert groupname in coils.name
         assert str(i + 1) in coils.name  # make sure the correct number is in the name
 
-    grid = LinearGridCurve(angle=coilset[0][0].knots, endpoint=False)
+    grid = LinearGridCurve(s=coilset[0][0].knots, endpoint=False)
 
     # check values at saved points, ensure they match
     for i, (cs1, cs2) in enumerate(zip(coilset, coilset2)):
@@ -1198,7 +1198,7 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
-        grid = LinearGridCurve(angle=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -1277,7 +1277,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
-        grid = LinearGridCurve(angle=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]

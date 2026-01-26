@@ -29,7 +29,7 @@ class AspectRatio(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -180,7 +180,7 @@ class Elongation(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -329,7 +329,7 @@ class Volume(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -495,10 +495,10 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    surface_grid : Grid, optional
+    surface_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    plasma_grid : Grid, optional
+    plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
@@ -859,7 +859,7 @@ class MeanCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -1005,7 +1005,7 @@ class PrincipalCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -1147,7 +1147,7 @@ class BScaleLength(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
 
@@ -1285,7 +1285,7 @@ class GoodCoordinates(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     sigma : float
         Relative weight between the Jacobian and radial terms.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
 
     """
@@ -1428,7 +1428,7 @@ class MirrorRatio(_Objective):
     ----------
     eq : Equilibrium or OmnigenousField
         Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.

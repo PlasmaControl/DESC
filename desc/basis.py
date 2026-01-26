@@ -192,7 +192,7 @@ class _Basis(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (x0,x1,x2)
@@ -399,7 +399,7 @@ class PowerSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -512,7 +512,7 @@ class FourierSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -640,7 +640,7 @@ class DoubleFourierSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -856,7 +856,7 @@ class ZernikePolynomial(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -1010,7 +1010,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -1258,7 +1258,7 @@ class FourierZernikeBasis(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).
@@ -1413,7 +1413,7 @@ class ChebyshevPolynomial(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (x0,x1,x2).

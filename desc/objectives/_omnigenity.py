@@ -21,7 +21,7 @@ class QuasisymmetryBoozer(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Must be a LinearGrid with sym=False.
         Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
@@ -222,7 +222,7 @@ class QuasisymmetryTwoTerm(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
@@ -392,7 +392,7 @@ class QuasisymmetryTripleProduct(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
 
@@ -528,11 +528,11 @@ class Omnigenity(_Objective):
         Equilibrium to be optimized to satisfy the Objective.
     field : OmnigenousField
         Omnigenous magnetic field to be optimized to satisfy the Objective.
-    eq_grid : Grid, optional
+    eq_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
         Must be without stellarator symmetry.
-    field_grid : Grid, optional
+    field_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
         ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
@@ -883,7 +883,7 @@ class Isodynamicity(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
 

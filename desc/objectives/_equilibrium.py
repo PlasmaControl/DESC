@@ -33,7 +33,7 @@ class ForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
 
@@ -194,7 +194,7 @@ class ForceBalanceAnisotropic(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, ndarray, optional
+    grid : AbstractGridFlux, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
 
@@ -337,7 +337,7 @@ class RadialForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
 
@@ -480,7 +480,7 @@ class HelicalForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
 
@@ -619,7 +619,7 @@ class Energy(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     gamma : float, optional
@@ -773,7 +773,7 @@ class CurrentDensity(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
 

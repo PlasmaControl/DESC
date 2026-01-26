@@ -289,13 +289,13 @@ def _get_quadrature_nodes(q):
 
 
 class _BIESTInterpolator(IOAble, ABC):
-    """Base class for interpolators from cartesian to polar domain.
+    """Base class for interpolators from Cartesian to polar domain.
 
     Used for singular integral calculations.
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGrid
         Evaluation and source points for the integral transform.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
@@ -432,7 +432,7 @@ class FFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
@@ -514,7 +514,7 @@ class DFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
         ``source_grid`` must be a tensor-product grid in (ρ, θ, ζ) with
         uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
@@ -1052,9 +1052,9 @@ def compute_B_plasma(
     ----------
     eq : Equilibrium
         Equilibrium that is the source of the plasma current.
-    eval_grid : Grid
+    eval_grid : AbstractGrid
         Evaluation points for the magnetic field.
-    source_grid : Grid, optional
+    source_grid : AbstractGridFlux, optional
         Source points for integral.
     normal_only : bool
         If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧

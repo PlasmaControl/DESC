@@ -4363,3 +4363,82 @@ def test_deflation_operator_Nones():
     assert things_to_deflate_with_None[0] == surf2
     assert things_to_deflate_with_None[1] == surf3
     assert things_to_deflate_with_None[2] is None
+
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+            bounds=(2, 3),
+        ),
+        use_jit=False,
+    )
+    # min value is 1.0, but lowest bound is 2.0 so raise error
+    with pytest.raises(AssertionError, match="lower"):
+        obj2.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=False,
+            bounds=(2.5, 3),
+        ),
+        use_jit=False,
+    )
+    # min value is 1.0 * # things not none = 2.0,
+    # but lowest bound is 2.5 so raise error
+    with pytest.raises(AssertionError, match="lower"):
+        obj2.build()
+
+
+@pytest.mark.unit
+def test_deflation_operator_all_Nones():
+    """Test DeflationOperator when passing all Nones."""
+    surf = FourierRZToroidalSurface()
+    things_to_deflate_with_None = [None, None, None]
+
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    sub_obj = GenericObjective(
+        "R", surf, target=0, grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0)
+    )
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="prod",
+            params_to_deflate_with={"R_lmn": True},
+            objective=sub_obj,
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_unscaled(obj1.x(surf))
+    val2 = obj2.compute_unscaled(obj2.x(surf))
+
+    # make sure values are identical and correct
+    # non-wrapped deflation operator with all Nones should return 0.0
+    np.testing.assert_allclose(val1, 0.0)
+    # wrapped deflation operator should return the sub-objective value untouched
+    np.testing.assert_allclose(
+        val2,
+        surf.compute("R", grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0))["R"].squeeze(),
+    )

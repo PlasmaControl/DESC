@@ -120,9 +120,6 @@ class LinearGridCurve(AbstractGridCurve):
         self._fft_x1 = False
         self._fft_x2 = False
         self._can_fft2 = not endpoint
-        # these are just default values that may get overwritten in _create_nodes
-        self._poloidal_endpoint = False
-        self._toroidal_endpoint = False
 
         self._nodes, self._spacing = self._create_nodes(
             N=N, NFP=NFP, endpoint=endpoint, s=s
@@ -208,11 +205,12 @@ class LinearGridCurve(AbstractGridCurve):
         _ = np.zeros(1)
         d_ = np.zeros_like(_)
 
-        self._toroidal_endpoint = np.isclose(ss[0], 0, atol=1e-12) and np.isclose(
-            ss[-1], s_period, atol=1e-12
+        self._endpoint = (
+            (ss.size > 1)
+            and np.isclose(ss[0], 0, atol=1e-12)
+            and np.isclose(ss[-1], s_period, atol=1e-12)
         )
-        self._endpoint = (ss.size > 1) and self._toroidal_endpoint
-        self._can_fft2 = self._can_fft2 and not self._toroidal_endpoint
+        self._can_fft2 = not self._endpoint
 
         _, _, ss = map(np.ravel, np.meshgrid(_, _, ss, indexing="ij"))
         d_, d_, ds = map(np.ravel, np.meshgrid(d_, d_, ds, indexing="ij"))

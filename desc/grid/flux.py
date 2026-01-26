@@ -29,8 +29,11 @@ class AbstractGridFlux(AbstractGrid):
 
     def _set_up(self):
         """Do things after loading."""
+        super()._set_up()
+
         # ensure things that should be ints are ints
         self._NFP = int(self._NFP)
+
         # backwards compatability
         if hasattr(self, "_unique_rho_idx"):
             self._unique_x0_idx = self._unique_rho_idx

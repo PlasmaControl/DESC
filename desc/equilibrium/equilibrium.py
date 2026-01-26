@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import AbstractGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import AbstractGridFlux, Grid, LinearGrid, QuadratureGrid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
@@ -880,10 +880,10 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         errorif(
-            not isinstance(grid, AbstractGrid),
+            not isinstance(grid, AbstractGridFlux),
             TypeError,
-            msg="must pass in a Grid object for argument grid!"
-            f" instead got type {type(grid)}",
+            msg="Must pass in an AbstractGridFlux object for argument grid, "
+            + f"but instead got type {type(grid)}.",
         )
         # a check for Redl to prevent computing on-axis or
         # at a rho=1.0 point where profiles vanish

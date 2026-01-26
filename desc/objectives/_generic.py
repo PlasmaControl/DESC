@@ -886,9 +886,7 @@ class DeflationOperator(_Objective):
         self._not_all_things_to_deflate_are_None = not np.all(
             [t is None for t in self._things_to_deflate]
         )
-        self._not_all_things_to_deflate_are_None = float(
-            self._not_all_things_to_deflate_are_None
-        )
+
         for i, t in enumerate(self._things_to_deflate):
             if t is None:
                 self._is_none_mask.append(1.0)
@@ -982,8 +980,9 @@ class DeflationOperator(_Objective):
             f = self._objective.compute(params)
             # if wrapping an objective, but all things are None, make deflation do
             # nothing when multiplying f, so here we add 1 to it as it is 0 right now
-            # if all things are None
-            deflation_parameter += 1.0
+            deflation_parameter += float(
+                jnp.invert(self._not_all_things_to_deflate_are_None)
+            )
         else:
             f = 1.0
 

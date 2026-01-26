@@ -121,7 +121,7 @@ class AbstractGrid(IOAble, ABC):
         # span the surface.
         return weights
 
-    def compress(self, x, surface_label="rho"):
+    def compress(self, x, surface_label):
         """Return elements of ``x`` at indices of unique surface label values.
 
         Parameters
@@ -149,7 +149,7 @@ class AbstractGrid(IOAble, ABC):
             unique_indices=True,
         )
 
-    def expand(self, x, surface_label="rho"):
+    def expand(self, x, surface_label):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
 
         Parameters
@@ -276,7 +276,7 @@ class AbstractGrid(IOAble, ABC):
         x = x.reshape(shape, order="F")
         return x
 
-    def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
+    def copy_data_from_other(self, x, other_grid, surface_label, tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
 
         Given data x corresponding to nodes of other_grid, copy data to a new array that
@@ -291,7 +291,7 @@ class AbstractGrid(IOAble, ABC):
         surface_label : str
             The surface label. Must be one of the elements in self.coordinates.
         tol : float
-            tolerance for considering nodes the same.
+            Tolerance for considering nodes the same.
 
         Returns
         -------

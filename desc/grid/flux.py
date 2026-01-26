@@ -125,6 +125,78 @@ class AbstractGridFlux(AbstractGrid):
         """Find indices of axis nodes."""
         return np.nonzero(self.nodes[:, 0] == 0)[0]
 
+    def compress(self, x, surface_label="rho"):
+        """Return elements of ``x`` at indices of unique surface label values.
+
+        Parameters
+        ----------
+        x : ndarray
+            The array to compress. Should usually represent a surface function (constant
+            over a surface) in an array that matches the grid's pattern.
+        surface_label : str, optional
+            The surface label. Must be one of the elements in self.coordinates.
+            Default = "rho".
+
+        Returns
+        -------
+        compress_x : ndarray
+            This array will be sorted such that the first element corresponds to
+            the value associated with the smallest surface, and the last element
+            corresponds to the value associated with the largest surface.
+
+        """
+        return self.compress(x, surface_label)
+
+    def expand(self, x, surface_label="rho"):
+        """Expand ``x`` by duplicating elements to match the grid's pattern.
+
+        Parameters
+        ----------
+        x : ndarray
+            Stores the values of a surface function (constant over a surface) for all
+            unique surfaces of the specified label on the grid. The length of ``x``
+            should match the number of unique surfaces of the corresponding label in
+            this grid. ``x`` should be sorted such that the first element corresponds to
+            the value associated with the smallest surface, and the last element
+            corresponds to the value associated with the largest surface.
+        surface_label : str, optional
+            The surface label. Must be one of the elements in self.coordinates.
+            Default = "rho".
+
+        Returns
+        -------
+        expand_x : ndarray
+            ``x`` expanded to match the grid's pattern.
+
+        """
+        return self.expand(x, surface_label)
+
+    def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
+        """Copy data x from other_grid to this grid at matching surface label.
+
+        Given data x corresponding to nodes of other_grid, copy data to a new array that
+        corresponds to this grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(other_grid.num_nodes,...)
+            Data to copy. Assumed to be constant over the specified surface.
+        other_grid: Grid
+            Grid to copy from.
+        surface_label : str, optional
+            The surface label. Must be one of the elements in self.coordinates.
+            Default = "rho".
+        tol : float, optional
+            Tolerance for considering nodes the same. Default = 1e-14.
+
+        Returns
+        -------
+        y : ndarray, shape(grid2.num_nodes, ...)
+            Data copied to grid2
+
+        """
+        return self.copy_data_from_other(x, other_grid, surface_label, tol)
+
     def get_label(self, label):
         """Get general label that specifies the direction of given coordinate label."""
         if label in {"rho", "poloidal", "zeta"}:

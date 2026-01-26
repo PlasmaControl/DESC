@@ -27,6 +27,8 @@ class AbstractGridCurve(AbstractGrid):
 
     def _set_up(self):
         """Do things after loading."""
+        super()._set_up()
+
         # ensure things that should be ints are ints
         self._NFP = int(self._NFP)
 

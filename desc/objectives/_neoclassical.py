@@ -599,7 +599,7 @@ class TrappedResonance(_Objective):
 
         # Setup rational array
         m_max = self._hyperparameters["m_max"]
-        n_max = self._hyperparameters["m_max"]
+        n_max = self._hyperparameters["n_max"]
         INCLUDE_ZERO_RES = self._hyperparameters["INCLUDE_ZERO_RES"]
         res_range_min = self._hyperparameters["res_range_min"]
         res_range_max = self._hyperparameters["res_range_max"]

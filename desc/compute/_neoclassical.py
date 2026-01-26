@@ -9,7 +9,8 @@ from desc.backend import imap, jax, jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
 # from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv, softmin, softmax
+from ..utils import safediv
+# , softmin, softmax
 from .data_index import register_compute_fun
 
 from ..integrals.quad_utils import (
@@ -642,7 +643,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         points_0 = points[0][:][:][:][:]
         points_1 = points[1][:][:][:][:]
         iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
-        delta_chi = jnp.abs(jnp.abs(jnp.abs(points_0) - jnp.abs(points_1)) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
+        delta_chi = jnp.abs(jnp.abs(points_0 - points_1) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
         return jnp.where(delta_chi < float(2.5*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2.5*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
     def fb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Do nothing
         return alpha_drift_out, psi_drift_out
@@ -766,11 +767,11 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
 
     ##### PHASE-SPACE AVERAGING #####
-    f_b = jnp.sum( (rho_max**2) * f_b * Deltarho_4 ,axis=-1) # := (rho,Bcrit,well)
+    f = jnp.sum( (rho_max**2) * f_b * Deltarho_4 ,axis=-1) # := (rho,Bcrit,well)
 
     # First sum over rho
-    iotas_rho1_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
-    f_tr2_out = rho_res * jnp.sum( safediv(f_b * psi_drift_out , iotas_rho1_sum) , axis=0 )  # := (Bcrit,well)
+    iotas_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
+    f_tr2_out = rho_res * jnp.sum( safediv( f , iotas_sum) , axis=0 )  # := (Bcrit,well)
 
     # Sum over Bcrit
     f_tr2_out = jnp.broadcast_to(f_tr2_out[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)

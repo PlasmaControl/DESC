@@ -10,6 +10,7 @@ from desc.grid import (
     ConcentricGrid,
     Grid,
     LinearGrid,
+    LinearGridCurve,
     QuadratureGrid,
     dec_to_cf,
     find_least_rational_surfaces,
@@ -844,6 +845,17 @@ class TestGrid:
             y = grid.meshgrid_reshape(x, order)
             z = grid.meshgrid_flatten(y, order)
             np.testing.assert_allclose(x, z)
+
+    @pytest.mark.unit
+    def test_volume_weights(self):
+        """Test that grid weights integrate to the volume of the coordinate system."""
+        # curve coordinate system (s): ∫ ds = 2π
+        grid_curve = LinearGridCurve(N=8)
+        np.testing.assert_allclose(np.sum(grid_curve.weights), 2 * np.pi)
+
+        # flux coordinate system (ρ,θ,ζ): ∫ dρ dθ dζ = 4π²
+        grid_flux = LinearGrid(L=8, M=8, N=8)
+        np.testing.assert_allclose(np.sum(grid_flux.weights), (2 * np.pi) ** 2)
 
 
 @pytest.mark.unit

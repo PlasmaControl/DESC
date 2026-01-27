@@ -108,7 +108,9 @@ class AbstractGrid(IOAble, ABC):
         dx0 = self.bounds[0][1] - self.bounds[0][0]
         dx1 = self.bounds[1][1] - self.bounds[1][0]
         dx2 = self.bounds[2][1] - self.bounds[2][0]
-        volume = dx0 * dx1 * dx2
+        dxs = np.array([dx0, dx1, dx2])
+        volume = np.prod(dxs[np.nonzero(dxs)])
+        temp_spacing[:, np.where(dxs == 0)] = 1
         if temp_spacing.prod(axis=1).sum() and np.abs(volume) < np.inf:
             temp_spacing *= (volume / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         weights = temp_spacing.prod(axis=1)

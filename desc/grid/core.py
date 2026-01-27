@@ -64,6 +64,12 @@ class AbstractGrid(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
 
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        self._spacing = self.spacing[sort_idx]
+
     def _find_unique_inverse_nodes(self):
         """Find unique values of coordinates and their indices."""
         __, unique_x0_idx, inverse_x0_idx = np.unique(

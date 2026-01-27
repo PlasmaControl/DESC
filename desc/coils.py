@@ -30,7 +30,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, LinearGridCurve
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -405,7 +405,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+            source_grid = LinearGridCurve(N=2 * self.N * NFP + 5)
         else:
             # coil grids should have NFP=1. The only possible exception is FourierRZCoil
             # which in theory can be different as long as it matches the coils NFP.
@@ -580,9 +580,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGrid(zeta=s)
+            grid = LinearGridCurve(s=s)
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
             self.current, coords, N=N, s=s, basis="xyz", name=name
@@ -622,7 +622,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
-            grid = LinearGrid(zeta=knots)
+            grid = LinearGridCurve(s=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
@@ -656,7 +656,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         NFP = 1 or NFP
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
@@ -689,7 +689,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCoil.from_values(
             self.current, coords, N=N, basis=basis, name=name
@@ -727,9 +727,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGrid(zeta=s)
+            grid = LinearGridCurve(s=s)
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierXYCoil.from_values(
             self.current, coords, N=N, s=s, basis=basis, name=name
@@ -761,7 +761,6 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     .. code-block:: python
 
         from desc.coils import FourierRZCoil
-        from desc.grid import LinearGrid
         import numpy as np
 
         I = 10
@@ -867,7 +866,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     .. code-block:: python
 
         from desc.coils import FourierXYZCoil
-        from desc.grid import LinearGrid
         import numpy as np
 
         I = 10
@@ -979,7 +977,6 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     .. code-block:: python
 
         from desc.coils import FourierPlanarCoil
-        from desc.grid import LinearGrid
         import numpy as np
 
         I = 10
@@ -1252,7 +1249,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # using more points than knots.size (self.N) to better sample coil
-            source_grid = LinearGrid(N=self.N * 2 + 5)
+            source_grid = LinearGridCurve(N=self.N * 2 + 5)
         else:
             # coil grids should have NFP=1. The only possible exception is FourierRZCoil
             # which in theory can be different as long as it matches the coils NFP.
@@ -1734,7 +1731,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if grid is None:
-            grid = LinearGrid(N=50)
+            grid = LinearGridCurve(N=50)
         dx = grid.spacing[:, 2]
         x, x_s = self._compute_position(params, grid, dx1=True, basis="xyz")
         link = _linking_number(
@@ -2559,8 +2556,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         ----------
         grid : AbstractGridCurve, optional
             Collocation grid containing the nodes to evaluate the coil positions at.
-            If a list, must have the same structure as the coilset. Defaults to a
-            LinearGrid(N=100)
+            If a list, must have the same structure as the coilset. Defaults to
+            LinearGridCurve(N=100).
         tol : float, optional
             the tolerance (in meters) to check the intersections to, if points on any
             two coils are closer than this tolerance, then the function will return
@@ -2578,7 +2575,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         from desc.objectives._coils import CoilSetMinDistance
 
-        grid = grid if grid else LinearGrid(N=100)
+        grid = grid if grid else LinearGridCurve(N=100)
         obj = CoilSetMinDistance(self, grid=grid)
         obj.build(verbose=0)
         if tol:
@@ -3385,7 +3382,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
     """
     extent = 2 * np.pi / (eq.NFP * (eq.sym + 1))
     zeta = np.linspace(0, extent, num_coils, endpoint=False) + extent / (2 * num_coils)
-    grid = LinearGrid(rho=[0.0], M=0, zeta=zeta, NFP=eq.NFP)
+    grid = LinearGridCurve(s=zeta, NFP=eq.NFP)
 
     minor_radius = eq.compute("a")["a"]
     G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
@@ -3448,7 +3445,7 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
     )
     extent = 2 * np.pi / (eq.NFP * (eq.sym + 1))
     zeta = np.linspace(0, extent, num_coils, endpoint=False) + extent / (2 * num_coils)
-    grid = LinearGrid(rho=[0.0], M=0, zeta=zeta, NFP=eq.NFP)
+    grid = LinearGridCurve(s=zeta, NFP=eq.NFP)
 
     minor_radius = eq.compute("a")["a"]
     data = eq.axis.compute(["x", "x_s"], grid=grid, basis="rpz")

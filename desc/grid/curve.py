@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.utils import check_nonnegint, check_posint, errorif
 
 from .core import AbstractGrid
@@ -31,12 +32,6 @@ class AbstractGridCurve(AbstractGrid):
 
         # ensure things that should be ints are ints
         self._NFP = int(self._NFP)
-
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        self._spacing = self.spacing[sort_idx]
 
     def get_label(self, label):
         """Get general label that specifies the direction of given coordinate label."""
@@ -103,9 +98,9 @@ class LinearGridCurve(AbstractGridCurve):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractGridCurve._io_attrs_ + ["_endpoint"]
+    _io_attrs_ = AbstractGridCurve._io_attrs_ + ["_endpoint", "_sort"]
 
-    _static_attrs = AbstractGridCurve._static_attrs + ["_endpoint"]
+    _static_attrs = AbstractGridCurve._static_attrs + ["_endpoint", "_sort"]
 
     def __init__(
         self,
@@ -262,3 +257,123 @@ class LinearGridCurve(AbstractGridCurve):
     def endpoint(self):
         """bool: Whether the grid is made of open or closed intervals."""
         return self.__dict__.setdefault("_endpoint", False)
+
+
+class CustomGridCurve(AbstractGridCurve):
+    """Collocation grid with custom node placement.
+
+    Parameters
+    ----------
+    s : ndarray of float, size(num_nodes,)
+        Node coordinates, in s.
+    spacing : ndarray of float, size(num_nodes,)
+        Spacing between each node.
+    weights : ndarray of float, size(num_nodes,)
+        Quadrature weights for each node.
+    NFP : int
+        Number of field periods (Default = 1).
+    sort : bool
+        Whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights,
+        symmetry etc. may be wrong if grid contains duplicate nodes.
+    """
+
+    def __init__(
+        self,
+        s,
+        spacing=None,
+        weights=None,
+        NFP=1,
+        sort=False,
+        jitable=False,
+        **kwargs,
+    ):
+        self._NFP = check_posint(NFP, "NFP", False)
+        # If you are using a custom grid it almost always is not uniform, or is under
+        # jit where we cannot properly check this anyways, so just set to False.
+        self._fft_x1 = False
+        self._fft_x2 = False
+        self._can_fft2 = False
+        self._nodes = self._create_nodes(s)
+        self._spacing = (
+            jnp.array(
+                [
+                    jnp.zeros_like(spacing),
+                    jnp.zeros_like(spacing),
+                    jnp.atleast_1d(spacing),
+                ]
+            ).T
+            if spacing is not None
+            else None
+        )
+        self._weights = (
+            jnp.atleast_1d(jnp.asarray(weights))
+            .reshape(self.nodes.shape[0])
+            .astype(float)
+            if weights is not None
+            else None
+        )
+        if sort:
+            self._sort_nodes()
+        setable_attr = [
+            "_unique_x0_idx",
+            "_unique_x1_idx",
+            "_unique_x2_idx",
+            "_inverse_x0_idx",
+            "_inverse_x1_idx",
+            "_inverse_x2_idx",
+        ]
+        if jitable:
+            # allow for user supplied indices/inverse indices for special cases
+            for attr in setable_attr:
+                if attr in kwargs:
+                    setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
+        else:
+            for attr in setable_attr:
+                kwargs.pop(attr, None)
+            (
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
+            ) = self._find_unique_inverse_nodes()
+        # assign with logic in setter method if possible else 0
+        self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
+        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
+
+    def _create_nodes(self, s):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        s : ndarray of float, size(num_nodes,)
+            Node coordinates, in s.
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (_,_,s).
+
+        """
+        nodes = jnp.array(
+            [jnp.zeros_like(s), jnp.zeros_like(s), jnp.atleast_1d(jnp.asarray(s))]
+        ).T
+        # do not alter nodes given by the user for custom grids
+        return nodes
+
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        try:
+            self._spacing = self.spacing[sort_idx]
+        except AttributeError:
+            pass
+        try:
+            self._weights = self.weights[sort_idx]
+        except AttributeError:
+            pass

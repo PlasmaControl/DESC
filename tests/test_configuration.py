@@ -14,7 +14,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, LinearGridCurve, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
 
@@ -493,7 +493,7 @@ def test_magnetic_axis():
     """Test that Configuration.axis returns the true axis location."""
     eq = desc.examples.get("HELIOTRON")
     axis = eq.axis
-    grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
+    grid = LinearGridCurve(N=3 * eq.N_grid, NFP=eq.NFP)
 
     data = eq.compute(["R", "Z"], grid=grid)
     coords = axis.compute("x", grid=grid)["x"]

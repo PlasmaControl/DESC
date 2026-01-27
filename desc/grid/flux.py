@@ -118,12 +118,6 @@ class AbstractGridFlux(AbstractGrid):
         self._nodes = self.nodes[~to_delete_idx]
         self._spacing = self.spacing[~to_delete_idx]
 
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        self._spacing = self.spacing[sort_idx]
-
     def _find_axis(self):
         """Find indices of axis nodes."""
         return np.nonzero(self.nodes[:, 0] == 0)[0]
@@ -468,8 +462,8 @@ class Grid(AbstractGridFlux):
         )
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
-        # if you're using a custom grid it almost always isnt uniform, or is under jit
-        # where we can't properly check this anyways, so just set to false
+        # If you are using a custom grid it almost always is not uniform, or is under
+        # jit where we cannot properly check this anyways, so just set to False.
         self._fft_x1 = False
         self._fft_x2 = False
         self._nodes = self._create_nodes(nodes)
@@ -526,7 +520,7 @@ class Grid(AbstractGridFlux):
             else 0
         )
         self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
-        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
+        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.

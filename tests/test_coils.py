@@ -24,7 +24,7 @@ from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import Grid, LinearGrid, LinearGridCurve
+from desc.grid import CustomGridCurve, LinearGrid, LinearGridCurve
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
@@ -471,10 +471,8 @@ class TestCoil:
         angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x1[:, 1] - coil5.center[1],
             x1[:, 0] - coil5.center[0],
-        )  # use Grid instead of LinearGridCurve to prevent node sorting
-        grid_planar = Grid(
-            np.array([np.zeros_like(angle), np.zeros_like(angle), angle]).T
-        )
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        grid_planar = CustomGridCurve(s=angle)
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
@@ -833,11 +831,10 @@ class TestCoilSet:
         angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x0[0]["x"][:, 1] - coils3[0].center[1],
             x0[0]["x"][:, 0] - coils3[0].center[0],
-        )  # use Grid instead of LinearGridCurve to prevent node sorting
-        grid_planar = Grid(
-            np.array([np.zeros_like(angle), np.zeros_like(angle), angle]).T
-        )
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        grid_planar = CustomGridCurve(s=angle)
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
+
         np.testing.assert_allclose(
             [xi["x"] for xi in x0], [xi["x"] for xi in x1], atol=1e-12
         )
@@ -882,11 +879,10 @@ class TestCoilSet:
         angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x5[0]["x"][:, 1] - coils8[0].center[1],
             x5[0]["x"][:, 0] - coils8[0].center[0],
-        )  # use Grid instead of LinearGridCurve to prevent node sorting
-        grid_planar = Grid(
-            np.array([np.zeros_like(angle), np.zeros_like(angle), angle]).T
-        )
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        grid_planar = CustomGridCurve(s=angle)
         x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
+
         np.testing.assert_allclose(
             [xi["x"] for xi in x5], [xi["x"] for xi in x6], atol=1e-12
         )

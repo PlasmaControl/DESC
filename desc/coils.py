@@ -31,8 +31,8 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.grid import Grid, LinearGrid
-from desc.magnetic_fields import _MagneticField
-from desc.magnetic_fields._core import (
+from desc.magnetic_fields import (
+    _MagneticField,
     biot_savart_general,
     biot_savart_general_vector_potential,
 )

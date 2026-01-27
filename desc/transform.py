@@ -38,6 +38,21 @@ class Transform(IOAble):
         * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
         * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
           you to create transforms inside JIT compiled functions.
+        * ``'rpz'`` uses a fast fourier transform in the phi (second) dimension, and
+            direct cosine transforms in the R and Z (first and third) dimensions so
+            must have a compatible grid (CylindricalGrid) and basis (DoubleChebyshev
+            FourierBasis). This method will never be chosen by auto.
+        * ``'partialrpz'`` uses a fast fourier transform in the phi (second) dimension,
+            but directly evaluates the Chebyshev functions in the first and third
+            dimensions. still must have a compatible grid (CylindricalGrid) and basis
+            (DoubleChebyshevFourierBasis), but can have arbitrary node patterns in
+            the first and third dimensions. This method will never be chosen by auto.
+        * ``'directrpz'``  directly evaluates the Chebyshev functions in the first
+            and third dimensions and evaluates the Fourier functions in the phi
+            dimension, but uses partial sums to improve memory usage compared to
+            direct1. still must have a compatible grid (CylindricalGrid) and basis
+            (DoubleChebyshevFourierBasis), but can have arbitrary node patterns in each
+            dimension. This method will never be chosen by auto.
         * ``'auto'`` selects the method based on the grid and basis resolution.
 
     """
@@ -71,9 +86,10 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         warnif(
-            self.grid.coordinates != "rtz",
-            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
+            self.grid.coordinates not in ["rtz", "rpz"],
+            msg=f"Expected coordinates rtz or rpz, got {self.grid.coordinates}.",
         )
+
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
@@ -170,6 +186,14 @@ class Transform(IOAble):
                 "direct1": {
                     i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
                     for i in range(ndi + 1)
+                },
+            }
+        elif self.method in ["rpz", "partialrpz", "directrpz"]:
+            matrices = {
+                "rpz": {
+                    "dr": {i: {} for i in range(ndi + 1)},
+                    "dphi": {j: {} for j in range(ndj + 1)},
+                    "dz": {k: {} for k in range(ndk + 1)},
                 },
             }
 
@@ -305,11 +329,137 @@ class Transform(IOAble):
         )
         self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
 
+    def _check_inputs_partialrpz(self, grid, basis):
+        from desc.basis import DoubleChebyshevFourierBasis
+        from desc.grid import CylindricalGrid
+
+        if not isinstance(grid, CylindricalGrid) or not isinstance(
+            basis, DoubleChebyshevFourierBasis
+        ):
+            warnings.warn(
+                colored(
+                    "partialRPZ method requires the compatible basis and grid"
+                    + "got {} grid".format(grid)
+                    + " and {} basis".format(basis)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if grid.NFP != basis.NFP:
+            warnings.warn(
+                colored(
+                    "partialrpz method requires basis and grid to have the same NFP."
+                    + "got {} grid NFP".format(grid.NFP)
+                    + " and basis NFP {}".format(basis.NFP)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        # Coefficients for Fourier derivatives in spectral coordinates (phi basis)
+        self.dk = self.basis.NFP * jnp.arange(-self.basis.M, self.basis.M + 1)
+        self._method = "partialrpz"
+
+    def _check_inputs_directrpz(self, grid, basis):
+        if not grid.is_meshgrid:
+            warnings.warn(
+                colored(
+                    "Direct RPZ method requires a tensor product grid."
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        from desc.basis import DoubleChebyshevFourierBasis
+
+        if not isinstance(basis, DoubleChebyshevFourierBasis):
+            warnings.warn(
+                colored(
+                    "Direct RPZ method requires a basis of type"
+                    + " DoubleChebyshevFourierBasis."
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+    def _check_inputs_rpz(self, grid, basis):
+        from desc.basis import DoubleChebyshevFourierBasis
+        from desc.grid import CylindricalGrid
+
+        if not isinstance(grid, CylindricalGrid) or not isinstance(
+            basis, DoubleChebyshevFourierBasis
+        ):
+            warnings.warn(
+                colored(
+                    "RPZ method requires the compatible basis and grid"
+                    + " got {} grid".format(grid)
+                    + " and {} basis".format(basis)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if (grid.L, grid.N) != (basis.L, basis.N):
+            warnings.warn(
+                colored(
+                    "RPZ method requires basis and grid to have same L and N"
+                    + " got grid L,N={}".format((grid.L, grid.N))
+                    + " and basis L,N={}".format((basis.L, basis.N))
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if grid.NFP != basis.NFP:
+            warnings.warn(
+                colored(
+                    "rpz method requires basis and grid to have the same NFP."
+                    + "got {} grid NFP".format(grid.NFP)
+                    + " and basis NFP {}".format(basis.NFP)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if not grid.can_fft_dct:
+            warnings.warn(
+                colored(
+                    "RPZ method does not support 0-resolution grids or custom"
+                    + " node patterns when defining the CylindricalGrid object"
+                    + " falling back to direct1 method."
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        self._method = "rpz"
+
+        # Coefficients for Fourier derivatives in spectral coordinates (phi basis)
+        self.dk = self.basis.NFP * jnp.arange(-self.basis.M, self.basis.M + 1)
+
     def build(self):
         """Build the transform matrices for each derivative order."""
         if self.built:
             return
 
+        if self.method in ["rpz", "partialrpz", "directrpz"]:
+            self._build_rpz()
+        else:
+            self._build_rtz()
+
+        self._built = True
+
+    def _build_rtz(self):
+        """Build transforms matrices for each derivative order, for flux coordinates."""
         if self.basis.num_modes == 0:
             self._built = True
             return
@@ -341,14 +491,45 @@ class Transform(IOAble):
                     self.dft_grid, d, modes=temp_modes
                 )
 
-        self._built = True
+    def _build_rpz(self):
+        """Build matrices for each derivative order, for cylindrical coordinates."""
+        from desc.basis import chebyshev, fourier
+
+        r = self.grid.nodes[self.grid.unique_r_idx, 0]
+        z = self.grid.nodes[self.grid.unique_z_idx, 2]
+
+        # Differentiation matrices (only on unique R and Z coordinates)
+        for dr in np.unique(self.derivatives[:, 0]):
+            if dr > 0 or self.method in ["partialrpz", "directrpz"]:
+                self.matrices["rpz"]["dr"][dr] = chebyshev(
+                    r[:, jnp.newaxis],
+                    self.basis.modes[self.basis.unique_L_idx, 0],
+                    dr=dr,
+                )
+        for dz in np.unique(self.derivatives[:, 2]):
+            if dz > 0 or self.method in ["partialrpz", "directrpz"]:
+                self.matrices["rpz"]["dz"][dz] = chebyshev(
+                    z[:, jnp.newaxis],
+                    self.basis.modes[self.basis.unique_N_idx, 2],
+                    dr=dz,
+                )
+        # Differentiation matices for unique phi coordinates
+        if self.method == "directrpz":
+            phi = self.grid.nodes[self.grid.unique_phi_idx, 1]
+            for dphi in np.unique(self.derivatives[:, 1]):
+                self.matrices["rpz"]["dphi"][dphi] = fourier(
+                    phi[:, jnp.newaxis],
+                    self.basis.modes[self.basis.unique_M_idx, 1],
+                    NFP=self.basis.NFP,
+                    dt=dphi,
+                )
 
     def build_pinv(self):
         """Build the pseudoinverse for fitting."""
         if self.built_pinv:
             return
         rcond = None if self.rcond == "auto" else self.rcond
-        if self.method in ["direct1", "jitable"]:
+        if self.method in ["direct1", "jitable", "partialrpz", "directrpz"]:
             A = self.basis.evaluate(self.grid, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
@@ -378,6 +559,8 @@ class Transform(IOAble):
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
             )
+        elif self.method == "rpz":
+            pass
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -462,6 +645,43 @@ class Transform(IOAble):
             # transform coefficients
             c_fft = jnp.real(jnp.fft.ifft(c_pad))
             return (A @ c_fft).flatten(order="F")
+        elif self.method in ["rpz", "partialrpz", "directrpz"]:
+            from desc.basis import ichebfit, ifftfit
+
+            # reshape coefficients (Z,R,phi)
+            c_3d = c.reshape(
+                self.basis.unique_N_idx.shape[0],
+                self.basis.unique_L_idx.shape[0],
+                self.basis.unique_M_idx.shape[0],
+                -1,
+            )
+            dphi = dt
+            if self.method == "directrpz":
+                y = (
+                    self.matrices["rpz"]["dphi"][dphi] @ c_3d.swapaxes(2, -2)
+                ).swapaxes(2, -2)
+            else:
+                # differentiate with respect to phi
+                y = (
+                    c_3d[:, :, :: (-1) ** dphi]
+                    * self.dk.reshape((-1, 1)) ** dphi
+                    * (-1) ** (dphi > 1)
+                )
+                y = ifftfit(y, axis=2, n=self.grid.M)
+
+            # differentiate with respect to r
+            if dr == 0 and self.method == "rpz":
+                y = ichebfit(y, axis=1)
+            else:
+                y = (self.matrices["rpz"]["dr"][dr] @ y.swapaxes(1, -2)).swapaxes(1, -2)
+
+            # differentiate with respect to z
+            if dz == 0 and self.method == "rpz":
+                y = ichebfit(y, axis=0)
+            else:
+                y = (self.matrices["rpz"]["dz"][dz] @ y.swapaxes(0, -2)).swapaxes(0, -2)
+
+            return jnp.squeeze(y.reshape(self.grid.num_nodes, -1))
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -482,7 +702,10 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method in ["direct1", "jitable"]:
+        if self.method in ["direct1", "jitable", "partialrpz"]:
+            # Partial RPZ method just defaults to direct1 because it
+            # probably won't be necessary to fit a transform to a grid that
+            # doesn't have Chebyshev nodes in the R and Z directions
             Ainv = self.matrices["pinv"]
             c = jnp.matmul(Ainv, x)
         elif self.method == "direct2":
@@ -500,6 +723,17 @@ class Transform(IOAble):
             c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_zeta / 2)
             c_diff = jnp.hstack([c1, c0, c2])
             c = c_diff.flatten()[self.fft_index]
+        elif self.method == "rpz":
+            from desc.basis import chebfit, fftfit
+
+            x_3d = x.reshape(self.grid.num_z, self.grid.num_r, self.grid.num_phi, -1)
+            c = fftfit(chebfit(chebfit(x_3d, axis=0), axis=1), axis=2, n=self.basis.M)
+            c = (
+                c.reshape(self.basis.num_modes)
+                if x.ndim == 1
+                else c.reshape(self.basis.num_modes, -1)
+            )
+
         return c
 
     def project(self, y):
@@ -532,7 +766,7 @@ class Transform(IOAble):
                 )
             )
 
-        if self.method in ["direct1", "jitable"]:
+        if self.method in ["direct1", "jitable", "rpz"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -742,6 +976,12 @@ class Transform(IOAble):
             self._method = "direct1"
         elif method == "jitable":
             self._method = "jitable"
+        elif method == "rpz":
+            self._check_inputs_rpz(self.grid, self.basis)
+        elif method == "partialrpz":
+            self._check_inputs_partialrpz(self.grid, self.basis)
+        elif method == "directrpz":
+            self._check_inputs_directrpz(self.grid, self.basis)
         else:
             raise ValueError("Unknown transform method: {}".format(method))
         if self.method != old_method:

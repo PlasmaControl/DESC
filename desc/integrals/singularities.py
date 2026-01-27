@@ -295,7 +295,7 @@ class _BIESTInterpolator(IOAble, ABC):
 
     Parameters
     ----------
-    eval_grid, source_grid : AbstractGrid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
@@ -1052,7 +1052,7 @@ def compute_B_plasma(
     ----------
     eq : Equilibrium
         Equilibrium that is the source of the plasma current.
-    eval_grid : AbstractGrid
+    eval_grid : AbstractGridFlux
         Evaluation points for the magnetic field.
     source_grid : AbstractGridFlux, optional
         Source points for integral.

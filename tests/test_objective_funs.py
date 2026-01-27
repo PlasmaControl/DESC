@@ -130,12 +130,12 @@ class TestObjectiveFunction:
                 val,
             )
 
-        test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGrid(0, 0, 12))
-        test("length", FourierPlanarCoil(r_n=0.5), LinearGrid(0, 0, 12))
+        test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGridCurve(N=12))
+        test("length", FourierPlanarCoil(r_n=0.5), LinearGridCurve(N=12))
         test(
             "Phi",
             FourierCurrentPotentialField(Phi_mn=np.array([0.2])),
-            LinearGrid(0, 4, 4),
+            LinearGrid(L=0, M=4, N=4),
         )
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)), None, True)
@@ -159,15 +159,15 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(R1, R2)
 
         curve = FourierXYZCurve()
-        grid = LinearGrid(0, 0, 5)
+        grid = LinearGridCurve(N=5)
         test(curve, grid)
 
         surf = FourierRZToroidalSurface()
-        grid = LinearGrid(2, 2, 2)
+        grid = LinearGrid(L=2, M=2, N=2)
         test(surf, grid)
 
         eq = Equilibrium()
-        grid = LinearGrid(2, 2, 2)
+        grid = LinearGrid(L=2, M=2, N=2)
         test(eq, grid)
 
     @pytest.mark.unit
@@ -554,7 +554,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using BIEST w/ sheet current."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.surface = FourierCurrentPotentialField.from_surface(
             eq.surface, M_Phi=eq.M, N_Phi=eq.N
@@ -576,7 +576,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using BIEST."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
@@ -593,7 +593,7 @@ class TestObjectiveFunction:
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
@@ -610,7 +610,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using NESTOR."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
@@ -633,7 +633,7 @@ class TestObjectiveFunction:
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
         coils = [coil for coil in coilset]
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
 
@@ -1096,7 +1096,10 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
-            coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
+            coils_angular,
+            np.sqrt(2) * (center - r),
+            grid=LinearGridCurve(s=4),
+            tol=1e-5,
         )
 
         # planar toroidal coils, with symmetry
@@ -1109,7 +1112,7 @@ class TestObjectiveFunction:
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
-        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
+        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGridCurve(s=4))
 
         # mixture of toroidal field coilset, vertical field coilset, and extra coil
         # TF coils instersect with the middle VF coil
@@ -1132,7 +1135,7 @@ class TestObjectiveFunction:
             test(
                 coils_mixed,
                 [0, 0, 0, 0, 1, 0, 1, 2],
-                grid=LinearGrid(zeta=4),
+                grid=LinearGridCurve(s=4),
                 expect_intersect=True,
             )
         # TODO (#1400, 914): move this coil set to conftest?
@@ -1188,7 +1191,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         plasma_grid = LinearGrid(M=4, zeta=16)
-        coil_grid = LinearGrid(N=8)
+        coil_grid = LinearGridCurve(N=8)
 
         # planar toroidal coils without symmetry, around fixed circular tokamak
         R0 = 3
@@ -1381,7 +1384,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f_max, maxdist, rtol=5e-2, atol=1e-3)
 
         plasma_grid = LinearGrid(M=8, zeta=16)
-        coil_grid = LinearGrid(N=32)
+        coil_grid = LinearGridCurve(N=32)
 
         # planar toroidal coils without symmetry, around fixed circular tokamak
         # shifted over slightly to get an interesting max distance
@@ -2680,7 +2683,7 @@ def test_boundary_error_print(capsys):
     """Test that the boundary error objectives print correctly."""
     coil = FourierXYZCoil(5e5)
     coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-    coil_grid = LinearGrid(N=20)
+    coil_grid = LinearGridCurve(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
     obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)

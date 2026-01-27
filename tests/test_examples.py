@@ -25,7 +25,7 @@ from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, LinearGridCurve
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
@@ -1918,7 +1918,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
     quad_eval_grid = LinearGrid(M=2, sym=True)
-    quad_field_grid = LinearGrid(N=2)
+    quad_field_grid = LinearGridCurve(N=2)
 
     spline_coil = mixed_coils.coils[-1].copy()
 

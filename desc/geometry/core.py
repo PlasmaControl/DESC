@@ -499,7 +499,7 @@ class Surface(IOAble, Optimizable, ABC):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : AbstractGridCurve, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
             rho surfaces or a Quadrature grid for constant zeta surfaces.
         params : dict of ndarray

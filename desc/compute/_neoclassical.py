@@ -9,8 +9,10 @@ from desc.backend import imap, jax, jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
 # from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv, softmin, softmax
+from ..utils import safediv
 from .data_index import register_compute_fun
+
+from desc.objectives.utils import softmin, softmax
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -488,11 +490,12 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
-    Psi = kwargs.get("Psi",None)
+    # Psi = kwargs.get("Psi",None)
     wd_blur = kwargs.get("wd_blur",1.25)
     res_arr = kwargs.get("res_arr",None)
     q_arr = kwargs.get("q_arr",None)
     quad = kwargs.get("quad",None)
+    rhos = kwargs.get("rhos",None)
 
     # Flags
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
@@ -767,7 +770,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     ##### ISLAND WIDTH TERM #####
     # Sum psi_drift_out term over alpha
     psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
-    psi_drift_out = jnp.broadcast_to(psi_drift_out[...,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+    psi_drift_out = jnp.broadcast_to(psi_drift_out[...,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
 
     # Create n array for island width - make 4D array with q values on axis=3
     q_broad = jnp.broadcast_to(q_arr[None,None,None,:], (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
@@ -782,9 +785,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
 
     ##### WEIGHTING BASED ON PLASMA EDGE VICINITY #####
-    rhos = grid.nodes[:,0]**2 # := (rho)
+    # rhos = grid.nodes[:,0]
     if LOSS_FRAC_WEIGHT:
-        rho_max = jnp.broadcast_to(rhos[...,:,:,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+        rho_max = jnp.broadcast_to(rhos[...,None,None,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
     else:
         rho_max=1 # no weighting
 
@@ -797,8 +800,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # f_tr2_out = rho_res * jnp.sum( safediv( f , iotas_sum) , axis=0 )  # := (Bcrit,well)
 
     # Sum over Bcrit
-    f_tr2_out = jnp.broadcast_to(f[...,None,None],(ado_shape[2],ado_shape[3],ado_shape[0],ado_shape[1])) # := (Bcrit,well,rho,alpha)
-    f_tr2_out = jnp.transpose(f_tr2_out,(2,3,0,1)) # := (rho,alpha,Bcrit,well)
+    f_tr2_out = jnp.broadcast_to(f[...,None],(ado_shape[0],ado_shape[2],ado_shape[3],ado_shape[1])) # := (rho,Bcrit,well,alpha)
+    f_tr2_out = jnp.transpose(f_tr2_out,(0,3,1,2)) # := (rho,alpha,Bcrit,well)
     pitch_invs = jnp.broadcast_to(pitch_invs[...,None,None,None],(ado_shape[2],ado_shape[0],ado_shape[1],ado_shape[3])) # := (Bcrit,rho,alpha,well)
     pitch_invs = jnp.transpose(pitch_invs,(1,2,0,3)) # := (rho,alpha,Bcrit,well)
     f_tr2_out = Bcrit_res * jnp.sum(f_tr2_out * tau_arr * pitch_invs**(-2) , axis=2 ) # := (rho,alpha,well)

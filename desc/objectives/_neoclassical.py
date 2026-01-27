@@ -477,7 +477,7 @@ class TrappedResonance(_Objective):
         rho=np.linspace(0.1, 0.9, 3),
         alpha=np.linspace(0,2*np.pi,10),
         KE_frac=np.array([1]), # currently only supporting one KE_frac
-        Psi=None,
+        # Psi=None,
         *,
         num_transit=3,
         knots_per_transit=100,
@@ -544,7 +544,8 @@ class TrappedResonance(_Objective):
             "LOSS_FRAC_WEIGHT": LOSS_FRAC_WEIGHT,
             "verbose": verbose,
             "wd_blur": wd_blur,
-            'M': M
+            'M': M,
+            'rhos': rho
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"
@@ -552,7 +553,7 @@ class TrappedResonance(_Objective):
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
             "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
             "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
-            "Psi": Psi,
+            # "Psi": Psi,
         }
 
 

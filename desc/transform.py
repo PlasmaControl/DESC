@@ -250,9 +250,13 @@ class Transform(IOAble):
             self._method = "direct1"
             return
 
-        from desc.grid import LinearGrid
+        from desc.grid import LinearGrid, LinearGridCurve
 
-        if not (grid.fft_x2 or isinstance(grid, LinearGrid)):
+        if not (
+            grid.fft_x2
+            or isinstance(grid, LinearGrid)
+            or isinstance(grid, LinearGridCurve)
+        ):
             warnings.warn(
                 colored(
                     "direct2 method requires compatible grid, got {}".format(grid)

@@ -683,7 +683,7 @@ class FourierRZToroidalSurface(Surface):
         offset : float
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
-        grid : AbstractGrid, optional
+        grid : AbstractGridFlux, optional
             Grid object of the points on the given surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N.

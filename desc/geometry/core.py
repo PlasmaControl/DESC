@@ -243,7 +243,7 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import FourierXYZCurve
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGridCurve(zeta=s)
+            grid = LinearGridCurve(s=s)
         if grid is None:
             grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
@@ -396,7 +396,7 @@ class Curve(IOAble, Optimizable, ABC):
         from .curve import FourierXYCurve
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
-            grid = LinearGridCurve(zeta=s)
+            grid = LinearGridCurve(s=s)
         if grid is None:
             grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]

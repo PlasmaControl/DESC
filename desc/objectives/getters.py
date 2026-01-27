@@ -27,7 +27,13 @@ from .linear_objectives import (
     FixNearAxisZ,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     FixSheetCurrent,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
 )
 from .nae_utils import (
     calc_zeroth_order_lambda,
@@ -145,6 +151,40 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
+
+    return constraints
+
+
+def get_fixed_xsection_constraints(eq, profiles=True, normalize=True, fix_lambda=False):
+    """Get the constraints necessary for a fixed cross-section equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    fix_lambda : bool
+        Whether to fix the λ coefficients to match the cross-section. Defaults to False.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed cross-section problems.
+
+    """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixSectionR(**kwargs), FixSectionZ(**kwargs))
+    if fix_lambda:
+        constraints += (FixSectionLambda(**kwargs),)
+    constraints += (FixPsi(**kwargs),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -359,6 +399,13 @@ def maybe_add_self_consistency(thing, constraints):
 
     if {"Z_lmn", "Za_n"} <= params:
         constraints = add_if_multiple(constraints, AxisZSelfConsistency)
+
+    if {"R_lmn", "Rp_lmn"} <= params:
+        constraints = add_if_multiple(constraints, SectionRSelfConsistency)
+    if {"Z_lmn", "Zp_lmn"} <= params:
+        constraints = add_if_multiple(constraints, SectionZSelfConsistency)
+    if {"L_lmn", "Lp_lmn"} <= params:
+        constraints = add_if_multiple(constraints, SectionLambdaSelfConsistency)
 
     # Curve
     if {"shift"} <= params:

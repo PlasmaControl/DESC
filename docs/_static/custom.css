@@ -46,3 +46,9 @@ div.nbinput.container div.prompt, div.nboutput.container div.prompt {
   }
 
 }
+
+.publist li {
+    margin-bottom: 0.5em;   /* adjust spacing between items */
+    text-indent: -2em;      /* hanging indent effect */
+    padding-left: 2em;
+}

@@ -702,7 +702,7 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method in ["direct1", "partialrpz"]:
+        if self.method in ["direct1", "jitable", "partialrpz"]:
             # Partial RPZ method just defaults to direct1 because it
             # probably won't be necessary to fit a transform to a grid that
             # doesn't have Chebyshev nodes in the R and Z directions
@@ -766,7 +766,7 @@ class Transform(IOAble):
                 )
             )
 
-        if self.method == "direct1" or self.method == "rpz":
+        if self.method in ["direct1", "jitable", "rpz"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -953,7 +953,10 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+
+        Transform compute method.
+        """
         return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter

@@ -96,6 +96,21 @@ Examples
     desc.examples.get
     desc.examples.listall
 
+External
+********
+Note that these objectives and utility functions are not regularly tested and maybe incompatible with newer version
+of the external code. Please see the README of the `desc.external` for more details.
+
+.. autosummary::
+    :toctree: _api/external
+    :recursive:
+
+    desc.external.paraview.export_coils_to_paraview
+    desc.external.paraview.export_surface_to_paraview
+    desc.external.paraview.export_volume_to_paraview
+    desc.external.terpsichore.TERPSICHORE
+
+
 Geometry
 ********
 
@@ -260,6 +275,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.ShareParameters
     desc.objectives.Shear
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.SurfaceQuadraticFlux
@@ -284,6 +300,21 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
+
+Particles
+*********
+
+.. autosummary::
+    :toctree: _api/particles
+    :recursive:
+    :template: class.rst
+
+    desc.particles.CurveParticleInitializer
+    desc.particles.ManualParticleInitializerFlux
+    desc.particles.ManualParticleInitializerLab
+    desc.particles.SurfaceParticleInitializer
+    desc.particles.VacuumGuidingCenterTrajectory
+    desc.particles.trace_particles
 
 Perturbations
 *************
@@ -319,6 +350,7 @@ Plotting
     desc.plotting.plot_gammac
     desc.plotting.plot_grid
     desc.plotting.plot_logo
+    desc.plotting.plot_particle_trajectories
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces

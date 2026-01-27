@@ -520,6 +520,10 @@ class TrappedResonance(_Objective):
         }
         if pitch_invs is not None:
             num_pitch = len(pitch_invs)
+        if QS_flag: # QA or QH
+            M=1
+        else: # QI~QP
+            M=0
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -539,7 +543,8 @@ class TrappedResonance(_Objective):
             "STAB_SACRIFICE": STAB_SACRIFICE,
             "LOSS_FRAC_WEIGHT": LOSS_FRAC_WEIGHT,
             "verbose": verbose,
-            "wd_blur": wd_blur
+            "wd_blur": wd_blur,
+            'M': M
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"

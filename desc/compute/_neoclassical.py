@@ -476,6 +476,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     num_pitch = kwargs.get("num_pitch",None)
     num_well = kwargs.get("num_well", None)
     grid = transforms["grid"].source_grid # use initial raz-specified grid
+    M = kwargs.get("M",1) # default is QA, M=1
     N = kwargs.get("N",0) # default is QA, N=0
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
@@ -646,16 +647,16 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # alpha_drift_out,psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out,psi_drift_out)
 
     # Barely trapped filtering (if bt_filter_flag==True)
-    def tb_btfilter(iotas,points,N,nfp,psi_drift_out): # Perform barely trapped filter
+    def tb_btfilter(iotas,points,N,nfp,psi_drift_out,M): # Perform barely trapped filter
         points_0 = points[0][:][:][:][:]
         points_1 = points[1][:][:][:][:]
         iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
-        delta_chi = jnp.abs(jnp.abs(points_0 - points_1) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
+        delta_chi = jnp.abs(jnp.abs(points_0 - points_1) * (M*iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
         return jnp.where(delta_chi < float(2.5*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
-    def fb_btfilter(iotas,points,N,nfp,psi_drift_out): # Do nothing
+    def fb_btfilter(iotas,points,N,nfp,psi_drift_out,M): # Do nothing
         return psi_drift_out
     # Only need to filter on psi_drift_out to filter all of f
-    psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,psi_drift_out)
+    psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,psi_drift_out,M)
 
 
     # Ripple-trapped filtering (if rt_filter_flag==True) OLD

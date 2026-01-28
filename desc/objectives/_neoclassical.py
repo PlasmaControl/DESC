@@ -1,15 +1,17 @@
 """Objectives for neoclassical transport."""
 
+import warnings
+
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import setdefault
+from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
+from desc.utils import parse_argname_change, setdefault, warnif
 
-from ..integrals import Bounce2D
-from ..integrals.basis import FourierChebyshevSeries
 from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
@@ -22,10 +24,8 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        Unless ``fwd`` is specified, ``jac_chunk_size=1`` is recommended to reduce
-        memory consumption. In ``rev`` mode, reducing the pitch angle parameter
-        ``pitch_batch_size`` does not reduce memory consumption, so it is recommended
-        to retain the default for that.
+        In ``rev`` mode, reducing the parameter ``pitch_batch_size`` does not
+        reduce memory consumption, so it is recommended to retain the default for that.
         """
 }
 
@@ -50,11 +50,11 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
+      * https://github.com/jax-ml/jax/issues/30627
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
+
 
     Parameters
     ----------
@@ -101,6 +101,8 @@ class EffectiveRipple(_Objective):
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
@@ -113,11 +115,15 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
-    spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    use_bounce1d : bool
+        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
+        basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
+        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
 
     """
 
@@ -132,9 +138,7 @@ class EffectiveRipple(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_hyperparam",
         "_keys_1dr",
-        "_spline",
-        "_X",
-        "_Y",
+        "_use_bounce1d",
     ]
 
     _coordinates = "r"
@@ -157,7 +161,6 @@ class EffectiveRipple(_Objective):
         grid=None,
         X=16,
         Y=32,
-        # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
         alpha=np.array([0.0]),
         num_transit=20,
@@ -166,16 +169,34 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
-        spline=False,
+        nufft_eps=1e-6,
+        use_bounce1d=False,
+        **kwargs,
     ):
+        try:
+            import jax_finufft  # noqa: F401
+        except ImportError:
+            warnif(
+                nufft_eps >= 1e-14,
+                msg="\njax-finufft is not installed.\n"
+                "Setting parameter nufft_eps to zero.\n"
+                "Performance will deteriorate significantly.\n",
+            )
+            nufft_eps = 0.0
+
         if target is None and bounds is None:
             target = 0.0
 
-        self._spline = spline
+        self._use_bounce1d = parse_argname_change(
+            use_bounce1d, kwargs, "spline", "use_bounce1d"
+        )
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
-        self._X = X
-        self._Y = Y
+        self._constants = {
+            "quad_weights": 1.0,
+            "alpha": alpha,
+            "X": fourier_pts(X),
+            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
+        }
         Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
             "Y_B": Y_B,
@@ -185,6 +206,7 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
         }
 
         super().__init__(
@@ -211,30 +233,38 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        if self._spline:
-            return self._build_spline(use_jit, verbose)
+        if self._use_bounce1d:
+            return self._build_bounce1d(use_jit, verbose)
 
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X,
-            self._Y,
-            self._grid.compress(self._grid.nodes[:, 0]),
-            domain=(0, 2 * np.pi),
-        )
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+
+        rho = self._grid.compress(self._grid.nodes[:, 0])
+        x, w = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["_vander"] = _get_vander(self, x)
+        self._constants["fieldline quad"] = (x, w)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["profiles"] = get_profiles(
+            "effective ripple", eq, grid=self._grid
         )
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Unequal number of field periods")
+            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
+            self._constants["lambda"] = get_transforms(
+                "lambda",
+                eq,
+                grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=self._constants["Y"]),
+            )["L"]
+        assert self._constants["lambda"].basis.NFP == eq.NFP
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, rho
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -256,26 +286,26 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        if self._spline:
-            return self._compute_spline(params, constants)
+        if self._use_bounce1d:
+            return self._compute_bounce1d(params, constants)
 
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO (#1034): Use old theta values as initial guess.
-        theta = Bounce2D.compute_theta(
-            eq,
-            self._X,
-            self._Y,
+        theta = eq._map_clebsch_coordinates(
             iota=constants["transforms"]["grid"].compress(data["iota"]),
-            clebsch=constants["clebsch"],
-            # Pass in params so that root finding is done with the new
-            # perturbed λ coefficients and not the original equilibrium's.
-            params=params,
-        )
+            alpha=constants["X"],
+            zeta=constants["Y"],
+            L_lmn=params["L_lmn"],
+            lmbda=constants["lambda"],
+            # TODO (#1034): Use old theta values as initial guess.
+            tol=1e-7,
+        )[..., ::-1]
+
         data = compute_fun(
             eq,
             "effective ripple",
@@ -287,11 +317,20 @@ class EffectiveRipple(_Objective):
             alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
-    def _build_spline(self, use_jit=True, verbose=1):
+    def _build_bounce1d(self, use_jit=True, verbose=1):
+        Y_B = self._hyperparam.pop("Y_B")
+        num_transit = self._hyperparam.pop("num_transit")
+        num_quad = self._hyperparam.pop("num_quad")
+        self._hyperparam.pop("nufft_eps")
+        del self._constants["X"]
+        self._constants["Y"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
+        )
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -300,34 +339,33 @@ class EffectiveRipple(_Objective):
             "max_tz |B|",
             "R0",
         ]
-        num_transit = self._hyperparam.pop("num_transit")
-        Y_B = self._hyperparam.pop("Y_B")
 
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+
+        rho = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["rho"] = rho
+        self._constants["quad"] = chebgauss2(num_quad)
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["old effective ripple"], eq, self._grid
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, rho
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _compute_spline(self, params, constants=None):
+    def _compute_bounce1d(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -335,10 +373,12 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
+        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
+        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["zeta"],
+            constants["Y"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,
@@ -362,3 +402,25 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
+
+
+def _get_vander(obj, x):
+    eq = obj.things[0]
+    Y_B = ((obj._hyperparam["Y_B"] + eq.NFP - 1) // eq.NFP) * eq.NFP
+    return {
+        "dct cfl": _vander_dct_cfl(x, obj._constants["Y"].size),
+        "dft cfl": _vander_dft_cfl(x, obj._grid),
+        "dct spline": _vander_dct_cfl(
+            jnp.linspace(-1, 1, Y_B, endpoint=False), obj._constants["Y"].size
+        ),
+    }
+
+
+def _vander_dft_cfl(x, grid):
+    modes = jnp.fft.fftfreq(grid.num_zeta, 1 / (grid.NFP * grid.num_zeta))
+    zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
+    return jnp.exp(1j * modes * zeta[:, jnp.newaxis])[..., jnp.newaxis]
+
+
+def _vander_dct_cfl(x, Y):
+    return jnp.cos(jnp.arange(Y) * jnp.arccos(x)[:, jnp.newaxis])

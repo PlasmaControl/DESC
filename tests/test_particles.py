@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
@@ -18,7 +18,6 @@ from desc.particles import (
     ManualParticleInitializerLab,
     SurfaceParticleInitializer,
     VacuumGuidingCenterTrajectory,
-    _trace_particles,
     trace_particles,
 )
 from desc.utils import rpz2xyz, xyz2rpz_vec
@@ -107,12 +106,11 @@ def test_mirror_force_drift():
     field = MagneticFieldFromUser(fun=custom_B, params=(B0, dB))
     particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=xi0, E=E)
     model = VacuumGuidingCenterTrajectory(frame="lab")
-    ts = np.linspace(0, 1e-6, 10)
     x0, args = particles.init_particles(model=model, field=field)
-    rpz, vpar = _trace_particles(
+    ts = np.linspace(0, 1e-6, 10)
+    rpz, vpar = trace_particles(
         field=field,
-        y0=x0,
-        model_args=args,
+        initializer=particles,
         model=model,
         ts=ts,
     )
@@ -143,10 +141,9 @@ def test_tracing_purely_toroidal_magnetic_field():
     model = VacuumGuidingCenterTrajectory(frame="lab")
     x0, args = particles.init_particles(model=model, field=field)
     m, q, _ = args[0, :]
-    rpz, vpar = _trace_particles(
+    rpz, vpar = trace_particles(
         field=field,
-        y0=x0,
-        model_args=args,
+        initializer=particles,
         model=model,
         ts=ts,
     )
@@ -181,11 +178,10 @@ def test_tracing_vacuum_tokamak():
     """Test particle tracing in a vacuum tokamak."""
     rmajor = 4.0
     rminor = 1.0
-    ts = np.linspace(0, 1e-7, 100)
+    ts = np.linspace(0, 1e-6, 100)
     R0 = rmajor + rminor / 2
 
     # Create a vacuum tokamak equilibrium with a FourierRZToroidalSurface
-    # TODO: replace with one of the existing vacuum tokamak
     surf = FourierRZToroidalSurface(
         R_lmn=np.array([rmajor, rminor]),
         modes_R=np.array([[0, 0], [1, 0]]),
@@ -195,7 +191,7 @@ def test_tracing_vacuum_tokamak():
     eq = Equilibrium(surface=surf, L=8, M=8, N=0, Psi=3)
     eq.solve(verbose=1)
 
-    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e7)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0.0, xi0=0.9, E=1e6)
     model = VacuumGuidingCenterTrajectory(frame="flux")
 
     # Particle tracing compute the field on individual points as grid which
@@ -208,14 +204,10 @@ def test_tracing_vacuum_tokamak():
     # Initialize particles
     x0, args = particles.init_particles(model=model, field=eq)
     m, q, _ = args[0, :]
-    # Ensure particles stay within the surface by bounds_R (not actually
-    # needed here since the tracing time is chosen accordingly, but this
-    # is the intended use case).
-    rtz, vpar = _trace_particles(
-        y0=x0,
+    rtz, vpar = trace_particles(
         field=eq,
+        initializer=particles,
         model=model,
-        model_args=args,
         ts=ts,
     )
     grid = Grid(rtz[0, :, :], jitable=True)
@@ -270,6 +262,9 @@ def test_init_manual_lab():
     assert x0.shape == (100, 4)
     assert args.shape == (100, 3)
 
+    # test that intitializer is jitable
+    _, _ = jit(particles.init_particles)(model, field)
+
     # test using lab class to initialize in flux coordinates
     eq = Equilibrium(M=4, N=0)
     model = VacuumGuidingCenterTrajectory(frame="lab")
@@ -281,6 +276,9 @@ def test_init_manual_lab():
     x0, args = particles.init_particles(model, eq)
     assert x0.shape == (2, 4)
     assert args.shape == (2, 3)
+
+    # test that intitializer is jitable with coordinate mapping
+    _, _ = jit(particles.init_particles)(model, eq)
 
 
 @pytest.mark.unit
@@ -321,6 +319,9 @@ def test_init_manual_flux():
     assert qs.shape == (100,)
     assert mus.shape == (100,)
 
+    # test that intitializer is jitable
+    _, _ = jit(particles.init_particles)(model, eq)
+
     # test using flux class to initialize in lab coordinates
     eq = Equilibrium(M=4, N=0)
     model = VacuumGuidingCenterTrajectory(frame="lab")
@@ -333,6 +334,11 @@ def test_init_manual_flux():
     field = ToroidalMagneticField(1.0, 3.0)
     with pytest.raises(NotImplementedError):
         x0, args = particles.init_particles(model, field)
+
+    # we can pass eq to allow mapping from flux to lab
+    x0, args = particles.init_particles(model, field, eq=eq)
+    # test that intitializer is jitable
+    _, _ = jit(particles.init_particles)(model, field, eq=eq)
 
 
 @pytest.mark.unit
@@ -354,7 +360,7 @@ def test_init_surface_particles():
     surf = eq.get_surface_at(rho=rho)
     # rho=0.8 surface is not inside eq but inside eq_large
     surf_large = eq_large.get_surface_at(rho=rho)
-    grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid)
 
     N = 100
     particles = SurfaceParticleInitializer(
@@ -372,7 +378,7 @@ def test_init_surface_particles():
     np.testing.assert_allclose(x0[:, 0], surf.rho)
 
     # larger surface is out of small equilibrium, so it should fail
-    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles_large.init_particles(model, eq)
 
     # surface and equilibrium are consistent in rho since we generated the surface
@@ -389,6 +395,9 @@ def test_init_surface_particles():
     assert x0.shape == (N, 4)
     assert args.shape == (N, 3)
     assert (x0[:, 0] != surf.rho).all()
+
+    # test that intitializer is jitable
+    _, _ = jit(particles.init_particles)(model, eq_large)
 
 
 @pytest.mark.unit
@@ -435,8 +444,11 @@ def test_init_curve_particles():
     assert args.shape == (N, 3)
     np.testing.assert_allclose(x0[:, 0], 1.0, atol=1e-8)
 
+    # test that intitializer is jitable
+    _, _ = jit(particles_mid.init_particles)(model, eq)
+
     # larger curve is out of smaller equilibrium, so it should fail
-    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles_large.init_particles(model, eq)
 
     x0, args = particles_large.init_particles(model, eq_large)
@@ -453,5 +465,5 @@ def test_init_curve_particles():
     np.testing.assert_allclose(rpz[:, 2], 0.0, atol=1e-8)
 
     # smaller curve is out of larger equilibrium, so it should fail
-    with pytest.raises(ValueError, match="Mapping from lab to flux coordinates failed"):
+    with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles.init_particles(model, eq_large)

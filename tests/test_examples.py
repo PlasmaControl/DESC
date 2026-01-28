@@ -1861,7 +1861,7 @@ def test_second_stage_optimization_CoilSet():
             field=field,
             vacuum=True,
             eval_grid=grid,
-            field_grid=LinearGrid(N=15),
+            field_grid=LinearGridCurve(N=15),
             bs_chunk_size=10,
         )
     )

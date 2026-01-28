@@ -19,7 +19,7 @@ from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, LinearGridCurve
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -411,7 +411,7 @@ class TestMagneticFields:
         correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
 
         curve = FourierXYZCurve()  # curve to integrate A over
-        curve_grid = LinearGrid(zeta=20)
+        curve_grid = LinearGridCurve(s=20)
         curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
@@ -606,7 +606,7 @@ class TestMagneticFields:
             NFP=surface.NFP,
         )
         coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
-            N=2, grid=LinearGrid(N=8), check_intersection=False
+            N=2, grid=LinearGridCurve(N=8), check_intersection=False
         )
 
         np.testing.assert_allclose(
@@ -655,14 +655,16 @@ class TestMagneticFields:
         coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
-            coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            coils.compute_magnetic_field(
+                [20.0, 0, 0], source_grid=LinearGridCurve(N=700)
+            ),
             correct_field(20.0, 0, 0),
             atol=2e-8,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
             coils.compute_magnetic_field(
-                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+                [20.0, np.pi / 4, 0], source_grid=LinearGridCurve(N=700)
             ),
             correct_field(20.0, np.pi / 4, 0),
             atol=2e-8,
@@ -683,14 +685,16 @@ class TestMagneticFields:
         coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
-            -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            -coils.compute_magnetic_field(
+                [20.0, 0, 0], source_grid=LinearGridCurve(N=700)
+            ),
             correct_field(20.0, 0, 0),
             atol=2e-8,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
             -coils.compute_magnetic_field(
-                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+                [20.0, np.pi / 4, 0], source_grid=LinearGridCurve(N=700)
             ),
             correct_field(20.0, np.pi / 4, 0),
             atol=2e-8,
@@ -722,7 +726,7 @@ class TestMagneticFields:
         correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
 
         curve = FourierXYZCurve()  # curve to integrate A over
-        curve_grid = LinearGrid(zeta=20)
+        curve_grid = LinearGridCurve(s=20)
         curve_data = curve.compute(["x", "x_s"], grid=curve_grid)
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
@@ -1072,10 +1076,12 @@ class TestMagneticFields:
         p = np.linspace(0, 2 * np.pi / 5, 40)
         # add source_grid here just for code coverage
         field2 = SplineMagneticField.from_field(
-            field1, R, p, Z, source_grid=LinearGrid(N=1)
+            field1, R, p, Z, source_grid=LinearGridCurve(N=1)
         )
         # test the logic when compute_vector_potential returns a ValueError
-        _ = SplineMagneticField.from_field(field2, R, p, Z, source_grid=LinearGrid(N=1))
+        _ = SplineMagneticField.from_field(
+            field2, R, p, Z, source_grid=LinearGridCurve(N=1)
+        )
         # test NFP warning
         with pytest.warns(UserWarning):
             # user warning because NFP != field.NFP
@@ -1102,7 +1108,7 @@ class TestMagneticFields:
             nphi=field3._phi.size,
             # just to test the source_grid function, the
             # field is independent of source_grid
-            source_grid=LinearGrid(N=0),
+            source_grid=LinearGridCurve(N=0),
         )
         # no need for extcur b/c is saved in "raw" format, no need to scale again
         field4 = SplineMagneticField.from_mgrid(path)

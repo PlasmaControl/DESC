@@ -980,7 +980,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
 
     path = tmpdir.join("coils.MAKEGRID_format_desc")
     coilset.save_in_makegrid_format(
-        str(path), grid=LinearGrid(zeta=coilset[0].knots, theta=0, endpoint=True)
+        str(path), grid=LinearGridCurve(s=coilset[0].knots, endpoint=True)
     )
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))

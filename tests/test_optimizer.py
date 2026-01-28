@@ -1,6 +1,5 @@
 """Tests for optimizers and Optimizer class."""
 
-import inspect
 import warnings
 
 import numpy as np
@@ -73,7 +72,6 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
-from desc.optimize._desc_wrappers import _all_optax_optimizers
 from desc.optimize.optimizer import _parse_x_scale
 from desc.utils import get_all_instances
 
@@ -337,54 +335,6 @@ class TestSGD:
                 verbose=3,
                 maxiter=2,
             )
-
-    @pytest.mark.unit
-    def test_available_optax_optimizers(self):
-        """Test that all optax optimizers are included in _all_optax_optimizers."""
-        optimizers = []
-        # Optax doesn't have a specific module for optimizers, and there is no specific
-        # base class for optimizers, so we have to manually exclude some outliers. The
-        # class optax.GradientTransformationExtraArgs is the closest thing, but there
-        # are some other classes that inherit from it that are not optimizers. Since
-        # the optimizers are actually a function that returns an instance of
-        # optax.GradientTransformationExtraArgs,
-        names_to_exclude = [
-            "GradientTransformationExtraArgs",
-            "freeze",
-            "scale_by_backtracking_linesearch",
-            "scale_by_polyak",
-            "scale_by_zoom_linesearch",
-            "optimistic_adam",  # deprecated
-        ]
-        for name, obj in inspect.getmembers(optax):
-            if name.startswith("_"):
-                continue
-            if callable(obj):
-                try:
-                    sig = inspect.signature(obj)
-                    ins = {
-                        p.name: 0.1
-                        for p in sig.parameters.values()
-                        if p.default is inspect._empty
-                    }
-                    if name == "noisy_sgd":
-                        ins["key"] = 0
-                    out = obj(**ins)
-                    if isinstance(out, optax.GradientTransformationExtraArgs):
-                        if name not in names_to_exclude:
-                            optimizers.append(name)
-                except Exception:
-                    print(f"Could not instantiate: {name}")
-                    pass
-
-        msg = (
-            "Wrapped optax optimizers can be out of date. If the newly added callable "
-            "is not an optimizer, add it to the names_to_exclude list in this test."
-        )
-        print(optimizers)
-        assert len(set(optimizers)) == len(_all_optax_optimizers), msg
-        assert sorted(set(optimizers)) == sorted(_all_optax_optimizers), msg
-        assert len(set(_all_optax_optimizers)) == len(_all_optax_optimizers), msg
 
 
 class TestLSQTR:

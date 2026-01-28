@@ -10,8 +10,8 @@ from .optimizer import register_optimizer
 from .stochastic import sgd
 
 # List of all optax optimizers to register
-# test_available_optax_optimizers in tests/test_optimizer.py ensures this
-# list is up to date
+# You may use the following test to update the list accordingly
+# https://github.com/PlasmaControl/DESC/pull/2041#issuecomment-3813092445
 _all_optax_optimizers = [
     "adabelief",
     "adadelta",
@@ -42,8 +42,6 @@ _all_optax_optimizers = [
     "sign_sgd",
     "sm3",
     "yogi",
-    # will be available in the release after 0.2.6
-    # "signum",   # noqa E501
 ]
 
 

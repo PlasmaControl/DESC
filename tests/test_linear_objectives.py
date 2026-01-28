@@ -1233,3 +1233,32 @@ def test_NAE_asym_with_sym_axis():
     conZ.build()
     assert conR._A.shape[0] == conR.dim_f
     assert conZ._A.shape[0] == conZ.dim_f
+
+
+@pytest.mark.unit
+def test_linearconstraintprojection_xscale():
+    """Test that giving x_scale to LCP works."""
+    eq = desc.examples.get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=2, M=2, L_grid=4, M_grid=4)
+    cons = get_fixed_boundary_constraints(eq)
+    cons = maybe_add_self_consistency(eq, cons)
+    con = ObjectiveFunction(cons)
+    obj = ObjectiveFunction(ForceBalance(eq))
+
+    # np and jnp arrays behaves differently for
+    # arr == "auto" kind of conditions. Numpy requires
+    # a type check, Jax gives False automatically
+    lcp_scale_np = np.ones(eq.dim_x)
+    lcp_scale_np[eq.x_idx["L_lmn"]] *= 5
+    lcp_scale_jnp = jnp.array(lcp_scale_np)
+
+    lcp = LinearConstraintProjection(obj, con, x_scale=lcp_scale_np)
+    lcp.build()
+
+    lcp2 = LinearConstraintProjection(obj, con, x_scale=lcp_scale_jnp)
+    lcp2.build()
+
+    # LCP shouldn't change the given x_scale
+    assert (lcp._D == lcp_scale_np).all()
+    assert (lcp2._D == lcp_scale_np).all()

@@ -16,11 +16,13 @@ from desc.vmec import VMECIO
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_effective_ripple_2D():
+@pytest.mark.parametrize("nufft_eps", [0, 1e-6])
+def test_effective_ripple_2D(nufft_eps):
     """Test effective ripple with W7-X against NEO.
 
-    If this test has a peak memory consumption of more than 4.4 GB,
-    then there exists a memory regression that needs be fixed.
+    If this test has a peak memory consumption of more than 2.7 GB on JAX version 0.5.0
+    or more than 5.7 GB on JAX versions 0.5.3+, then there is another memory regression.
+    These values are for the test where nufft_eps is zero.
     https://github.com/jax-ml/jax/issues/30627.
     """
     eq = get("W7-X")
@@ -34,7 +36,8 @@ def test_effective_ripple_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
-        surf_batch_size=2,
+        surf_batch_size=1 if (nufft_eps == 0) else 2,
+        nufft_eps=nufft_eps,
     )
 
     assert np.isfinite(data["effective ripple 3/2"]).all()

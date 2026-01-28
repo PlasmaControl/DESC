@@ -58,7 +58,7 @@ doc_normalize_target = """
         this should also be set to ``True``.
 """
 doc_loss_function = """
-    loss_function : {None, 'mean', 'min', 'max'}, optional
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
@@ -247,6 +247,7 @@ class ObjectiveFunction(IOAble):
         "_name",
         "_things_per_objective_idx",
         "_use_jit",
+        "_static_attrs",
     ]
 
     def __init__(
@@ -441,7 +442,7 @@ class ObjectiveFunction(IOAble):
         flat_, treedef_ = tree_flatten(
             things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
-        unique_, inds_ = unique_list(flat_)
+        unique_, inds_, _ = unique_list(flat_)
 
         # this is needed to know which "thing" goes with which sub-objective,
         # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
@@ -1103,6 +1104,7 @@ class _Objective(IOAble, ABC):
         "_print_value_fmt",
         "_scalar",
         "_units",
+        "_static_attrs",
     ]
 
     def __init__(
@@ -1125,7 +1127,7 @@ class _Objective(IOAble, ABC):
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
-        assert loss_function in [None, "mean", "min", "max"]
+        assert loss_function in [None, "mean", "min", "max", "sum"]
         assert deriv_mode in {"auto", "fwd", "rev"}
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
@@ -1145,6 +1147,7 @@ class _Objective(IOAble, ABC):
             "mean": jnp.mean,
             "max": jnp.max,
             "min": jnp.min,
+            "sum": jnp.sum,
             None: None,
         }[loss_function]
 
@@ -1749,5 +1752,5 @@ class _ThingFlattener(IOAble):
         )
         assert treedef == self.treedef
         assert len(flat) == self.length
-        unique, _ = unique_list(flat)
+        unique, _, _ = unique_list(flat)
         return unique

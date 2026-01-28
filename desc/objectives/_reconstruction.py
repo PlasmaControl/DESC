@@ -124,6 +124,7 @@ class PointBMeasurement(_MagneticMeasurement):
         "_field_fixed",
         "_sheet_data_keys",
         "_compute_A_or_B_from_CurrentPotentialField",
+        "_B_plasma_chunk_size",
     ]
 
     def __init__(
@@ -147,10 +148,12 @@ class PointBMeasurement(_MagneticMeasurement):
         deriv_mode="auto",
         name="Magnetic-Point-Measurement-Error",
         jac_chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         self._field = field
         self._field_grid = field_grid
         self._vc_source_grid = vc_source_grid
+        self._B_plasma_chunk_size = B_plasma_chunk_size
         measurement_coords = np.atleast_2d(measurement_coords)
         self._use_directions = False
         if directions is not None:
@@ -173,7 +176,7 @@ class PointBMeasurement(_MagneticMeasurement):
         if basis == "rpz":
             pass
         elif basis == "xyz":
-            if directions:
+            if self._use_directions:
                 # convert directions to rpz
                 directions = xyz2rpz_vec(
                     directions, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
@@ -279,7 +282,7 @@ class PointBMeasurement(_MagneticMeasurement):
             # dot with directions if directions provided
             self._B_from_field = (
                 self._B_from_field
-                if not self._directions
+                if not self._use_directions
                 else dot(self._B_from_field, self._directions)
             )
 
@@ -374,6 +377,7 @@ class PointBMeasurement(_MagneticMeasurement):
                 source_grid=self._vc_source_grid,
                 compute_A_or_B="B",
                 data=plasma_surf_data,
+                chunk_size=self._B_plasma_chunk_size,
             )
         else:
             Bplasma = jnp.zeros_like(self._measurement_coords)

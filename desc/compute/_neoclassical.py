@@ -482,15 +482,10 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     N = kwargs.get("N",0) # default is QA, N=0
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
-    # p_max = kwargs.get("p_max",5)
-    # q_max = kwargs.get("q_max",5)
-    # res_range_min = kwargs.get("res_range_min",-4)
-    # res_range_max = kwargs.get("res_range_max",4)
     pitch_invs = kwargs.get("pitch_invs",None)
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     Bcrit_res = kwargs.get("Bcrit_res",None)
-    # Psi = kwargs.get("Psi",None)
     wd_blur = kwargs.get("wd_blur",1.25)
     res_arr = kwargs.get("res_arr",None)
     q_arr = kwargs.get("q_arr",None)
@@ -500,11 +495,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Flags
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
     rt_filter_flag = kwargs.get("rt_filter_flag",True)
-    # include_zero_res = kwargs.get("include_zero_res",True)
     STAB_SACRIFICE = kwargs.get("STAB_SACRIFICE",True)
     QS_flag = kwargs.get("QS_flag",False) # True for QS (QA, QH configurations, not QI)
     LOSS_FRAC_WEIGHT = kwargs.get("LOSS_FRAC_WEIGHT",True)
-    verbose = kwargs.get("verbose",False)
 
 
     # Setup energies

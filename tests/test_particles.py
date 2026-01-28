@@ -6,7 +6,7 @@ import pytest
 from desc.backend import jit, jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, LinearGridCurve
 from desc.magnetic_fields import (
     MagneticFieldFromUser,
     ToroidalMagneticField,
@@ -419,7 +419,7 @@ def test_init_curve_particles():
     # curve that passesthrough the LCFS of small equilibrium
     curve_mid = FourierRZCurve(R_n=11.0)
     curve_large = eq_large.get_axis()
-    grid = LinearGrid(N=eq.N_grid)
+    grid = LinearGridCurve(N=eq.N_grid)
 
     N = 100
     particles = CurveParticleInitializer(

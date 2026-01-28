@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import AbstractGridFlux, Grid, LinearGrid, QuadratureGrid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
@@ -765,7 +765,7 @@ class Equilibrium(IOAble, Optimizable):
             Name of the quantity to compute.
             If list is given, then two names are expected: the quantity to spline
             and its radial derivative.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
         kind : {"power_series", "spline", "fourier_zernike"}
@@ -848,7 +848,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
@@ -880,10 +880,10 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         errorif(
-            not isinstance(grid, _Grid),
+            not isinstance(grid, AbstractGridFlux),
             TypeError,
-            msg="must pass in a Grid object for argument grid!"
-            f" instead got type {type(grid)}",
+            msg="Must pass in an AbstractGridFlux object for argument grid, "
+            + f"but instead got type {type(grid)}.",
         )
         # a check for Redl to prevent computing on-axis or
         # at a rho=1.0 point where profiles vanish

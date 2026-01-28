@@ -98,7 +98,7 @@ and can be adjusted as shown below.
         ----------
         eq : Equilibrium
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Collocation grid containing the nodes to evaluate at.
 
         """
@@ -317,7 +317,7 @@ from above are not repeated here)
         ----------
         eq : Equilibrium or OmnigenousField
             Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
-        grid : Grid, optional
+        grid : AbstractGrid, optional
             Collocation grid containing the nodes to evaluate at. Defaults to
             ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
             or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.

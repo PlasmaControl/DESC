@@ -20,7 +20,7 @@ from desc.coils import (
 )
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, LinearGridCurve
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     ToroidalMagneticField,
@@ -248,12 +248,13 @@ def DummyCoilSet(tmpdir_factory):
 
     # CoilSet with symmetry
     num_coils = 3  # number of unique coils per half field period
-    grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    grid_flux = LinearGrid(zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    grid_curve = LinearGridCurve(s=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-        data_normal = eq.compute("e^zeta", grid=grid)
+        data_center = eq.axis.compute("x", grid=grid_curve, basis="xyz")
+        data_normal = eq.compute("e^zeta", grid=grid_flux)
     centers = data_center["x"]
-    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid_curve.nodes[:, 2])
     coils = []
     for k in range(1, 2 * num_coils + 1, 2):
         coil = FourierPlanarCoil(

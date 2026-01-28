@@ -5,7 +5,7 @@ https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html.
 """
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import AbstractGridFlux, ConcentricGrid, LinearGrid
 from desc.utils import errorif, warnif
 
 # TODO (#1389): Make the surface integral stuff objects with a callable method instead
@@ -19,7 +19,7 @@ def _get_grid_surface(grid, surface_label):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta.
@@ -39,7 +39,9 @@ def _get_grid_surface(grid, surface_label):
         Whether the grid knows the number of unique nodes and inverse idx.
 
     """
-    assert surface_label in {"rho", "poloidal", "zeta"}
+    assert isinstance(grid, AbstractGridFlux)
+    assert surface_label in ["rho", "poloidal", "zeta"]
+    surface_label_axis = grid.get_label_axis(surface_label)
     if surface_label == "rho":
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
@@ -49,11 +51,11 @@ def _get_grid_surface(grid, surface_label):
     else:
         spacing = grid.spacing[:, :2]
         has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._toroidal_endpoint
-    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
-        grid, f"_inverse_{surface_label}_idx"
+    has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
+        grid, f"_inverse_x{surface_label_axis}_idx"
     )
-    unique_size = getattr(grid, f"num_{surface_label}", -1)
-    inverse_idx = getattr(grid, f"_inverse_{surface_label}_idx", jnp.array([]))
+    unique_size = getattr(grid, f"num_x{surface_label_axis}", -1)
+    inverse_idx = getattr(grid, f"_inverse_x{surface_label_axis}_idx", jnp.array([]))
     return unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx
 
 
@@ -88,7 +90,7 @@ def line_integrals(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -162,7 +164,7 @@ def surface_integrals(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -196,7 +198,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the integration over.
@@ -326,7 +328,7 @@ def surface_averages(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to average.
@@ -371,7 +373,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the average over.
@@ -392,9 +394,9 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
-    surface_label = grid.get_label(surface_label)
-    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
-        grid, f"_inverse_{surface_label}_idx"
+    surface_label_axis = grid.get_label_axis(surface_label)
+    has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
+        grid, f"_inverse_x{surface_label_axis}_idx"
     )
     # If we don't have the idx attributes, we are forced to expand out.
     errorif(
@@ -488,7 +490,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, poloidal, or zeta to compute the integration over.
@@ -533,9 +535,9 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    surface_label = grid.get_label(surface_label)
-    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
-        grid, f"_inverse_{surface_label}_idx"
+    surface_label_axis = grid.get_label_axis(surface_label)
+    has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
+        grid, f"_inverse_x{surface_label_axis}_idx"
     )
     errorif(
         not has_idx,
@@ -595,7 +597,7 @@ def surface_variance(
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to compute the sample variance.
@@ -662,7 +664,7 @@ def surface_max(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find max.
@@ -685,7 +687,7 @@ def surface_min(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find min.

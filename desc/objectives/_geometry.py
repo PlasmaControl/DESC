@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import AbstractGridFlux, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -29,7 +29,7 @@ class AspectRatio(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -112,6 +112,12 @@ class AspectRatio(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = 1
         self._data_keys = ["R0/a"]
 
@@ -174,7 +180,7 @@ class Elongation(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -256,6 +262,12 @@ class Elongation(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
+
         self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
 
@@ -317,7 +329,7 @@ class Volume(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -396,6 +408,12 @@ class Volume(_Objective):
                 )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 1
         self._data_keys = ["V"]
@@ -477,10 +495,10 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    surface_grid : Grid, optional
+    surface_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    plasma_grid : Grid, optional
+    plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
@@ -841,7 +859,7 @@ class MeanCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -908,6 +926,12 @@ class MeanCurvature(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
@@ -981,7 +1005,7 @@ class PrincipalCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
@@ -1048,6 +1072,12 @@ class PrincipalCurvature(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
@@ -1117,7 +1147,7 @@ class BScaleLength(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
 
@@ -1178,6 +1208,12 @@ class BScaleLength(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
@@ -1249,7 +1285,7 @@ class GoodCoordinates(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     sigma : float
         Relative weight between the Jacobian and radial terms.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
 
     """
@@ -1311,6 +1347,12 @@ class GoodCoordinates(_Objective):
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = ["sqrt(g)", "g_rr", "rho"]
@@ -1386,7 +1428,7 @@ class MirrorRatio(_Objective):
     ----------
     eq : Equilibrium or OmnigenousField
         Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
@@ -1463,6 +1505,12 @@ class MirrorRatio(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["mirror ratio"]

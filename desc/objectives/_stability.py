@@ -5,8 +5,8 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
-from desc.utils import ResolutionWarning, Timer, setdefault, warnif
+from desc.grid import AbstractGridFlux, LinearGrid
+from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -46,7 +46,7 @@ class MercierStability(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
@@ -114,6 +114,11 @@ class MercierStability(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             ResolutionWarning,
@@ -200,7 +205,7 @@ class MagneticWell(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
@@ -271,6 +276,11 @@ class MagneticWell(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             ResolutionWarning,

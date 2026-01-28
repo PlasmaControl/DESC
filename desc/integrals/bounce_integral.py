@@ -182,7 +182,7 @@ class Bounce2D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
@@ -370,7 +370,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, θ, ζ).
         f : jnp.ndarray
             Data evaluated on grid.
@@ -1034,7 +1034,7 @@ class Bounce1D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
@@ -1121,7 +1121,7 @@ class Bounce1D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         f : jnp.ndarray
             Data evaluated on grid.

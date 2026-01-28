@@ -7,9 +7,9 @@ from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGrid
 from desc.integrals._interp_utils import cheb_pts, fourier_pts
-from desc.utils import parse_argname_change, setdefault, warnif
+from desc.utils import errorif, parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -60,7 +60,7 @@ class GammaC(_Objective):
     ----------
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
@@ -254,6 +254,13 @@ class GammaC(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
+        errorif(
+            not isinstance(self._grid, AbstractGridFlux),
+            ValueError,
+            msg="Grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(self._grid)
+            ),
+        )
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         x, w = leggauss(self._hyperparam["Y_B"] // 2)

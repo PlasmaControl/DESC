@@ -10,6 +10,7 @@ from desc.grid import (
     ConcentricGrid,
     Grid,
     LinearGrid,
+    LinearGridCurve,
     QuadratureGrid,
     dec_to_cf,
     find_least_rational_surfaces,
@@ -755,9 +756,7 @@ class TestGrid:
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 2 * np.pi, 3)
-        grid = Grid.create_meshgrid(
-            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
-        )
+        grid = Grid.create_meshgrid([R, A, Z], coordinates="raz")
         # treating theta == alpha just for grid construction
         grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
         # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
@@ -845,6 +844,17 @@ class TestGrid:
             z = grid.meshgrid_flatten(y, order)
             np.testing.assert_allclose(x, z)
 
+    @pytest.mark.unit
+    def test_volume_weights(self):
+        """Test that grid weights integrate to the volume of the coordinate system."""
+        # curve coordinate system (s): ∫ ds = 2π
+        grid_curve = LinearGridCurve(N=8)
+        np.testing.assert_allclose(np.sum(grid_curve.weights), 2 * np.pi)
+
+        # flux coordinate system (ρ,θ,ζ): ∫ dρ dθ dζ = 4π²
+        grid_flux = LinearGrid(L=8, M=8, N=8)
+        np.testing.assert_allclose(np.sum(grid_flux.weights), (2 * np.pi) ** 2)
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():
@@ -911,7 +921,7 @@ def test_custom_jitable_grid_indexing():
     zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
     grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
     grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
-    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_rho_idx=[0, 10])
+    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_x0_idx=[0, 10])
     np.testing.assert_allclose(grid1.nodes, grid2.nodes)
 
     x = np.random.random(grid1.num_nodes)

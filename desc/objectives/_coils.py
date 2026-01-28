@@ -8,7 +8,7 @@ from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatte
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, _Grid
+from desc.grid import AbstractGrid, LinearGrid, LinearGridCurve
 from desc.integrals import compute_B_plasma
 from desc.utils import (
     Timer,
@@ -35,7 +35,7 @@ class _CoilObjective(_Objective):
         Coil for which the data keys will be optimized.
     data_keys : list of str
         data keys that will be optimized when this class is inherited.
-    grid : Grid, list, optional
+    grid : AbstractGridCurve, list, optional
         Collocation grid containing the nodes to evaluate at.
         If a list, must have the same structure as coil.
 
@@ -118,23 +118,31 @@ class _CoilObjective(_Objective):
         if grid is None:
             grid = []
             for c in coils:
-                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
+                grid.append(LinearGridCurve(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=self._grid)
-        if isinstance(grid, _Grid):
+            grid = LinearGridCurve(N=self._grid)
+        if isinstance(grid, AbstractGrid):  # TODO: change to AbstractGridCurve
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
-            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
+            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, AbstractGrid))
 
         errorif(
             len(grid) != len(coils),
             ValueError,
             "grid input must be broadcastable to the coil structure.",
         )
+        warnif(
+            np.any([not isinstance(g, LinearGridCurve) for g in grid]),
+            DeprecationWarning,
+            "Using a LinearGrid for coil objectives is deprecated and will be removed "
+            + "in a future DESC version, use a LinearGridCurve instead.",
+        )
+        # TODO: can replace this check with a check for LinearGridCurve instead,
+        # once other grids are deprecated
         errorif(
-            np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
+            np.any([g.num_x0 > 1 or g.num_x1 > 1 for g in grid]),
             ValueError,
-            "Only use toroidal resolution for coil grids.",
+            "Only use N resolution for coil grids.",
         )
 
         self._dim_f = np.sum([g.num_nodes for g in grid])
@@ -154,7 +162,7 @@ class _CoilObjective(_Objective):
             lambda c, g: get_transforms(self._data_keys, obj=c, grid=g),
             coil,
             grid,
-            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
+            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, AbstractGrid),
         )
 
         self._grid = grid
@@ -205,9 +213,9 @@ class CoilLength(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -309,9 +317,9 @@ class CoilCurvature(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -408,9 +416,9 @@ class CoilTorsion(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -507,9 +515,9 @@ class CoilCurrentLength(CoilLength):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -615,9 +623,9 @@ class CoilIntegratedCurvature(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5, endpoint=True)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5, endpoint=True)``
 
     """
 
@@ -720,7 +728,7 @@ class CoilSetMinDistance(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
-    grid : Grid, list, optional
+    grid : AbstractGridCurve, list, optional
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
@@ -888,10 +896,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
         One of ``bound``, ``min``, or ``max`` for bounding both min and max plasma-coil
         distance or targeting only min or max plasma-coil distance.
         Defaults to ``bound``.
-    plasma_grid : Grid, optional
+    plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    coil_grid : Grid, list, optional
+    coil_grid : AbstractGridCurve, list, optional
         Collocation grid containing the nodes to evaluate coilset geometry at.
         Defaults to the default grid for the given coil-type, see ``coils.py``
         and ``curve.py`` for more details.
@@ -1181,10 +1189,10 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    plasma_grid : Grid, optional
+    plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    coil_grid : Grid, list, optional
+    coil_grid : AbstractGridCurve, list, optional
         Collocation grid containing the nodes to evaluate coilset geometry at.
         Defaults to the default grid for the given coil-type, see ``coils.py``
         and ``curve.py`` for more details.
@@ -1293,9 +1301,9 @@ class CoilArclengthVariance(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+        Defaults to ``LinearGridCurve(N=2 * coil.N + 5)``
 
     """
 
@@ -1422,15 +1430,15 @@ class QuadraticFlux(_Objective):
     field : MagneticField
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided equilibrium's surface.
-    source_grid : Grid, optional
+    source_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes for plasma source terms.
         Default grid is detailed in the docs for ``compute_B_plasma``
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
         Default grid is: ``LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
         NFP=eq.NFP, sym=False)``
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see
         the docs of that object's ``compute_magnetic_field`` method for more detail.
@@ -1657,12 +1665,12 @@ class SurfaceQuadraticFlux(_Objective):
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided QFM surface. May be fixed
         by passing in ``field_fixed=True``
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
         Default grid is: ``LinearGrid(rho=np.array([1.0]), M=surface.M_grid,``
         ``N=surface.N_grid, NFP=surface.NFP, sym=False)``
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see
         the docs of that object's ``compute_magnetic_field`` method for more detail.
@@ -1866,12 +1874,12 @@ class ToroidalFlux(_Objective):
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid containing the nodes to evaluate field source at on
         the winding surface. (used if e.g. field is a CoilSet or
         FourierCurrentPotentialField). Defaults to the default for the
         given field, see the docstring of the field object for the specific default.
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
@@ -2159,7 +2167,7 @@ class LinkingCurrentConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Collocation grid containing the nodes to evaluate plasma current at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
     eq_fixed : bool
@@ -2353,9 +2361,9 @@ class CoilSetLinkingNumber(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
-    grid : Grid, list, optional
+    grid : AbstractGridCurve, list, optional
         Collocation grid used to discretize each coil. Defaults to
-        ``LinearGrid(N=50)``
+        ``LinearGridCurve(N=50)``
 
     """
 
@@ -2418,7 +2426,7 @@ class CoilSetLinkingNumber(_Objective):
 
         """
         coilset = self.things[0]
-        grid = self._grid or LinearGrid(N=50)
+        grid = self._grid or LinearGridCurve(N=50)
 
         self._dim_f = coilset.num_coils
         self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
@@ -2502,7 +2510,7 @@ class SurfaceCurrentRegularization(_Objective):
         of this will be optimized to minimize the objective.
     regularization : str, optional
         Regularization method. One of {'K', 'Phi', 'sqrt(Phi)'}. Default = 'K'.
-    source_grid : Grid, optional
+    source_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the

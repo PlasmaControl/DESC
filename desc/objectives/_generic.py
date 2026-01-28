@@ -219,7 +219,7 @@ class GenericObjective(_Objective):
         Name of the quantity to compute.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     compute_kwargs : dict
@@ -497,7 +497,7 @@ class ObjectiveFromUser(_Objective):
         Custom objective function.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     compute_kwargs : dict

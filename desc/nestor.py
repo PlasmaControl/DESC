@@ -1006,7 +1006,7 @@ class Nestor(IOAble):
         maximum poloidal and toroidal mode numbers to use
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize external field.
     """
 

@@ -470,12 +470,13 @@ def test_assigning_profile_pressure_kinetic():
     with pytest.warns(UserWarning, match="existing pressure"):
         eq.electron_density = PowerSeriesProfile()
 
-    eq = get("reactor_QA")  # pressure-constrained
+    eq = get("reactor_QA")  # kinetic-constrained
     with pytest.warns(UserWarning, match="at least one kinetic"):
         eq.pressure = PowerSeriesProfile()
     # also tests that the normalization scales include "n","T" when pressure
     # is also present
-    scales = compute_scaling_factors(eq)
+    with pytest.warns(UserWarning, match="kinetic and pressure"):
+        scales = compute_scaling_factors(eq)
     for key in ["p", "n", "T"]:
         assert key in scales.keys()
 

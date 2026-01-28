@@ -54,7 +54,7 @@ def compute_scaling_factors(thing):
             and thing.ion_temperature is not None
         ):
             has_kinetic = True
-            # if kinetic profiles exist, then use them for "p" scale
+            # if kinetic profiles exist, populate those entries as well
             scales["n"] = float(
                 ((thing.atomic_number(0) + 1) / 2 * thing.electron_density(0))[0]
             )

@@ -13,10 +13,16 @@ from diffrax import (
     Tsit5,
     diffeqsolve,
 )
-from scipy.constants import Boltzmann, elementary_charge, proton_mass
+from scipy.constants import (
+    Boltzmann,
+    electron_mass,
+    elementary_charge,
+    epsilon_0,
+    hbar,
+    proton_mass,
+)
 
-from desc.backend import jax, jit, jnp, tree_map
-from desc.batching import vmap_chunked
+from desc.backend import jax, jit, jnp, tree_map, vmap
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
@@ -290,6 +296,173 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         vpardot = jnp.atleast_1d(-mu / m * dot(b, grad_B))
         dxdt = jnp.concatenate([Rdot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
+
+
+class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
+    """Guiding center trajectories with slowing down on electrons and main ions.
+
+    Solves the following ODEs,
+
+    d𝐑/dt = v∥ 𝐛 + (m / q B²) ⋅ (v∥² + 1/2 v⊥²) ( 𝐛 × ∇B )
+
+    dv∥/dt = − ((v² - v∥²) / 2B) ( 𝐛 ⋅ ∇B )
+
+    dv/dt = - v / τₛ (1 + v_c³ / v³)
+
+    where 𝐁 is the magnetic field vector at position 𝐑, B is the magnitude of
+    the magnetic field, 𝐛 is the unit magnetic field 𝐁/B, τₛ is the Spitzer
+    ion–electron momentum exchange time and v_c is the critical velocity associated
+    with the critical energy at which the velocity reduction transitions from
+    nearly exponential (drag on electrons) to significantly steeper (drag on ions).
+    τₛ and v_c are defined as follows:
+
+    τₛ = (mᵢ (4πϵ₀)² 3mₑ¹ᐟ² Tₑ³ᐟ²) / (mₑ 4√(2π) nₑ Zᵢ² e⁴ lnΛ)
+
+    v_c = [ (3√π / 4) (mₑ / mᵢ) ]¹ᐟ³ v_Tₑ
+
+    v_Tₑ = √(2 Tₑ / mₑ)
+
+    See ref [1]_ Eq. (1-4) for definitions, and other references [2]_ [3]_ [4]_
+    for the details.
+
+    Works only in flux coordinates corresponding to {rho, theta, zeta}. Particle
+    tracing can be performed with an Equilibrium object, which must have electron
+    temperature Te and electron density ne defined.
+
+    Parameters
+    ----------
+    m_eff : float
+        Effective mass of the plasma main ions, in units of proton mass. Default is 2.5,
+        for a 50/50 DT plasma
+    Z_eff : float
+        Effective charge of the plasma main ions, in units of elementary charge.
+        Default is 1, for H/D/T plasmas.
+
+    References
+    ----------
+    .. [1] McMillan M, Lazerson S A. "BEAMS3D neutral beam injection model"
+       Plasma Physics and Controlled Fusion (2014).
+    .. [2] Callen J D, "Fundamentals of Plasma Physics (Lecture Notes)" (Madison, WI:
+       University of Wisconsin Press) (2003)
+    .. [3] Fowler R H, Morris R N, Rome J A and Hanatani K, "Neutral beam injection
+       benchmark studies for stellarators/heliotrons", Nucl. Fusion 30 997–1010 (1990)
+    .. [4] Rosenbluth M N, MacDonald W M and Judd D L, "Fokker–Planck equation for an
+       inverse-square force", Phys.Rev. 107 1–6 (1957)
+
+    """
+
+    _Z_eff: float
+    _m_eff: float
+    vcoords = ["vpar", "v"]
+    args = ["m", "q"]
+
+    def __init__(self, frame="flux", m_eff=2.5, Z_eff=1.0):
+        assert frame == "flux"
+        self._frame = frame
+        self._Z_eff = Z_eff
+        self._m_eff = m_eff
+
+    @property
+    def Z_eff(self):
+        """Coordinate frame of the model."""
+        return self._Z_eff
+
+    @property
+    def m_eff(self):
+        """Coordinate frame of the model."""
+        return self._m_eff
+
+    @property
+    def frame(self):
+        """Coordinate frame of the model."""
+        return self._frame
+
+    @jit
+    def vf(self, t, x, args):
+        """RHS of guiding center trajectories without collisions or slowing down.
+
+        ``vf`` method corresponds to the ``vf`` method in diffrax.AbstractTerm class
+        and must have the same name and signature.
+
+        Parameters
+        ----------
+        t : float
+            Time to evaluate RHS at.
+        x : jax.Array, shape(N,5)
+            Position of particle in phase space (rho, theta, zeta, vpar, v).
+        args : tuple
+            Should include the arguments needed by the model, (m, q) as
+            an array, Equilibrium object, params and any additional keyword
+            arguments needed for magnetic field computation, i.e. iota profile for
+            the Equilibrium. Note: if Equilibrium does not have iota profile,
+            params dictionary must contain i_l, which is the iota profile parameters.
+
+        Returns
+        -------
+        dx : jax.Array, shape(N,5)
+            Velocity of particles in phase space.
+        """
+        rho, theta, zeta, vpar, v = x
+        model_args, eq, params, kwargs = args
+        m, q = model_args
+        iota = kwargs.get("iota", None)
+
+        assert (
+            eq.Te_l.size > 0
+        ), "Equilibrium must have electron temperature Te defined."
+        assert eq.ne_l.size > 0, "Equilibrium must have electron density ne defined."
+
+        grid = Grid(
+            jnp.array([rho, theta, zeta]).T,
+            spacing=jnp.zeros((3,)).T,
+            jitable=True,
+            sort=False,
+        )
+        data_keys = [
+            "B",
+            "|B|",
+            "grad(|B|)",
+            "e^rho",
+            "e^theta",
+            "e^zeta",
+            "b",
+            "Te",
+            "ne",
+        ]
+
+        transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        profiles = get_profiles(data_keys, eq, grid)
+        if iota is not None:
+            profiles["iota"] = iota
+        data = compute_fun(
+            eq,
+            data_keys,
+            params,
+            transforms,
+            profiles,
+        )
+
+        # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
+        # neutral beam injection model." Plasma Physics and Controlled Fusion (2014)
+        tau_s = slowing_down_time(data["Te"], data["ne"], self.m_eff, self.Z_eff)
+        vc = slowing_down_critical_velocity(data["Te"], self.m_eff)
+
+        # derivative of the guiding center position in R, phi, Z coordinates
+        Rdot = vpar * data["b"] + (
+            (m / q / data["|B|"] ** 2)
+            * (vpar**2 + 0.5 * (v**2 - vpar**2))
+            * cross(data["b"], data["grad(|B|)"])
+        )
+        # take dot product for rho, theta and zeta coordinates
+        rhodot = dot(Rdot, data["e^rho"])
+        thetadot = dot(Rdot, data["e^theta"])
+        zetadot = dot(Rdot, data["e^zeta"])
+        vpardot = (
+            -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
+        )
+        vdot = -v / tau_s * (1 + vc**3 / v**3)
+        dxdt = jnp.array([rhodot, thetadot, zetadot, vpardot, vdot]).reshape(x.shape)
         return dxdt.squeeze()
 
 

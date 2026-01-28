@@ -2641,7 +2641,7 @@ def test_share_parameters_coilsets():
     eq2 = eq1.copy()
     eq2.change_resolution(8, 2, 2, 12, 4, 4)
     ## setup opt problem
-    coil_grid = LinearGrid(N=10)
+    coil_grid = LinearGridCurve(N=10)
     eval_grid = LinearGrid(M=10, N=10, NFP=eq1.NFP, sym=True)
     # let surfs and Phi change while keeping their geometry shared
     obj = ObjectiveFunction(

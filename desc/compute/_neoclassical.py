@@ -517,43 +517,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Setup iotas
     iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
 
-    # # Setup rationals - moving to build()
-    # def tb_zr(res_arr_set,res_arr,q_arr):
-    #     res_arr = res_arr.at[0].set(0)
-    #     q_arr = q_arr.at[0].set(1)
-    #     return res_arr_set+1,res_arr,q_arr
-    # def fb_zr(res_arr_set,res_arr,q_arr):
-    #     return res_arr_set, res_arr, q_arr
-    # def false_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # do nothing
-    #     return res_arr_set, res_arr, q_arr
-    # def true_branch_res_setup(res_arr_set,res_arr,p,q,q_arr): # add both positive and negative resonance to res_arr
-    #     res_arr = res_arr.at[res_arr_set].set(p/q)
-    #     res_arr = res_arr.at[res_arr_set+1].set(-p/q)
-    #     q_arr = q_arr.at[res_arr_set].set(q)
-    #     q_arr = q_arr.at[res_arr_set+1].set(q)
-    #     return res_arr_set+2, res_arr, q_arr
-    # res_arr = jnp.full(2*p_max*q_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
-    # q_arr = jnp.full(2*p_max*q_max + 1, 1)
-    # res_arr_set = 0
-    # res_arr_set, res_arr, q_arr = jax.lax.cond(include_zero_res,tb_zr,fb_zr,res_arr_set,res_arr,q_arr)
-    # # p_max and q_max are Python integers so these loops remain differentiable with jax and jit
-    # for p in range(1,p_max+1): # include the zero resonance
-    #     for q in range(1,q_max+1):
-    #         condition = jnp.logical_and(
-    #             ~jnp.isin(p/q, res_arr),
-    #             jnp.logical_and(p/q >= res_range_min, p/q <= res_range_max)
-    #             )
-    #         res_arr_set, res_arr, q_arr = jax.lax.cond( condition, true_branch_res_setup, false_branch_res_setup, res_arr_set,res_arr,p,q,q_arr )
-
-    # quad = (
-    #     kwargs["quad"]
-    #     if "quad" in kwargs
-    #     else get_quadrature(
-    #         leggauss(kwargs.get("num_quad", 32)),
-    #         (automorphism_sin, grad_automorphism_sin),
-    #     )
-    # )
-
     # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     def drifts(data):
@@ -568,8 +531,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         )
         _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
         _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
-        # count_nz = jnp.count_nonzero(v_tau,axis=-1) # array size [rho][alpha][pitch]
-        # count_nz = jnp.sum(count_nz,axis=1) # array size [rho][pitch]
 
         return _alpha_drift, _psi_drift, points, v_tau
     alpha_drift_out, psi_drift_out, points, vtau_out = ( # *_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in at some other time
@@ -583,7 +544,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             pitch_invs=pitch_invs
         )
     )
-    # count_nz will be 3D [rho,alpha,pitch]
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
 
@@ -638,17 +598,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     ##### PARTICLE FILTERING #####
 
-    # Barely trapped filtering (if bt_filter_flag==True) OLD
-    # def tb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Perform barely trapped filter
-    #     points_0 = points[0][:][:][:][:]
-    #     points_1 = points[1][:][:][:][:]
-    #     iotas_tb = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0],points_0.shape[1],points_0.shape[2],points_0.shape[3]))
-    #     delta_chi = jnp.abs(jnp.abs(points_0 - points_1) * (iotas_tb - N*nfp)) # zeta->chi assuming delta(alpha)=0
-    #     return jnp.where(delta_chi < float(2.5*jnp.pi),alpha_drift_out,0.0),jnp.where(delta_chi < float(2.5*jnp.pi),psi_drift_out,0.0) # set barely-trapped particles to 0
-    # def fb_btfilter(iotas,points,N,nfp,alpha_drift_out,psi_drift_out): # Do nothing
-    #     return alpha_drift_out, psi_drift_out
-    # alpha_drift_out,psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,alpha_drift_out,psi_drift_out)
-
     # Barely trapped filtering (if bt_filter_flag==True)
     def tb_btfilter(iotas,points,N,nfp,psi_drift_out,M): # Perform barely trapped filter
         points_0 = points[0][:][:][:][:]
@@ -660,33 +609,18 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         return psi_drift_out
     # Only need to filter on psi_drift_out to filter all of f
     psi_drift_out = jax.lax.cond(bt_filter_flag,tb_btfilter,fb_btfilter,iotas,points,N,nfp,psi_drift_out,M)
-
-
-    # Ripple-trapped filtering (if rt_filter_flag==True) OLD
-    # Average and standard deviation per-surface and pitch inverse
-    # alpha_drift_avg = jnpmean_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch), does not include zero wells in averaging
-    # alpha_drift_std = jnpstd_nz(alpha_drift_out,axis=3) # :=(rho,alpha,pitch)
-    # alpha_drift_avg = jnp.broadcast_to(alpha_drift_avg[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
-    # alpha_drift_std = jnp.broadcast_to(alpha_drift_std[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
-
-    # def tb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Perform ripple-trapped filter
-    #     return jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, alpha_drift_out, 0.0),jnp.where(jnp.abs(alpha_drift_out - alpha_drift_avg) < 2*alpha_drift_std, psi_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
-    # def fb_rtfilter(alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std): # Do nothing
-    #     return alpha_drift_out, psi_drift_out
-    # alpha_drift_out, psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,alpha_drift_out,psi_drift_out,alpha_drift_avg,alpha_drift_std)
-    
+   
     # Ripple-trapped filtering (if rt_filter_flag==True)
     tau_arr = vtau_out / jnp.sqrt(v2) # := (rho,alpha,Bcrit,well), vtau->tau
     tau_well_avg = jnpmean_nz(tau_arr,axis=3) # :=(rho,alpha,pitch), does not include zero wells in averaging
     tau_well_std = jnpstd_nz(tau_arr,axis=3) # :=(rho,alpha,pitch)
     tau_well_avg = jnp.broadcast_to(tau_well_avg[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
     tau_well_std = jnp.broadcast_to(tau_well_std[..., None], (ado_shape[0], ado_shape[1], ado_shape[2], ado_shape[3])) # :=(rho,alpha,Bcrit,well)
-
-    # Only need to filter on psi_drift_out to filter all of f
     def tb_rtfilter(psi_drift_out,tau_arr,tau_well_avg,tau_well_std): # Perform ripple-trapped filter
         return jnp.where(jnp.abs(tau_arr - tau_well_avg) < 2*tau_well_std, psi_drift_out, 0.0) # this is true if the value of interest is greater than 2 standard deviations away from the mean
     def fb_rtfilter(psi_drift_out,tau_arr,tau_well_avg,tau_well_std): # Do nothing
         return psi_drift_out
+    # Only need to filter on psi_drift_out to filter all of f
     psi_drift_out = jax.lax.cond(rt_filter_flag,tb_rtfilter,fb_rtfilter,psi_drift_out,tau_arr,tau_well_avg,tau_well_std)
 
 
@@ -701,28 +635,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
     omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well)
     omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
-
-    # Setting wd (wd=DeltaOmega)
-    # def arr_max_1d(arr): # find the maximum of an array (jax/jit differentiable)
-    #     def body_fun(i, carry):
-    #         max_val, max_idx = carry
-    #         new_val = arr[i]
-    #         cond = new_val > max_val
-
-    #         # jnp.where chooses elementwise between two values
-    #         max_val = jnp.where(cond, new_val, max_val)
-    #         max_idx = jnp.where(cond, i, max_idx)
-    #         return (max_val, max_idx)
-        
-    #     carry_init = (arr[0], 0)
-    #     max_val, max_idx = jax.lax.fori_loop(1, arr.shape[0], body_fun, carry_init)
-    #     return {'max_i': max_idx, 'max_num': max_val}
-    # wd takes a different value for each (Bcrit,well) combination
-    # max_rhospace = jax.vmap(jax.vmap(arr_max_1d,in_axes=1,out_axes=0),in_axes=2,out_axes=1) # apply arr_max_1d to each (Bcrit,well) combo
-    # wd_max = max_rhospace(omega_arr) # := (Bcrit,well)
-    # wd_max = wd_max['max_num']
-    # wd = wd_blur*wd_max['max_num']
-
 
     # Setting wd (wd=DeltaOmega)
     # wd takes a different value for each (Bcrit,well) combination
@@ -772,7 +684,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     psi_drift_out = alpha_res * jnp.sum(psi_drift_out**2,axis=1) # := (rho,Bcrit,well)
     psi_drift_out = jnp.broadcast_to(psi_drift_out[...,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
 
-    # Create n array for island width - make 4D array with q values on axis=3
+    # Create n array for island width - make 4D array with n values on axis=3
     q_broad = jnp.broadcast_to(q_arr[None,None,None,:], (omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
 
     # Calculate island width or modified island width
@@ -810,9 +722,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = alpha_res * jnp.sum(f_tr2_out, axis=1) # := (rho,well)
 
     # Second sum over rho
-    # Psi_sqrt = jnp.sqrt(Psi) # I don't think Psi=0 ever with discretation of the rho grid in DESC
-    # Psi_sqrt = jnp.broadcast_to(Psi_sqrt[...,None],(ado_shape[0],ado_shape[3])) # := (rho,well)
-    # f_tr2_out = rho_res * jnp.sqrt(Psi[-1]) * jnp.sum(Psi_sqrt * f_tr2_out, axis=0) # := (well)
     rhos = jnp.broadcast_to(rhos[...,None],(ado_shape[0],ado_shape[3])) # := (rho,well)
     f_tr2_out = rho_res * jnp.sum(rhos * f_tr2_out, axis=0) # := (well)
 

@@ -2820,13 +2820,27 @@ def _field_line_integrate(
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
     theta = x[:, :, 3].squeeze().T.reshape((phis.size, *rshape))
     if iota:
-        # iota =  delta theta / delta phi, where the integration
-        # found the running sums delta x = sum(dx)
-        iota = (
-            theta[-1, :] / (phis[-1] - phis[0])
-            if theta.ndim > 1
-            else theta[-1] / (phis[-1] - phis[0])
+        # compute the iota = 1/N sum(dtheta_n / dphi_n)
+        # using WBA: iota = 1/normalization * sum(w(n/N) dtheta_n / dphi_n)
+        # where w(x) = exp(-[x(1-x)]^-1) and normalization is the
+        # normalization for that weight fxn
+        N = phis.size
+
+        def weight(n, N):
+            x = n / N
+            return jnp.exp(-(x ** (-1)) * (1 - x) ** (-1))
+
+        dts = jnp.diff(theta, axis=0)  # [nphi-1 x nfieldlines]
+        dphis = jnp.diff(phis, axis=0)
+        normalization = np.sum([weight(n, N) for n in range(1, N)])
+        # n+1 here is bc the sum is really from n=0 to N-1 inclusive,
+        #  but n=0 contributes nothing so we ignore it
+        weighted_sum = np.sum(
+            jnp.asarray([weight(n + 1, N) * dts[n] / dphis[n] for n in range(N - 1)]),
+            axis=0,
         )
+        iota = weighted_sum / normalization
+
         if return_aux:
             return r, z, iota, (out.stats, out.result)
         else:

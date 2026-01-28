@@ -4,7 +4,7 @@ import numpy as np
 from scipy import special
 
 from desc.backend import jnp, put, repeat
-from desc.utils import check_nonnegint, check_posint, errorif, setdefault
+from desc.utils import check_nonnegint, check_posint, errorif
 
 from .core import AbstractGrid
 from .utils import midpoint_spacing, periodic_spacing
@@ -246,13 +246,23 @@ class AbstractGridFlux(AbstractGrid):
     def coordinates(self):
         """Coordinates specified by the nodes.
 
-        Examples
-        --------
-        rtz : rho, theta, zeta
-        rvp : rho, theta_PEST, phi
-        raz : rho, alpha, zeta
+        Options for x0 coordinate:
+        - r = rho
+
+        Options for x1 coordinate:
+        - a = alpha
+        - t = theta
+        - v = theta_PEST
+
+        Options for x2 coordinate:
+        - p = phi
+        - z = zeta
         """
-        return self.__dict__.setdefault("_coordinates", "rtz")
+        coordinates = self.__dict__.setdefault("_coordinates", "rtz")
+        errorif(coordinates[0] not in ["r"], NotImplementedError)
+        errorif(coordinates[1] not in ["a", "t", "v"], NotImplementedError)
+        errorif(coordinates[2] not in ["p", "z"], NotImplementedError)
+        return coordinates
 
     @property
     def bounds(self):
@@ -411,9 +421,6 @@ class Grid(AbstractGridFlux):
         raz : rho, alpha, zeta
         rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
-    period : tuple of float
-        Assumed periodicity for each coordinate.
-        Use np.inf to denote no periodicity.
     NFP : int
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
@@ -441,7 +448,6 @@ class Grid(AbstractGridFlux):
         spacing=None,
         weights=None,
         coordinates="rtz",
-        period=None,
         NFP=1,
         source_grid=None,
         sort=False,
@@ -455,14 +461,6 @@ class Grid(AbstractGridFlux):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._coordinates = coordinates
-        self._period = setdefault(
-            period,
-            (
-                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
-                if coordinates == "rtz"
-                else (np.inf, np.inf, np.inf)
-            ),
-        )
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         # If you are using a custom grid it almost always is not uniform, or is under
@@ -562,7 +560,6 @@ class Grid(AbstractGridFlux):
         nodes,
         spacing=None,
         coordinates="rtz",
-        period=None,
         NFP=1,
         jitable=True,
         **kwargs,
@@ -583,9 +580,6 @@ class Grid(AbstractGridFlux):
             raz : rho, alpha, zeta
             rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
-        period : tuple of float
-            Assumed periodicity for each coordinate.
-            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
             Only makes sense to change from 1 if last coordinate is periodic
@@ -603,32 +597,28 @@ class Grid(AbstractGridFlux):
 
         """
         NFP = check_posint(NFP, "NFP", False)
-        period = setdefault(
-            period,
-            (
-                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
-                if coordinates == "rtz"
-                else (np.inf, np.inf, np.inf)
-            ),
-        )
-        a, b, c = jnp.atleast_1d(*nodes)
-        if spacing is None:
-            errorif(coordinates[0] != "r", NotImplementedError)
-            da = midpoint_spacing(a)
-            db = periodic_spacing(b, period[1])[1]
-            dc = periodic_spacing(c, period[2])[1] * NFP
+        if coordinates[1] == "a":
+            period = (np.inf, np.inf, 2 * np.pi / NFP)
         else:
-            da, db, dc = spacing
+            period(np.inf, 2 * np.pi, 2 * np.pi / NFP)
 
-        bb, aa, cc = jnp.meshgrid(b, a, c, indexing="ij")
+        x0, x1, x2 = jnp.atleast_1d(*nodes)
+        if spacing is None:
+            dx0 = midpoint_spacing(x0)
+            dx1 = periodic_spacing(x1, period[1])[1]
+            dx2 = periodic_spacing(x2, period[2])[1] * NFP
+        else:
+            dx0, dx1, dx2 = spacing
+
+        xx1, xx0, xx2 = jnp.meshgrid(x1, x0, x2, indexing="ij")
 
         nodes = jnp.column_stack(
-            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
+            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
         )
-        bb, aa, cc = jnp.meshgrid(db, da, dc, indexing="ij")
+        xx1, xx0, xx2 = jnp.meshgrid(dx1, dx0, dx2, indexing="ij")
 
         spacing = jnp.column_stack(
-            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
+            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
         )
         weights = (
             spacing.prod(axis=1)
@@ -638,31 +628,34 @@ class Grid(AbstractGridFlux):
             else None
         )
 
-        unique_a_idx = jnp.arange(a.size) * b.size
-        unique_b_idx = jnp.arange(b.size)
-        unique_c_idx = jnp.arange(c.size) * a.size * b.size
-        inverse_a_idx = jnp.tile(
-            repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
-            c.size,
+        unique_x0_idx = jnp.arange(x0.size) * x1.size
+        unique_x1_idx = jnp.arange(x1.size)
+        unique_x2_idx = jnp.arange(x2.size) * x0.size * x1.size
+        inverse_x0_idx = jnp.tile(
+            repeat(
+                unique_x0_idx // x1.size, x1.size, total_repeat_length=x0.size * x1.size
+            ),
+            x2.size,
         )
-        inverse_b_idx = jnp.tile(unique_b_idx, a.size * c.size)
-        inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
+        inverse_x1_idx = jnp.tile(unique_x1_idx, x0.size * x2.size)
+        inverse_x2_idx = repeat(
+            unique_x2_idx // (x0.size * x1.size), (x0.size * x1.size)
+        )
         return Grid(
             nodes=nodes,
             spacing=spacing,
             weights=weights,
             coordinates=coordinates,
-            period=period,
             NFP=NFP,
             sort=False,
             is_meshgrid=True,
             jitable=jitable,
-            _unique_x0_idx=unique_a_idx,
-            _unique_x1_idx=unique_b_idx,
-            _unique_x2_idx=unique_c_idx,
-            _inverse_x0_idx=inverse_a_idx,
-            _inverse_x1_idx=inverse_b_idx,
-            _inverse_x2_idx=inverse_c_idx,
+            _unique_x0_idx=unique_x0_idx,
+            _unique_x1_idx=unique_x1_idx,
+            _unique_x2_idx=unique_x2_idx,
+            _inverse_x0_idx=inverse_x0_idx,
+            _inverse_x1_idx=inverse_x1_idx,
+            _inverse_x2_idx=inverse_x2_idx,
             **kwargs,
         )
 

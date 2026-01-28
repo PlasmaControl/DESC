@@ -45,8 +45,18 @@ class AbstractGridCurve(AbstractGrid):
 
     @property
     def coordinates(self):
-        """Coordinates specified by the nodes."""
-        return self.__dict__.setdefault("_coordinates", "__s")
+        """Coordinates specified by the nodes.
+
+        Options for x0 coordinate: None
+
+        Options for x1 coordinate: None
+
+        Options for x2 coordinate:
+        - s = s
+        """
+        coordinates = self.__dict__.setdefault("_coordinates", "__s")
+        errorif(coordinates != "__s", NotImplementedError)
+        return coordinates
 
     @property
     def bounds(self):

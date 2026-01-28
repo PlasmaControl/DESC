@@ -778,7 +778,6 @@ def get_rtz_grid(
     grid = Grid.create_meshgrid(
         [radial, poloidal, toroidal],
         coordinates=coordinates,
-        period=period,
         jitable=jitable,
     )
     if "iota" in kwargs:

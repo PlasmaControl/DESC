@@ -756,9 +756,7 @@ class TestGrid:
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 2 * np.pi, 3)
-        grid = Grid.create_meshgrid(
-            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
-        )
+        grid = Grid.create_meshgrid([R, A, Z], coordinates="raz")
         # treating theta == alpha just for grid construction
         grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
         # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit

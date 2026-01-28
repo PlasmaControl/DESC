@@ -1241,6 +1241,7 @@ def test_linearconstraintprojection_xscale():
     eq = desc.examples.get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=2, M=2, L_grid=4, M_grid=4)
+    # use standard fixed boundary constraints as test
     cons = get_fixed_boundary_constraints(eq)
     cons = maybe_add_self_consistency(eq, cons)
     con = ObjectiveFunction(cons)

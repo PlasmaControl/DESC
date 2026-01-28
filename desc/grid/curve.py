@@ -359,9 +359,8 @@ class CustomGridCurve(AbstractGridCurve):
             Node coordinates, in (_,_,s).
 
         """
-        nodes = jnp.array(
-            [jnp.zeros_like(s), jnp.zeros_like(s), jnp.atleast_1d(jnp.asarray(s))]
-        ).T
+        s = jnp.atleast_1d(jnp.asarray(s))
+        nodes = jnp.array([jnp.zeros_like(s), jnp.zeros_like(s), s]).T
         # do not alter nodes given by the user for custom grids
         return nodes
 

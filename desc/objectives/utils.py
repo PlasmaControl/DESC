@@ -123,15 +123,17 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # compute x_scale if not provided
     # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
     # but the one given as solve_options["linear_constraint_options"]["x_scale"]
-    if x_scale == "auto":
+    if isinstance(x_scale, str) and x_scale == "auto":
         x_scale = objective.x(*objective.things)
+        D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+    else:
+        D = x_scale
     errorif(
         x_scale.shape != xp.shape,
         ValueError,
         "x_scale must be the same size as the full state vector. "
         + f"Got size {x_scale.size} for state vector of size {xp.size}.",
     )
-    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

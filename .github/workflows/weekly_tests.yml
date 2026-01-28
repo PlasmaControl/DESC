@@ -17,9 +17,9 @@ jobs:
                  {group: 4, python_version: '3.13'}]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.combos.python_version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.combos.python_version }}
       - name: Install dependencies

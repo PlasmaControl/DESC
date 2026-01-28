@@ -37,7 +37,7 @@ class ExternalObjective(_Objective):
         It does not need to be JAX transformable.
     dim_f : int
         Dimension of the output of ``fun``.
-    fun_kwargs : any, optional
+    fun_kwargs : dict, optional
         Keyword arguments that are passed as inputs to ``fun``.
     vectorized : bool
         Set to False if ``fun`` takes a single Equilibrium as its positional argument.
@@ -67,7 +67,8 @@ class ExternalObjective(_Objective):
             eq.save(path)
             eq = load(path)
             data = eq.compute("<beta>_vol")
-            return data["<beta>_vol"]
+            # needs to return a 1d array, not a scalar
+            return jnp.atleast_1d(data["<beta>_vol"])
 
         myobj = ExternalObjective(
             eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,

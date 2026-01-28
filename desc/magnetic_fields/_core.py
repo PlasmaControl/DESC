@@ -7,9 +7,10 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from diffrax import (
-    DiscreteTerminatingEvent,
+    Event,
     ODETerm,
     PIDController,
+    RecursiveCheckpointAdjoint,
     SaveAt,
     Tsit5,
     diffeqsolve,
@@ -24,7 +25,7 @@ from desc.basis import (
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.batching import batch_map
+from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
@@ -566,6 +567,7 @@ class _MagneticField(IOAble, ABC):
         nR=101,
         nZ=101,
         nphi=90,
+        NFP=None,
         save_vector_potential=True,
         chunk_size=None,
         source_grid=None,
@@ -590,6 +592,9 @@ class _MagneticField(IOAble, ABC):
             Number of grid points in the Z coordinate (default = 101).
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
+        NFP : int, optional
+            Number of toroidal field periods. If not provided, will default to 1 or
+            the field's NFP, if it has that attribute.
         save_vector_potential : bool, optional
             Whether to save the magnetic vector potential to the mgrid
             file, in addition to the magnetic field. Defaults to True.
@@ -611,7 +616,9 @@ class _MagneticField(IOAble, ABC):
         """
         path = os.path.expanduser(path)
         # cylindrical coordinates grid
-        NFP = self.NFP if hasattr(self, "_NFP") else 1
+        NFP = getattr(self, "_NFP", 1) if NFP is None else NFP
+        if hasattr(self, "_NFP"):
+            warnif(NFP != self.NFP, UserWarning, "NFP input is not equal to field.NFP.")
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
@@ -830,6 +837,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
+        elif isinstance(params, dict):
+            params = params["params"]
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -893,7 +902,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
-        scale = float(np.squeeze(scale))
+        scale = jnp.float64(float(np.squeeze(scale)))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -913,7 +922,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        self._scale = float(np.squeeze(new))
+        self._scale = jnp.float64(float(np.squeeze(new)))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -1246,8 +1255,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0):
-        self.B0 = float(np.squeeze(B0))
-        self.R0 = float(np.squeeze(R0))
+        self.B0 = jnp.float64(float(np.squeeze(B0)))
+        self.R0 = jnp.float64(float(np.squeeze(R0)))
 
     @optimizable_parameter
     @property
@@ -1257,7 +1266,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1267,7 +1276,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1401,7 +1410,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1550,7 +1559,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1560,7 +1569,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1570,7 +1579,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        self._iota = float(np.squeeze(new))
+        self._iota = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -2201,7 +2210,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.  If not provided, will default to 1 or
+            Number of toroidal field periods. If not provided, will default to 1 or
             the provided field's NFP, if it has that attribute.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
@@ -2209,7 +2218,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             then supply ``None``. Default is ``None``.
         source_grid : Grid, optional
             Grid used to discretize field. Defaults to the default grid for given field.
-
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2219,7 +2227,11 @@ class SplineMagneticField(_MagneticField, Optimizable):
         BR, BP, BZ = field.compute_magnetic_field(
             coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
-        NFP = getattr(field, "_NFP", 1)
+        NFP = getattr(field, "_NFP", 1) if NFP is None else NFP
+        if hasattr(field, "_NFP"):
+            warnif(
+                NFP != field.NFP, UserWarning, "NFP input is not equal to field.NFP."
+            )
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords,
@@ -2579,15 +2591,17 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=None,
     min_step_size=1e-8,
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    bs_chunk_size=None,
     iota=False,
     axis=None,
-    **kwargs,
+    options=None,
+    return_aux=False,
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2605,9 +2619,11 @@ def field_line_integrate(
     source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
-        relative and absolute tolerances for ode integration
-    maxstep : int
-        maximum number of steps between different phis
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        ``stepsize_controller`` is provided.
+    max_steps : int
+        maximum number of steps for the integration. Defaults to
+        abs((phis[-1] - phis[0]) * 1000)
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver
@@ -2616,15 +2632,17 @@ def field_line_integrate(
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
-        Defaults to (0,np.inf)
+        Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
-        Defaults to (-np.inf,np.inf)
+        Defaults to (-np.inf, np.inf)
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
+        Chunk of field lines to trace at once. If None, traces all at once.
+        Defaults to None.
+    bs_chunk_size: int or None
+        Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
+        evaluates all the source grid points at once. Defaults to None.
     iota: bool
         Whether or not to also find the rotational transform of each field line. If
         True, requires axis to be passed in. iota is computed assuming the poloidal
@@ -2633,8 +2651,12 @@ def field_line_integrate(
     axis: Curve
         The magnetic axis relative to which the rotational transform is computed. Only
         required if iota=True.
-    kwargs: dict
-        keyword arguments to be passed into the ``diffrax.diffeqsolve``
+    options : dict, optional
+        Additional arguments to pass to the diffrax diffeqsolve.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (r, z, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
@@ -2644,133 +2666,155 @@ def field_line_integrate(
     iotas : 1-D ndarray of shape [n_initial_points]
         if iota=True, the rotational transform computed for each field line traced.
     """
-    r0, z0, phis = map(jnp.atleast_1d, (r0, z0, phis))
+    if options is None:
+        options = {}
+
+    r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     errorif(iota and axis is None, ValueError, "Must pass in an axis if iota=True")
+
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
+    max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
+
+    # diffrax parameters
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
+
+    saveat = options.pop("saveat", SaveAt(ts=phis))
+    event = options.pop("event", Event(default_terminating_event))
+    adjoint = options.pop("adjoint", RecursiveCheckpointAdjoint())
+    stepsize_controller = options.pop(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
+    return _field_line_integrate(
+        r0=r0,
+        z0=z0,
+        phis=phis,
+        field=field,
+        params=params,
+        source_grid=source_grid,
+        solver=solver,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        event=event,
+        adjoint=adjoint,
+        chunk_size=chunk_size,
+        bs_chunk_size=bs_chunk_size,
+        iota=iota,
+        axis=axis,
+        options=options,
+        return_aux=return_aux,
+    )
+
+
+def _field_line_integrate(
+    r0,
+    z0,
+    phis,
+    field,
+    params,
+    source_grid,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    options,
+    chunk_size=None,
+    bs_chunk_size=None,
+    iota=False,
+    axis=None,
+    return_aux=False,
+):
+    """JIT/AD friendly field line integrator.
+
+    This function gives more control over the integration and is also JIT and AD
+    friendly. One can use this function inside an objective. All arguments must
+    have a value. For description of the full set of arguments, see
+    ``field_line_integrate``. There won't be any checks on the arguments here,
+    so make sure they are valid before using this function.
+
+    Parameters
+    ----------
+    stepsize_controller : diffrax.StepsizeController
+        Stepsize controller to use for the integration.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify when to save the solution.
+    event : diffrax.Event
+        Event object to specify when to stop the integration.
+    adjoint : diffrax.AbstractAdjoint
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    """
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
-
     # scale to make toroidal field (bp) positive
     scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
-    min_step_size = jnp.where(
-        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
-    )
-
-    @jit
-    def odefun(s, rpz, args):
-        rpz = rpz.reshape((3, -1)).T
-        field = args[0]
-        r = rpz[:, 0]
-        br, bp, bz = (
-            scale
-            * field.compute_magnetic_field(
-                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-            ).T
-        )
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
-
-    @jit
-    def odefun_iota(s, rpzt, args):
-        rpzt = rpzt.reshape((4, -1)).T  # R, phi, Z, polar theta
-        field = args[0]
-        axis = args[1]  # magnetic axis
-        r = rpzt[:, 0]
-        phi = rpzt[:, 1]
-        z = rpzt[:, 2]
-        trans = get_transforms(
-            ["x", "x_s"],
-            axis,
-            grid=Grid(
-                jnp.array([jnp.zeros_like(phi), jnp.zeros_like(phi), phi]).squeeze(),
-                jitable=True,
-            ),
-            jitable=True,
-        )
-        data_axis = axis.compute(
-            ["x", "x_s"], transforms=trans, params=axis.params_dict
-        )
-
-        br, bp, bz = (
-            scale
-            * field.compute_magnetic_field(
-                rpzt[:, :-1],
-                params,
-                basis="rpz",
-                source_grid=source_grid,
-                chunk_size=chunk_size,
-            ).T
-        )
-        dR_ds = r * br / bp * jnp.sign(bp)
-        dphi_ds = jnp.sign(bp)
-        dZ_ds = r * bz / bp * jnp.sign(bp)
-        # delta_X is the rel. position w.r.t. the magnetic axis
-        delta_R = r - data_axis["x"][:, 0].squeeze()
-        delta_Z = z - data_axis["x"][:, 2].squeeze()
-        d_delta_R_ds = dR_ds - data_axis["x_s"][:, 0].squeeze()
-        d_delta_Z_ds = dZ_ds - data_axis["x_s"][:, 2].squeeze()
-        # one negative sign bc this is based off taking a deriv of
-        # arctan(delta_Z/delta_R), and the arctan angle definition
-        # is opposite what we define as increasing poloidal angle
-        # (i.e. CCW field line rotation is decreasing arctan angle,
-        # but increasing DESC poloidal angle)
-        # sign(bp) to account for when s and Bphi are opposing
-        dtheta_ds = (
-            -jnp.sign(bp)
-            * (delta_R * d_delta_Z_ds - delta_Z * d_delta_R_ds)
-            / (delta_R**2 + delta_Z**2)
-        )
-        return jnp.array([dR_ds, dphi_ds, dZ_ds, dtheta_ds]).squeeze()
-
-    # diffrax parameters
-
-    def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
-        return jnp.logical_or(R_out, Z_out)
-
-    kwargs.setdefault(
-        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    )
-    kwargs.setdefault(
-        "discrete_terminating_event",
-        DiscreteTerminatingEvent(default_terminating_event_fxn),
-    )
     if iota:
-        term = ODETerm(odefun_iota)
         data_ax = axis.compute(["R", "Z"], grid=LinearGrid(zeta=phis[0]))
         dR = x0[:, 0] - data_ax["R"].squeeze()
         dZ = x0[:, 2] - data_ax["Z"].squeeze()
         theta0 = np.arctan2(dZ, dR)
         x0 = np.hstack([x0, theta0[:, None]])
-    else:
-        term = ODETerm(odefun)
-    saveat = SaveAt(ts=phis)
-
-    intfun = lambda x: diffeqsolve(
-        term,
-        solver,
-        y0=x,
-        t0=phis[0],
-        t1=phis[-1],
-        saveat=saveat,
-        max_steps=maxstep * len(phis),
-        dt0=min_step_size,
-        args=(field, axis),
-        **kwargs,
-    ).ys
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
-    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
-        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+        if iota is False:
+            out = vmap_chunked(
+                _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
+            )(
+                x0,
+                field,
+                params,
+                source_grid,
+                phis,
+                scale,
+                solver,
+                max_steps,
+                min_step_size,
+                saveat,
+                stepsize_controller,
+                event,
+                adjoint,
+                bs_chunk_size,
+                options,
+            )
+        else:
+            out = vmap_chunked(
+                _intfun_wrapper_iota, in_axes=(0,) + 15 * (None,), chunk_size=chunk_size
+            )(
+                x0,
+                field,
+                params,
+                source_grid,
+                phis,
+                scale,
+                solver,
+                max_steps,
+                min_step_size,
+                saveat,
+                stepsize_controller,
+                event,
+                adjoint,
+                bs_chunk_size,
+                options,
+                axis,
+            )
 
+    x = out.ys
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
@@ -2778,10 +2822,155 @@ def field_line_integrate(
     if iota:
         # iota =  delta theta / delta phi, where the integration
         # found the running sums delta x = sum(dx)
-        iota = theta[-1, :] / (phis[-1] - phis[0])
-        return r, z, iota
+        iota = (
+            theta[-1, :] / (phis[-1] - phis[0])
+            if theta.ndim > 1
+            else theta[-1] / (phis[-1] - phis[0])
+        )
+        if return_aux:
+            return r, z, iota, (out.stats, out.result)
+        else:
+            return r, z, iota
 
-    return r, z
+    if return_aux:
+        return r, z, (out.stats, out.result)
+    else:
+        return r, z
+
+
+def _intfun_wrapper(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    bs_chunk_size,
+    options,
+):
+    """Wrapper for field line integration."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid, bs_chunk_size],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    )
+
+
+@jit
+def _odefun(s, rpz, args):
+    field, params, scale, source_grid, bs_chunk_size = args
+    r = rpz[0]
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=bs_chunk_size
+        ).squeeze()
+    )
+    return jnp.array(
+        [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+    ).squeeze()
+
+
+def _intfun_wrapper_iota(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    bs_chunk_size,
+    options,
+    axis,
+):
+    """Wrapper for field line integration + iota."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun_iota),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid, bs_chunk_size, axis],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    )
+
+
+@jit
+def _odefun_iota(s, rpzt, args):
+    field, params, scale, source_grid, bs_chunk_size, axis = args
+    r = rpzt[0]
+    phi = rpzt[1]
+    z = rpzt[2]
+    trans = get_transforms(
+        ["x", "x_s"],
+        axis,
+        grid=Grid(
+            jnp.array([jnp.zeros_like(phi), jnp.zeros_like(phi), phi]).squeeze(),
+            jitable=True,
+        ),
+        jitable=True,
+    )
+    data_axis = axis.compute(["x", "x_s"], transforms=trans, params=axis.params_dict)
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpzt[:-1],
+            params,
+            basis="rpz",
+            source_grid=source_grid,
+            chunk_size=bs_chunk_size,
+        ).squeeze()
+    )
+
+    dR_ds = r * br / bp * jnp.sign(bp)
+    dphi_ds = jnp.sign(bp)
+    dZ_ds = r * bz / bp * jnp.sign(bp)
+    # delta_X is the rel. position w.r.t. the magnetic axis
+    delta_R = r - data_axis["x"][:, 0].squeeze()
+    delta_Z = z - data_axis["x"][:, 2].squeeze()
+    d_delta_R_ds = dR_ds - data_axis["x_s"][:, 0].squeeze()
+    d_delta_Z_ds = dZ_ds - data_axis["x_s"][:, 2].squeeze()
+    # one negative sign bc this is based off taking a deriv of
+    # arctan(delta_Z/delta_R), and the arctan angle definition
+    # is opposite what we define as increasing poloidal angle
+    # (i.e. CCW field line rotation is decreasing arctan angle,
+    # but increasing DESC poloidal angle)
+    # sign(bp) to account for when s and Bphi are opposing
+    dtheta_ds = (
+        -jnp.sign(bp)
+        * (delta_R * d_delta_Z_ds - delta_Z * d_delta_R_ds)
+        / (delta_R**2 + delta_Z**2)
+    )
+    return jnp.array([dR_ds, dphi_ds, dZ_ds, dtheta_ds]).squeeze()
 
 
 class OmnigenousField(Optimizable, IOAble):

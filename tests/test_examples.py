@@ -2014,7 +2014,7 @@ def test_coilset_geometry_optimization():
 
     # grids
     plasma_grid = LinearGrid(M=8, zeta=64)
-    coil_grid = LinearGrid(N=8)
+    coil_grid = LinearGridCurve(N=8)
 
     #### optimize coils with fixed equilibrium ####
     # optimizing for target coil-plasma distance and maximum coil-coil distance

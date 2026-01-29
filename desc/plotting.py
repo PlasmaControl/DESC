@@ -22,6 +22,7 @@ from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
+from desc.geometry import Curve
 from desc.grid import Grid, LinearGrid, LinearGridCurve
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
@@ -273,35 +274,49 @@ def _update_3d_layout(
     return fig
 
 
-def _get_grid(**kwargs):
+def _get_grid(thing, **kwargs):
     """Get grid for plotting.
 
     Parameters
     ----------
+    thing : Optimizable
+        Thing that is being plotted.
     kwargs
-         Any arguments taken by LinearGrid.
+        Any arguments taken by LinearGridCurve or LinearGrid.
 
     Returns
     -------
-    grid : LinearGrid
-         Grid of coordinates to evaluate at.
+    grid : AbstractGrid
+        Grid of coordinates to evaluate at.
 
     """
-    grid_args = {
-        "NFP": 1,
-        "sym": False,
-        "axis": True,
-        "endpoint": True,
-    }
+    grid_args = {"NFP": 1, "sym": False, "axis": True, "endpoint": True}
     grid_args.update(kwargs)
+
     if ("L" not in grid_args) and ("rho" not in grid_args):
         grid_args["rho"] = np.array([1.0])
+
     if ("M" not in grid_args) and ("theta" not in grid_args):
         grid_args["theta"] = np.array([0.0])
-    if ("N" not in grid_args) and ("zeta" not in grid_args):
-        grid_args["zeta"] = np.array([0.0])
 
-    grid = LinearGrid(**grid_args)
+    x2_coord = "s" if isinstance(thing, Curve) else "zeta"
+    if ("N" not in grid_args) and (x2_coord not in grid_args):
+        grid_args[x2_coord] = np.array([0.0])
+
+    if isinstance(thing, Curve):
+        sig = inspect.signature(LinearGridCurve.__init__)
+        cls_args = list(sig.parameters.keys())
+        for key in list(grid_args.keys()):
+            if key not in cls_args:
+                del grid_args[key]
+        grid = LinearGridCurve(**grid_args)
+    else:
+        sig = inspect.signature(LinearGrid.__init__)
+        cls_args = list(sig.parameters.keys())
+        for key in list(grid_args.keys()):
+            if key not in cls_args:
+                del grid_args[key]
+        grid = LinearGrid(**grid_args)
 
     return grid
 
@@ -321,11 +336,11 @@ def _get_plot_axes(grid):
 
     """
     plot_axes = [0, 1, 2]
-    if grid.num_rho == 1:
+    if grid.num_x0 == 1:
         plot_axes.remove(0)
-    if grid.num_theta == 1:
+    if grid.num_x1 == 1:
         plot_axes.remove(1)
-    if grid.num_zeta == 1:
+    if grid.num_x2 == 1:
         plot_axes.remove(2)
 
     return tuple(plot_axes)
@@ -698,7 +713,7 @@ def plot_1d(  # noqa : C901
     NFP = getattr(eq, "NFP", 1)
     if grid is None:
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
     plot_axes = _get_plot_axes(grid)
 
     data, ylabel = _compute(
@@ -882,7 +897,7 @@ def plot_2d(  # noqa : C901
     parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     errorif(len(plot_axes) != 2, msg="Grid must be 2D")
     component = kwargs.pop("component", None)
@@ -1153,7 +1168,7 @@ def plot_3d(  # noqa : C901
 
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
     assert isinstance(grid, LinearGrid), "grid must be LinearGrid for 3d plotting"
     assert only1(
         grid.num_rho == 1, grid.num_theta == 1, grid.num_zeta == 1
@@ -1672,7 +1687,7 @@ def plot_section(
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": phi,
         }
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         coords = map_coordinates(
             eq,
@@ -1943,7 +1958,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
-    r_grid = _get_grid(**grid_kwargs)
+    r_grid = _get_grid(eq, **grid_kwargs)
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
         map_coordinates(
@@ -1965,7 +1980,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
-        t_grid = _get_grid(**grid_kwargs)
+        t_grid = _get_grid(eq, **grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
             map_coordinates(
@@ -2330,7 +2345,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
-    grid = _get_grid(**grid_kwargs)
+    grid = _get_grid(eq, **grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
         map_coordinates(
@@ -2514,7 +2529,7 @@ def plot_boundaries(
         rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
 
         grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eqs[i], **grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
             map_coordinates(
@@ -3216,7 +3231,7 @@ def plot_boozer_surface(
             "NFP": thing.NFP,
             "endpoint": False,
         }
-        grid_compute = _get_grid(**grid_kwargs)
+        grid_compute = _get_grid(thing, **grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
             "rho": rho,
@@ -3225,7 +3240,7 @@ def plot_boozer_surface(
             "NFP": thing.NFP,
             "endpoint": eq_switch,
         }
-        grid_plot = _get_grid(**grid_kwargs)
+        grid_plot = _get_grid(thing, **grid_kwargs)
 
     # compute
     if eq_switch:  # Equilibrium

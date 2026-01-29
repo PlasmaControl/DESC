@@ -1,10 +1,12 @@
 """Function for minimizing a scalar function of multiple variables."""
 
+import warnings
+
 import optax
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, setdefault, warnif
 
 from .utils import (
     STATUS_MESSAGES,
@@ -149,6 +151,19 @@ def sgd(  # noqa: C901
         ValueError,
         "x_scale should be one of 'auto' or array-like, got {}".format(x_scale),
     )
+    deprecated_sgd = False
+    if method == "sgd":
+        # warn the user but do not fail the pytest
+        with warnings.catch_warnings():
+            warnings.filterwarnings("default", "'sgd' method is deprecated")
+            warnif(
+                True,
+                DeprecationWarning,
+                "'sgd' method is deprecated and will be removed in a future "
+                "release in favor of 'optax-sgd'",
+            )
+        method = "optax-sgd"
+        deprecated_sgd = True
     if isinstance(x_scale, str):
         x_scale = 1.0
 
@@ -172,24 +187,21 @@ def sgd(  # noqa: C901
     xs_norm = jnp.linalg.norm(x / x_scale, ord=2)
     maxiter = setdefault(maxiter, N * 100)
 
-    v = jnp.zeros_like(x)
-    method_options = {}
-    method_options["alpha"] = options.pop("alpha", 1e-2 * xs_norm / gs_norm)
+    alpha = options.pop("alpha", 1e-2 * xs_norm / gs_norm)
     # check for zero or nan step size
-    if method_options["alpha"] == 0 or jnp.isnan(method_options["alpha"]):
-        method_options["alpha"] = 1e-3  # default small step size
-    method_options["beta"] = options.pop("beta", 0.9)
+    if alpha == 0 or jnp.isnan(alpha):
+        alpha = 1e-3  # default small step size
     if "optax-" in method and method != "optax-custom":
-        alpha_default = method_options.pop("alpha")
         method_options = options.pop("optax-options", {})
         if method not in ["optax-lbfgs", "optax-polyak_sgd"]:
             # L-BFGS uses its own line search, so don't set learning rate if not given
-            method_options["learning_rate"] = method_options.get(
-                "learning_rate", alpha_default
-            )
+            method_options["learning_rate"] = method_options.get("learning_rate", alpha)
         if method == "optax-noisy_sgd":
             # noisy_sgd requires a key for random number generation
             method_options["key"] = method_options.get("key", 0)
+        if deprecated_sgd and "momentum" not in method_options:
+            method_options["momentum"] = options.pop("beta", 0.9)
+
     elif method == "optax-custom":
         method_options = options.pop("optax-options", {})
         errorif(
@@ -236,16 +248,11 @@ def sgd(  # noqa: C901
         print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
-    if "optax-" not in method:
-        # select the update rule that we implemented
-        update_rule = {"sgd": _sgd}[method]
-    else:
-        if method != "optax-custom":
-            optax_method = getattr(optax, method.replace("optax-", ""))(
-                **method_options
-            )
-        opt_state = optax_method.init(x)
-        optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
+    if method != "optax-custom":
+        optax_method = getattr(optax, method.replace("optax-", ""))(**method_options)
+    opt_state = optax_method.init(x)
+    # necessary for linesearch
+    optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
 
     while True:
         success, message = check_termination(
@@ -266,12 +273,9 @@ def sgd(  # noqa: C901
         if success is not None:
             break
 
-        if "optax-" not in method:
-            dxs, v = update_rule(gs, v, **method_options)
-        else:
-            dxs, opt_state = optax_method.update(
-                gs, opt_state, x / x_scale, value=f, grad=gs, value_fn=optax_fun
-            )
+        dxs, opt_state = optax_method.update(
+            gs, opt_state, x / x_scale, value=f, grad=gs, value_fn=optax_fun
+        )
         dx = dxs * x_scale
         x = x + dx
         gs = grad(x, *args) * x_scale
@@ -317,10 +321,3 @@ def sgd(  # noqa: C901
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
 
     return result
-
-
-def _sgd(g, v, alpha, beta):
-    """Update rule for the stochastic gradient descent with momentum."""
-    v = beta * v + (1 - beta) * g
-    dx = -alpha * v
-    return dx, v

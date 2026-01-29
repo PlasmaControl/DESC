@@ -201,6 +201,7 @@ def sgd(  # noqa: C901
             method_options["key"] = method_options.get("key", 0)
         if deprecated_sgd and "momentum" not in method_options:
             method_options["momentum"] = options.pop("beta", 0.9)
+            method_options["nesterov"] = True
 
     elif method == "optax-custom":
         method_options = options.pop("optax-options", {})

@@ -21,7 +21,7 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - The ``x_scale`` parameter can now be used with stochastic gradient descent type optimizers.
-- Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary.
+- Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary. See the docstring of the ``optax-custom`` for details.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 
@@ -33,6 +33,11 @@ Bug Fixes
 Performance Improvements
 
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+
+Depreciations
+
+- ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer['sgd']` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer['optax-sgd']` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
+
 
 v0.16.0
 -------

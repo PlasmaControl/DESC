@@ -267,16 +267,13 @@ class AbstractGridFlux(AbstractGrid):
     @property
     def bounds(self):
         """Bounds of coordinates."""
-        if self.coordinates[1] == "a":
-            return ((0, 1), (0, np.inf), (0, 2 * np.pi))
-        else:
-            return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi))
+        return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi))
 
     @property
     def period(self):
         """Periodicity of coordinates."""
         if self.coordinates[1] == "a":
-            return (np.inf, np.inf, 2 * np.pi / self.NFP)
+            return (np.inf, np.inf, np.inf)
         else:
             return (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
 

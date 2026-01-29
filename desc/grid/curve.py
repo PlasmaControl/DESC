@@ -10,7 +10,7 @@ from .utils import periodic_spacing
 
 
 class AbstractGridCurve(AbstractGrid):
-    """Base class for collocation grids along 1D curves."""
+    """Base class for collocation grids along 1D filamentary curves."""
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP"]
 

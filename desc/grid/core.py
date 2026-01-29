@@ -129,6 +129,11 @@ class AbstractGrid(IOAble, ABC):
         # span the surface.
         return weights
 
+    def get_label_axis(self, label):
+        """Get node axis index associated with given coordinate label."""
+        label = self.get_label(label)
+        return {"x0": 0, "x1": 1, "x2": 2}[label]
+
     def compress(self, x, surface_label):
         """Return elements of ``x`` at indices of unique surface label values.
 
@@ -339,11 +344,6 @@ class AbstractGrid(IOAble, ABC):
     @abstractmethod
     def get_label(self, label) -> str:
         """Get general label that specifies the direction of given coordinate label."""
-        pass
-
-    @abstractmethod
-    def get_label_axis(self, label) -> int:
-        """Get node axis index associated with given coordinate label."""
         pass
 
     @property

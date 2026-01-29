@@ -196,17 +196,12 @@ class AbstractGridFlux(AbstractGrid):
 
     def get_label(self, label):
         """Get general label that specifies the direction of given coordinate label."""
-        if label in {"rho", "poloidal", "zeta"}:
+        if label in {"x0", "x1", "x2"}:
             return label
-        rad = {"r": "rho"}[self.coordinates[0]]
-        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
-        tor = {"z": "zeta"}[self.coordinates[2]]
-        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
-
-    def get_label_axis(self, label):
-        """Get node axis index associated with given coordinate label."""
-        label = self.get_label(label)
-        return {"rho": 0, "poloidal": 1, "zeta": 2}[label]
+        x0 = {"r": "rho"}[self.coordinates[0]]
+        x1 = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
+        x2 = {"z": "zeta"}[self.coordinates[2]]
+        return {x0: "x0", x1: "x1", x2: "x2"}[label]
 
     def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.

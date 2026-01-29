@@ -143,7 +143,7 @@ def line_integrals(
     # should correspond to the line label's spacing.
     # The differential element of the surface integral is
     # ds = dl * fix_surface_dl, so we scale q_prime by 1 / fix_surface_dl.
-    axis = {"rho": 0, "poloidal": 1, "zeta": 2}
+    axis = {"x0": 0, "x1": 1, "x2": 2}
     column_id = axis[fix_label]
     mask = grid.nodes[:, column_id] == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
@@ -268,7 +268,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         )
         # don't try to expand if already expanded
         expand_out = expand_out and has_idx
-        axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
+        axis = {"x0": 0, "x1": 1, "x2": 2}[surface_label]
         # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
         # reduces memory usage by > 400% for the forward computation and Jacobian.
         nodes = jnp.asarray(grid.nodes[:, axis])

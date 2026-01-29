@@ -35,13 +35,10 @@ class AbstractGridCurve(AbstractGrid):
 
     def get_label(self, label):
         """Get general label that specifies the direction of given coordinate label."""
-        assert label == "s"
-        return label
-
-    def get_label_axis(self, label):
-        """Get node axis index associated with given coordinate label."""
-        label = self.get_label(label)
-        return {"s": 2}[label]
+        if label in {"x0", "x1", "x2"}:
+            return label
+        x2 = {"s": "s"}[self.coordinates[2]]
+        return {x2: "x2"}[label]
 
     @property
     def coordinates(self):

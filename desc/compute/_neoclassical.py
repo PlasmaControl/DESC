@@ -490,7 +490,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     res_arr = kwargs.get("res_arr",None)
     q_arr = kwargs.get("q_arr",None)
     quad = kwargs.get("quad",None)
-    rhos = kwargs.get("rhos",None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
 
     # Flags
     bt_filter_flag = kwargs.get("bt_filter_flag",True)
@@ -507,11 +507,11 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     KE = KE_frac * 5.6076*10**(-13) # J, 3.5 MeV if KE_frac=1
     v2 = 2*KE/m_alpha # m/s
 
-    # Setup iotas
+    # Setup other grid-related parameters
+    rhos = grid.nodes[grid.unique_rho_idx, 0]
     iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user
 
     # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
     def drifts(data):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
@@ -522,8 +522,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             ["gbdrift","cvdrift0"],
             num_well=num_well,
         )
-        _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
-        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
+        _alpha_drift = safediv(2.0 * _alpha_drift , v_tau) # safediv will take out NaNs
+        _psi_drift = safediv(2.0 * _psi_drift , v_tau) # safediv will take out NaNs
 
         return _alpha_drift, _psi_drift, points, v_tau
     alpha_drift_out, psi_drift_out, points, vtau_out = ( # *_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in at some other time
@@ -533,37 +533,12 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             data,
             grid,
             num_pitch,
-            surf_batch_size,
+            surf_batch_size, # avoid jax's vectorizing if set to 1 in the rho dimension
             pitch_invs=pitch_invs
         )
     )
     assert alpha_drift_out.shape[:-1] == (grid.num_rho,grid.num_alpha,num_pitch) # don't know well number yet, default is None, and assert is useable in optimization
     ado_shape = jnp.shape(alpha_drift_out)
-
-    # def psi_drift(data):
-    #     bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-    #     v_tau, _psi_drift = bounce.integrate(
-    #         [_v_tau, _radial_drift],
-    #         data["pitch_inv"],
-    #         data,
-    #         ["cvdrift0"],
-    #         num_well=num_well,
-    #     )
-    #     _psi_drift = safediv(2.0 * _psi_drift , v_tau) # jnp.countnonzero, safediv will take out NaNs
-
-    #     return _psi_drift
-
-    # psi_drift_out = ( # psi_drift_out := (rho,alpha,Bcrit,wells) in order. Energy will be added in later
-    #     _compute(
-    #         psi_drift, 
-    #         {"cvdrift0": data["cvdrift0"]},
-    #         data,
-    #         grid,
-    #         num_pitch,
-    #         surf_batch_size,
-    #         pitch_invs=pitch_invs
-    #     )
-    # ) 
 
     
     # Setup array allocations
@@ -576,10 +551,10 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     '''
     
     # Setup mean and standard deviation functions
-    def jnpmean_nz(x,axis=0):
+    def jnpmean_nz(x,axis=0,fill=0): # if all values in x along axis = 0, this outputs zero. This is okay for f_b, well=0 points where no bounce occurs will be taken care of by psi_drift_out
         mask = x!=0.0
         count = jnp.sum(mask,axis) # how many wells that are not 0
-        return safediv(jnp.sum(x,axis=axis) , count)
+        return safediv(jnp.sum(x,axis=axis) , count, fill=fill)
     def jnpstd_nz(x,axis=0): # compute population standard deviation of an array while ignoring "0" elements in JAX numpy
         # x is an array with size: (num_rho,num_alpha,num_pitch,num_fieldlines)
         xbar = jnpmean_nz(x,axis=axis)
@@ -627,7 +602,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         return jnp.ones(iotas_omega.shape)
     QS_factor = jax.lax.cond(QS_flag,tb_QS,fb_QS,nfp,N,iotas_omega)
     omega_arr_test = QS_factor * tau_arr * (m_alpha/(Z*e)) * alpha_drift_out * v2[0] / (2*jnp.pi) # :=(rho,alpha,Bcrit,well)
-    omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well)
+    # omega_arr = alpha_res * jnp.sum(omega_arr_test,axis=1) / (2*jnp.pi) # :=(rho,Bcrit,well), concern in this line about if there are values that don't have an Omega_eta in omega_arr, they will skew the results
+    omega_arr = jnpmean_nz(omega_arr_test,axis=1,fill=11.0) # :=(rho,Bcrit,well), will return 11.0 only if there was not a single field line for this (rho,Bc,well) combination that had a non-0.0 value (extremely unlikely for something close to the zero resonance but will be true if not trapped at this combination)
 
     # Setting wd (wd=DeltaOmega)
     # wd takes a different value for each (Bcrit,well) combination
@@ -636,7 +612,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     # Check if wd needs to be cropped if resolution or shear issues
     wd_max = softmax(omega_arr,alpha=50,axis=0) # := (Bcrit,well)
-    wd_max = jnp.ones(wd_max.shape) * 0.10 * wd_max # if all elements needed to be cropped
+    wd_max = jnp.ones(wd_max.shape) * 0.05 * wd_max # if all elements needed to be cropped
     wd_min = softmin(omega_arr,alpha=50,axis=0) # := (Bcrit,well)
     wd_min = jnp.ones(wd_min.shape) * 0.01 * wd_max # if all elements needed to be cropped
     wd = jnp.where(wd > wd_max,wd_max,wd) # limit max size of wd based on 10% of wd_max
@@ -661,7 +637,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     a = res_broad + wd
     b = res_broad - wd
     y = omega_broad - res_broad
-    condition = jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) # check that corresponding omega value is less than wd away from the resonance and not jnp.pi (unset)
+    condition = jnp.logical_and( jnp.logical_and(abs(y) < wd, res_broad!=jnp.pi) , omega_broad!=11.0 ) # check that corresponding Omega_eta value is less than wd away from the resonance and not res_broad==jnp.pi (no resonance considered at this array element) and omega_broad!=11.0 so a trapping condition exists somewhere in this (rho,Bc,well) combination
 
     # Calculate bump function (f_b)
     w=1 # width and amplitude parameter, recommended to keep =1
@@ -670,7 +646,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         jnp.exp(  jnp.clip( safediv(w * ((a-b)**2) , ( (omega_broad-b) * (omega_broad-a)) ) ,-500,500)  ), # clip to avoid overflow warning in jnp.exp()
         0
         ) # := (rho,Bcrit,well,res)
-    
+        
 
     ##### ISLAND WIDTH TERM #####
     # Sum psi_drift_out term over alpha
@@ -684,7 +660,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     if STAB_SACRIFICE:
         Deltarho_4 = safediv(psi_drift_out , q_broad**2) # := (rho,Bcrit,well,res)
     else:
-        omega_prime = jnp.gradient(omega_arr,rho_res,axis=0) # := (rho,Bcrit,well), omega_arr is :=(rho,Bcrit,well)
+        omega_prime = jnp.where(omega_arr == 11.0, 0 , jnp.gradient(omega_arr,rho_res,axis=0))# := (rho,Bcrit,well), omega_arr is :=(rho,Bcrit,well)
         omega_prime = jnp.broadcast_to(omega_prime[...,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
         Deltarho_4 = safediv(psi_drift_out , omega_prime*(q_broad**2)) # := (rho,Bcrit,well,res)
 
@@ -722,17 +698,12 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
 
-    data["f_tr2"] = f_tr2_out # full output
-    # data["f_tr2"] = { # for plotting/debugging
-    #     'omega_arr':omega_arr_test,
-    #     'psi_drift_out':psi_drift_out,
-    #     'iotas_rho1_sum': iotas_rho1_sum,
-    #     'f_b': f_b,
-    #     'tau_arr': tau_arr,
-    #     'nfp': nfp,
-    #     'alpha_drift_out':alpha_drift_out,
-    #     'pitch_inv':pitch_inv,
-    #     'f_tr2_out':f_tr2_out,
-    #     'iotas': iotas
-    #     }
+    # data["f_tr2"] = f_tr2_out # full output
+    data["f_tr2"] = { # for plotting/debugging
+        'omega_arr':omega_arr,
+        'f_b': f_b,
+        'f_tr2_out':f_tr2_out,
+        'rhos': rhos,
+        'res_arr': res_arr
+        }
     return data

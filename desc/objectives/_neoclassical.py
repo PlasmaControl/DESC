@@ -479,7 +479,7 @@ class TrappedResonance(_Objective):
         KE_frac=np.array([1]), # currently only supporting one KE_frac
         # Psi=None,
         *,
-        num_transit=3,
+        num_transit=5,
         knots_per_transit=100,
         num_quad=32,
         num_pitch=1,
@@ -545,7 +545,6 @@ class TrappedResonance(_Objective):
             "verbose": verbose,
             "wd_blur": wd_blur,
             'M': M,
-            'rhos': rho
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"

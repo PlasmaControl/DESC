@@ -5,7 +5,7 @@ https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html.
 """
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import AbstractGridFlux, ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid
 from desc.utils import errorif, warnif
 
 # TODO (#1389): Make the surface integral stuff objects with a callable method instead
@@ -19,10 +19,10 @@ def _get_grid_surface(grid, surface_label):
 
     Parameters
     ----------
-    grid : AbstractGridFlux
+    grid : AbstractGrid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
-        The surface label of rho, poloidal, or zeta.
+        The coordinate surface label.
 
     Returns
     -------
@@ -39,13 +39,12 @@ def _get_grid_surface(grid, surface_label):
         Whether the grid knows the number of unique nodes and inverse idx.
 
     """
-    assert isinstance(grid, AbstractGridFlux)
-    assert surface_label in ["rho", "poloidal", "zeta"]
+    surface_label = grid.get_label(surface_label)
     surface_label_axis = grid.get_label_axis(surface_label)
-    if surface_label == "rho":
+    if surface_label == "x0":
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
-    elif surface_label == "poloidal":
+    elif surface_label == "x1":
         spacing = grid.spacing[:, [0, 2]]
         has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._poloidal_endpoint
     else:

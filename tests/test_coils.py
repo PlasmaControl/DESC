@@ -1097,7 +1097,7 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
     path = tmpdir.join("coils.MAKEGRID_format_groups_desc")
 
     coilset.save_in_makegrid_format(
-        str(path), grid=LinearGrid(zeta=coilset[0][0].knots, theta=0, endpoint=True)
+        str(path), grid=LinearGridCurve(s=coilset[0][0].knots, endpoint=True)
     )
     coilset2 = MixedCoilSet.from_makegrid_coilfile(str(path), ignore_groups=False)
     # also compare to flattened

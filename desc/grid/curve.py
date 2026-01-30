@@ -105,9 +105,9 @@ class LinearGridCurve(AbstractGridCurve):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractGridCurve._io_attrs_ + ["_endpoint", "_sort"]
+    _io_attrs_ = AbstractGridCurve._io_attrs_ + ["_endpoint"]
 
-    _static_attrs = AbstractGridCurve._static_attrs + ["_endpoint", "_sort"]
+    _static_attrs = AbstractGridCurve._static_attrs + ["_endpoint"]
 
     def __init__(
         self,

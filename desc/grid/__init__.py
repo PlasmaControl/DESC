@@ -3,6 +3,7 @@
 from .core import AbstractGrid
 from .curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
 from .flux import AbstractGridFlux, ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from .surface import LinearGridSurface
 from .utils import (
     cf_to_dec,
     dec_to_cf,

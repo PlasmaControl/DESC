@@ -457,8 +457,8 @@ class TrappedResonance(_Objective):
 
     """
 
-    _scalar = False
-    _coordinates = "r" # "rtz" if need all three coordinates
+    _scalar = True
+    _coordinates = "" # "rtz" if need all three coordinates
     _units = "(s^-2)"
     _print_value_fmt = "Trapped EP Resonance Penalty: "
 

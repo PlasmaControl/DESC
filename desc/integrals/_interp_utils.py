@@ -16,7 +16,7 @@ except ImportError:
         "computations that involve bounce integrals.\n"
     )
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.utils import safediv
 
 
@@ -161,8 +161,8 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
-def cubic_val(*, x, c, der=False):
-    """Evaluate cubic polynomial ``c`` at the points ``x``.
+def poly_val(*, x, c, der=False):
+    """Evaluate polynomial ``c`` at the points ``x``.
 
     Parameters
     ----------
@@ -190,10 +190,17 @@ def cubic_val(*, x, c, der=False):
         )
 
     """
-    assert c.shape[-1] == 4
-    if der:
-        return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
-    return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+    if c.shape[-1] == 4:
+        if der:
+            return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
+        return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+
+    if c.shape[-1] == 3:
+        if der:
+            return 2 * c[..., 0] * x + c[..., 1]
+        return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+
+    raise NotImplementedError
 
 
 def _subtract_first(c, k):
@@ -244,6 +251,10 @@ _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 # TODO (#1388): Move to interpax.
 
 
+@partial(
+    jax.custom_vjp,
+    nondiff_argnames=("sort", "sentinel", "eps", "distinct"),
+)
 def polyroot_vec(
     c,
     k=0.0,
@@ -330,6 +341,53 @@ def polyroot_vec(
         r = _filter_distinct(r, sentinel, eps)
     assert r.shape[-1] == num_coef - 1
     return r
+
+
+def _polyroot_fwd(c, k, a_min, a_max, sort, sentinel, eps, distinct):
+    r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
+    return r, (c, k, r)
+
+
+def _unbroadcast(g, target_shape):
+    ndim_diff = g.ndim - len(target_shape)
+    if ndim_diff:
+        g = g.sum(tuple(range(ndim_diff)))
+
+    dims_to_sum = tuple(
+        i
+        for i, (g_dim, t_dim) in enumerate(zip(g.shape, target_shape))
+        if t_dim == 1 and g_dim > 1
+    )
+    if dims_to_sum:
+        g = g.sum(dims_to_sum, keepdims=True)
+
+    return g
+
+
+def _polyroot_bwd(sort, sentinel, eps, distinct, res, g):
+    """Implicit function theorem with regularization.
+
+    Regularization used to fix autodiff.
+    """
+    c, k, r = res
+
+    dc_dr = poly_val(x=r, c=c[..., None, :], der=True)
+    dc_dr = jnp.where(jnp.abs(dc_dr) > eps, dc_dr, dc_dr + jnp.copysign(eps, dc_dr))
+
+    g = jnp.where(r == sentinel, 0.0, g / dc_dr)
+    gees = [g]
+    for i in range(1, c.shape[-1]):  # this is a small loop
+        gees.append(gees[-1] * r)
+
+    gees = [g.sum(-1) for g in gees]
+    g = -jnp.stack(
+        [_unbroadcast(g, c.shape[:-1]) for g in gees[::-1]],
+        axis=-1,
+    )
+    return (g, _unbroadcast(gees[0], jnp.shape(k)), None, None)
+
+
+polyroot_vec.defvjp(_polyroot_fwd, _polyroot_bwd)
 
 
 def _root_cubic(a, b, c, d, sentinel, eps, distinct):

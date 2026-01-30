@@ -12,7 +12,7 @@ from tests.test_plotting import tol_2d
 from desc.backend import jnp, rfft, rfft2
 from desc.examples import get
 from desc.integrals import Bounce2D
-from desc.integrals._interp_utils import cubic_val, nufft1d2r, nufft2d2r, polyroot_vec
+from desc.integrals._interp_utils import nufft1d2r, nufft2d2r, poly_val, polyroot_vec
 
 
 def _c_1d(x):
@@ -297,7 +297,7 @@ class TestPolyUtils:
             assert np.unique(c.shape).size == c.ndim
             dc = np.vectorize(np.polyder, signature="(m)->(n)")(c) if der else c
             np.testing.assert_allclose(
-                cubic_val(x=x, c=c, der=der),
+                poly_val(x=x, c=c, der=der),
                 np.sum(polyvander(x, dc.shape[-1] - 1) * dc[..., ::-1], axis=-1),
             )
 

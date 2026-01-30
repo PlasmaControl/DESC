@@ -26,8 +26,8 @@ from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
     _subtract_first,
-    cubic_val,
     nufft1d2r,
+    poly_val,
     polyroot_vec,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
@@ -152,7 +152,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     )
     assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
-    dB_dz = flatten_mat(jnp.sign(cubic_val(x=intersect, c=B[..., None, :], der=True)))
+    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=True)))
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
@@ -565,14 +565,13 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         a_max=jnp.diff(knots),
         sentinel=0.0,
     )
-    b = b[..., None, :]
-    b = flatten_mat((2 * b[..., 0] * mins + b[..., 1] > 0) & (mins > 0))
+    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=True) > 0) & (mins > 0))
     mins = flatten_mat(
         jnp.stack(
             [
                 # Transform out of local power basis expansion.
                 mins + knots[:-1, None],
-                cubic_val(x=mins, c=B[..., None, :]),
+                poly_val(x=mins, c=B[..., None, :]),
             ]
         )
     )

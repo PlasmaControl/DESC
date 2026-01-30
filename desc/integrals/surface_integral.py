@@ -121,14 +121,14 @@ def line_integrals(
         By default, the returned array has the same shape as the input.
 
     """
-    line_label = grid.get_label(line_label)
+    line_label = grid.get_label(line_label)  # general coordinate -> x0, x1, or x2
     fix_label = grid.get_label(fix_surface[0])
     errorif(
         line_label == fix_label,
         msg="There is no valid use for this combination of inputs.",
     )
     errorif(
-        line_label != "poloidal" and isinstance(grid, ConcentricGrid),
+        line_label != "x1" and isinstance(grid, ConcentricGrid),
         msg="ConcentricGrid should only be used for poloidal line integrals.",
     )
     warnif(

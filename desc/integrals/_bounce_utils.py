@@ -864,7 +864,7 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
     # pitch_inv = jnp.array([0.92]) # DESC_pyQSC_NAE_2022 QH nfp7.h5
     # pitch_inv = jnp.array([1.3]) # wout_nfp2_beta_2.00.nc
     # pitch_inv = jnp.array([2.0]) # qs_initial_guess.h5
-    pitch_inv = jnp.array([5.0,5.1,5.2])
+    # pitch_inv = jnp.array([5.0,5.1,5.2])
 
     
     return pitch_inv, weight

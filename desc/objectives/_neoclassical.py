@@ -445,8 +445,8 @@ class TrappedResonance(_Objective):
 
     Description
     ----------
-    Creates Gaussian about a specified n lowest order resonances (p/q) for trapped particle motion
-    Vicinity to these resonance frequencies is penalized
+    Creates bump function about a specified number of lowest order resonances (m/n) for trapped energetic particle motion
+    Vicinity to these rational values is penalized
 
     Parameters
     ----------
@@ -457,9 +457,10 @@ class TrappedResonance(_Objective):
 
     """
 
+    _scalar = False
     _coordinates = "r" # "rtz" if need all three coordinates
-    _units = "(s^-2)" # A is dimensionless, vD has units m/s, grad(psi) has units of 1/m, so this objective function has units of s^-2
-    _print_value_fmt = "Resonant frequency vicinity: "
+    _units = "(s^-2)"
+    _print_value_fmt = "Trapped EP Resonance Penalty: "
 
     _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]
 
@@ -477,12 +478,12 @@ class TrappedResonance(_Objective):
         rho=np.linspace(0.1, 0.9, 3),
         alpha=np.linspace(0,2*np.pi,10),
         KE_frac=np.array([1]), # currently only supporting one KE_frac
-        # Psi=None,
         *,
         num_transit=5,
         knots_per_transit=100,
         num_quad=32,
-        num_pitch=1,
+        num_pitch=16,
+        pitch_method=1,
         batch=True,
         num_well=None,
         Nemov=True,
@@ -491,17 +492,19 @@ class TrappedResonance(_Objective):
         pitch_invs=None,
         N=0, # QA is default
         QS_flag=True,
-        m_max = 5,
+        m_max = 10,
         n_max = 5,
         res_range_min = -4,
         res_range_max = 4,
         INCLUDE_ZERO_RES = True,
-        bt_filter_flag = True,
+        bt_filter_flag = False,
         rt_filter_flag = True,
         STAB_SACRIFICE = True,
         LOSS_FRAC_WEIGHT = True,
         verbose = False,
-        wd_blur = 1.25
+        wd_blur = 1.25, # DeltaOmega
+        pitch_batch_size = 1,
+        surf_batch_size = 1
     ):
         # assign attributes and store inputs. No expensive calculations
                 # we don't have to do much here, mostly just call ``super().__init__()``
@@ -518,8 +521,8 @@ class TrappedResonance(_Objective):
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
             )
         }
-        if pitch_invs is not None:
-            num_pitch = len(pitch_invs)
+        # if pitch_invs is not None:
+        #     num_pitch = len(pitch_invs)
         if QS_flag: # QA or QH
             M=1
         else: # QI~QP
@@ -545,13 +548,17 @@ class TrappedResonance(_Objective):
             "verbose": verbose,
             "wd_blur": wd_blur,
             'M': M,
+            'pitch_batch_size': pitch_batch_size,
+            'surf_batch_size': surf_batch_size,
+            'num_transit': num_transit,
+            'pitch_method': pitch_method
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "f_tr2"
         self._params2 = { # other non-static params       
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
             "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
-            "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
+            # "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
             # "Psi": Psi,
         }
 

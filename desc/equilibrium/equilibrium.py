@@ -511,7 +511,7 @@ class Equilibrium(IOAble, Optimizable):
                 Optionally a Curve object may also be supplied for the magnetic axis.
               - Another Equilibrium, whose flux surfaces will be used.
               - File path to a VMEC or DESC equilibrium, which will be loaded and used.
-              - CustomGridFlux and 2-3 ndarrays, specifying the flux surface locations
+              - Grid and 2-3 ndarrays, specifying the flux surface locations
                 (R, Z, and optionally lambda) at fixed flux coordinates. All arrays
                 should have the same length. Optionally, an ndarray of shape(k,3) may be
                 passed instead of a grid.
@@ -551,7 +551,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
         Use flux surfaces specified by points:
-        nodes should either be a CustomGridFlux or an ndarray, shape(k,3) giving the
+        nodes should either be an AbstractGrid or an ndarray, shape(k,3) giving the
         locations in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
         array-like, shape(k,) giving the corresponding real space coordinates
 
@@ -771,8 +771,8 @@ class Equilibrium(IOAble, Optimizable):
             If list is given, then two names are expected: the quantity to spline
             and its radial derivative.
         grid : AbstractGridFlux, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to the quadrature
-            grid. Note profile will only be a function of the radial coordinate.
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+            Note profile will only be a function of the radial coordinate.
         kind : {"power_series", "spline", "fourier_zernike"}
             Type of returned profile.
 
@@ -854,8 +854,7 @@ class Equilibrium(IOAble, Optimizable):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridFlux, optional
-            CustomGridFlux of coordinates to evaluate at.
-            Defaults to the quadrature grid.
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to attributes of self.
@@ -1428,9 +1427,9 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        grid  :  CustomGridFlux, optional
-            CustomGridFlux on which to evaluate the coordinate Jacobian and check for
-            the sign. (Default to QuadratureGridFlux with eq's current grid resolutions)
+        grid : AbstractGrid, optional
+            Grid on which to evaluate the coordinate Jacobian and check for the sign.
+            Defaults to QuadratureGridFlux with eq's current grid resolutions.
         R_lmn, Z_lmn, L_lmn : ndarray, optional
             spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}

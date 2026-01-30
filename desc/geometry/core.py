@@ -98,7 +98,7 @@ class Curve(IOAble, Optimizable, ABC):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -224,8 +224,8 @@ class Curve(IOAble, Optimizable, ABC):
         N : int
             Fourier resolution of the new X,Y,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYZCurve. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -264,8 +264,8 @@ class Curve(IOAble, Optimizable, ABC):
             Alternatively, the string "arclength" can be supplied to use the normalized
             distance between points.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            SplineXYZCurve. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
+            If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
             - `'nearest'`: nearest neighbor interpolation
@@ -301,8 +301,8 @@ class Curve(IOAble, Optimizable, ABC):
         N : int
             Fourier resolution of the new R,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierRZCurve. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
+            If an integer, uses that many equally spaced points.
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
@@ -339,8 +339,8 @@ class Curve(IOAble, Optimizable, ABC):
         N : int
             Fourier resolution of the new FourierPlanarCurve representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierPlanarCurve. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCurve.
+            If an integer, uses that many equally spaced points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -373,8 +373,8 @@ class Curve(IOAble, Optimizable, ABC):
         N : int
             Fourier resolution of the new FourierXYCurve representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYCurve. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYCurve.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -500,8 +500,8 @@ class Surface(IOAble, Optimizable, ABC):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridFlux, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid for
-            constant rho surfaces or a Quadrature grid for constant zeta surfaces.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
+            rho surfaces or a Quadrature grid for constant zeta surfaces.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
         transforms : dict of Transform

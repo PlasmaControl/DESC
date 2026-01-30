@@ -92,7 +92,7 @@ class LinearGridCurve(AbstractGridCurve):
     Parameters
     ----------
     N : int, optional
-        CustomGridFlux resolution.
+        Grid resolution.
     NFP : int
         Number of field periods (Default = 1).
     endpoint : bool
@@ -146,7 +146,7 @@ class LinearGridCurve(AbstractGridCurve):
         Parameters
         ----------
         N : int, optional
-            CustomGridFlux resolution.
+            Grid resolution.
         NFP : int
             Number of field periods (Default = 1).
         endpoint : bool

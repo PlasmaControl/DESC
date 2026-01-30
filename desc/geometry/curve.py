@@ -844,7 +844,7 @@ class FourierPlanarCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -1248,7 +1248,7 @@ class FourierXYCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -1615,7 +1615,7 @@ class SplineXYZCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.

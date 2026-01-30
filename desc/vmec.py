@@ -1502,7 +1502,7 @@ class VMECIO:
             f.write(" {:5.0E}".format(ftol))
         f.write("\n")
 
-        f.write("!---- CustomGridFlux Parameters ----\n")
+        f.write("!---- Grid Parameters ----\n")
         f.write("  LASYM = {}\n".format("F" if eq.sym else "T"))  # stellarator symmetry
         f.write("  NFP = {:2.0f}\n".format(eq.NFP))  # number of field periods
         # poloidal resolution

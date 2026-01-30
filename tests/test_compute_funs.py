@@ -1358,7 +1358,7 @@ def test_covariant_basis_vectors_PEST(eq):
 
         deriv = _get_deriv(deriv_tokn)
 
-        # CustomGridFlux will have to be custom for vartheta
+        # Grid will have to be custom for vartheta
         grid_used = (
             CustomGridFlux(rtz_nodes)
             if deriv == "v"
@@ -1484,7 +1484,7 @@ def test_contravariant_basis_vectors_PEST(eq):
 
         deriv = deriv_tokn.split("_")[-1]
 
-        # CustomGridFlux will have to be custom for vartheta
+        # Grid will have to be custom for vartheta
         grid_used = (
             CustomGridFlux(rtz_nodes)
             if deriv == "v"

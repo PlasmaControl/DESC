@@ -1007,7 +1007,7 @@ class Nestor(IOAble):
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize external field.
+        Grid used to discretize external field.
     """
 
     _static_attrs = ["M", "N", "ntheta", "nzeta", "sym", "NFP"]

@@ -11,7 +11,7 @@
   NS_ARRAY = 16, 49, 101
   FTOL_ARRAY = 1e-14, 1e-13, 1e-13
   NITER_ARRAY = 2000, 2000, 2000
-!----- CustomGridFlux Parameters -----
+!----- Grid Parameters -----
   LASYM = True
   NFP = 5
   MPOL = 10

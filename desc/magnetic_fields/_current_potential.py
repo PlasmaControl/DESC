@@ -1252,8 +1252,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         LinearGridFlux(M=max(3 * current_potential_field.M_Phi, 30),
         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
     eval_grid : AbstractGridFlux, optional
-        CustomGridFlux upon which to evaluate the normal field on the plasma surface,
-        and at which the normal field is minimized. Defaults to
+        Grid upon which to evaluate the normal field on the plasma surface, and at which
+        the normal field is minimized. Defaults to
         ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
     vc_source_grid : LinearGridFlux
         LinearGridFlux to use for the singular integral for the virtual casing

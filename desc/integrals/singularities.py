@@ -90,7 +90,7 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     theta0, zeta0 : jnp.ndarray
         Origin (θ₀,ζ₀) where the partition η₀ is unity.
     ht, hz : float
-        CustomGridFlux step size in θ and ζ.
+        Grid step size in θ and ζ.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
@@ -114,7 +114,7 @@ def _vanilla_params(grid):
     Parameters
     ----------
     grid : LinearGridFlux
-        CustomGridFlux that can fft2.
+        Grid that can fft2.
 
     Returns
     -------
@@ -146,7 +146,7 @@ def best_params(grid, ratio):
     Parameters
     ----------
     grid : LinearGridFlux
-        CustomGridFlux that can fft2.
+        Grid that can fft2.
     ratio : float
         Mean best ratio.
 
@@ -194,7 +194,7 @@ def _local_params(grid, ratio):
     Parameters
     ----------
     grid : LinearGridFlux
-        CustomGridFlux that can fft2.
+        Grid that can fft2.
     ratio : tuple
         Mean best ratio and local ratio
 

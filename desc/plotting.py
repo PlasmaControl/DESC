@@ -287,7 +287,7 @@ def _get_grid(thing, **kwargs):
     Returns
     -------
     grid : AbstractGrid
-        CustomGridFlux of coordinates to evaluate at.
+        Grid of coordinates to evaluate at.
 
     """
     grid_args = {"NFP": 1, "sym": False, "axis": True, "endpoint": True}
@@ -327,7 +327,7 @@ def _get_plot_axes(grid):
     Parameters
     ----------
     grid : AbstractGrid
-        CustomGridFlux of coordinates to evaluate at.
+        Grid of coordinates to evaluate at.
 
     Returns
     -------
@@ -363,7 +363,7 @@ def _compute(
     name : str
         Name of variable to plot.
     grid : AbstractGrid
-        CustomGridFlux of coordinates to evaluate at.
+        Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
     compute_kwargs : dict, optional
@@ -615,7 +615,7 @@ def plot_1d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        CustomGridFlux of coordinates to plot at.
+        Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -817,7 +817,7 @@ def plot_2d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        CustomGridFlux of coordinates to plot at.
+        Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -849,8 +849,8 @@ def plot_2d(  # noqa : C901
           values of the data.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a CustomGridFlux to pass to the field as a
-          source grid from which to calculate Bn, by default None.
+        * ``field_grid``: AbstractGrid, a grid to pass to the field as a  source grid
+          from which to calculate Bn, by default None.
         * ``filled`` : bool, whether to fill contours or not i.e. whether to use
           `contourf` or `contour`
 
@@ -1093,7 +1093,7 @@ def plot_3d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        CustomGridFlux of coordinates to plot at.
+        Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -1129,8 +1129,8 @@ def plot_3d(  # noqa : C901
           True by default.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a CustomGridFlux to pass to the field as a
-          source grid from which to calculate Bn, by default None.
+        * ``field_grid``: AbstractGrid, a grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -1354,8 +1354,8 @@ def plot_fsa(  # noqa: C901
     return_data : bool
         if True, return the data plotted as well as fig,ax
     grid : AbstractGrid
-        CustomGridFlux to compute name on. If provided, the parameters
-        ``rho``, ``M``, and ``N`` are ignored.
+        Grid to compute name on. If provided, the parameters ``rho``, ``M``, and ``N``
+        are ignored.
     compute_kwargs : dict, optional
         Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
@@ -1596,7 +1596,7 @@ def plot_section(
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        CustomGridFlux of coordinates to plot at.
+        Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -2105,7 +2105,7 @@ def poincare_plot(
         Number of field periods. By default attempts to infer from ``field``, otherwise
         uses NFP=1.
     grid : AbstractGrid, optional
-        CustomGridFlux used to discretize ``field``.
+        Grid used to discretize ``field``.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2779,7 +2779,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot.
     grid : AbstractGridCurve, optional
-        CustomGridFlux to use for evaluating geometry
+        Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -3165,9 +3165,9 @@ def plot_boozer_surface(
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : AbstractGridFlux, optional
-        CustomGridFlux to use for computing boozer spectrum
+        Grid to use for computing boozer spectrum
     grid_plot : AbstractGridFlux, optional
-        CustomGridFlux to plot on.
+        Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
@@ -3564,7 +3564,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     Parameters
     ----------
     grid : AbstractGrid
-        CustomGridFlux to plot.
+        Grid to plot.
     return_data : bool
         If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional

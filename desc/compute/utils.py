@@ -447,7 +447,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
     grid : AbstractGrid
-        CustomGridFlux to compute quantity on.
+        Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
@@ -535,7 +535,7 @@ def get_transforms(
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
     grid : AbstractGrid
-        CustomGridFlux to compute quantity on
+        Grid to compute quantity on
     jitable: bool
         Whether to skip certain checks so that this operation works under JIT
     has_axis : bool

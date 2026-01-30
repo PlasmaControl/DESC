@@ -684,11 +684,11 @@ class FourierRZToroidalSurface(Surface):
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
         grid : AbstractGridFlux, optional
-            CustomGridFlux object of the points on the given surface to evaluate the
-            offset points at, from which the offset surface will be created by fitting
-            offset points with the basis defined by the given M and N.
-            If None, defaults to a LinearGridFlux with M and N and NFP equal to the
-            base_surface.M and base_surface.N and base_surface.NFP
+            Grid of the points on the given surface to evaluate the offset points at,
+            from which the offset surface will be created by fitting offset points with
+            the basis defined by the given M and N. If None, defaults to a
+            LinearGridFlux with M and N and NFP equal to the base_surface.M and
+            base_surface.N and base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal

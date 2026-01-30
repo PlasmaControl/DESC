@@ -154,9 +154,9 @@ class FourierChebyshevSeries(IOAble):
         Parameters
         ----------
         X : int
-            CustomGridFlux resolution in x direction. Preferably power of 2.
+            Grid resolution in x direction. Preferably power of 2.
         Y : int
-            CustomGridFlux resolution in y direction. Preferably power of 2.
+            Grid resolution in y direction. Preferably power of 2.
         L : int or jnp.ndarray
             Optional, resolution in radial direction of domain [0, 1].
             May also be an array of coordinates values. If given, then the
@@ -171,7 +171,7 @@ class FourierChebyshevSeries(IOAble):
         -------
         coords : jnp.ndarray
             Shape (X * Y, 2).
-            CustomGridFlux of (x, y) points for optimal interpolation.
+            Grid of (x, y) points for optimal interpolation.
 
         """
         x = fourier_pts(X)
@@ -191,9 +191,9 @@ class FourierChebyshevSeries(IOAble):
         Parameters
         ----------
         X : int
-            CustomGridFlux resolution in x direction. Preferably power of 2.
+            Grid resolution in x direction. Preferably power of 2.
         Y : int
-            CustomGridFlux resolution in y direction. Preferably power of 2.
+            Grid resolution in y direction. Preferably power of 2.
 
         Returns
         -------
@@ -330,7 +330,7 @@ class PiecewiseChebyshevSeries(IOAble):
         Parameters
         ----------
         Y : int
-            CustomGridFlux resolution in y direction. Preferably power of 2.
+            Grid resolution in y direction. Preferably power of 2.
 
         Returns
         -------

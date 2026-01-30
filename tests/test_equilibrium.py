@@ -416,7 +416,7 @@ def test_change_NFP():
 
 @pytest.mark.unit
 def test_error_when_ndarray_or_integer_passed():
-    """Test that errors raise correctly when a non-CustomGridFlux object is passed."""
+    """Test that errors raise correctly when a non-AbstractGrid object is passed."""
     eq = get("DSHAPE")
     with pytest.raises(TypeError):
         eq.compute("R", grid=1)

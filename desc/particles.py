@@ -676,8 +676,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : AbstractGridCurve
-        CustomGridFlux used to discretize curve.
-        Defaults to ``LinearGridCurve(N=curve.N)``.
+        Grid used to discretize curve. Defaults to ``LinearGridCurve(N=curve.N)``.
     seed : int
         Seed for rng.
     is_curve_magnetic_axis : bool
@@ -837,7 +836,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
     grid : AbstractGrid
-        CustomGridFlux used to discretize curve. Defaults to
+        Grid used to discretize curve. Defaults to
         ``LinearGridFlux(M=surface.M, N=surface.N)``.
     seed : int
         Seed for rng.

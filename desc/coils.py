@@ -306,7 +306,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         dx1 : bool
             If True, also return dx/ds for the curve.
@@ -359,7 +359,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
+            Grid used to discretize coil. If an integer, uses that many
             equally spaced points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -469,7 +469,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
+            Grid used to discretize coil. If an integer, uses that many
             equally spaced points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -519,7 +519,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
+            Grid used to discretize coil. If an integer, uses that many
             equally spaced points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -563,8 +563,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         N : int
             Fourier resolution of the new X,Y,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -603,8 +603,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Alternatively, the string "arclength" can be supplied to use the normalized
             distance between points.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            SplineXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
             - `'nearest'`: nearest neighbor interpolation
@@ -638,8 +638,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         N : int
             Fourier resolution of the new R,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierRZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
         NFP : int
             Number of field periods, the coil will have a discrete toroidal symmetry
             according to NFP.
@@ -674,8 +674,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         N : int
             Fourier resolution of the new FourierPlanarCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierPlanarCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -707,8 +707,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         N : int
             Fourier resolution of the new FourierXYCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -1207,8 +1207,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         compute_A_or_B: {"A", "B"}, optional
@@ -1301,8 +1301,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         chunk_size : int or None
@@ -1350,8 +1350,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coil. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         chunk_size : int or None
@@ -1587,7 +1587,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray or array-like
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -1642,7 +1642,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         dx1 : bool
             If True, also return dx/ds for each curve.
@@ -1720,7 +1720,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
         grid : AbstractGridCurve or int, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
 
         Returns
@@ -1760,8 +1760,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         compute_A_or_B: {"A", "B"}, optional
@@ -1875,8 +1875,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         chunk_size : int or None
@@ -1914,8 +1914,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
         chunk_size : int or None
@@ -2219,7 +2219,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             put that NFP in the periods line of the coils file generated.
             defaults to 1
         grid: AbstractGridCurve, ndarray, int,
-            CustomGridFlux of sample points along each coil to save.
+            Grid of sample points along each coil to save.
             if None, will default to the coil compute functions's
             default grid
         """
@@ -2351,8 +2351,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         N : int
             Fourier resolution of the new FourierPlanarCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierPlanarCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -2390,8 +2390,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         N : int
             Fourier resolution of the new FourierXYCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -2432,8 +2432,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         N : int
             Fourier resolution of the new R,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierRZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
         NFP : int
             Number of field periods, the coil will have a discrete toroidal symmetry
             according to NFP.
@@ -2467,8 +2467,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         N : int
             Fourier resolution of the new X,Y,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray
             Arbitrary curve parameter to use for the fitting. If None, defaults to
             normalized arclength.
@@ -2508,8 +2508,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             If None, defaults to using an equal-arclength angle as the knots.
             If supplied, will be rescaled to the range [0,2pi].
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            SplineXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
             - `'nearest'`: nearest neighbor interpolation
@@ -2735,7 +2735,7 @@ class MixedCoilSet(CoilSet):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int or array-like, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
         params : dict of ndarray or array-like
@@ -2777,7 +2777,7 @@ class MixedCoilSet(CoilSet):
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
         grid : AbstractGridCurve or int or array-like, optional
-            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
         dx1 : bool
@@ -2832,8 +2832,8 @@ class MixedCoilSet(CoilSet):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None or array-like, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -2895,8 +2895,8 @@ class MixedCoilSet(CoilSet):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None or array-like, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -2936,8 +2936,8 @@ class MixedCoilSet(CoilSet):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGridCurve, int or None or array-like, optional
-            CustomGridFlux used to discretize coils. If an integer, uses that many
-            equally spaced points. Should NOT include endpoint at 2pi.
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
@@ -2971,8 +2971,8 @@ class MixedCoilSet(CoilSet):
         N : int
             Fourier resolution of the new FourierPlanarCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierPlanarCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -3009,8 +3009,8 @@ class MixedCoilSet(CoilSet):
         N : int
             Fourier resolution of the new FourierXYCoil representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray or "arclength"
             Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -3050,8 +3050,8 @@ class MixedCoilSet(CoilSet):
         N : int
             Fourier resolution of the new R,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierRZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
         NFP : int
             Number of field periods, the coil will have a discrete toroidal symmetry
             according to NFP.
@@ -3084,8 +3084,8 @@ class MixedCoilSet(CoilSet):
         N : int
             Fourier resolution of the new X,Y,Z representation.
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            FourierXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
         s : ndarray
             Arbitrary curve parameter to use for the fitting. If None, defaults to
             normalized arclength.
@@ -3122,8 +3122,8 @@ class MixedCoilSet(CoilSet):
             If None, defaults to using an equal-arclength angle as the knots.
             If supplied, will be rescaled to the range [0,2pi].
         grid : AbstractGridCurve, int or None
-            CustomGridFlux used to evaluate curve coordinates on to fit with
-            SplineXYZCoil. If an integer, uses that many equally spaced points.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
             - `'nearest'`: nearest neighbor interpolation

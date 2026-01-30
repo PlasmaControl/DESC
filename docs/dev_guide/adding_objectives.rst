@@ -151,7 +151,7 @@ attributes and call the parent class's ``__init__`` method which will handle com
 ``build`` method can be thought as a pre-computation step that prepares the objective for optimization by storing the constants
 needed for ``compute`` method to prevent extra computations. This method is not JIT-compiled, so it can perform any Python code.
 
-``grid`` is a ``CustomGridFlux`` object that contains the nodes where the objective will be evaluated. If it is not provided, a default
+``grid`` is an ``AbstractGrid`` object that contains the nodes where the objective will be evaluated. If it is not provided, a default
 grid is created based on the grid requirements for the objective. For example, if the objective needs to compute a volumetric
 quantity, a grid that covers the entire plasma volume needs to be chosen as default, or if there is an integral quantity
 a grid with proper quadrature points needs to be chosen. Sometimes 2 grids are needed, for example coil objectives, one for the

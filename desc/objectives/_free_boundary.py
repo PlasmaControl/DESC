@@ -48,8 +48,7 @@ class VacuumBoundaryError(_Objective):
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
         Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize field.
-        Defaults to the default grid for given field.
+        Grid used to discretize field. Defaults to the default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -416,8 +415,7 @@ class BoundaryError(_Objective):
         stellarator symmetric, and both should be at rho=1.
         Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for both.
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize field.
-        Defaults to default grid for given field.
+        Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -949,7 +947,7 @@ class BoundaryErrorNESTOR(_Objective):
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize field.
+        Grid used to discretize field.
 
     """
 

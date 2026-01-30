@@ -1439,8 +1439,8 @@ class QuadraticFlux(_Objective):
         ``LinearGridFlux(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,``
         ``NFP=eq.NFP, sym=False)``.
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize field (e.g. grid for the magnetic field source
-        from coils). Default grid is determined by the specific MagneticField object,
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object,
         see the docs of that object's ``compute_magnetic_field`` method for more detail.
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
@@ -1671,8 +1671,8 @@ class SurfaceQuadraticFlux(_Objective):
         ``LinearGridFlux(rho=np.array([1.0]), M=surface.M_grid, N=surface.N_grid,``
         ``NFP=surface.NFP, sym=False)``.
     field_grid : AbstractGrid, optional
-        CustomGridFlux used to discretize field (e.g. grid for the magnetic field source
-        from coils). Default grid is determined by the specific MagneticField object,
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object,
         see the docs of that object's ``compute_magnetic_field`` method for more detail.
     field_fixed : bool
         Whether or not to fix the magnetic field's DOFs during the optimization.
@@ -1875,10 +1875,10 @@ class ToroidalFlux(_Objective):
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
     field_grid : AbstractGrid, optional
-        CustomGridFlux containing the nodes to evaluate field source at on
-        the winding surface. (used if e.g. field is a CoilSet or
-        FourierCurrentPotentialField). Defaults to the default for the
-        given field, see the docstring of the field object for the specific default.
+        Grid containing the nodes to evaluate field source at on the winding surface
+        (used if e.g. field is a CoilSet or FourierCurrentPotentialField). Defaults to
+        the default for the given field, see the docstring of the field object for the
+        specific default.
     eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGridFlux(L=eq.L_grid, M=eq.M_grid,

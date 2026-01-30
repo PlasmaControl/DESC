@@ -1,4 +1,4 @@
-"""Tests CustomGridFlux classes."""
+"""Tests AbstractGrid classes."""
 
 import numpy as np
 import pytest
@@ -21,7 +21,7 @@ from desc.profiles import PowerSeriesProfile
 
 
 class TestGrid:
-    """Test for CustomGridFlux classes."""
+    """Test for AbstractGrid classes."""
 
     @pytest.mark.unit
     def test_linear_grid(self):

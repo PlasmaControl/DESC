@@ -118,7 +118,7 @@ def _compute(
         DESC coordinates θ from ``Bounce2D.compute_theta``.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     grid : AbstractGrid
-        CustomGridFlux that can expand and compress.
+        Grid that can expand and compress.
     num_pitch : int
         Resolution for quadrature over velocity coordinate.
     surf_batch_size : int

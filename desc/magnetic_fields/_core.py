@@ -149,7 +149,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         Surface to calculate the magnetic field's Bnormal on.
         If an Equilibrium is supplied, will use its boundary surface.
     eval_grid : AbstractGridFlux, optional
-        CustomGridFlux of points on the plasma surface to evaluate the Bnormal at,
+        Grid of points on the plasma surface to evaluate the Bnormal at,
         if None defaults to a LinearGridFlux with twice
         the surface grid's poloidal and toroidal resolutions
     scale_by_curpol : bool, optional
@@ -279,7 +279,7 @@ class _MagneticField(IOAble, ABC):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -320,7 +320,7 @@ class _MagneticField(IOAble, ABC):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating A from
+            Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -357,12 +357,11 @@ class _MagneticField(IOAble, ABC):
             and also include the contribution from the equilibrium currents
             using the virtual casing principle.
         eval_grid : AbstractGridFlux, optional
-            CustomGridFlux of points on the surface to calculate the Bnormal at,
-            if None defaults to a LinearGridFlux with twice
-            the surface poloidal and toroidal resolutions
+            Grid of points on the surface to calculate the Bnormal at, if None defaults
+            to a LinearGridFlux with twice the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
         source_grid : AbstractGrid, int or None
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         vc_source_grid : LinearGridFlux
             LinearGridFlux to use for the singular integral for the virtual casing
@@ -462,12 +461,11 @@ class _MagneticField(IOAble, ABC):
             Toroidal resolution of the DoubleFourierSeries used to fit the Bnormal
             on the plasma surface, by default 24
         eval_grid : AbstractGridFlux, optional
-            CustomGridFlux of points on the surface to calculate the Bnormal at,
-            if None defaults to a LinearGridFlux with twice
-            the surface poloidal and toroidal resolutions
+            Grid of points on the surface to calculate the Bnormal at, if None defaults
+            to a LinearGridFlux with twice the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
         source_grid : AbstractGrid, int or None
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         params : list or tuple of dict, optional
             parameters to pass to underlying field's compute_magnetic_field function.
@@ -966,7 +964,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1005,7 +1003,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating A from
+            Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1067,7 +1065,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1147,7 +1145,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating B from
+            Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1192,7 +1190,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : AbstractGrid, int or None or array-like, optional
-            CustomGridFlux used to discretize MagneticField object if calculating A from
+            Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -2224,8 +2222,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
         source_grid : AbstractGrid, optional
-            CustomGridFlux used to discretize field. Defaults to the default grid for
-            given field.
+            Grid used to discretize field. Defaults to the default grid for given field.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -3050,8 +3047,8 @@ class OmnigenousField(Optimizable, IOAble):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridFlux, optional
-            CustomGridFlux of coordinates to evaluate at. The grid nodes are given in
-            the usual (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
             Defaults to a linearly space grid on the rho=1 surface.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc

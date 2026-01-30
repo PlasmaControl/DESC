@@ -179,7 +179,7 @@ class AbstractGridFlux(AbstractGrid):
         x : ndarray, shape(other_grid.num_nodes,...)
             Data to copy. Assumed to be constant over the specified surface.
         other_grid: AbstractGridFlux
-            CustomGridFlux to copy from.
+            Grid to copy from.
         surface_label : str, optional
             The surface label. Must be one of the elements in self.coordinates.
             Default = "rho".
@@ -417,7 +417,7 @@ class CustomGridFlux(AbstractGridFlux):
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
     source_grid : AbstractGridFlux
-        CustomGridFlux from which coordinates were mapped from.
+        Grid from which coordinates were mapped from.
     sort : bool
         Whether to sort the nodes for use with FFT method.
     is_meshgrid : bool

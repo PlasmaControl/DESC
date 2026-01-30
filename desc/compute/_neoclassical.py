@@ -833,14 +833,14 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
 
-    # data["f_tr2"] = f_tr2_out # full output
-    data["f_tr2"] = { # for plotting/debugging
-        'omega_arr':omega_arr,
-        'f_b': f_b,
-        'f_tr2_out':f_tr2_out,
-        'rhos': rhos,
-        'res_arr': res_arr,
-        'pitch_inv': data['pitch_inv'],
-        'p_res': data['Bcrit_res']
-        }
+    data["f_tr2"] = f_tr2_out # full output
+    # data["f_tr2"] = { # for plotting/debugging
+    #     'omega_arr':omega_arr,
+    #     'f_b': f_b,
+    #     'f_tr2_out':f_tr2_out,
+    #     'rhos': rhos,
+    #     'res_arr': res_arr,
+    #     'pitch_inv': data['pitch_inv'],
+    #     'p_res': data['Bcrit_res']
+    #     }
     return data

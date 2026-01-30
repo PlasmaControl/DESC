@@ -300,7 +300,7 @@ class AbstractGrid(IOAble, ABC):
         x : ndarray, shape(other_grid.num_nodes,...)
             Data to copy. Assumed to be constant over the specified surface.
         other_grid: AbstractGrid
-            Grid to copy from.
+            CustomGridFlux to copy from.
         surface_label : str
             The surface label. Must be one of the elements in self.coordinates.
         tol : float
@@ -421,7 +421,7 @@ class AbstractGrid(IOAble, ABC):
             "Custom grids must have weights specified by user.\n"
             "Recall that the accurate computation of volume integral quantities "
             "requires a specific set of quadrature nodes.\n"
-            "It is recommended to compute such quantities on a QuadratureGrid.",
+            "It is recommended to compute such quantities on a QuadratureGridFlux.",
         )
         return self._weights
 

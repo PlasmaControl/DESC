@@ -127,7 +127,7 @@ Geometry
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
-Grid
+CustomGridFlux
 ****
 
 .. autosummary::
@@ -135,9 +135,9 @@ Grid
     :recursive:
     :template: class.rst
 
-    desc.grid.ConcentricGrid
-    desc.grid.Grid
-    desc.grid.LinearGrid
+    desc.grid.ConcentricGridFlux
+    desc.grid.CustomGridFlux
+    desc.grid.LinearGridFlux
     desc.grid.QuadratureGrid
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces

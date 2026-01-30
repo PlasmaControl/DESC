@@ -269,10 +269,10 @@ created and passed to the corresponding objective.
     :recursive:
     :template: class.rst
 
-    desc.grid.Grid
-    desc.grid.LinearGrid
+    desc.grid.CustomGridFlux
+    desc.grid.LinearGridFlux
     desc.grid.QuadratureGrid
-    desc.grid.ConcentricGrid
+    desc.grid.ConcentricGridFlux
 
 ``desc.grid`` also contains utilities for finding the most and least rational surfaces
 for a given iota profile, for either avoiding or analyzing rational surfaces.

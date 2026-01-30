@@ -23,7 +23,7 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.geometry import Curve
-from desc.grid import Grid, LinearGrid, LinearGridCurve
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
 from desc.particles import trace_particles
@@ -282,12 +282,12 @@ def _get_grid(thing, **kwargs):
     thing : Optimizable
         Thing that is being plotted.
     kwargs
-        Any arguments taken by LinearGridCurve or LinearGrid.
+        Any arguments taken by LinearGridCurve or LinearGridFlux.
 
     Returns
     -------
     grid : AbstractGrid
-        Grid of coordinates to evaluate at.
+        CustomGridFlux of coordinates to evaluate at.
 
     """
     grid_args = {"NFP": 1, "sym": False, "axis": True, "endpoint": True}
@@ -311,12 +311,12 @@ def _get_grid(thing, **kwargs):
                 del grid_args[key]
         grid = LinearGridCurve(**grid_args)
     else:
-        sig = inspect.signature(LinearGrid.__init__)
+        sig = inspect.signature(LinearGridFlux.__init__)
         cls_args = list(sig.parameters.keys())
         for key in list(grid_args.keys()):
             if key not in cls_args:
                 del grid_args[key]
-        grid = LinearGrid(**grid_args)
+        grid = LinearGridFlux(**grid_args)
 
     return grid
 
@@ -327,7 +327,7 @@ def _get_plot_axes(grid):
     Parameters
     ----------
     grid : AbstractGrid
-        Grid of coordinates to evaluate at.
+        CustomGridFlux of coordinates to evaluate at.
 
     Returns
     -------
@@ -363,7 +363,7 @@ def _compute(
     name : str
         Name of variable to plot.
     grid : AbstractGrid
-        Grid of coordinates to evaluate at.
+        CustomGridFlux of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
     compute_kwargs : dict, optional
@@ -439,7 +439,7 @@ def _compute_Bn(
     # often plot_grid is still linearly spaced but includes endpoints. In that case
     # make a temp grid that just leaves out the endpoint so we can FFT
     elif (
-        isinstance(plot_grid, LinearGrid)
+        isinstance(plot_grid, LinearGridFlux)
         and not plot_grid.sym
         and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
         and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
@@ -450,7 +450,7 @@ def _compute_Bn(
         if plot_grid._toroidal_endpoint:
             zeta_endpoint = True
             zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
-        vc_grid = LinearGrid(
+        vc_grid = LinearGridFlux(
             theta=theta,
             zeta=zeta,
             NFP=plot_grid.NFP,
@@ -461,7 +461,7 @@ def _compute_Bn(
         source_grid = eval_grid = vc_grid
     else:
         eval_grid = plot_grid
-        source_grid = LinearGrid(
+        source_grid = LinearGridFlux(
             M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
         )
 
@@ -615,7 +615,7 @@ def plot_1d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        Grid of coordinates to plot at.
+        CustomGridFlux of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -742,7 +742,7 @@ def plot_1d(  # noqa : C901
         errorif(
             surface_label is None or axis is None,
             NotImplementedError,
-            msg="Grid must be 1D",
+            msg="grid must be 1D",
         )
         data = grid.compress(data, surface_label=surface_label)
         nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
@@ -817,7 +817,7 @@ def plot_2d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        Grid of coordinates to plot at.
+        CustomGridFlux of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -849,8 +849,8 @@ def plot_2d(  # noqa : C901
           values of the data.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
-          from which to calculate Bn, by default None.
+        * ``field_grid``: MagneticField, a CustomGridFlux to pass to the field as a
+          source grid from which to calculate Bn, by default None.
         * ``filled`` : bool, whether to fill contours or not i.e. whether to use
           `contourf` or `contour`
 
@@ -899,7 +899,7 @@ def plot_2d(  # noqa : C901
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(eq, **grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
+    errorif(len(plot_axes) != 2, msg="grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(
@@ -1093,7 +1093,7 @@ def plot_3d(  # noqa : C901
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        Grid of coordinates to plot at.
+        CustomGridFlux of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -1129,9 +1129,8 @@ def plot_3d(  # noqa : C901
           True by default.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
-          from which to calculate Bn, by default None.
-
+        * ``field_grid``: MagneticField, a CustomGridFlux to pass to the field as a
+          source grid from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -1150,8 +1149,8 @@ def plot_3d(  # noqa : C901
     .. code-block:: python
 
         from desc.plotting import plot_3d
-        from desc.grid import LinearGrid
-        grid = LinearGrid(
+        from desc.grid import LinearGridFlux
+        grid = LinearGridFlux(
                 rho=0.5,
                 theta=np.linspace(0, 2 * np.pi, 100),
                 zeta=np.linspace(0, 2 * np.pi, 100),
@@ -1169,10 +1168,12 @@ def plot_3d(  # noqa : C901
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(eq, **grid_kwargs)
-    assert isinstance(grid, LinearGrid), "grid must be LinearGrid for 3d plotting"
+    assert isinstance(
+        grid, LinearGridFlux
+    ), "grid must be LinearGridFlux for 3d plotting"
     assert only1(
         grid.num_rho == 1, grid.num_theta == 1, grid.num_zeta == 1
-    ), "Grid must be 2D"
+    ), "grid must be 2D"
     figsize = kwargs.pop("figsize", (10, 10))
     alpha = kwargs.pop("alpha", 1.0)
     cmap = kwargs.pop("cmap", "RdBu_r")
@@ -1353,7 +1354,7 @@ def plot_fsa(  # noqa: C901
     return_data : bool
         if True, return the data plotted as well as fig,ax
     grid : AbstractGrid
-        Grid to compute name on. If provided, the parameters
+        CustomGridFlux to compute name on. If provided, the parameters
         ``rho``, ``M``, and ``N`` are ignored.
     compute_kwargs : dict, optional
         Additional keyword arguments to pass to ``eq.compute``.
@@ -1424,7 +1425,7 @@ def plot_fsa(  # noqa: C901
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
         # sym=False to ensure the FSA is correct
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
+        grid = LinearGridFlux(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 
@@ -1595,7 +1596,7 @@ def plot_section(
     name : str
         Name of variable to plot.
     grid : AbstractGrid, optional
-        Grid of coordinates to plot at.
+        CustomGridFlux of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
     normalize : str, optional
@@ -1697,7 +1698,7 @@ def plot_section(
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         )
-        grid = Grid(coords, sort=False)
+        grid = CustomGridFlux(coords, sort=False)
     else:
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
@@ -1710,7 +1711,7 @@ def plot_section(
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         )
-        grid = Grid(coords, sort=False)
+        grid = CustomGridFlux(coords, sort=False)
 
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
@@ -1960,7 +1961,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     }
     r_grid = _get_grid(eq, **grid_kwargs)
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
-    r_grid = Grid(
+    r_grid = CustomGridFlux(
         map_coordinates(
             eq,
             r_grid.nodes,
@@ -1982,7 +1983,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(eq, **grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
-        v_grid = Grid(
+        v_grid = CustomGridFlux(
             map_coordinates(
                 eq,
                 t_grid.nodes,
@@ -2104,7 +2105,7 @@ def poincare_plot(
         Number of field periods. By default attempts to infer from ``field``, otherwise
         uses NFP=1.
     grid : AbstractGrid, optional
-        Grid used to discretize ``field``.
+        CustomGridFlux used to discretize ``field``.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2144,7 +2145,7 @@ def poincare_plot(
     .. code-block:: python
 
         from desc.plotting import poincare_plot
-        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        grid_trace = LinearGridFlux(rho=np.linspace(0.4, 0.9, 7))
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
         fig, ax = desc.plotting.poincare_plot(
@@ -2156,7 +2157,7 @@ def poincare_plot(
             size=0.5,
             ntransit=100
         )
-        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        grid_trace2 = LinearGridFlux(rho=np.linspace(0.52, 0.55, 4))
         r0 = eq.compute("R", grid=grid_trace2)["R"]
         z0 = eq.compute("Z", grid=grid_trace2)["Z"]
         fig, ax = desc.plotting.poincare_plot(
@@ -2347,7 +2348,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(eq, **grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-    grid = Grid(
+    grid = CustomGridFlux(
         map_coordinates(
             eq,
             grid.nodes,
@@ -2531,7 +2532,7 @@ def plot_boundaries(
         grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(eqs[i], **grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        grid = Grid(
+        grid = CustomGridFlux(
             map_coordinates(
                 eqs[i],
                 grid.nodes,
@@ -2778,7 +2779,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot.
     grid : AbstractGridCurve, optional
-        Grid to use for evaluating geometry
+        CustomGridFlux to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -3045,7 +3046,11 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B",
+        obj=eq,
+        grid=CustomGridFlux(np.array([])),
+        M_booz=M_booz,
+        N_booz=N_booz,
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -3054,7 +3059,7 @@ def plot_boozer_modes(  # noqa: C901
     else:
         matrix, modes = ptolemy_linear_transform(basis.modes)
 
-    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    grid = LinearGridFlux(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     transforms = get_transforms(
         "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
     )
@@ -3160,9 +3165,9 @@ def plot_boozer_surface(
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : AbstractGridFlux, optional
-        Grid to use for computing boozer spectrum
+        CustomGridFlux to use for computing boozer spectrum
     grid_plot : AbstractGridFlux, optional
-        Grid to plot on.
+        CustomGridFlux to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
@@ -3450,7 +3455,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
 
     plot_data = {"rho": rho}
 
-    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    grid = LinearGridFlux(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
     if fB:
         names += ["|B|_mn_B"]
@@ -3559,7 +3564,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     Parameters
     ----------
     grid : AbstractGrid
-        Grid to plot.
+        CustomGridFlux to plot.
     return_data : bool
         If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
@@ -3589,8 +3594,8 @@ def plot_grid(grid, return_data=False, **kwargs):
     .. code-block:: python
 
         from desc.plotting import plot_grid
-        from desc.grid import ConcentricGrid
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        from desc.grid import ConcentricGridFlux
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="jacobi")
         fig, ax = plot_grid(grid)
 
     """
@@ -3631,13 +3636,17 @@ def plot_grid(grid, return_data=False, **kwargs):
         ]
     )
     ax.set_yticklabels([])
-    if grid.__class__.__name__ in ["Grid", "LinearGrid", "QuadratureGrid"]:
+    if grid.__class__.__name__ in [
+        "CustomGridFlux",
+        "LinearGridFlux",
+        "QuadratureGridFlux",
+    ]:
         ax.set_title(
             "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
             pad=20,
             fontsize=title_fontsize,
         )
-    if grid.__class__.__name__ in ["ConcentricGrid"]:
+    if grid.__class__.__name__ in ["ConcentricGridFlux"]:
         ax.set_title(
             "{}, $L={}$, $M={}, pattern: {}$".format(
                 grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
@@ -3721,7 +3730,7 @@ def plot_basis(  # noqa : C901
 
     # 1D BASIS
     if basis.__class__.__name__ == "PowerSeries":
-        grid = LinearGrid(rho=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3748,7 +3757,7 @@ def plot_basis(  # noqa : C901
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
-        grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGridFlux(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3779,7 +3788,7 @@ def plot_basis(  # noqa : C901
         return fig, ax
 
     elif basis.__class__.__name__ == "ChebyshevPolynomial":
-        grid = LinearGrid(rho=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3810,7 +3819,7 @@ def plot_basis(  # noqa : C901
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
-        grid = LinearGrid(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGridFlux(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
         t = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta))
         z = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta))
         fig = plt.figure(
@@ -3894,7 +3903,7 @@ def plot_basis(  # noqa : C901
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, theta=100, endpoint=True)
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
@@ -3949,7 +3958,7 @@ def plot_basis(  # noqa : C901
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, theta=100, endpoint=True)
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
@@ -4086,7 +4095,7 @@ def plot_field_lines(
 
         field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
         eq = desc.examples.get("precise_QA")
-        grid_trace = desc.grid.LinearGrid(rho=[1])
+        grid_trace = desc.grid.LinearGridFlux(rho=[1])
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
@@ -4355,7 +4364,7 @@ def plot_particle_trajectories(  # noqa: C901
     )
 
     def to_lab(coords):
-        grid = Grid(coords, jitable=True)
+        grid = CustomGridFlux(coords, jitable=True)
         return field.compute("x", grid=grid)["x"]
 
     # tracing an equilibrium gives rpz in flux coordinates
@@ -4757,7 +4766,7 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,

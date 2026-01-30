@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGridFlux, LinearGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
@@ -46,9 +46,10 @@ class VacuumBoundaryError(_Objective):
         External field produced by coils or other sources outside the plasma.
     eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``
     field_grid : AbstractGrid, optional
-        Grid used to discretize field. Defaults to the default grid for given field.
+        CustomGridFlux used to discretize field.
+        Defaults to the default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -135,7 +136,7 @@ class VacuumBoundaryError(_Objective):
 
         eq = self.things[0]
         if self._eval_grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
@@ -413,9 +414,10 @@ class BoundaryError(_Objective):
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for both.
     field_grid : AbstractGrid, optional
-        Grid used to discretize field. Defaults to default grid for given field.
+        CustomGridFlux used to discretize field.
+        Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -543,7 +545,7 @@ class BoundaryError(_Objective):
         if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
-            source_grid = LinearGrid(
+            source_grid = LinearGridFlux(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -947,7 +949,7 @@ class BoundaryErrorNESTOR(_Objective):
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
     field_grid : AbstractGrid, optional
-        Grid used to discretize field.
+        CustomGridFlux used to discretize field.
 
     """
 
@@ -1029,7 +1031,7 @@ class BoundaryErrorNESTOR(_Objective):
             self._nzeta,
             self._field_grid,
         )
-        grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
 
         timer = Timer()

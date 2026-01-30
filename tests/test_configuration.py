@@ -14,7 +14,12 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, LinearGrid, LinearGridCurve, QuadratureGrid
+from desc.grid import (
+    ConcentricGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    QuadratureGridFlux,
+)
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
 
@@ -383,7 +388,7 @@ class TestInitialGuess:
                 -2.07374046e-02,
             ]
         )
-        grid = ConcentricGrid(L=6, M=6, N=2, node_pattern="ocs")
+        grid = ConcentricGridFlux(L=6, M=6, N=2, node_pattern="ocs")
         coords = eq.compute(["R", "Z", "lambda"], grid=grid)
         eq2 = Equilibrium(L=3, M=3, N=1)
         eq2.set_initial_guess(grid.nodes, coords["R"], coords["Z"], coords["lambda"])
@@ -494,7 +499,7 @@ def test_magnetic_axis():
     eq = desc.examples.get("HELIOTRON")
     axis = eq.axis
 
-    grid_flux = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=0.0)
+    grid_flux = LinearGridFlux(N=3 * eq.N_grid, NFP=eq.NFP, rho=0.0)
     grid_curve = LinearGridCurve(N=3 * eq.N_grid, NFP=eq.NFP)
 
     data = eq.compute(["R", "Z"], grid=grid_flux)
@@ -508,7 +513,7 @@ def test_magnetic_axis():
 def test_is_nested():
     """Test that jacobian sign indicates whether surfaces are nested."""
     eq = Equilibrium()
-    grid = QuadratureGrid(L=10, M=10, N=0)
+    grid = QuadratureGridFlux(L=10, M=10, N=0)
     assert eq.is_nested(grid=grid)
 
     eq.change_resolution(L=2, M=2)
@@ -536,7 +541,7 @@ def test_is_nested_theta():
     eq = Equilibrium(L=6, M=6, N=0, iota=1)
     # just mess with lambda, so rho contours are the same
     eq.L_lmn += 1e-1 * np.random.default_rng(seed=3).random(eq.L_lmn.shape)
-    grid = QuadratureGrid(10, 10, 0, NFP=eq.NFP)
+    grid = QuadratureGridFlux(10, 10, 0, NFP=eq.NFP)
     g1 = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
     g2 = eq.compute("sqrt(g)_PEST", grid=grid)["sqrt(g)_PEST"]
     assert np.all(g1 > 0)  # regular jacobian will still be fine

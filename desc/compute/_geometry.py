@@ -13,7 +13,7 @@ from quadax import simpson
 
 from desc.backend import jnp
 
-from ..grid import QuadratureGrid
+from ..grid import QuadratureGridFlux
 from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
@@ -34,7 +34,7 @@ from .data_index import register_compute_fun
     resolution_requirement="rtz",
 )
 def _V(params, transforms, profiles, data, **kwargs):
-    if isinstance(transforms["grid"], QuadratureGrid):
+    if isinstance(transforms["grid"], QuadratureGridFlux):
         data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
     else:
         # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
@@ -158,7 +158,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
         return jnp.mean(grid.compress(data["A(z)"], surface_label="zeta"))
 
     max_rho = jnp.max(data["rho"])
-    if isinstance(grid, QuadratureGrid) or "n_rho" not in data:  # TODO(#1761)
+    if isinstance(grid, QuadratureGridFlux) or "n_rho" not in data:  # TODO(#1761)
         assert extrap
         A = surface_integrals(
             grid,

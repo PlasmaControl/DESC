@@ -22,7 +22,7 @@ from desc.compute._geometry import _V_r_of_r, _V_rr_of_r
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGridFlux, QuadratureGridFlux
 from desc.objectives import (
     BootstrapRedlConsistency,
     FixAtomicNumber,
@@ -76,7 +76,7 @@ class TestBootstrapCompute:
         M = 100
         NFP = 3
         for N in [0, 25]:
-            grid = LinearGrid(rho=[0.5, 1], M=M, N=N, NFP=NFP)
+            grid = LinearGridFlux(rho=[0.5, 1], M=M, N=N, NFP=NFP)
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
 
@@ -214,7 +214,7 @@ class TestBootstrapCompute:
             plt.plot(epsilon, f_t, ":g", label="Alternative algorithm")
 
         for N in [0, 13]:
-            for grid_type in [LinearGrid, QuadratureGrid]:
+            for grid_type in [LinearGridFlux, QuadratureGridFlux]:
                 test(N, grid_type)
 
         plt.xlabel("epsilon")
@@ -890,7 +890,7 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
@@ -977,7 +977,7 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
@@ -1067,10 +1067,10 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
-        grid2 = LinearGrid(rho=0.0, M=eq.M, N=eq.N, NFP=eq.NFP)
-        grid3 = LinearGrid(rho=1.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid2 = LinearGridFlux(rho=0.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid3 = LinearGridFlux(rho=1.0, M=eq.M, N=eq.N, NFP=eq.NFP)
         with pytest.warns(UserWarning, match="rho=0"):
             eq.compute("<J*B> Redl", grid=grid2, helicity=helicity)
         with pytest.warns(UserWarning, match="vanish"):
@@ -1139,7 +1139,7 @@ class TestBootstrapObjectives:
             sym=True,
         )
         # The equilibrium need not be in force balance, so no need to solve().
-        grid = QuadratureGrid(
+        grid = QuadratureGridFlux(
             L=LMN_resolution, M=LMN_resolution, N=LMN_resolution, NFP=eq.NFP
         )
         obj = ObjectiveFunction(
@@ -1285,7 +1285,7 @@ class TestBootstrapObjectives:
         )
 
         # grid for bootstrap consistency objective:
-        grid = LinearGrid(
+        grid = LinearGridFlux(
             rho=np.linspace(1e-4, 1 - 1e-4, (num_iota_points - 1) * 2 + 1),
             M=eq.M * 2,
             N=eq.N * 2,
@@ -1398,7 +1398,7 @@ class TestBootstrapObjectives:
         )
 
         # grid for bootstrap consistency objective:
-        grid = QuadratureGrid(L=current_L * 2, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
+        grid = QuadratureGridFlux(L=current_L * 2, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         objective = ObjectiveFunction(
             BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
@@ -1570,7 +1570,7 @@ def test_bootstrap_optimization_comparison_qa():
     eq1 = eq0.copy()
     eq2 = eq0.copy()
 
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         M=eq0.M_grid,
         N=eq0.N_grid,
         NFP=eq0.NFP,
@@ -1612,7 +1612,7 @@ def test_bootstrap_optimization_comparison_qa():
         eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
         eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
 
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         M=eq0.M_grid,
         N=eq0.N_grid,
         NFP=eq0.NFP,

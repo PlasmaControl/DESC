@@ -8,7 +8,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import Index, setdefault
@@ -1007,7 +1007,7 @@ class Nestor(IOAble):
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use
     field_grid : AbstractGrid, optional
-        Grid used to discretize external field.
+        CustomGridFlux used to discretize external field.
     """
 
     _static_attrs = ["M", "N", "ntheta", "nzeta", "sym", "NFP"]
@@ -1032,8 +1032,8 @@ class Nestor(IOAble):
         self.sym = False  # hard-coded for now, can be generalized later
         ntheta_sym = self.ntheta // 2 + 1 if self.sym else self.ntheta
 
-        bdry_grid = LinearGrid(rho=1, theta=ntheta, zeta=nzeta, NFP=self.NFP)
-        axis_grid = LinearGrid(rho=0, theta=0, zeta=nzeta, NFP=self.NFP)
+        bdry_grid = LinearGridFlux(rho=1, theta=ntheta, zeta=nzeta, NFP=self.NFP)
+        axis_grid = LinearGridFlux(rho=0, theta=0, zeta=nzeta, NFP=self.NFP)
         self._Ra_transform = Transform(axis_grid, equil.R_basis)
         self._Za_transform = Transform(axis_grid, equil.Z_basis)
         self._Rb_transform = Transform(bdry_grid, equil.R_basis, derivs=2)

@@ -138,11 +138,11 @@ We can check whether the axis limit currently evaluates as finite by computing t
 ::
 
     from desc.examples import get
-    from desc.grid import LinearGrid
+    from desc.grid import LinearGridFlux
     import numpy as np
 
     eq = get("HELIOTRON")
-    grid = LinearGrid(rho=np.array([0.0]), M=4, N=8, axis=True)
+    grid = LinearGridFlux(rho=np.array([0.0]), M=4, N=8, axis=True)
     new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
     print(np.isfinite(new_quantity).all())
 

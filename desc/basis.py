@@ -8,7 +8,7 @@ import mpmath
 import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
-from desc.grid import AbstractGrid, Grid
+from desc.grid import AbstractGrid, CustomGridFlux
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -413,7 +413,7 @@ class PowerSeries(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx
@@ -529,7 +529,7 @@ class FourierSeries(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             nidx = self.unique_N_idx
@@ -659,7 +659,7 @@ class DoubleFourierSeries(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             midx = self.unique_M_idx
@@ -870,7 +870,7 @@ class ZernikePolynomial(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
 
         if modes is None:
             modes = self.modes
@@ -1030,7 +1030,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx
@@ -1272,7 +1272,7 @@ class FourierZernikeBasis(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lmidx = self.unique_LM_idx
@@ -1430,7 +1430,7 @@ class ChebyshevPolynomial(_Basis):
 
         """
         if not isinstance(grid, AbstractGrid):
-            grid = Grid(grid, sort=False, jitable=True)
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx

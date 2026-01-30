@@ -6,7 +6,7 @@ import pytest
 from desc.backend import jit, jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid, LinearGridCurve
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
 from desc.magnetic_fields import (
     MagneticFieldFromUser,
     ToroidalMagneticField,
@@ -210,14 +210,14 @@ def test_tracing_vacuum_tokamak():
         model=model,
         ts=ts,
     )
-    grid = Grid(rtz[0, :, :], jitable=True)
+    grid = CustomGridFlux(rtz[0, :, :], jitable=True)
     rpz = eq.compute("x", grid=grid)["x"]
     # We will find the B0*r00/R field representation of the vacuum tokamak
     # First, find the magnetic field at a random R position (equation doesn't
     # depend on R as long as B0 and r00 are consistent)
     # Then, the exact solution is the same as given in the
     # test_tracing_purely_toroidal_magnetic_field above
-    grid = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+    grid = LinearGridFlux(rho=0.5, M=eq.M_grid, N=eq.N_grid)
     data = eq.compute(["|B|", "x"], grid=grid)
     B0 = grid.compress(data["|B|"])[0]
     r00 = grid.compress(data["x"])[0, 0]
@@ -360,7 +360,7 @@ def test_init_surface_particles():
     surf = eq.get_surface_at(rho=rho)
     # rho=0.8 surface is not inside eq but inside eq_large
     surf_large = eq_large.get_surface_at(rho=rho)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid)
 
     N = 100
     particles = SurfaceParticleInitializer(
@@ -458,7 +458,7 @@ def test_init_curve_particles():
     np.testing.assert_allclose(x0[:, 0], 0.0, atol=1e-8)
 
     # also check that particle positions are correct in lab frame
-    grid_t = Grid(x0[:, :3], jitable=True)
+    grid_t = CustomGridFlux(x0[:, :3], jitable=True)
     rpz = eq_large.compute("x", grid=grid_t)["x"]
 
     np.testing.assert_allclose(rpz[:, 0], curve_large.R_n[0], atol=1e-8)

@@ -179,7 +179,7 @@ class AbstractGridFlux(AbstractGrid):
         x : ndarray, shape(other_grid.num_nodes,...)
             Data to copy. Assumed to be constant over the specified surface.
         other_grid: AbstractGridFlux
-            Grid to copy from.
+            CustomGridFlux to copy from.
         surface_label : str, optional
             The surface label. Must be one of the elements in self.coordinates.
             Default = "rho".
@@ -394,11 +394,11 @@ class AbstractGridFlux(AbstractGrid):
         return self.__dict__.setdefault("_axis", np.array([]))
 
 
-class Grid(AbstractGridFlux):
+class CustomGridFlux(AbstractGridFlux):
     """Collocation grid with custom node placement.
 
-    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
-    to pass in a custom set of collocation nodes.
+    Unlike subclasses LinearGridFlux and ConcentricGridFlux, the base CustomGridFlux
+    allows the user to pass in a custom set of collocation nodes.
 
     Parameters
     ----------
@@ -417,7 +417,7 @@ class Grid(AbstractGridFlux):
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
     source_grid : AbstractGridFlux
-        Grid from which coordinates were mapped from.
+        CustomGridFlux from which coordinates were mapped from.
     sort : bool
         Whether to sort the nodes for use with FFT method.
     is_meshgrid : bool
@@ -584,7 +584,7 @@ class Grid(AbstractGridFlux):
 
         Returns
         -------
-        grid : Grid
+        grid : CustomGridFlux
             Meshgrid.
 
         """
@@ -633,7 +633,7 @@ class Grid(AbstractGridFlux):
         inverse_x2_idx = repeat(
             unique_x2_idx // (x0.size * x1.size), (x0.size * x1.size)
         )
-        return Grid(
+        return CustomGridFlux(
             nodes=nodes,
             spacing=spacing,
             weights=weights,
@@ -658,7 +658,7 @@ class Grid(AbstractGridFlux):
         return self._source_grid
 
 
-class LinearGrid(AbstractGridFlux):
+class LinearGridFlux(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -943,7 +943,7 @@ class LinearGrid(AbstractGridFlux):
         elif zeta is not None:
             errorif(
                 np.any(np.asarray(zeta) > zeta_period),
-                msg="LinearGrid should be defined on 1 field period.",
+                msg="LinearGridFlux should be defined on 1 field period.",
             )
             z, dz = periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
@@ -1048,7 +1048,7 @@ class LinearGrid(AbstractGridFlux):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(AbstractGridFlux):
+class QuadratureGridFlux(AbstractGridFlux):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -1077,7 +1077,7 @@ class QuadratureGrid(AbstractGridFlux):
         self._fft_x1 = True
         self._fft_x2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
-        # symmetry is never enforced for Quadrature Grid
+        # symmetry is never enforced for Quadrature CustomGridFlux
         self._sort_nodes()
         self._axis = self._find_axis()
         (
@@ -1176,7 +1176,7 @@ class QuadratureGrid(AbstractGridFlux):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(AbstractGridFlux):
+class ConcentricGridFlux(AbstractGridFlux):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more

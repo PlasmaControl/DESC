@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGridFlux, LinearGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
@@ -48,7 +48,7 @@ class MercierStability(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
 
@@ -103,7 +103,7 @@ class MercierStability(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -207,7 +207,7 @@ class MagneticWell(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
 
@@ -265,7 +265,7 @@ class MagneticWell(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -484,7 +484,7 @@ class BallooningStability(_Objective):
         self._iota_keys = ["iota", "iota_r", "shear", "a"]
 
         eq = self.things[0]
-        iota_grid = LinearGrid(
+        iota_grid = LinearGridFlux(
             # to compute length scale quantities correctly
             rho=np.append(self._rho, 1) if self._add_lcfs else self._rho,
             M=eq.M_grid,

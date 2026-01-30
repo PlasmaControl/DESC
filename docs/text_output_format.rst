@@ -9,7 +9,7 @@ integers are printed with a total width of 3 characters, and all
 floating point numbers are printed in exponential notation with a total
 width of 16 characters including 8 digits after the decimal points.
 
-Grid Parameters
+CustomGridFlux Parameters
 ---------------
 
 The first two lines of the output file specify some global parameters:

@@ -3,7 +3,7 @@
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGridFlux, ConcentricGrid, QuadratureGrid
+from desc.grid import AbstractGridFlux, ConcentricGridFlux, QuadratureGridFlux
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
@@ -35,7 +35,7 @@ class ForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -91,7 +91,7 @@ class ForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -196,7 +196,7 @@ class ForceBalanceAnisotropic(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -252,7 +252,7 @@ class ForceBalanceAnisotropic(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -339,7 +339,7 @@ class RadialForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -395,7 +395,7 @@ class RadialForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -482,7 +482,7 @@ class HelicalForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -538,7 +538,7 @@ class HelicalForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -621,7 +621,7 @@ class Energy(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
 
@@ -683,7 +683,7 @@ class Energy(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -775,7 +775,7 @@ class CurrentDensity(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -831,7 +831,7 @@ class CurrentDensity(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,

@@ -397,7 +397,7 @@ class LinearGridSurface(AbstractGridSurface):
         elif zeta is not None:
             errorif(
                 np.any(np.asarray(zeta) > zeta_period),
-                msg="LinearGrid should be defined on 1 field period.",
+                msg="LinearGridFlux should be defined on 1 field period.",
             )
             z, dz = periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP

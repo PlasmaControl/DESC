@@ -24,7 +24,7 @@ from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import CustomGridCurve, LinearGrid, LinearGridCurve
+from desc.grid import CustomGridCurve, LinearGridCurve, LinearGridFlux
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
@@ -949,7 +949,7 @@ def test_symmetry_magnetic_field(DummyCoilSet):
     )
 
     # test that both coil sets compute the same field on the plasma surface
-    grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
+    grid = LinearGridFlux(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
         data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
 
@@ -1563,7 +1563,7 @@ def test_initialize_helical():
     a = eq.compute("a")["a"]
     data = eq.compute(
         ["R", "phi", "Z"],
-        grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+        grid=LinearGridFlux(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
     )
     rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
     rpz = copy_rpz_periods(rpz, eq.NFP)

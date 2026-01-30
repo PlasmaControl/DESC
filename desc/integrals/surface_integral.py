@@ -5,7 +5,7 @@ https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html.
 """
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGridFlux, LinearGridFlux
 from desc.utils import errorif, warnif
 
 # TODO (#1389): Make the surface integral stuff objects with a callable method instead
@@ -46,10 +46,10 @@ def _get_grid_surface(grid, surface_label):
         has_endpoint_dupe = False
     elif surface_label == "x1":
         spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._poloidal_endpoint
+        has_endpoint_dupe = isinstance(grid, LinearGridFlux) and grid._poloidal_endpoint
     else:
         spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._toroidal_endpoint
+        has_endpoint_dupe = isinstance(grid, LinearGridFlux) and grid._toroidal_endpoint
     has_idx = hasattr(grid, f"num_x{surface_label_axis}") and hasattr(
         grid, f"_inverse_x{surface_label_axis}_idx"
     )
@@ -128,11 +128,11 @@ def line_integrals(
         msg="There is no valid use for this combination of inputs.",
     )
     errorif(
-        line_label != "x1" and isinstance(grid, ConcentricGrid),
-        msg="ConcentricGrid should only be used for poloidal line integrals.",
+        line_label != "x1" and isinstance(grid, ConcentricGridFlux),
+        msg="ConcentricGridFlux should only be used for poloidal line integrals.",
     )
     warnif(
-        isinstance(grid, LinearGrid) and grid.endpoint,
+        isinstance(grid, LinearGridFlux) and grid.endpoint,
         msg="Correctness not guaranteed on grids with duplicate nodes.",
     )
     # Generate a new quantity q_prime which is zero everywhere
@@ -219,9 +219,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     """
     surface_label = grid.get_label(surface_label)
     warnif(
-        surface_label == "poloidal" and isinstance(grid, ConcentricGrid),
+        surface_label == "poloidal" and isinstance(grid, ConcentricGridFlux),
         msg="Integrals over constant poloidal surfaces"
-        " are poorly defined for ConcentricGrid.",
+        " are poorly defined for ConcentricGridFlux.",
     )
     unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label

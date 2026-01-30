@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import AbstractGrid, Grid
+from desc.grid import AbstractGrid, CustomGridFlux
 from desc.io import load
 from desc.objectives import (
     FixThetaSFL,
@@ -37,10 +37,10 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             used to find the axis from the surface, and eq.L_lmn will be set to zero.
           - Another Equilibrium, whose flux surfaces and lambda will be used.
           - File path to a VMEC or DESC equilibrium, which will be loaded and used.
-          - Grid and 2-3 ndarrays, specifying the flux surface locations (R, Z, and
-            optionally lambda) at fixed flux coordinates. All arrays should have the
-            same length. Optionally, an ndarray of shape(k,3) may be passed instead
-            of a grid. If lambda is not passed, it will be set to zero.
+          - CustomGridFlux and 2-3 ndarrays, specifying the flux surface locations
+            (R, Z, and optionally lambda) at fixed flux coordinates. All arrays should
+            have the same length. Optionally, an ndarray of shape(k,3) may be passed
+            instead of a grid. If lambda is not passed, it will be set to zero.
     ensure_nested : bool
         If True, and the default initial guess does not produce nested surfaces,
         run a small optimization problem to attempt to refine initial guess to improve
@@ -77,8 +77,8 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
     Use flux surfaces specified by points:
-    nodes should either be a Grid or an ndarray, shape(k,3) giving the locations
-    in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
+    nodes should either be a CustomGridFlux or an ndarray, shape(k,3) giving the
+    locations in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
     array-like, shape(k,) giving the corresponding real space coordinates
 
     >>> equil.set_initial_guess(nodes, R, Z, lambda)
@@ -355,7 +355,7 @@ def _initial_guess_points(nodes, x, x_basis):
 
     Parameters
     ----------
-    nodes : Grid or ndarray, shape(k,3)
+    nodes : CustomGridFlux or ndarray, shape(k,3)
         Locations in flux coordinates where real space coordinates are given.
     x : ndarray, shape(k,)
         R, Z or lambda values at specified nodes.
@@ -369,7 +369,7 @@ def _initial_guess_points(nodes, x, x_basis):
 
     """
     if not isinstance(nodes, AbstractGrid):
-        nodes = Grid(nodes, sort=False)
+        nodes = CustomGridFlux(nodes, sort=False)
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)
     return x_lmn

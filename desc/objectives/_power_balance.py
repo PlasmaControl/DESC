@@ -2,7 +2,7 @@
 
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
-from desc.grid import AbstractGridFlux, QuadratureGrid
+from desc.grid import AbstractGridFlux, QuadratureGridFlux
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
@@ -28,7 +28,7 @@ class FusionPower(_Objective):
         Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
     grid : AbstractGridFlux, optional
         Collocation grid used to compute the intermediate quantities.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
+        Defaults to ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
 
     """
 
@@ -103,7 +103,7 @@ class FusionPower(_Objective):
         )
 
         if self._grid is None:
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -205,7 +205,7 @@ class HeatingPowerISS04(_Objective):
         Adiabatic (compressional) index. Default = 0.
     grid : AbstractGridFlux, optional
         Collocation grid used to compute the intermediate quantities.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
+        Defaults to ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
 
     """
 
@@ -272,7 +272,7 @@ class HeatingPowerISS04(_Objective):
         )
 
         if self._grid is None:
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,

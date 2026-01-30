@@ -7,7 +7,7 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -311,7 +311,7 @@ class FourierRZCurve(Curve):
             not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
         )
 
-        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
+        grid = LinearGridFlux(zeta=phi, NFP=1, sym=sym)
         R_basis = FourierSeries(N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = FourierSeries(N=N, NFP=NFP, sym="sin" if sym else False)
         with warnings.catch_warnings():
@@ -621,7 +621,7 @@ class FourierXYZCurve(Curve):
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
 
-        grid = LinearGrid(zeta=s, NFP=1, sym=False)
+        grid = LinearGridFlux(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(X)
@@ -844,7 +844,7 @@ class FourierPlanarCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -966,7 +966,7 @@ class FourierPlanarCurve(Curve):
 
         # Fourier transform
         basis = FourierSeries(N, NFP=1, sym=False)
-        grid_fit = LinearGrid(zeta=s, NFP=1)
+        grid_fit = LinearGridFlux(zeta=s, NFP=1)
         transform_fit = Transform(grid_fit, basis, build_pinv=True)
         r_n = transform_fit.fit(r)
 
@@ -1248,7 +1248,7 @@ class FourierXYCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -1366,7 +1366,7 @@ class FourierXYCurve(Curve):
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
 
         # Fourier transform
-        grid = LinearGrid(zeta=s, NFP=1)
+        grid = LinearGridFlux(zeta=s, NFP=1)
         basis = FourierSeries(N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         idx = np.where(basis.modes[:, 2] != 0)  # exclude n=0 mode
@@ -1615,7 +1615,7 @@ class SplineXYZCurve(Curve):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : AbstractGridCurve or int, optional
-            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            CustomGridFlux of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.

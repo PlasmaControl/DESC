@@ -13,7 +13,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.integrals import compute_B_plasma
 from desc.optimizable import optimizable_parameter
 from desc.utils import (
@@ -248,7 +248,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
+        source_grid = source_grid or LinearGridFlux(
             M=30 + 2 * self.M,
             N=30 + 2 * self.N,
             NFP=self.NFP,
@@ -671,7 +671,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
+        source_grid = source_grid or LinearGridFlux(
             M=30 + 2 * max(self.M, self.M_Phi),
             N=30 + 2 * max(self.N, self.N_Phi),
             NFP=self.NFP,
@@ -979,7 +979,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
                 )
                 K = self.compute(
                     "K",
-                    grid=Grid(
+                    grid=CustomGridFlux(
                         jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])
                     ),
                     basis="xyz",
@@ -1249,15 +1249,14 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     source_grid : AbstractGridFlux, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
-        LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
+        LinearGridFlux(M=max(3 * current_potential_field.M_Phi, 30),
         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
     eval_grid : AbstractGridFlux, optional
-        Grid upon which to evaluate the normal field on the plasma surface, and
-        at which the normal field is minimized.
-        Defaults to
-        `LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`
-    vc_source_grid : LinearGrid
-        LinearGrid to use for the singular integral for the virtual casing
+        CustomGridFlux upon which to evaluate the normal field on the plasma surface,
+        and at which the normal field is minimized. Defaults to
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
+    vc_source_grid : LinearGridFlux
+        LinearGridFlux to use for the singular integral for the virtual casing
         principle to calculate the component of the normal field from the
         plasma currents. Must have endpoint=False and sym=False and be linearly
         spaced in theta and zeta, with nodes only at rho=1.0
@@ -1398,13 +1397,13 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         data["external_field_grid"] = external_field_grid
 
     if source_grid is None:
-        source_grid = LinearGrid(
+        source_grid = LinearGridFlux(
             M=max(3 * current_potential_field.M_Phi, 30),
             N=max(3 * current_potential_field.N_Phi, 30),
             NFP=int(eq.NFP),
         )
     if eval_grid is None:
-        eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
+        eval_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
     B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
     # just need it for normalization, so do a simple mean
     normalization_B = jnp.mean(B_eq_surf)
@@ -1836,7 +1835,7 @@ def _find_current_potential_contours(
 
     theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
 
-    grid = Grid(
+    grid = CustomGridFlux(
         jnp.vstack(
             (
                 jnp.zeros_like(theta_full_2D.flatten(order="F")),
@@ -2028,7 +2027,7 @@ def _find_XYZ_points(
     for thetas, zetas in zip(theta_pts, zeta_pts):
         coords = surface.compute(
             "x",
-            grid=Grid(
+            grid=CustomGridFlux(
                 jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T,
                 sort=False,
             ),
@@ -2047,7 +2046,7 @@ def _G_from_external_field(external_field, eq, external_field_grid, chunk_size=N
     try:
         G_ext = external_field.G
     except AttributeError:
-        curve_grid = LinearGrid(
+        curve_grid = LinearGridFlux(
             N=int(eq.NFP) * 50,
             theta=jnp.array(jnp.pi),  # does not matter which theta we choose
             rho=jnp.array(1.0),

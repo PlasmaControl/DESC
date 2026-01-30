@@ -19,7 +19,12 @@ from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import (
+    ConcentricGridFlux,
+    CustomGridFlux,
+    LinearGridFlux,
+    QuadratureGridFlux,
+)
 from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
@@ -100,7 +105,7 @@ class TestPlot1D:
     def test_1d_elongation(self):
         """Test plotting 1d elongation as a function of toroidal angle."""
         eq = get("precise_QA")
-        grid = LinearGrid(M=eq.M_grid, N=20, NFP=eq.NFP)
+        grid = LinearGridFlux(M=eq.M_grid, N=20, NFP=eq.NFP)
         fig, ax, data = plot_1d(
             eq, "a_major/a_minor", grid=grid, figsize=(4, 4), return_data=True
         )
@@ -112,7 +117,7 @@ class TestPlot1D:
     def test_1d_iota(self):
         """Test plotting 1d rotational transform."""
         eq = get("DSHAPE_current")
-        grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
+        grid = LinearGridFlux(rho=0.5, theta=100, zeta=0.0)
         fig, ax, data = plot_1d(eq, "iota", grid=grid, figsize=(4, 4), return_data=True)
         assert "theta" in data.keys()
         assert "iota" in data.keys()
@@ -152,7 +157,7 @@ class TestPlot1D:
     def test_plot_1d_surface(self):
         """Test plot_1d function for Surface objects."""
         surf = FourierRZToroidalSurface()
-        fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+        fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGridFlux(M=50))
         return fig
 
     @pytest.mark.unit
@@ -173,7 +178,7 @@ class TestPlot2D:
     def test_2d_logF(self):
         """Test plotting 2d force error with log scale."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=100, theta=100, zeta=0.0)
+        grid = LinearGridFlux(rho=100, theta=100, zeta=0.0)
         fig, ax, data = plot_2d(
             eq, "|F|", log=True, grid=grid, figsize=(4, 4), return_data=True
         )
@@ -185,7 +190,7 @@ class TestPlot2D:
     def test_2d_g_tz(self):
         """Test plotting 2d metric coefficients vs theta/zeta."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        grid = LinearGridFlux(rho=0.5, theta=100, zeta=100)
         fig, ax, data = plot_2d(
             eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True
         )
@@ -200,7 +205,7 @@ class TestPlot2D:
     def test_2d_g_rz(self):
         """Test plotting 2d metric coefficients vs rho/zeta."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=100, theta=0.0, zeta=100)
+        grid = LinearGridFlux(rho=100, theta=0.0, zeta=100)
         fig, ax, data = plot_2d(
             eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True
         )
@@ -236,7 +241,7 @@ class TestPlot2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_normF_2d(self):
         """Test 2d plot of normalized force."""
-        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        grid = LinearGridFlux(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
             eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
@@ -249,7 +254,7 @@ class TestPlot2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_normF_2d_deprecated(self):
         """Test deprecated 2d plot of normalized force."""
-        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        grid = LinearGridFlux(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         with pytest.raises((ValueError, FutureWarning)):
             _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
@@ -275,8 +280,8 @@ class TestPlot2D:
             eq,
             "B*n",
             field=ToroidalMagneticField(1, 1),
-            field_grid=LinearGrid(M=10, N=10),
-            grid=LinearGrid(M=30, N=30, NFP=eq.NFP, endpoint=True),
+            field_grid=LinearGridFlux(M=10, N=10),
+            grid=LinearGridFlux(M=30, N=30, NFP=eq.NFP, endpoint=True),
         )
         return fig
 
@@ -288,7 +293,7 @@ class TestPlot3D:
     def test_3d_tz(self):
         """Test 3d plot of force on interior surface."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        grid = LinearGridFlux(rho=0.5, theta=100, zeta=100)
         fig, data = plot_3d(eq, "|F|", log=True, grid=grid, return_data=True)
         assert "X" in data.keys()
         assert "Y" in data.keys()
@@ -300,7 +305,7 @@ class TestPlot3D:
     def test_3d_tz_normalized(self):
         """Test 3d plot of normalized force on interior surface."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        grid = LinearGridFlux(rho=0.5, theta=100, zeta=100)
         fig, data = plot_3d(
             eq,
             "|F|",
@@ -320,14 +325,14 @@ class TestPlot3D:
     def test_3d_rz(self):
         """Test 3d plotting of pressure on toroidal cross section."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=100, theta=0.0, zeta=100)
+        grid = LinearGridFlux(rho=100, theta=0.0, zeta=100)
         _ = plot_3d(eq, "p", grid=grid)
 
     @pytest.mark.unit
     def test_3d_rt(self):
         """Test 3d plotting of flux on poloidal ribbon."""
         eq = get("DSHAPE_CURRENT")
-        grid = LinearGrid(rho=100, theta=100, zeta=0.0)
+        grid = LinearGridFlux(rho=100, theta=100, zeta=0.0)
         _ = plot_3d(eq, "psi", grid=grid)
 
     @pytest.mark.unit
@@ -354,7 +359,7 @@ class TestPlot3D:
             eq,
             "B*n",
             field=ToroidalMagneticField(1, 1),
-            grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
+            grid=LinearGridFlux(M=30, N=30, NFP=1, endpoint=True),
         )
 
 
@@ -366,7 +371,7 @@ class TestPlotFSA:
         """Test magnetic axis limit of flux surface average is plotted."""
         eq = get("W7-X")
         rho = np.linspace(0, 1, 10)
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
         assert grid.axis.size
 
         name = "J*B"
@@ -683,7 +688,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_linear(self):
         """Test plotting linear grid."""
-        grid = LinearGrid(rho=10, theta=10, zeta=1)
+        grid = LinearGridFlux(rho=10, theta=10, zeta=1)
         fig, ax, data = plot_grid(grid, return_data=True)
         for string in ["theta", "rho"]:
             assert string in data.keys()
@@ -693,7 +698,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_quad(self):
         """Test plotting quadrature grid."""
-        grid = QuadratureGrid(L=10, M=10, N=1)
+        grid = QuadratureGridFlux(L=10, M=10, N=1)
         fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
@@ -701,7 +706,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_jacobi(self):
         """Test plotting concentric grid with jacobi nodes."""
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="jacobi")
         fig, ax = plot_grid(grid)
         return fig
 
@@ -709,7 +714,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_cheb1(self):
         """Test plotting concentric grid with chebyshev 1 nodes."""
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="cheb1")
         fig, ax = plot_grid(grid)
         return fig
 
@@ -717,7 +722,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_cheb2(self):
         """Test plotting concentric grid with chebyshev 2 nodes."""
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="cheb2")
         fig, ax = plot_grid(grid)
         return fig
 
@@ -725,7 +730,7 @@ class TestPlotGrid:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_ocs(self):
         """Test plotting concentric grid with optimal concentric sampling nodes."""
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="ocs")
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="ocs")
         fig, ax = plot_grid(grid)
         return fig
 
@@ -1040,7 +1045,7 @@ def test_plot_b_mag():
     alpha = 0
     # compute iota
     eq = get("W7-X")
-    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
+    iota = eq.compute("iota", grid=LinearGridFlux(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
     zeta = np.linspace(
@@ -1051,7 +1056,7 @@ def test_plot_b_mag():
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
     coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
-    grid = Grid(coords)
+    grid = CustomGridFlux(coords)
 
     # compute |B| normalized in the usual flux tube way
     psib = np.abs(eq.compute("psi")["psi"][-1])
@@ -1087,7 +1092,7 @@ def test_plot_poincare():
     """Test making a poincare plot."""
     ext_field = load("tests/inputs/precise_QA_helical_coils.h5")
     eq = get("precise_QA")
-    grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
+    grid_trace = LinearGridFlux(rho=np.linspace(0, 1, 9))
     r0 = eq.compute("R", grid=grid_trace)["R"]
     z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
@@ -1133,7 +1138,7 @@ def test_plot_field_lines_reversed():
     """Test plotting field lines with reversed direction."""
     field = load("tests/inputs/precise_QA_helical_coils.h5")
     eq = get("precise_QA")
-    grid_trace = LinearGrid(rho=[1])
+    grid_trace = LinearGridFlux(rho=[1])
     r0 = eq.compute("R", grid=grid_trace)["R"]
     z0 = eq.compute("Z", grid=grid_trace)["Z"]
 

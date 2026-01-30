@@ -8,7 +8,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
 from desc.batching import batch_map
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._bounce_utils import (
     _broadcast_for_bounce,
     _check_bounce_points,
@@ -474,7 +474,9 @@ class Bounce2D(Bounce):
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", "Unequal number of field periods")
                 lmbda = get_transforms(
-                    "lambda", eq, grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+                    "lambda",
+                    eq,
+                    grid=LinearGridFlux(rho=rho, M=eq.L_basis.M, zeta=zeta),
                 )["L"]
         assert lmbda.basis.NFP == eq.NFP
 

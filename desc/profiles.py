@@ -10,7 +10,7 @@ from interpax import interp1d
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
 from desc.derivatives import Derivative
-from desc.grid import AbstractGrid, Grid
+from desc.grid import AbstractGrid, CustomGridFlux
 from desc.io import IOAble
 from desc.utils import (
     combination_permutation,
@@ -205,7 +205,7 @@ class _Profile(IOAble, ABC):
             grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
-            grid = Grid(grid, sort=False)
+            grid = CustomGridFlux(grid, sort=False)
         return self.compute(grid, params, dr, dt, dz)
 
     def __repr__(self):

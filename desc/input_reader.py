@@ -825,7 +825,7 @@ class InputReader:
         threshold : float
             Fourier coefficients below this value will be set to 0.
         """
-        from desc.grid import LinearGrid
+        from desc.grid import LinearGridFlux
         from desc.io.optimizable_io import load
         from desc.profiles import PowerSeriesProfile
         from desc.utils import copy_coeffs
@@ -872,7 +872,7 @@ class InputReader:
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
         # fit profiles to power series
-        grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        grid = LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         rho = grid.nodes[grid.unique_rho_idx, 0]
         if not isinstance(eq.pressure, PowerSeriesProfile):
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])

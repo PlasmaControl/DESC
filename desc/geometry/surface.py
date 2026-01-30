@@ -16,7 +16,7 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -452,7 +452,7 @@ class FourierRZToroidalSurface(Surface):
 
         Parameters
         ----------
-        coords : array-like shape(num_points,3) or Grid
+        coords : array-like shape(num_points,3) or CustomGridFlux
             cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
         theta : ndarray, shape(num_points,)
             Locations in poloidal angle theta where real space coordinates are given.
@@ -504,7 +504,7 @@ class FourierRZToroidalSurface(Surface):
             zeta = coords[:, 1]
         else:
             raise NotImplementedError("zeta != phi not yet implemented")
-        nodes = Grid(
+        nodes = CustomGridFlux(
             np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
             sort=False,
             jitable=True,
@@ -626,7 +626,7 @@ class FourierRZToroidalSurface(Surface):
             ValueError,
             "surface has no volume for abs(twist)%1 == 0.5",
         )
-        grid = LinearGrid(L=0, M=30, N=30, NFP=NFP, endpoint=True)
+        grid = LinearGridFlux(L=0, M=30, N=30, NFP=NFP, endpoint=True)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
 
@@ -684,10 +684,10 @@ class FourierRZToroidalSurface(Surface):
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
         grid : AbstractGridFlux, optional
-            Grid object of the points on the given surface to evaluate the
+            CustomGridFlux object of the points on the given surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N.
-            If None, defaults to a LinearGrid with M and N and NFP equal to the
+            If None, defaults to a LinearGridFlux with M and N and NFP equal to the
             base_surface.M and base_surface.N and base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
@@ -727,7 +727,7 @@ class FourierRZToroidalSurface(Surface):
 
         base_surface = self
         if grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 M=base_surface.M * 2,
                 N=base_surface.N * 2,
                 NFP=base_surface.NFP,
@@ -742,7 +742,7 @@ class FourierRZToroidalSurface(Surface):
         def n_and_r_jax(nodes):
             data = base_surface.compute(
                 ["X", "Y", "Z", "n_rho"],
-                grid=Grid(nodes, jitable=True, sort=False),
+                grid=CustomGridFlux(nodes, jitable=True, sort=False),
                 method="jitable",
             )
 
@@ -815,7 +815,7 @@ class FourierRZToroidalSurface(Surface):
         from desc.geometry import FourierRZCurve
 
         # over-sample to get a good axis fit
-        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
+        grid = LinearGridFlux(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]
@@ -1172,7 +1172,7 @@ class ZernikeRZToroidalSection(Surface):
         """
         from desc.geometry import FourierRZCurve
 
-        grid = LinearGrid(rho=0)
+        grid = LinearGridFlux(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
         axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis

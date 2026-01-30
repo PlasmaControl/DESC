@@ -6,7 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put
-from desc.grid import Grid
+from desc.grid import CustomGridFlux
 from desc.io import IOAble
 from desc.utils import combination_permutation, warnif
 
@@ -77,7 +77,7 @@ class Transform(IOAble):
             method != "jitable"
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
-            and not isinstance(grid, Grid)
+            and not isinstance(grid, CustomGridFlux)
             and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
@@ -241,7 +241,9 @@ class Transform(IOAble):
             ]
         )
         # temp grid only used for building transforms, don't need any indexing etc
-        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
+        self.fft_grid = CustomGridFlux(
+            fft_nodes, sort=False, jitable=True, axis_shift=0
+        )
 
     def _check_inputs_direct2(self, grid, basis):
         """Check that inputs are formatted correctly for direct2 method."""
@@ -250,11 +252,11 @@ class Transform(IOAble):
             self._method = "direct1"
             return
 
-        from desc.grid import LinearGrid, LinearGridCurve
+        from desc.grid import LinearGridCurve, LinearGridFlux
 
         if not (
             grid.fft_x2
-            or isinstance(grid, LinearGrid)
+            or isinstance(grid, LinearGridFlux)
             or isinstance(grid, LinearGridCurve)
         ):
             warnings.warn(
@@ -297,11 +299,15 @@ class Transform(IOAble):
                 np.zeros((grid.num_nodes // grid.num_x2, 1)),
             ]
         )
-        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
+        self.fft_grid = CustomGridFlux(
+            fft_nodes, sort=False, jitable=True, axis_shift=0
+        )
         dft_nodes = np.hstack(
             [np.zeros((self.x2_nodes.size, 2)), self.x2_nodes[:, np.newaxis]]
         )
-        self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
+        self.dft_grid = CustomGridFlux(
+            dft_nodes, sort=False, jitable=True, axis_shift=0
+        )
 
     def build(self):
         """Build the transform matrices for each derivative order."""

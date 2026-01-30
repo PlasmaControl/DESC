@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGridFlux, LinearGrid, QuadratureGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux, QuadratureGridFlux
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -31,8 +31,8 @@ class AspectRatio(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -92,7 +92,7 @@ class AspectRatio(_Objective):
         eq = self.things[0]
         if self._grid is None:
             if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
+                grid = QuadratureGridFlux(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -102,7 +102,7 @@ class AspectRatio(_Objective):
                 # if not an Equilibrium, is a Surface,
                 # has no radial resolution so just need
                 # the surface points
-                grid = LinearGrid(
+                grid = LinearGridFlux(
                     rho=1.0,
                     M=eq.M * 2,
                     N=eq.N * 2,
@@ -182,8 +182,8 @@ class Elongation(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -242,7 +242,7 @@ class Elongation(_Objective):
         eq = self.things[0]
         if self._grid is None:
             if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
+                grid = QuadratureGridFlux(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -252,7 +252,7 @@ class Elongation(_Objective):
                 # if not an Equilibrium, is a Surface,
                 # has no radial resolution so just need
                 # the surface points
-                grid = LinearGrid(
+                grid = LinearGridFlux(
                     rho=1.0,
                     M=eq.M * 2,
                     N=eq.N * 2,
@@ -331,8 +331,8 @@ class Volume(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -390,7 +390,7 @@ class Volume(_Objective):
         eq = self.things[0]
         if self._grid is None:
             if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
+                grid = QuadratureGridFlux(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -400,7 +400,7 @@ class Volume(_Objective):
                 # if not an Equilibrium, is a Surface,
                 # has no radial resolution so just need
                 # the surface points
-                grid = LinearGrid(
+                grid = LinearGridFlux(
                     rho=1.0,
                     M=eq.M * 2,
                     N=eq.N * 2,
@@ -497,10 +497,10 @@ class PlasmaVesselDistance(_Objective):
         Bounding surface to penalize distance to.
     surface_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
     plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
     use_signed_distance: bool, optional
@@ -624,11 +624,11 @@ class PlasmaVesselDistance(_Objective):
             eq = self.things[0]
             surface = self.things[1]
         if self._surface_grid is None:
-            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
-            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            plasma_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
         warnif(
@@ -861,8 +861,8 @@ class MeanCurvature(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -918,7 +918,7 @@ class MeanCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(  # getattr statements in case a surface is passed in
+            grid = LinearGridFlux(  # getattr statements in case a surface is passed in
                 M=getattr(eq, "M_grid", eq.M * 2),
                 N=getattr(eq, "N_grid", eq.N * 2),
                 NFP=eq.NFP,
@@ -1007,8 +1007,8 @@ class PrincipalCurvature(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -1064,7 +1064,7 @@ class PrincipalCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(  # getattr statements in case a surface is passed in
+            grid = LinearGridFlux(  # getattr statements in case a surface is passed in
                 M=getattr(eq, "M_grid", eq.M * 2),
                 N=getattr(eq, "N_grid", eq.N * 2),
                 NFP=eq.NFP,
@@ -1149,7 +1149,7 @@ class BScaleLength(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
 
     """
 
@@ -1205,7 +1205,7 @@ class BScaleLength(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
 
@@ -1344,7 +1344,7 @@ class GoodCoordinates(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
 
@@ -1430,8 +1430,8 @@ class MirrorRatio(_Objective):
         Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
     grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
 
     """
 
@@ -1491,14 +1491,14 @@ class MirrorRatio(_Objective):
         from desc.magnetic_fields import OmnigenousField
 
         if self._grid is None and isinstance(eq, Equilibrium):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
             )
         elif self._grid is None and isinstance(eq, OmnigenousField):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 theta=2 * eq.M_B,
                 N=2 * eq.N_x,
                 NFP=eq.NFP,

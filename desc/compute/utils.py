@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 
 from desc.backend import execute_on_cpu, jnp
-from desc.grid import AbstractGridFlux, Grid
+from desc.grid import AbstractGridFlux, CustomGridFlux
 
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
@@ -447,7 +447,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
     grid : AbstractGrid
-        Grid to compute quantity on.
+        CustomGridFlux to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
@@ -535,7 +535,7 @@ def get_transforms(
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
     grid : AbstractGrid
-        Grid to compute quantity on
+        CustomGridFlux to compute quantity on
     jitable: bool
         Whether to skip certain checks so that this operation works under JIT
     has_axis : bool
@@ -551,7 +551,7 @@ def get_transforms(
 
     """
     from desc.basis import DoubleFourierSeries
-    from desc.grid import LinearGrid
+    from desc.grid import LinearGridFlux
     from desc.transform import Transform
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
@@ -599,7 +599,9 @@ def get_transforms(
             if grid.num_rho > 1:
                 theta = grid.nodes[grid.unique_theta_idx, 1]
                 zeta = grid.nodes[grid.unique_zeta_idx, 2]
-                grid_B = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+                grid_B = LinearGridFlux(
+                    theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym
+                )
             else:
                 grid_B = grid
             transforms["B"] = Transform(
@@ -623,7 +625,9 @@ def get_transforms(
             if grid.num_rho > 1:
                 theta = grid.nodes[grid.unique_theta_idx, 1]
                 zeta = grid.nodes[grid.unique_zeta_idx, 2]
-                grid_w = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+                grid_w = LinearGridFlux(
+                    theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym
+                )
             else:
                 grid_w = grid
             transforms["w"] = Transform(
@@ -645,7 +649,7 @@ def get_transforms(
             alpha = grid.nodes[:, 2] * grid.NFP
             nodes = jnp.array([rho, eta, alpha]).T
             transforms["h"] = Transform(
-                Grid(nodes, jitable=jitable),
+                CustomGridFlux(nodes, jitable=jitable),
                 obj.x_basis,
                 derivs=derivs["h"],
                 build=True,

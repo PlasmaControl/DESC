@@ -2,7 +2,13 @@
 
 from .core import AbstractGrid
 from .curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
-from .flux import AbstractGridFlux, ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from .flux import (
+    AbstractGridFlux,
+    ConcentricGridFlux,
+    CustomGridFlux,
+    LinearGridFlux,
+    QuadratureGridFlux,
+)
 from .surface import LinearGridSurface
 from .utils import (
     cf_to_dec,
@@ -15,3 +21,9 @@ from .utils import (
     n_most_rational,
     periodic_spacing,
 )
+
+# backwards compatibility
+ConcentricGrid = ConcentricGridFlux
+Grid = CustomGridFlux
+LinearGrid = LinearGridFlux
+QuadratureGrid = QuadratureGridFlux

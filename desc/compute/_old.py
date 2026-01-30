@@ -43,7 +43,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
     data : dict[str, jnp.ndarray]
         DESC data dict.
     grid : AbstractGrid
-        Grid that can expand and compress.
+        CustomGridFlux that can expand and compress.
     num_pitch : int
         Resolution for quadrature over velocity coordinate.
     surf_batch_size : int

@@ -9,7 +9,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -90,7 +90,7 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     theta0, zeta0 : jnp.ndarray
         Origin (θ₀,ζ₀) where the partition η₀ is unity.
     ht, hz : float
-        Grid step size in θ and ζ.
+        CustomGridFlux step size in θ and ζ.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
@@ -113,8 +113,8 @@ def _vanilla_params(grid):
 
     Parameters
     ----------
-    grid : LinearGrid
-        Grid that can fft2.
+    grid : LinearGridFlux
+        CustomGridFlux that can fft2.
 
     Returns
     -------
@@ -145,8 +145,8 @@ def best_params(grid, ratio):
 
     Parameters
     ----------
-    grid : LinearGrid
-        Grid that can fft2.
+    grid : LinearGridFlux
+        CustomGridFlux that can fft2.
     ratio : float
         Mean best ratio.
 
@@ -193,8 +193,8 @@ def _local_params(grid, ratio):
 
     Parameters
     ----------
-    grid : LinearGrid
-        Grid that can fft2.
+    grid : LinearGridFlux
+        CustomGridFlux that can fft2.
     ratio : tuple
         Mean best ratio and local ratio
 
@@ -1076,7 +1076,7 @@ def compute_B_plasma(
 
     """
     if source_grid is None:
-        source_grid = LinearGrid(
+        source_grid = LinearGridFlux(
             rho=np.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,

@@ -1,4 +1,4 @@
-"""Tests Grid classes."""
+"""Tests CustomGridFlux classes."""
 
 import numpy as np
 import pytest
@@ -7,11 +7,11 @@ from scipy import special
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import (
-    ConcentricGrid,
-    Grid,
-    LinearGrid,
+    ConcentricGridFlux,
+    CustomGridFlux,
     LinearGridCurve,
-    QuadratureGrid,
+    LinearGridFlux,
+    QuadratureGridFlux,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -21,13 +21,13 @@ from desc.profiles import PowerSeriesProfile
 
 
 class TestGrid:
-    """Test for Grid classes."""
+    """Test for CustomGridFlux classes."""
 
     @pytest.mark.unit
     def test_linear_grid(self):
-        """Test node placement in a LinearGrid."""
+        """Test node placement in a LinearGridFlux."""
         L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
-        g = LinearGrid(L, M, N, NFP, sym=False, axis=axis, endpoint=endpoint)
+        g = LinearGridFlux(L, M, N, NFP, sym=False, axis=axis, endpoint=endpoint)
 
         np.testing.assert_equal(g.num_rho, L + 1)
         np.testing.assert_equal(g.num_theta, 2 * M + 1)
@@ -61,13 +61,13 @@ class TestGrid:
     def test_grid_LMN(self):
         """Make sure grid attributes LMN are set correctly."""
         theta = 5
-        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=True)
+        g1 = LinearGridFlux(theta=theta, zeta=3, rho=2, sym=True)
         assert g1.num_theta == (theta + 1) // 2
-        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=True)
+        g2 = LinearGridFlux(M=g1.M, N=g1.N, L=g1.L, sym=True)
         assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
-        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=False)
+        g1 = LinearGridFlux(theta=theta, zeta=3, rho=2, sym=False)
         assert g1.num_theta == theta
-        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=False)
+        g2 = LinearGridFlux(M=g1.M, N=g1.N, L=g1.L, sym=False)
         assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
 
     @pytest.mark.unit
@@ -102,7 +102,7 @@ class TestGrid:
                 # range, meaning it wouldn't have been deleted by
                 # enforce_symmetry which only removes nodes from (pi, 2pi).
                 theta = theta[: theta.size - endpoint]
-            lg_1 = LinearGrid(
+            lg_1 = LinearGridFlux(
                 rho=nrho,
                 theta=ntheta,
                 zeta=nzeta,
@@ -111,7 +111,7 @@ class TestGrid:
                 axis=axis,
                 endpoint=endpoint,
             )
-            lg_2 = LinearGrid(
+            lg_2 = LinearGridFlux(
                 rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
                 theta=theta,
                 zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
@@ -148,8 +148,8 @@ class TestGrid:
         """Test that specifying theta nodes from [0, pi] is sufficient."""
         # uniform spacing
         theta = np.linspace(0, 2 * np.pi, 10)
-        lg_1 = LinearGrid(L=5, theta=theta, N=5, sym=True)
-        lg_2 = LinearGrid(L=5, theta=theta[theta <= np.pi], N=5, sym=True)
+        lg_1 = LinearGridFlux(L=5, theta=theta, N=5, sym=True)
+        lg_2 = LinearGridFlux(L=5, theta=theta[theta <= np.pi], N=5, sym=True)
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
@@ -159,8 +159,8 @@ class TestGrid:
         rho = np.array([r**3 for r in pts])
         theta = 2 * np.pi * np.array([t**1.85 for t in pts])
         zeta = 2 * np.pi * np.array([z**4 for z in pts])
-        lg_1 = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=True)
-        lg_2 = LinearGrid(rho=rho, theta=theta[theta <= np.pi], zeta=zeta, sym=True)
+        lg_1 = LinearGridFlux(rho=rho, theta=theta, zeta=zeta, sym=True)
+        lg_2 = LinearGridFlux(rho=rho, theta=theta[theta <= np.pi], zeta=zeta, sym=True)
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
@@ -172,7 +172,7 @@ class TestGrid:
         NFP = 7  # any integer > 1 is good candidate for test
 
         def test(endpoint):
-            lg = LinearGrid(
+            lg = LinearGridFlux(
                 theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
                 zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
                 NFP=NFP,
@@ -197,10 +197,10 @@ class TestGrid:
         endpoint = True
         spacing = np.tile([1, np.pi, 2 * np.pi], (2, 1))
 
-        lg = LinearGrid(L=0, M=1, N=0, sym=sym, endpoint=endpoint)
+        lg = LinearGridFlux(L=0, M=1, N=0, sym=sym, endpoint=endpoint)
         np.testing.assert_allclose(lg.spacing, spacing)
 
-        lg_2 = LinearGrid(
+        lg_2 = LinearGridFlux(
             rho=np.linspace(1, 0, num=1)[::-1],
             theta=np.linspace(0, 2 * np.pi, num=3, endpoint=endpoint),
             zeta=np.linspace(0, 2 * np.pi, num=1, endpoint=endpoint),
@@ -271,7 +271,7 @@ class TestGrid:
                 (1 / nrho) * (2 * np.pi / max(unique_theta_count, 1)),
             )
 
-        lg_1 = LinearGrid(
+        lg_1 = LinearGridFlux(
             rho=nrho,
             theta=unique_theta_count + endpoint,
             zeta=unique_zeta_count + endpoint,
@@ -286,10 +286,10 @@ class TestGrid:
         zeta = np.linspace(
             0, 2 * np.pi / NFP, unique_zeta_count + endpoint, endpoint=endpoint
         )
-        lg_2 = LinearGrid(
+        lg_2 = LinearGridFlux(
             rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=sym, endpoint=endpoint
         )
-        lg_3 = LinearGrid(
+        lg_3 = LinearGridFlux(
             rho=rho,
             theta=theta,
             zeta=zeta,
@@ -313,8 +313,8 @@ class TestGrid:
         nrho = 2
         ntheta = 3
         nzeta = 2
-        lg = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=False)
-        lg_sym = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=True)
+        lg = LinearGridFlux(rho=nrho, theta=ntheta, zeta=nzeta, sym=False)
+        lg_sym = LinearGridFlux(rho=nrho, theta=ntheta, zeta=nzeta, sym=True)
         np.testing.assert_allclose(
             lg.spacing,
             np.tile(
@@ -396,7 +396,7 @@ class TestGrid:
                 (1 / nrho) * (2 * np.pi / max(unique_theta_and_reflection_count, 1)),
             )
 
-        lg_1_sym = LinearGrid(
+        lg_1_sym = LinearGridFlux(
             rho=nrho,
             theta=ntheta,
             zeta=unique_zeta_count + endpoint,
@@ -404,7 +404,7 @@ class TestGrid:
             sym=sym,
             endpoint=endpoint,
         )
-        # Recall that LinearGrid created with integers forces ntheta + endpoint
+        # Recall that LinearGridFlux created with integers forces ntheta + endpoint
         # to be even and shifts nodes counterclockwise. The result is that
         # unique_theta_and_reflection_count is ntheta rounded up (down) to the
         # closest even integer when endpoint is false (true).
@@ -417,10 +417,10 @@ class TestGrid:
         zeta = np.linspace(
             0, 2 * np.pi / NFP, unique_zeta_count + endpoint, endpoint=endpoint
         )
-        lg_2_sym = LinearGrid(
+        lg_2_sym = LinearGridFlux(
             rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=sym, endpoint=endpoint
         )
-        lg_3_sym = LinearGrid(
+        lg_3_sym = LinearGridFlux(
             rho=rho,
             theta=theta,
             zeta=zeta,
@@ -442,14 +442,14 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_concentric_grid(self):
-        """Test node placement in ConcentricGrid."""
+        """Test node placement in ConcentricGridFlux."""
         M = 2
         N = 0
         NFP = 1
-        grid_ansi = ConcentricGrid(
+        grid_ansi = ConcentricGridFlux(
             M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
         )
-        grid_fringe = ConcentricGrid(
+        grid_fringe = ConcentricGridFlux(
             2 * M, M, N, NFP, sym=True, axis=True, node_pattern="linear"
         )
         ansi_nodes = np.stack(
@@ -487,16 +487,16 @@ class TestGrid:
 
         Test for GH issue #207.
         """
-        _ = ConcentricGrid(L=32, M=28, N=30)
+        _ = ConcentricGridFlux(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quadrature_grid(self):
-        """Test node placement in QuadratureGrid."""
+        """Test node placement in QuadratureGridFlux."""
         L = 2
         M = 2
         N = 0
         NFP = 1
-        grid_quad = QuadratureGrid(L, M, N, NFP)
+        grid_quad = QuadratureGridFlux(L, M, N, NFP)
         roots, weights = special.js_roots(2, 2, 2)
         quadrature_nodes = np.stack(
             [
@@ -532,7 +532,7 @@ class TestGrid:
         }
 
         eq = Equilibrium(**inputs)
-        grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = QuadratureGridFlux(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
         g = eq.compute("sqrt(g)", grid=grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
@@ -541,9 +541,9 @@ class TestGrid:
     @pytest.mark.unit
     def test_repr(self):
         """Test string representations of grid objects."""
-        qg = ConcentricGrid(2, 3, 4)
+        qg = ConcentricGridFlux(2, 3, 4)
         s = str(qg)
-        assert "ConcentricGrid" in s
+        assert "ConcentricGridFlux" in s
         assert "jacobi" in s
         assert "L=2" in s
         assert "M=3" in s
@@ -579,16 +579,16 @@ class TestGrid:
                 (grid.num_zeta - 1) / grid.num_zeta * 2 * np.pi / grid.NFP,
             )
 
-        lg = LinearGrid(1, 2, 3)
+        lg = LinearGridFlux(1, 2, 3)
         lg.change_resolution(2, 3, 4, 5)
         test(lg, 2, 3, 4, 5)
-        qg = QuadratureGrid(1, 2, 3)
+        qg = QuadratureGridFlux(1, 2, 3)
         qg.change_resolution(2, 3, 4, 5)
         test(qg, 2, 3, 4, 5)
-        cg = ConcentricGrid(2, 3, 4)
+        cg = ConcentricGridFlux(2, 3, 4)
         cg.change_resolution(3, 4, 5, 2)
         test(cg, 3, 4, 5, 2)
-        cg = ConcentricGrid(2, 3, 4)
+        cg = ConcentricGridFlux(2, 3, 4)
         cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
         test(cg, cg.L, cg.M, cg.N, 5)
 
@@ -596,15 +596,15 @@ class TestGrid:
     def test_enforce_symmetry(self):
         """Test correctness of enforce_symmetry() for uniformly spaced nodes.
 
-        Unlike enforce_symmetry(), the algorithm used in LinearGrid for
+        Unlike enforce_symmetry(), the algorithm used in LinearGridFlux for
         symmetry also works if the nodes are not uniformly spaced. This test
         compares the two methods when the grid is uniformly spaced in theta,
         as a means to ensure enforce_symmetry() is correct.
         """
         ntheta = 6
         theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-        lg_1 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=True)
-        lg_2 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=False)
+        lg_1 = LinearGridFlux(L=5, theta=theta, N=4, NFP=4, sym=True)
+        lg_2 = LinearGridFlux(L=5, theta=theta, N=4, NFP=4, sym=False)
         # precondition for the following tests to work
         np.testing.assert_allclose(lg_2.spacing[:, 1], 2 * np.pi / ntheta)
 
@@ -628,7 +628,7 @@ class TestGrid:
         even_number = 4
         n_theta = even_number - sym
 
-        # Currently, midpoint rule is false for LinearGrid made with L=number.
+        # Currently, midpoint rule is false for LinearGridFlux made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
             t = grid.nodes[:, 1]
@@ -674,10 +674,12 @@ class TestGrid:
             )
 
         for i in range(len(L)):
-            test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
-            test(LinearGrid(L=L[i], theta=n_theta[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(LinearGridFlux(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
             test(
-                LinearGrid(
+                LinearGridFlux(L=L[i], theta=n_theta[i], N=N[i], NFP=NFP[i], sym=sym[i])
+            )
+            test(
+                LinearGridFlux(
                     L=L[i],
                     theta=np.linspace(0, 2 * np.pi, n_theta[i], endpoint=False),
                     N=N[i],
@@ -686,7 +688,7 @@ class TestGrid:
                 )
             )
             test(
-                LinearGrid(
+                LinearGridFlux(
                     L=L[i],
                     theta=np.linspace(0, 2 * np.pi, n_theta[i] + 1, endpoint=False),
                     N=N[i],
@@ -695,12 +697,12 @@ class TestGrid:
                 )
             )
             test(
-                ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]),
+                ConcentricGridFlux(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]),
                 midpoint_rule=True,
             )
             # nonuniform spacing when sym is False, but spacing is still symmetric
             test(
-                LinearGrid(
+                LinearGridFlux(
                     L=L[i],
                     theta=np.linspace(0, np.pi, n_theta[i]),
                     N=N[i],
@@ -709,7 +711,7 @@ class TestGrid:
                 )
             )
             test(
-                LinearGrid(
+                LinearGridFlux(
                     L=L[i],
                     theta=np.linspace(0, np.pi, n_theta[i] + 1),
                     N=N[i],
@@ -723,7 +725,7 @@ class TestGrid:
         """Test that compress & expand are inverse operations for surface functions.
 
         Each test should be done on different types of grids
-        (e.g. LinearGrid, ConcentricGrid) and grids with duplicate nodes
+        (e.g. LinearGridFlux, ConcentricGridFlux) and grids with duplicate nodes
         (e.g. endpoint=True).
         """
 
@@ -741,8 +743,8 @@ class TestGrid:
             np.testing.assert_allclose(r, s, err_msg=surface_label)
 
         L, M, N, NFP = 6, 6, 3, 5
-        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
-        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        lg_endpoint = LinearGridFlux(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
+        cg_sym = ConcentricGridFlux(L=L, M=M, N=N, NFP=NFP, sym=True)
         test("rho", lg_endpoint)
         test("theta", lg_endpoint)
         test("zeta", lg_endpoint)
@@ -756,10 +758,10 @@ class TestGrid:
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 2 * np.pi, 3)
-        grid = Grid.create_meshgrid([R, A, Z], coordinates="raz")
+        grid = CustomGridFlux.create_meshgrid([R, A, Z], coordinates="raz")
         # treating theta == alpha just for grid construction
-        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
-        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        grid1 = LinearGridFlux(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc default grid shifts points away from the axis a tiny bit
         np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
         # want radial/poloidal/toroidal nodes sorted in the same order for both
         np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
@@ -772,7 +774,7 @@ class TestGrid:
     @pytest.mark.unit
     def test_meshgrid_reshape(self):
         """Test that reshaping meshgrids works correctly."""
-        grid = LinearGrid(2, 3, 4)
+        grid = LinearGridFlux(2, 3, 4)
 
         r = grid.nodes[grid.unique_rho_idx, 0]
         t = grid.nodes[grid.unique_theta_idx, 1]
@@ -797,14 +799,14 @@ class TestGrid:
             grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
 
         # not a meshgrid
-        grid = ConcentricGrid(2, 3, 4)
+        grid = ConcentricGridFlux(2, 3, 4)
         with pytest.raises(ValueError):
             grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
 
         rho = np.linspace(0, 1, 3)
         alpha = np.linspace(0, 2 * np.pi, 4)
         zeta = np.linspace(0, 6 * np.pi, 5)
-        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         r, a, z = grid.nodes.T
         # functions of zeta should separate along first two axes
         # since those are contiguous, this should work
@@ -829,7 +831,7 @@ class TestGrid:
     @pytest.mark.unit
     def test_meshgrid_flatten(self):
         """Test that meshgrid_flatten is the inverse of meshgrid_reshape."""
-        grid = LinearGrid(2, 3, 4)
+        grid = LinearGridFlux(2, 3, 4)
         orders = ["rtz", "trz", "zrt", "rzt", "tzr", "ztr"]
         rng = np.random.default_rng(123)
         x = rng.random(grid.num_nodes)
@@ -852,7 +854,7 @@ class TestGrid:
         np.testing.assert_allclose(np.sum(grid_curve.weights), 2 * np.pi)
 
         # flux coordinate system (ρ,θ,ζ): ∫ dρ dθ dζ = 4π²
-        grid_flux = LinearGrid(L=8, M=8, N=8)
+        grid_flux = LinearGridFlux(L=8, M=8, N=8)
         np.testing.assert_allclose(np.sum(grid_flux.weights), (2 * np.pi) ** 2)
 
 
@@ -919,9 +921,11 @@ def test_custom_jitable_grid_indexing():
     rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
     theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
     zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
-    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
-    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
-    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_x0_idx=[0, 10])
+    grid1 = CustomGridFlux(np.array([rho, theta, zeta]).T, jitable=False)
+    grid2 = CustomGridFlux(np.array([rho, theta, zeta]).T, jitable=True)
+    grid3 = CustomGridFlux(
+        np.array([rho, theta, zeta]).T, jitable=True, _unique_x0_idx=[0, 10]
+    )
     np.testing.assert_allclose(grid1.nodes, grid2.nodes)
 
     x = np.random.random(grid1.num_nodes)

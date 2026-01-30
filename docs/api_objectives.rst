@@ -271,7 +271,7 @@ created and passed to the corresponding objective.
 
     desc.grid.CustomGridFlux
     desc.grid.LinearGridFlux
-    desc.grid.QuadratureGrid
+    desc.grid.QuadratureGridFlux
     desc.grid.ConcentricGridFlux
 
 ``desc.grid`` also contains utilities for finding the most and least rational surfaces

@@ -127,7 +127,7 @@ Geometry
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
-CustomGridFlux
+Grid
 ****
 
 .. autosummary::

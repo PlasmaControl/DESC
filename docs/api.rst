@@ -315,11 +315,6 @@ Particles
     desc.particles.SurfaceParticleInitializer
     desc.particles.SlowingDownGuidingCenterTrajectory
     desc.particles.VacuumGuidingCenterTrajectory
-
-.. autosummary::
-    :toctree: _api/particles
-    :recursive:
-
     desc.particles.trace_particles
 
 Perturbations
@@ -358,7 +353,6 @@ Plotting
     desc.plotting.plot_logo
     desc.plotting.plot_particle_trajectories
     desc.plotting.plot_qs_error
-    desc.plotting.plot_particle_trajectories
     desc.plotting.plot_section
     desc.plotting.plot_surfaces
     desc.plotting.poincare_plot

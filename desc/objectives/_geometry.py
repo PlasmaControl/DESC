@@ -3,10 +3,11 @@
 import numpy as np
 
 from desc.backend import jnp, vmap
+from desc.basis import DoubleFourierSeries
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry.surface import _constant_offset_surface
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -494,11 +495,18 @@ class VolumeOffset(_Objective):
         name="volume",
         jac_chunk_size=None,
         offset=0.1,
+        offset_surface_M=None,
+        offset_surface_N=None,
     ):
         if target is None and bounds is None:
             target = 1
         self._grid = grid
         self._offset = offset
+        if offset_surface_M is None:
+            self._offset_surface_M = eq.surface.M
+        if offset_surface_N is None:
+            self._offset_surface_N = eq.surface.N
+
         super().__init__(
             things=eq,
             target=target,
@@ -550,7 +558,18 @@ class VolumeOffset(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "offset_surface_basis": DoubleFourierSeries(
+                M=self._offset_surface_M,
+                N=self._offset_surface_N,
+                NFP=eq.surface.NFP,
+                sym=eq.surface.sym,
+            ),
         }
+        self._constants["offset_transforms"] = get_transforms(
+            self._data_keys,
+            obj=self._constants["offset_surface_basis"],
+            grid=grid,
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -590,7 +609,7 @@ class VolumeOffset(_Objective):
         if constants is None:
             constants = self.constants
         surf = self.things[0].surface
-        # assign eq Rb and Zb to surf dict so JAX knows
+        # assign eq Rb and Zb to the surface's params dict so JAX knows
         # to trace the derivs wrt Rb etc when surf_params is passed
         # find eq Rb Zb by computing R_lmn at rho=1 so that AD knows how
         # to connect deriv back to R_lmn
@@ -598,7 +617,8 @@ class VolumeOffset(_Objective):
         surf_params["R_lmn"] = jnp.dot(self.constants["A_Rlmn_to_Rb"], params["R_lmn"])
         surf_params["Z_lmn"] = jnp.dot(self.constants["A_Zlmn_to_Zb"], params["Z_lmn"])
 
-        x_offset_surf = _constant_offset_surface(
+        # find offset surface using the surf_params
+        R_lmn_offset, Z_lmn_offset = _constant_offset_surface(
             surf,
             offset=self._offset,
             M=surf.M,
@@ -606,34 +626,18 @@ class VolumeOffset(_Objective):
             grid=constants["transforms"]["grid"],
             params=surf_params,
         )
-        offset_zetas = x_offset_surf[:, 1]
-        offset_rtz_nodes = jnp.vstack(
-            [
-                jnp.ones_like(offset_zetas),
-                constants["transforms"]["grid"].nodes[:, 1],
-                offset_zetas,
-            ]
-        ).T
-        # make transform to fit
-        t = get_transforms(
-            obj=surf,
-            keys=["R", "Z"],
-            grid=Grid(offset_rtz_nodes, jitable=True),
-            jitable=True,
-            build_pinv=True,
-        )
-        t["R"].build_pinv()
-        t["Z"].build_pinv()
-
+        # make a new params dict for the offset surface
+        # and assign the offset R_lmn and Z_lmn we just computed,
+        # so that AD knows to trace the derivs wrt the original eq R_lmn Z_lmn
         surf_params2 = surf_params.copy()
-        surf_params2["R_lmn"] = t["R"].fit(x_offset_surf[:, 0])
-        surf_params2["Z_lmn"] = t["Z"].fit(x_offset_surf[:, 2])
-
+        surf_params2["R_lmn"] = R_lmn_offset
+        surf_params2["Z_lmn"] = Z_lmn_offset
+        # finally, compute Volume of the offset surface
         data = compute_fun(
             surf,
             self._data_keys,
             params=surf_params2,
-            transforms=constants["transforms"],
+            transforms=constants["offset_transforms"],
             profiles=constants["profiles"],
         )
         return data["V"]

@@ -722,8 +722,8 @@ class FourierRZToroidalSurface(Surface):
                     coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
-                ``transforms`` : dict containing the Transform objects used to
-                    fit R and Z of the
+            as well as the DoubleFourierSeries bases used to fit R and Z.
+            Only returned if ``full_output`` is True
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True
@@ -748,18 +748,21 @@ class FourierRZToroidalSurface(Surface):
         base_surface.change_resolution(M=M, N=N)
 
         R_lmn, Z_lmn, data, (res, niter) = _constant_offset_surface(
-            base_surface, offset, grid=grid
+            base_surface,
+            offset,
+            grid=grid,
+            M=M,
+            N=N,
         )
 
         offset_surface = FourierRZToroidalSurface(
             R_lmn,
             Z_lmn,
-            data["transforms"]["R"].basis.modes[:, 1:],
-            data["transforms"]["Z"].basis.modes[:, 1:],
+            data["R_basis"].modes[:, 1:],
+            data["Z_basis"].modes[:, 1:],
             base_surface.NFP,
             base_surface.sym,
         )
-
         if full_output:
             return offset_surface, data, (res, niter)
         else:
@@ -1179,9 +1182,16 @@ class ZernikeRZToroidalSection(Surface):
 
 
 def _constant_offset_surface(
-    base_surface, offset, grid, M, N, full_output=False, params=None
+    base_surface,
+    offset,
+    grid,
+    M=None,
+    N=None,
+    R_basis=None,
+    Z_basis=None,
+    params=None,
 ):
-    """Create a FourierRZSurface with constant offset from the base surface (self).
+    """Create a FourierRZToroidalSurface with constant offset from the base surface.
 
     Implementation of algorithm described in Appendix B of
     "An improved current potential method for fast computation of
@@ -1210,21 +1220,25 @@ def _constant_offset_surface(
     M : int, optional
         Poloidal resolution of the basis used to fit the offset points
         to create the resulting constant offset surface, by default equal
-        to base_surface.M
+        to base_surface.M. If basis is given, this is ignored.
     N : int, optional
         Toroidal resolution of the basis used to fit the offset points
         to create the resulting constant offset surface, by default equal
-        to base_surface.N
-    full_output : bool, optional
-        If True, also return a dict of useful data about the surfaces and a
-        tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
+        to base_surface.N.  If basis is given, this is ignored.
+    R_basis, Z_basis: DoubleFourierSeries, optional
+        Basis to use to fit the offset surface's R and Z, respectivelu. If None,
+        new bases will be created using the given M and N.
+    params : dict, optional
+        dictionary of parameters to use when computing data from the base_surface.
+        If None, uses base_surface.params_dict, however the resulting computation
+        will not be differentiable with respect to the base_surface parameters
+        (since the JAX AD inside of an objective traces the params dictionaries
+        that are passedto their compute methods)
 
     Returns
     -------
-    offset_surface : FourierRZToroidalSurface
-        FourierRZToroidalSurface, created from fitting points offset from the input
-        surface by the given constant offset.
+    R_lmn, Z_lmn : array-like
+        coefficients describing the offset surface geometry
     data : dict
         dictionary containing  the following data, in the cylindrical basis:
             ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
@@ -1235,9 +1249,10 @@ def _constant_offset_surface(
                 coordinates on the offset surface, corresponding to the
                 ``x`` points on the base_surface (i.e. the points to which the
                 offset surface was fit)
+        as well as the DoubleFourierSeries bases used to fit R and Z.
     info : tuple
         2 element tuple containing residuals and number of iterations
-        for each point. Only returned if ``full_output`` is True
+        for each point.
 
     """
     if params is None:
@@ -1265,17 +1280,23 @@ def _constant_offset_surface(
 
     vecroot = jit(
         vmap(
-            lambda x0, *p: root_scalar(
-                fun_jax, x0, jac=None, args=p, full_output=full_output
-            )
+            lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p, full_output=True)
         )
     )
-    if full_output:
-        zetas, (res, niter) = vecroot(
-            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+
+    if R_basis is None:
+        M = base_surface.M if M is None else int(M)
+        N = base_surface.N if N is None else int(N)
+        R_basis = DoubleFourierSeries(
+            M=M, N=N, NFP=base_surface.NFP, sym=base_surface.R_basis.sym
         )
-    else:
-        zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+    if Z_basis is None:
+        M = base_surface.M if M is None else int(M)
+        N = base_surface.N if N is None else int(N)
+        Z_basis = DoubleFourierSeries(
+            M=M, N=N, NFP=base_surface.NFP, sym=base_surface.Z_basis.sym
+        )
 
     zetas = jnp.asarray(zetas)
     nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
@@ -1286,4 +1307,23 @@ def _constant_offset_surface(
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 
-    return data["x_offset_surface"]
+    offset_zetas = data["x_offset_surface"][:, 1]
+    offset_rtz_nodes = jnp.vstack(
+        [
+            jnp.ones_like(offset_zetas),
+            grid.nodes[:, 1],
+            offset_zetas,
+        ]
+    ).T
+    # make transform to fit
+    grid_offset = Grid(offset_rtz_nodes, jitable=True)
+    t_R = Transform(grid=grid_offset, basis=R_basis, method="jitable", build_pinv=True)
+    t_Z = Transform(grid=grid_offset, basis=Z_basis, method="jitable", build_pinv=True)
+
+    R_lmn = t_R.fit(data["x_offset_surface"][:, 0])
+    Z_lmn = t_Z.fit(data["x_offset_surface"][:, 2])
+
+    data["R_basis"] = R_basis
+    data["Z_basis"] = Z_basis
+
+    return R_lmn, Z_lmn, data, (res, niter)

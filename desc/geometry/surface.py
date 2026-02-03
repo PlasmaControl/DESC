@@ -1271,7 +1271,7 @@ def _constant_offset_surface(
     vecroot = jit(
         vmap(
             lambda x0, *p: root_scalar(
-                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-16
+                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-12
             )
         )
     )

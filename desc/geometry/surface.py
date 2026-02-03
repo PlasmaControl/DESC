@@ -1223,7 +1223,7 @@ def _constant_offset_surface(
         If None, uses base_surface.params_dict, however the resulting computation
         will not be differentiable with respect to the base_surface parameters
         (since the JAX AD inside of an objective traces the params dictionaries
-        that are passedto their compute methods)
+        that are passed to their compute methods)
 
     Returns
     -------

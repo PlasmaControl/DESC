@@ -231,6 +231,77 @@ class TestFourierRZToroidalSurface:
         # ensure is jitable
         R_lmn, Z_lmn, data, _ = jit(fun)(s.params_dict)
 
+        s_offset = FourierRZToroidalSurface(
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            M=s.M,
+            N=s.N,
+            NFP=s.NFP,
+            sym=s.sym,
+            modes_R=data["transforms"]["R"].basis.modes[:, 1:],
+            modes_Z=data["transforms"]["Z"].basis.modes[:, 1:],
+        )
+
+        r_offset_surf = data["x_offset_surface"]
+        r_surf = data["x"]
+        dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)
+        R00_offset = s_offset.R_lmn[R00_offset_ind]
+        R10_offset_ind = s_offset.R_basis.get_idx(M=1, N=0)
+        R10_offset = s_offset.R_lmn[R10_offset_ind]
+        Zneg10_offset_ind = s_offset.Z_basis.get_idx(M=-1, N=0)
+        Zneg10_offset = s_offset.Z_lmn[Zneg10_offset_ind]
+
+        np.testing.assert_allclose(R00_offset, 10)
+        np.testing.assert_allclose(R10_offset, 2)
+        np.testing.assert_allclose(Zneg10_offset, -2)
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.R_lmn,
+                np.array([R00_offset_ind, R10_offset_ind]),
+            ),
+            0,
+            atol=9e-15,
+        )
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.Z_lmn,
+                Zneg10_offset_ind,
+            ),
+            0,
+            atol=9e-15,
+        )
+        grid_compute = LinearGrid(M=10, N=10)
+        data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
+        data_offset = s_offset.compute(
+            ["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute
+        )
+        dists = np.linalg.norm(data["x"] - data_offset["x"], axis=1)
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        correct_data_offset = {
+            "e_theta": np.vstack(
+                (
+                    -2 * np.sin(grid_compute.nodes[:, 1]),
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                    -2 * np.cos(grid_compute.nodes[:, 1]),
+                )
+            ).T,
+            "e_zeta": np.vstack(
+                (
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                    data_offset["x"][:, 0],
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                )
+            ).T,
+        }
+        for key in ["e_theta", "e_zeta"]:
+            np.testing.assert_allclose(
+                correct_data_offset[key],
+                data_offset[key],
+                atol=1e-4,
+                err_msg=f"Failed test at comparison of {key}",
+            )
         # make sure that the function is not recompiled
         with jax.log_compiles():
             R_lmn, Z_lmn, data, _ = jit(fun)(s.params_dict)
@@ -243,7 +314,9 @@ class TestFourierRZToroidalSurface:
         grad_R00 = jax.grad(lambda params: fun(params)[0][s.R_basis.get_idx(M=0, N=0)])(
             s.params_dict
         )
-        # check that the gradient is zero other than R00 component
+        # check that the gradient is nonzero for the R00 component
+        assert np.any(np.abs(grad_R00["R_lmn"][s.R_basis.get_idx(M=0, N=0)]) > 1e-10)
+        # check that the gradient is zero otherwise
         non_R00_indices = np.where(s.R_basis.modes.sum(axis=1) != 0)[0]
         assert np.all(np.abs(grad_R00["R_lmn"][non_R00_indices]) < 1e-10)
 

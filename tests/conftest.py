@@ -425,7 +425,7 @@ def regcoil_windowpane_coils():
     N_egrid = 20
     M_sgrid = 20
     N_sgrid = 20
-    lambda_regularization = 1e-18
+    lambda_regularization = 1e-20
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"

@@ -692,8 +692,8 @@ class FourierRZToroidalSurface(Surface):
             Grid object of the points on the offset surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N.
-            If None, defaults to a LinearGrid with M and N and NFP equal to the
-            base_surface.M and base_surface.N and base_surface.NFP
+            If None, defaults to a LinearGrid with M and N and NFP equal to twice the
+            base_surface.M and base_surface.N and NFP equal to base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
@@ -1211,8 +1211,8 @@ def _constant_offset_surface(
         Grid object of the points on the offset surface to evaluate the
         offset points at, from which the offset surface will be created by fitting
         offset points with the basis defined by the given M and N.
-        If None, defaults to a LinearGrid with M and N and NFP equal to the
-        base_surface.M and base_surface.N and base_surface.NFP
+        If None, defaults to a LinearGrid with M and N and NFP equal to twice the
+        base_surface.M and base_surface.N and NFP equal to base_surface.NFP
     transforms: dict, optional
         Transforms to use to fit the offset surface's R and Z, respectively. If None,
         new transforms will be created using the given surface's M and N.

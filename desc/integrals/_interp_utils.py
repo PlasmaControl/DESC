@@ -315,7 +315,7 @@ def polyroot_vec(
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts and to avoid nan in gradient. Also consumes less memory.
+        # imaginary parts. Also consumes less memory.
         c = jnp.moveaxis(c, -1, 0)
         r = func[num_coef](*c[:-1], c[-1] - k, sentinel, eps, distinct)
         if num_coef == 2:

@@ -16,6 +16,7 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.compute import get_transforms
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -688,7 +689,7 @@ class FourierRZToroidalSurface(Surface):
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
         grid : Grid, optional
-            Grid object of the points on the given surface to evaluate the
+            Grid object of the points on the offset surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N.
             If None, defaults to a LinearGrid with M and N and NFP equal to the
@@ -721,7 +722,7 @@ class FourierRZToroidalSurface(Surface):
                     coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
-            as well as the DoubleFourierSeries bases used to fit R and Z.
+            as well as the transforms bases used to fit R and Z.
             Only returned if ``full_output`` is True
         info : tuple
             2 element tuple containing residuals and number of iterations
@@ -731,7 +732,7 @@ class FourierRZToroidalSurface(Surface):
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
 
-        base_surface = self
+        base_surface = self.copy()
         if grid is None:
             grid = LinearGrid(
                 M=base_surface.M * 2,
@@ -744,20 +745,19 @@ class FourierRZToroidalSurface(Surface):
         ), "base_surface must be a FourierRZToroidalSurface!"
         M = base_surface.M if M is None else int(M)
         N = base_surface.N if N is None else int(N)
+        base_surface.change_resolution(M=M, N=N)
 
         R_lmn, Z_lmn, data, (res, niter) = _constant_offset_surface(
             base_surface,
             offset,
             grid=grid,
-            M=M,
-            N=N,
         )
 
         offset_surface = FourierRZToroidalSurface(
             R_lmn,
             Z_lmn,
-            data["R_basis"].modes[:, 1:],
-            data["Z_basis"].modes[:, 1:],
+            data["transforms"]["R"].basis.modes[:, 1:],
+            data["transforms"]["Z"].basis.modes[:, 1:],
             base_surface.NFP,
             base_surface.sym,
         )
@@ -1184,10 +1184,7 @@ def _constant_offset_surface(
     base_surface,
     offset,
     grid,
-    M=None,
-    N=None,
-    R_basis=None,
-    Z_basis=None,
+    transforms=None,
     params=None,
 ):
     """Create a FourierRZToroidalSurface with constant offset from the base surface.
@@ -1211,22 +1208,16 @@ def _constant_offset_surface(
         constant offset (in m) of the desired surface from the input surface
         offset will be in the normal direction to the surface.
     grid : Grid, optional
-        Grid object of the points on the given surface to evaluate the
+        Grid object of the points on the offset surface to evaluate the
         offset points at, from which the offset surface will be created by fitting
         offset points with the basis defined by the given M and N.
         If None, defaults to a LinearGrid with M and N and NFP equal to the
         base_surface.M and base_surface.N and base_surface.NFP
-    M : int, optional
-        Poloidal resolution of the basis used to fit the offset points
-        to create the resulting constant offset surface, by default equal
-        to base_surface.M. If basis is given, this is ignored.
-    N : int, optional
-        Toroidal resolution of the basis used to fit the offset points
-        to create the resulting constant offset surface, by default equal
-        to base_surface.N.  If basis is given, this is ignored.
-    R_basis, Z_basis: DoubleFourierSeries, optional
-        Basis to use to fit the offset surface's R and Z, respectivelu. If None,
-        new bases will be created using the given M and N.
+    transforms: dict, optional
+        Transforms to use to fit the offset surface's R and Z, respectively. If None,
+        new transforms will be created using the given surface's M and N.
+        If given, should contain the keys ["R"] and ["Z"], with the pinv matrices
+        already built, and the corresponding grid should match the input grid.
     params : dict, optional
         dictionary of parameters to use when computing data from the base_surface.
         If None, uses base_surface.params_dict, however the resulting computation
@@ -1248,7 +1239,7 @@ def _constant_offset_surface(
                 coordinates on the offset surface, corresponding to the
                 ``x`` points on the base_surface (i.e. the points to which the
                 offset surface was fit)
-        as well as the DoubleFourierSeries bases used to fit R and Z.
+        as well as the transforms used to fit R and Z.
     info : tuple
         2 element tuple containing residuals and number of iterations
         for each point.
@@ -1279,23 +1270,12 @@ def _constant_offset_surface(
 
     vecroot = jit(
         vmap(
-            lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p, full_output=True)
+            lambda x0, *p: root_scalar(
+                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-16
+            )
         )
     )
     zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
-
-    if R_basis is None:
-        M = base_surface.M if M is None else int(M)
-        N = base_surface.N if N is None else int(N)
-        R_basis = DoubleFourierSeries(
-            M=M, N=N, NFP=base_surface.NFP, sym=base_surface.R_basis.sym
-        )
-    if Z_basis is None:
-        M = base_surface.M if M is None else int(M)
-        N = base_surface.N if N is None else int(N)
-        Z_basis = DoubleFourierSeries(
-            M=M, N=N, NFP=base_surface.NFP, sym=base_surface.Z_basis.sym
-        )
 
     zetas = jnp.asarray(zetas)
     nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
@@ -1306,23 +1286,20 @@ def _constant_offset_surface(
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 
-    offset_zetas = data["x_offset_surface"][:, 1]
-    offset_rtz_nodes = jnp.vstack(
-        [
-            jnp.ones_like(offset_zetas),
-            grid.nodes[:, 1],
-            offset_zetas,
-        ]
-    ).T
-    # make transform to fit
-    grid_offset = Grid(offset_rtz_nodes, jitable=True)
-    t_R = Transform(grid=grid_offset, basis=R_basis, method="jitable", build_pinv=True)
-    t_Z = Transform(grid=grid_offset, basis=Z_basis, method="jitable", build_pinv=True)
+    if transforms is None:
+        # NOTE: we are assuming here that the rootfind was successful for every point,
+        # so that the zeta=arctan(y/x) of the offset surface point are the same as
+        # the grid nodes' zeta values. If this is not the case, the fitting
+        # will be incorrect.
+        transforms = get_transforms(
+            obj=base_surface, keys=["R", "Z"], grid=grid, jitable=True
+        )
+        transforms["R"].build_pinv()
+        transforms["Z"].build_pinv()
 
-    R_lmn = t_R.fit(data["x_offset_surface"][:, 0])
-    Z_lmn = t_Z.fit(data["x_offset_surface"][:, 2])
+    R_lmn = transforms["R"].fit(data["x_offset_surface"][:, 0])
+    Z_lmn = transforms["Z"].fit(data["x_offset_surface"][:, 2])
 
-    data["R_basis"] = R_basis
-    data["Z_basis"] = Z_basis
+    data["transforms"] = transforms
 
     return R_lmn, Z_lmn, data, (res, niter)

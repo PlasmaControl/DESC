@@ -2,14 +2,13 @@
 
 from abc import ABC, abstractmethod
 
-import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGridFlux
+from desc.grid import LinearGridSurface
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -1076,12 +1075,8 @@ def compute_B_plasma(
 
     """
     if source_grid is None:
-        source_grid = LinearGridFlux(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
+        source_grid = LinearGridSurface(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP if eq.N > 0 else 64, sym=False
         )
 
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]

@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.utils import check_nonnegint, check_posint, errorif
 
 from .core import AbstractGrid
@@ -21,8 +22,8 @@ class AbstractGridSurface(AbstractGrid):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + f" (coordinates={self.coordinates}, N={self.N}, NFP={self.NFP}, "
-            + f"is_meshgrid={self.is_meshgrid}"
+            + f" (coordinates={self.coordinates}, M={self.M}, N={self.N}, "
+            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid})"
         )
 
     def _set_up(self):
@@ -239,13 +240,10 @@ class LinearGridSurface(AbstractGridSurface):
 
     def _create_nodes(  # noqa: C901
         self,
-        L=None,
         M=None,
         N=None,
         NFP=1,
-        axis=True,
         endpoint=False,
-        rho=1.0,
         theta=0.0,
         zeta=0.0,
     ):
@@ -253,8 +251,6 @@ class LinearGridSurface(AbstractGridSurface):
 
         Parameters
         ----------
-        L : int, optional
-            Radial grid resolution.
         M : int, optional
             Poloidal grid resolution.
         N : int, optional
@@ -263,15 +259,10 @@ class LinearGridSurface(AbstractGridSurface):
             Number of field periods (Default = 1).
             Only change this if your nodes are placed within one field period
             or should be interpreted as spanning one field period.
-        axis : bool
-            True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool
             If True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT. (Default = False).
             This boolean is ignored if an array is given for theta or zeta.
-        rho : int or ndarray of float, optional
-            Radial coordinates (Default = 1.0).
-            Alternatively, the number of radial coordinates (if an integer).
         theta : int or ndarray of float, optional
             Poloidal coordinates (Default = 0.0).
             Alternatively, the number of poloidal coordinates (if an integer).
@@ -494,3 +485,127 @@ class LinearGridSurface(AbstractGridSurface):
     def endpoint(self):
         """bool: Whether the grid is made of open or closed intervals."""
         return self.__dict__.setdefault("_endpoint", False)
+
+
+class CustomGridSurface(AbstractGridSurface):
+    """Collocation grid with custom node placement.
+
+    Parameters
+    ----------
+    theta : ndarray of float, size(num_nodes,)
+        Poloidal coordinates.
+    zeta : ndarray of float, size(num_nodes,)
+        Toroidal coordinates.
+    spacing : ndarray of float, size(num_nodes,)
+        Spacing between each node.
+    weights : ndarray of float, size(num_nodes,)
+        Quadrature weights for each node.
+    NFP : int
+        Number of field periods (Default = 1).
+    sort : bool
+        Whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights,
+        symmetry etc. may be wrong if grid contains duplicate nodes.
+    """
+
+    def __init__(
+        self,
+        theta,
+        zeta,
+        spacing=None,
+        weights=None,
+        NFP=1,
+        sort=False,
+        jitable=False,
+        **kwargs,
+    ):
+        self._NFP = check_posint(NFP, "NFP", False)
+        # If you are using a custom grid it almost always is not uniform, or is under
+        # jit where we cannot properly check this anyways, so just set to False.
+        self._fft_x1 = False
+        self._fft_x2 = False
+        self._can_fft2 = False
+        self._nodes = self._create_nodes(theta, zeta)
+        self._spacing = (
+            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
+            if spacing is not None
+            else None
+        )
+        self._weights = (
+            jnp.atleast_1d(jnp.asarray(weights))
+            .reshape(self.nodes.shape[0])
+            .astype(float)
+            if weights is not None
+            else None
+        )
+        if sort:
+            self._sort_nodes()
+        setable_attr = [
+            "_unique_x0_idx",
+            "_unique_x1_idx",
+            "_unique_x2_idx",
+            "_inverse_x0_idx",
+            "_inverse_x1_idx",
+            "_inverse_x2_idx",
+        ]
+        if jitable:
+            # allow for user supplied indices/inverse indices for special cases
+            for attr in setable_attr:
+                if attr in kwargs:
+                    setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
+        else:
+            for attr in setable_attr:
+                kwargs.pop(attr, None)
+            (
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
+            ) = self._find_unique_inverse_nodes()
+        # assign with logic in setter method if possible else 0
+        self._M = (
+            (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
+            if hasattr(self, "num_x1")
+            else 0
+        )
+        self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
+        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
+
+    def _create_nodes(self, theta, zeta):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        theta : ndarray of float, size(num_nodes,)
+            Poloidal coordinates.
+        zeta : ndarray of float, size(num_nodes,)
+            Toroidal coordinates.
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (_,_,s).
+
+        """
+        theta = jnp.atleast_1d(jnp.asarray(theta))
+        zeta = jnp.atleast_1d(jnp.asarray(zeta))
+        nodes = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
+        # do not alter nodes given by the user for custom grids
+        return nodes
+
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        try:
+            self._spacing = self.spacing[sort_idx]
+        except AttributeError:
+            pass
+        try:
+            self._weights = self.weights[sort_idx]
+        except AttributeError:
+            pass

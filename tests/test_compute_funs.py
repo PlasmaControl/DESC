@@ -8,7 +8,7 @@ from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridFlux
+from desc.grid import CustomGridFlux, LinearGridFlux, LinearGridSurface
 from desc.io import load
 from desc.utils import cross, dot, rpz2xyz_vec
 
@@ -1921,6 +1921,7 @@ def test_surface_equilibrium_geometry():
         # surface.compute to agree for these surface basis vectors
         grid = LinearGridFlux(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
         data_eq = eq.compute(data_basis_vecs_fourierRZ, grid=grid)
+        grid = LinearGridSurface(M=10, N=10, NFP=eq.NFP)
         data_surf = eq.surface.compute(
             data_basis_vecs_fourierRZ, grid=grid, basis="rpz"
         )

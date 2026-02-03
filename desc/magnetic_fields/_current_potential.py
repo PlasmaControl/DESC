@@ -13,7 +13,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridFlux
+from desc.grid import CustomGridSurface, LinearGridFlux, LinearGridSurface
 from desc.integrals import compute_B_plasma
 from desc.optimizable import optimizable_parameter
 from desc.utils import (
@@ -248,10 +248,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGridFlux(
-            M=30 + 2 * self.M,
-            N=30 + 2 * self.N,
-            NFP=self.NFP,
+        source_grid = source_grid or LinearGridSurface(
+            M=30 + 2 * self.M, N=30 + 2 * self.N, NFP=self.NFP
         )
         return _compute_A_or_B_from_CurrentPotentialField(
             field=self,
@@ -671,7 +669,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGridFlux(
+        source_grid = source_grid or LinearGridSurface(
             M=30 + 2 * max(self.M, self.M_Phi),
             N=30 + 2 * max(self.N, self.N_Phi),
             NFP=self.NFP,
@@ -951,9 +949,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         ################################################################
 
         contour_X, contour_Y, contour_Z = _find_XYZ_points(
-            contour_theta,
-            contour_zeta,
-            self,
+            contour_theta, contour_zeta, self
         )
         ################################################################
         # Create CoilSet object
@@ -979,8 +975,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
                 )
                 K = self.compute(
                     "K",
-                    grid=CustomGridFlux(
-                        jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])
+                    grid=LinearGridSurface(
+                        theta=contour_theta[j][0], zeta=contour_zeta[j][0]
                     ),
                     basis="xyz",
                 )["K"]
@@ -1163,8 +1159,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     current_helicity=(1, 0),
     vacuum=False,
     regularization_type="regcoil",
-    source_grid=None,
     eval_grid=None,
+    source_grid=None,
     vc_source_grid=None,
     external_field=None,
     external_field_grid=None,
@@ -1246,15 +1242,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         whether to use a simple regularization based off of just the single-valued
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
         Defaults to ``"regcoil"``
-    source_grid : AbstractGridFlux, optional
-        Source grid upon which to evaluate the surface current when calculating
-        the normal field on the plasma surface. Defaults to
-        LinearGridFlux(M=max(3 * current_potential_field.M_Phi, 30),
-        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
     eval_grid : AbstractGridFlux, optional
         Grid upon which to evaluate the normal field on the plasma surface, and at which
         the normal field is minimized. Defaults to
-        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
+        ``LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
+    source_grid : AbstractGridSurface, optional
+        Source grid upon which to evaluate the surface current when calculating
+        the normal field on the plasma surface. Defaults to
+        ``LinearGridSurface(M=max(3 * current_potential_field.M_Phi, 30),
+        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)``
     vc_source_grid : LinearGridFlux
         LinearGridFlux to use for the singular integral for the virtual casing
         principle to calculate the component of the normal field from the
@@ -1397,13 +1393,23 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         data["external_field_grid"] = external_field_grid
 
     if source_grid is None:
-        source_grid = LinearGridFlux(
+        source_grid = LinearGridSurface(
             M=max(3 * current_potential_field.M_Phi, 30),
             N=max(3 * current_potential_field.N_Phi, 30),
             NFP=int(eq.NFP),
         )
     if eval_grid is None:
         eval_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
+    surf_eval_grid = LinearGridSurface(
+        M=eval_grid.M,
+        N=eval_grid.N,
+        NFP=eval_grid.NFP,
+        sym=eval_grid.sym,
+        endpoint=eval_grid.endpoint,
+    )
+    np.testing.assert_allclose(surf_eval_grid.nodes[:, 1:], eval_grid.nodes[:, 1:])
+    np.testing.assert_allclose(surf_eval_grid.weights, eval_grid.weights)
+
     B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
     # just need it for normalization, so do a simple mean
     normalization_B = jnp.mean(B_eq_surf)
@@ -1419,7 +1425,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     ]
 
     # calculate net enclosed poloidal and toroidal currents
-    G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
+    G_tot = -(eq.compute("G", grid=eval_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
     if external_field:
         G_ext = _G_from_external_field(
@@ -1450,7 +1456,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         params["G"] = G
         Bn, _ = current_potential_field.compute_Bnormal(
             eq.surface,
-            eval_grid=eval_grid,
+            eval_grid=surf_eval_grid,
             source_grid=source_grid,
             params=params,
             chunk_size=chunk_size,
@@ -1477,10 +1483,10 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         return jnp.sum(integrand).squeeze()
 
     if regularization_type == "regcoil":
-        # also need these gradients for the RHS if using regcoil regularization
-        # set jacobian deriv mode based on the matrix dimensions,  which is the output
-        # size (grid nodes, which is eval_grid for Bn and 3*source_grid for K)
-        # by the input size (the number of Phi modes)
+        # also need these gradients for the RHS if using regcoil regularization set
+        # jacobian deriv mode based on the matrix dimensions, which is the output size
+        # (grid nodes, which is eval_grid for Bn and 3*source_grid for K) by the input
+        # size (the number of Phi modes)
         deriv_mode = (
             "fwd"
             if eval_grid.num_nodes >= 0.5 * current_potential_field.Phi_basis.num_modes
@@ -1835,14 +1841,9 @@ def _find_current_potential_contours(
 
     theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
 
-    grid = CustomGridFlux(
-        jnp.vstack(
-            (
-                jnp.zeros_like(theta_full_2D.flatten(order="F")),
-                theta_full_2D.flatten(order="F"),
-                zeta_full_2D.flatten(order="F"),
-            )
-        ).T,
+    grid = CustomGridSurface(
+        theta=theta_full_2D.flatten(order="F"),
+        zeta=zeta_full_2D.flatten(order="F"),
         sort=False,
     )
     phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"].reshape(
@@ -2027,10 +2028,7 @@ def _find_XYZ_points(
     for thetas, zetas in zip(theta_pts, zeta_pts):
         coords = surface.compute(
             "x",
-            grid=CustomGridFlux(
-                jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T,
-                sort=False,
-            ),
+            grid=CustomGridSurface(theta=thetas, zeta=zetas, sort=False),
             basis="xyz",
         )["x"]
         contour_X.append(coords[:, 0])

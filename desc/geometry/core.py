@@ -17,8 +17,10 @@ from desc.compute.utils import (
 from desc.grid import (
     AbstractGridCurve,
     AbstractGridFlux,
+    AbstractGridSurface,
     LinearGridCurve,
     LinearGridFlux,
+    LinearGridSurface,
     QuadratureGridFlux,
 )
 from desc.io import IOAble
@@ -483,7 +485,7 @@ class Surface(IOAble, Optimizable, ABC):
     def change_resolution(self, *args, **kwargs):
         """Change the maximum resolution."""
 
-    def compute(
+    def compute(  # noqa: C901
         self,
         names,
         grid=None,
@@ -522,24 +524,30 @@ class Surface(IOAble, Optimizable, ABC):
         """
         if isinstance(names, str):
             names = [names]
-        if grid is None:
-            if hasattr(self, "rho"):  # constant rho surface
-                grid = LinearGridFlux(
-                    rho=np.array(self.rho),
-                    M=2 * self.M + 5,
-                    N=2 * self.N + 5,
-                    NFP=self.NFP,
+
+        if hasattr(self, "rho"):  # FourierRZToroidalSurface
+            if grid is None:
+                grid = LinearGridSurface(
+                    M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
-            elif hasattr(self, "zeta"):  # constant zeta surface
+            if not isinstance(grid, AbstractGridSurface):
+                raise TypeError(
+                    "Must pass in an AbstractGridSurface object for argument grid, "
+                    + f"but got type {type(grid)}.",
+                )
+        elif hasattr(self, "zeta"):  # ZernikeRZToroidalSection
+            if grid is None:
                 grid = QuadratureGridFlux(
                     L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1
                 )
                 grid._nodes[:, 2] = self.zeta
-        elif not isinstance(grid, AbstractGridFlux):
-            raise TypeError(
-                "Must pass in an AbstractGridFlux object for argument grid, "
-                + f"but got type {type(grid)}",
-            )
+            if not isinstance(grid, AbstractGridFlux):
+                raise TypeError(
+                    "Must pass in an AbstractGridFlux object for argument grid, "
+                    + f"but got type {type(grid)}.",
+                )
+        else:
+            raise NotImplementedError(f"Unknown surface of type {type(self)}.")
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))

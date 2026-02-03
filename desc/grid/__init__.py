@@ -9,7 +9,7 @@ from .flux import (
     LinearGridFlux,
     QuadratureGridFlux,
 )
-from .surface import LinearGridSurface
+from .surface import AbstractGridSurface, CustomGridSurface, LinearGridSurface
 from .utils import (
     cf_to_dec,
     dec_to_cf,

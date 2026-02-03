@@ -1266,7 +1266,10 @@ def _constant_offset_surface(
     def fun_jax(zeta_hat, theta, zeta):
         nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
         n, r, r_offset = n_and_r_jax(nodes)
-        return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+        # add 2pi to the arctan2<0 so it matches our convention of
+        # zeta being btwn 0 and 2pi
+        zeta_offset = jnp.arctan2(r_offset[0, 1], r_offset[0, 0])
+        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - zeta
 
     vecroot = jit(
         vmap(
@@ -1292,7 +1295,10 @@ def _constant_offset_surface(
         # the grid nodes' zeta values. If this is not the case, the fitting
         # will be incorrect.
         transforms = get_transforms(
-            obj=base_surface, keys=["R", "Z"], grid=grid, jitable=True
+            obj=base_surface,
+            keys=["R", "Z"],
+            grid=grid,
+            jitable=True,
         )
         transforms["R"].build_pinv()
         transforms["Z"].build_pinv()

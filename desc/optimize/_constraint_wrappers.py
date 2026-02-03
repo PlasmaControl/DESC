@@ -4,7 +4,14 @@ import functools
 
 import numpy as np
 
-from desc.backend import desc_config, jax, jit, jnp, put, safe_mpi_Bcast
+from desc.backend import (
+    desc_config,
+    jit,
+    jnp,
+    put,
+    safe_mpi_Bcast,
+    safe_transfer_to_device,
+)
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1419,8 +1426,7 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
             ),
             root=0,
         )
-        if not desc_config["mpi-cuda"]:
-            recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
+        recvbuf = safe_transfer_to_device(recvbuf)
 
         # we collected the Jacobian in the proper way above, but as a convention
         # the _jvp methods return the transpose of the Jacobian. For example,

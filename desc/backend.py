@@ -583,6 +583,29 @@ if use_jax:  # noqa: C901
         # array with a numpy array, which is not ideal
         return arr
 
+    def safe_transfer_to_device(arr):
+        """Safely transfer array to device.
+
+        Handles the final array device if the array is too big for GPU,
+        or the backend is CPU.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to transfer.
+
+        Returns
+        -------
+        arr : jnp.ndarray
+            Array on the target device.
+        """
+        size_gb = arr.nbytes / 1024**3
+
+        # this can still fail if arr is big even for CPU
+        if desc_config["kind"] == "cpu" or size_gb > desc_config["avail_mems"][0] * 0.9:
+            return jnp.array(arr, device=jax.devices("cpu")[0])
+        return jax.array(arr)
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -1057,3 +1080,7 @@ else:  # pragma: no cover
     def safe_mpi_Bcast(arr, comm, root=0):
         """Numpy implementation of desc.backend.safe_mpi_Bcast."""
         return comm.Bcast(arr, root=root)
+
+    def safe_transfer_to_device(arr):
+        """Numpy implementation of desc.backend.safe_transfer_to_device."""
+        return arr

@@ -12,6 +12,7 @@ from desc.backend import (
     jit,
     jnp,
     safe_mpi_Bcast,
+    safe_transfer_to_device,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -787,8 +788,7 @@ class ObjectiveFunction(IOAble):
                 (recvbuf, self._f_sizes, self._f_displs, self.mpi.DOUBLE),
                 root=0,
             )
-            if not desc_config["mpi-cuda"]:
-                recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
+            recvbuf = safe_transfer_to_device(recvbuf)
             return recvbuf
 
     @jit
@@ -1122,8 +1122,7 @@ class ObjectiveFunction(IOAble):
                     ),
                     root=0,
                 )
-                if not desc_config["mpi-cuda"]:
-                    recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
+                recvbuf = safe_transfer_to_device(recvbuf)
                 return recvbuf.T
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):

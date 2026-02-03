@@ -1298,6 +1298,8 @@ def _constant_offset_surface(
             obj=base_surface,
             keys=["R", "Z"],
             grid=grid,
+            # this is more robust than letting method become fft if
+            # jitable=False, and will also work within jitted functions
             jitable=True,
         )
         transforms["R"].build_pinv()

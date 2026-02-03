@@ -1282,7 +1282,7 @@ def _constant_offset_surface(
     n, x, x_offsets = n_and_r_jax(nodes)
 
     data = {}
-    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
+    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 2])
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 

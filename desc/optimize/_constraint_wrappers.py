@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import desc_config, jit, jnp, put, safe_mpi_Bcast
+from desc.backend import desc_config, jax, jit, jnp, put, safe_mpi_Bcast
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1404,7 +1404,7 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
         ]
         objs = [objective.objectives[i] for i in obj_idx_rank]
         J_rank = jvp_proximal_per_process(xs, vs, objs, op=op)
-        if desc_config["kind"] == "cpu":
+        if not desc_config["mpi-cuda"]:
             J_rank = np.array(J_rank)
             recvbuf = np.empty((objective.dim_f, J_rank.shape[1]), dtype=np.float64)
         else:
@@ -1419,8 +1419,8 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
             ),
             root=0,
         )
-        if desc_config["kind"] == "cpu":
-            recvbuf = jnp.array(recvbuf)
+        if not desc_config["mpi-cuda"]:
+            recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
 
         # we collected the Jacobian in the proper way above, but as a convention
         # the _jvp methods return the transpose of the Jacobian. For example,

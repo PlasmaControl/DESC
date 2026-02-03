@@ -788,7 +788,7 @@ class ObjectiveFunction(IOAble):
                 root=0,
             )
             if not desc_config["mpi-cuda"]:
-                recvbuf = jnp.array(recvbuf)
+                recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
             return recvbuf
 
     @jit
@@ -1123,7 +1123,7 @@ class ObjectiveFunction(IOAble):
                     root=0,
                 )
                 if not desc_config["mpi-cuda"]:
-                    recvbuf = jnp.array(recvbuf)
+                    recvbuf = jnp.array(recvbuf, device=jax.devices("cpu")[0])
                 return recvbuf.T
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):

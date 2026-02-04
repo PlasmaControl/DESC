@@ -418,9 +418,21 @@ class _MagneticField(IOAble, ABC):
         Bnormal = dot(B, data["n_rho"])
 
         if calc_Bplasma:
+            # compute_B_plasma requires a LinearGridFlux
+            eq_eval_grid = LinearGridFlux(
+                theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
+                zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
+                NFP=eval_grid.NFP,
+                sym=eval_grid.sym,
+                endpoint=eval_grid.endpoint,
+            )
+            np.testing.assert_allclose(
+                eq_eval_grid.nodes[:, 1:], eval_grid.nodes[:, 1:]
+            )
+            np.testing.assert_allclose(eq_eval_grid.weights, eval_grid.weights)
             Bnormal += compute_B_plasma(
                 eq,
-                eval_grid,
+                eq_eval_grid,
                 vc_source_grid,
                 normal_only=True,
                 chunk_size=setdefault(B_plasma_chunk_size, chunk_size),

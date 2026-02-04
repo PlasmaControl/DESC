@@ -5,7 +5,13 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGridFlux, LinearGridFlux, QuadratureGridFlux
+from desc.grid import (
+    AbstractGridFlux,
+    AbstractGridSurface,
+    LinearGridFlux,
+    LinearGridSurface,
+    QuadratureGridFlux,
+)
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -90,33 +96,31 @@ class AspectRatio(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
                 grid = QuadratureGridFlux(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGridFlux(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
-                    sym=False,
-                )
-        else:
-            grid = self._grid
-
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+            else:
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridSurface),
+                ValueError,
+                msg="Grid must be of type AbstractGridSurface, "
+                + f"but got type {type(grid)}.",
+            )
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
@@ -180,10 +184,10 @@ class Elongation(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : AbstractGridFlux, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        or ``LinearGridSurface(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -240,33 +244,31 @@ class Elongation(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
                 grid = QuadratureGridFlux(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGridFlux(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
-                    sym=False,
-                )
-        else:
-            grid = self._grid
-
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+            else:
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridSurface),
+                ValueError,
+                msg="Grid must be of type AbstractGridSurface, "
+                + f"but got type {type(grid)}.",
+            )
 
         self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
@@ -388,32 +390,31 @@ class Volume(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
                 grid = QuadratureGridFlux(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGridFlux(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
-                )
-        else:
-            grid = self._grid
-
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+            else:
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridSurface),
+                ValueError,
+                msg="Grid must be of type AbstractGridSurface, "
+                + f"but got type {type(grid)}.",
+            )
 
         self._dim_f = 1
         self._data_keys = ["V"]

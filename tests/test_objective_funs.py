@@ -34,6 +34,7 @@ from desc.grid import (
     CustomGridFlux,
     LinearGridCurve,
     LinearGridFlux,
+    LinearGridSurface,
     QuadratureGridFlux,
 )
 from desc.integrals import Bounce2D
@@ -141,7 +142,7 @@ class TestObjectiveFunction:
         test(
             "Phi",
             FourierCurrentPotentialField(Phi_mn=np.array([0.2])),
-            LinearGridFlux(L=0, M=4, N=4),
+            LinearGridSurface(M=4, N=4),
         )
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)), None, True)
@@ -169,7 +170,7 @@ class TestObjectiveFunction:
         test(curve, grid)
 
         surf = FourierRZToroidalSurface()
-        grid = LinearGridFlux(L=2, M=2, N=2)
+        grid = LinearGridSurface(M=2, N=2)
         test(surf, grid)
 
         eq = Equilibrium()
@@ -1512,46 +1513,24 @@ class TestObjectiveFunction:
         eq = desc.examples.get("precise_QA", "all")[0]
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        eval_grid = LinearGridFlux(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
-        )
-        source_grid = LinearGridFlux(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
-        )
-
-        obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
-        Bnorm = t_field.compute_Bnormal(
-            eq, eval_grid=eval_grid, source_grid=source_grid
-        )[0]
+        flux_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        surf_grid = LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        obj = QuadraticFlux(eq, t_field, eval_grid=flux_grid)
+        Bnorm = t_field.compute_Bnormal(eq, eval_grid=surf_grid)[0]
         obj.build()
-        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        dA = eq.compute("|e_theta x e_zeta|", grid=flux_grid)["|e_theta x e_zeta|"]
         f = obj.compute_unscaled(t_field.params_dict)
-
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
 
         # equilibrium that has B_plasma == 0
         eq = load("./tests/inputs/vacuum_nonaxisym.h5")
-
-        eval_grid = LinearGridFlux(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
-        )
-        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
-        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
+        flux_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        surf_grid = LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=flux_grid)
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=surf_grid)[0]
         obj.build()
         f = obj.compute(t_field.params_dict)
-        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        dA = eq.compute("|e_theta x e_zeta|", grid=flux_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
 
@@ -1572,18 +1551,10 @@ class TestObjectiveFunction:
         eq = desc.examples.get("precise_QA", "all")[0]
         surf = eq.surface
         surf.change_resolution(4, 4)
-        eval_grid = LinearGridFlux(
-            rho=np.array([1.0]),
-            M=surf.M * 2,
-            N=surf.N * 2,
-            NFP=eq.NFP,
-            sym=False,
-        )
+        eval_grid = LinearGridSurface(M=surf.M * 2, N=surf.N * 2, NFP=eq.NFP, sym=False)
 
         obj = SurfaceQuadraticFlux(surf, t_field, eval_grid=eval_grid, field_fixed=True)
-        Bnorm = t_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=eval_grid
-        )[0]
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(surf)
         dA = surf.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute(params_1=surf.params_dict)
@@ -1950,7 +1921,7 @@ class TestObjectiveFunction:
         field1 = FourierCurrentPotentialField(
             I=0, G=10, NFP=10, Phi_mn=[[0]], modes_Phi=[[2, 2]]
         )
-        grid = LinearGridFlux(M=5, N=5, NFP=field1.NFP)
+        grid = LinearGridSurface(M=5, N=5, NFP=field1.NFP)
         result1 = test(field1, grid)
         result2 = test(field1, grid=None)
 
@@ -2017,7 +1988,7 @@ class TestObjectiveFunction:
         field = FourierCurrentPotentialField(
             I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
         )
-        grid = LinearGridFlux(M=5, N=5, NFP=field.NFP)
+        grid = LinearGridSurface(M=5, N=5, NFP=field.NFP)
         test(field, grid, "K")
         test(field, grid, "Phi")
         test(field, grid, "sqrt(Phi)")

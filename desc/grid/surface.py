@@ -416,7 +416,7 @@ class LinearGridSurface(AbstractGridSurface):
         )
 
         _ = np.zeros(1)
-        d_ = np.zeros_like(_)
+        d_ = np.ones_like(_)
 
         # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array

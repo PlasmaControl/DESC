@@ -207,7 +207,7 @@ class LinearGridCurve(AbstractGridCurve):
             self._fft_x2 = True  # trivially true
 
         _ = np.zeros(1)
-        d_ = np.zeros_like(_)
+        d_ = np.ones_like(_)
 
         self._endpoint = (
             (ss.size > 1)
@@ -307,8 +307,8 @@ class CustomGridCurve(AbstractGridCurve):
         self._spacing = (
             jnp.array(
                 [
-                    jnp.zeros_like(spacing),
-                    jnp.zeros_like(spacing),
+                    jnp.ones_like(spacing),
+                    jnp.ones_like(spacing),
                     jnp.atleast_1d(spacing),
                 ]
             ).T

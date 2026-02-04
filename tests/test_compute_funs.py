@@ -180,10 +180,11 @@ def test_elongation():
         modes_Z=[[-1, 0], [0, -1]],
     )
     assert surf3.sym
-    grid = LinearGridFlux(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    grid = LinearGridSurface(M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
     data1 = surf1.compute(["a_major/a_minor"], grid=grid)
     data2 = surf2.compute(["a_major/a_minor"], grid=grid)
     data3 = surf3.compute(["a_major/a_minor"], grid=grid)
+    print(data1)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
     np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)

@@ -8,7 +8,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGridSurface
+from desc.grid import LinearGridFlux
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -1075,7 +1075,7 @@ def compute_B_plasma(
 
     """
     if source_grid is None:
-        source_grid = LinearGridSurface(
+        source_grid = LinearGridFlux(
             M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP if eq.N > 0 else 64, sym=False
         )
 

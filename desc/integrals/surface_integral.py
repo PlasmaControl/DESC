@@ -132,7 +132,7 @@ def line_integrals(
         msg="ConcentricGridFlux should only be used for poloidal line integrals.",
     )
     warnif(
-        isinstance(grid, LinearGridFlux) and grid.endpoint,
+        hasattr(grid, "endpoint") and grid.endpoint,
         msg="Correctness not guaranteed on grids with duplicate nodes.",
     )
     # Generate a new quantity q_prime which is zero everywhere

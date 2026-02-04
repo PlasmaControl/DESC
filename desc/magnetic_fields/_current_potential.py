@@ -1400,9 +1400,10 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         )
     if eval_grid is None:
         eval_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
+    # compute_Bnormal requires a LinearGridSurface
     surf_eval_grid = LinearGridSurface(
-        M=eval_grid.M,
-        N=eval_grid.N,
+        theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
         NFP=eval_grid.NFP,
         sym=eval_grid.sym,
         endpoint=eval_grid.endpoint,

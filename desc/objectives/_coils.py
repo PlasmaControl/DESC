@@ -1,5 +1,4 @@
 import numbers
-import warnings
 
 import numpy as np
 from scipy.constants import mu_0
@@ -8,7 +7,13 @@ from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatte
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import AbstractGrid, LinearGridCurve, LinearGridFlux
+from desc.grid import (
+    AbstractGrid,
+    AbstractGridSurface,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridSurface,
+)
 from desc.integrals import compute_B_plasma
 from desc.utils import (
     Timer,
@@ -1508,9 +1513,8 @@ class QuadraticFlux(_Objective):
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
-            "Detected FourierRZToroidalSurface object "
-            "if attempting to find a QFM surface, please use "
-            "SurfaceQuadraticFlux objective instead.",
+            "Detected FourierRZToroidalSurface object. If attempting to find a QFM"
+            + "surface, please use SurfaceQuadraticFlux objective instead.",
         )
         super().__init__(
             things=self._field,
@@ -1540,11 +1544,7 @@ class QuadraticFlux(_Objective):
 
         if self._eval_grid is None:
             eval_grid = LinearGridFlux(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
             self._eval_grid = eval_grid
         else:
@@ -1665,11 +1665,11 @@ class SurfaceQuadraticFlux(_Objective):
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided QFM surface. May be fixed
         by passing in ``field_fixed=True``
-    eval_grid : AbstractGridFlux, optional
+    eval_grid : AbstractGridSurface, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors. Defaults to
-        ``LinearGridFlux(rho=np.array([1.0]), M=surface.M_grid, N=surface.N_grid,``
-        ``NFP=surface.NFP, sym=False)``.
+        ``LinearGridSurface(M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP,``
+        ``sym=False)``.
     field_grid : AbstractGrid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object,
@@ -1751,8 +1751,7 @@ class SurfaceQuadraticFlux(_Objective):
         surface = self._surface
 
         if self._eval_grid is None:
-            eval_grid = LinearGridFlux(
-                rho=np.array([1.0]),
+            eval_grid = LinearGridSurface(
                 M=2 * surface.M,
                 N=2 * surface.N,
                 NFP=surface.NFP,
@@ -2510,7 +2509,7 @@ class SurfaceCurrentRegularization(_Objective):
         of this will be optimized to minimize the objective.
     regularization : str, optional
         Regularization method. One of {'K', 'Phi', 'sqrt(Phi)'}. Default = 'K'.
-    source_grid : AbstractGridFlux, optional
+    source_grid : LinearGridSurface, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the
@@ -2614,16 +2613,17 @@ class SurfaceCurrentRegularization(_Objective):
             N_Phi = surface_current_field.N
 
         if self._source_grid is None:
-            source_grid = LinearGridFlux(
-                M=3 * M_Phi + 1,
-                N=3 * N_Phi + 1,
-                NFP=surface_current_field.NFP,
+            source_grid = LinearGridSurface(
+                M=3 * M_Phi + 1, N=3 * N_Phi + 1, NFP=surface_current_field.NFP
             )
         else:
             source_grid = self._source_grid
-
-        if not np.allclose(source_grid.nodes[:, 0], 1):
-            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+        errorif(
+            not isinstance(source_grid, AbstractGridSurface),
+            ValueError,
+            msg="Grid must be of type AbstractGridSurface, "
+            + f"but got type {type(source_grid)}.",
+        )
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
@@ -2635,10 +2635,7 @@ class SurfaceCurrentRegularization(_Objective):
         timer.start("Precomputing transforms")
 
         surface_transforms = get_transforms(
-            self._data_keys,
-            obj=surface_current_field,
-            grid=source_grid,
-            has_axis=source_grid.axis.size,
+            self._data_keys, obj=surface_current_field, grid=source_grid
         )
         if self._normalize:
             if isinstance(surface_current_field, FourierCurrentPotentialField):

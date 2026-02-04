@@ -25,7 +25,7 @@ from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux, LinearGridSurface
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
@@ -1490,12 +1490,12 @@ def test_regcoil_axisymmetric():
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridFlux(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
-    grid = LinearGridFlux(N=10, M=10, NFP=surface_current_field.NFP)
+    grid = LinearGridSurface(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
@@ -1506,7 +1506,7 @@ def test_regcoil_axisymmetric():
         surface_current_field,
         eq=eq,
         eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGridFlux(M=40, N=40, NFP=eq.NFP),
+        source_grid=LinearGridSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
         regularization_type="simple",
@@ -1521,7 +1521,7 @@ def test_regcoil_axisymmetric():
     )
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridFlux(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
@@ -1531,7 +1531,7 @@ def test_regcoil_axisymmetric():
         surface_current_field,
         eq=eq,
         eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGridFlux(M=40, N=80, NFP=eq.NFP),
+        source_grid=LinearGridSurface(M=40, N=80, NFP=eq.NFP),
         lambda_regularization=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
@@ -1552,7 +1552,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridFlux(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf * 2, rtol=1e-4, atol=1e-8)
@@ -1579,7 +1579,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridFlux(M=60, N=60, NFP=surface_current_field.NFP),
+        source_grid=LinearGridSurface(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
         chunk_size=20,
     )

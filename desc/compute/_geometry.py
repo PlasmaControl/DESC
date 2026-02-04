@@ -86,6 +86,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
         surface_integrals(
             transforms["grid"],
             cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
+            surface_label="x0",
         )
     )
     return data
@@ -187,7 +188,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
                 grid,
                 data["Z"] * n[:, 2] * safenorm(data["e_theta"], axis=-1),
                 line_label="theta",
-                fix_surface=("rho", max_rho),
+                fix_surface=("x0", max_rho),
                 expand_out=False,
             )
         )
@@ -589,18 +590,17 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "e_theta"],
+    data=["e_theta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
 def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
-    max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = line_integrals(
         transforms["grid"],
         safenorm(data["e_theta"], axis=-1),
         line_label="theta",
-        fix_surface=("rho", max_rho),
+        fix_surface=("x0", 0.0),
         expand_out=True,
     )
     return data

@@ -16,8 +16,7 @@ except ImportError:
         "computations that involve bounce integrals.\n"
     )
 
-from desc.backend import jnp
-from desc.utils import safediv
+from desc.backend import jax, jnp
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
@@ -161,8 +160,8 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
-def cubic_val(*, x, c, der=False):
-    """Evaluate cubic polynomial ``c`` at the points ``x``.
+def poly_val(*, x, c, der=False):
+    """Evaluate polynomial ``c`` at the points ``x``.
 
     Parameters
     ----------
@@ -190,10 +189,19 @@ def cubic_val(*, x, c, der=False):
         )
 
     """
-    assert c.shape[-1] == 4
+    if c.shape[-1] == 4:
+        if der:
+            return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
+        return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+
+    if c.shape[-1] == 3:
+        if der:
+            return 2 * c[..., 0] * x + c[..., 1]
+        return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+
     if der:
-        return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
-    return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+    return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
 def _subtract_first(c, k):
@@ -244,6 +252,10 @@ _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 # TODO (#1388): Move to interpax.
 
 
+@partial(
+    jax.custom_jvp,
+    nondiff_argnames=("sort", "sentinel", "eps", "distinct"),
+)
 def polyroot_vec(
     c,
     k=0.0,
@@ -303,7 +315,7 @@ def polyroot_vec(
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts and to avoid nan in gradient. Also consumes less memory.
+        # imaginary parts. Also consumes less memory.
         c = jnp.moveaxis(c, -1, 0)
         r = func[num_coef](*c[:-1], c[-1] - k, sentinel, eps, distinct)
         if num_coef == 2:
@@ -332,14 +344,40 @@ def polyroot_vec(
     return r
 
 
+@polyroot_vec.defjvp
+def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
+    """Implicit function theorem with regularization.
+
+    Regularization used to smooth the discretized system so that it recognizes
+    any non-differentiable sample it has observed actually has zero measure in
+    the continuous system.
+    """
+    c, k, a_min, a_max = primals
+    dc, dk, _, _ = tangents
+
+    r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
+
+    dc_dr = poly_val(x=r, c=c[..., None, :], der=True)
+    dc_dr = jnp.where(
+        jnp.abs(dc_dr) > eps,
+        dc_dr,
+        dc_dr + jnp.copysign(eps, dc_dr.real),
+    )
+    dr = jnp.where(
+        r == sentinel,
+        0.0,
+        (jnp.expand_dims(dk, -1) - poly_val(x=r, c=dc[..., None, :])) / dc_dr,
+    )
+    return r, dr
+
+
 def _root_cubic(a, b, c, d, sentinel, eps, distinct):
     """Return real cubic root assuming real coefficients."""
     # numerical.recipes/book.html, page 228
 
-    def irreducible(Q, R, b, mask):
+    def irreducible(Q, R, b):
         # Three irrational real roots.
-        theta = R / jnp.sqrt(jnp.where(mask, Q**3, 1.0))
-        theta = jnp.arccos(jnp.where(jnp.abs(theta) < 1.0, theta, 0.0))
+        theta = jnp.arccos(R / jnp.sqrt(Q**3))
         return (
             -2
             * jnp.sqrt(Q)
@@ -356,19 +394,18 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
     def reducible(Q, R, b):
         # One real and two complex roots.
         A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
-        B = safediv(Q, A)
+        B = Q / A
         r1 = (A + B) - b / 3
         return _concat_sentinel(r1[jnp.newaxis], sentinel, num=2)
 
     def root(b, c, d):
-        b = safediv(b, a)
-        c = safediv(c, a)
+        b = b / a
+        c = c / a
         Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c) / 54 + safediv(d, 2 * a)
-        mask = R**2 < Q**3
+        R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
         return jnp.where(
-            mask,
-            irreducible(jnp.abs(Q), R, b, mask),
+            R**2 < Q**3,
+            irreducible(jnp.abs(Q), R, b),
             reducible(Q, R, b),
         )
 
@@ -392,20 +429,20 @@ def _root_quadratic(a, b, c, sentinel, eps, distinct):
     r1 = jnp.where(
         discriminant < 0,
         sentinel,
-        safediv(q, a, _root_linear(b, c, sentinel, eps)),
+        jnp.where(a == 0, _root_linear(b, c, sentinel, eps), q / a),
     )
     r2 = jnp.where(
         # more robust to remove repeated roots with discriminant
         (discriminant < 0) | (distinct & (discriminant <= eps)),
         sentinel,
-        safediv(c, q, sentinel),
+        c / q,
     )
     return jnp.stack([r1, r2])
 
 
 def _root_linear(a, b, sentinel, eps, distinct=False):
     """Return real linear root assuming real coefficients."""
-    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
+    return jnp.where((a == 0) & (jnp.abs(b) <= eps), 0.0, -b / a)
 
 
 def _concat_sentinel(r, sentinel, num=1):

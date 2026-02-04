@@ -1438,8 +1438,8 @@ class TestBounce:
              + f(λ,ζ₂) (∂ζ₂/∂λ)(λ)
              - f(λ,ζ₁) (∂ζ₁/∂λ)(λ)
         ]
-        where (∂ζ₁/∂λ)(λ) = -λ² / (∂|B|/∂ζ|ρ,α)(ζ₁)
-              (∂ζ₂/∂λ)(λ) = -λ² / (∂|B|/∂ζ|ρ,α)(ζ₂)
+        where (∂ζ₁/∂λ)(λ) = -λ⁻² / (∂|B|/∂ζ|ρ,α)(ζ₁)
+              (∂ζ₂/∂λ)(λ) = -λ⁻² / (∂|B|/∂ζ|ρ,α)(ζ₂)
 
         All terms in these expressions are known analytically.
         If we wanted, it's simple to check explicitly that AD takes each derivative

@@ -40,7 +40,7 @@ Performance Improvements
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
 - Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
-- Default quadrature over pitch angles in ``Gamma_c`` switched from second to third order method (becomes fourth order if sufficiently smooth).
+- Default quadrature over pitch angles in ``Gamma_c`` changed. Handling logarithmic singularities in the velocity coordinate remains future work (waiting on maturation of jax.ffi compatibility).
 
 v0.16.0
 -------

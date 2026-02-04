@@ -713,7 +713,8 @@ class FourierRZToroidalSurface(Surface):
             FourierRZToroidalSurface, created from fitting points offset from the input
             surface by the given constant offset.
         data : dict
-            dictionary containing  the following data, in the cylindrical basis:
+            dictionary containing  the following data, in the cylindrical basis,
+            as well as the transforms bases used to fit R and Z:
                 ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
                     the base_surface evaluated at the input ``grid``
                 ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
@@ -722,8 +723,6 @@ class FourierRZToroidalSurface(Surface):
                     coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
-            as well as the transforms bases used to fit R and Z.
-            Only returned if ``full_output`` is True
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True

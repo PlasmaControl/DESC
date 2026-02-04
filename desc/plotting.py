@@ -26,7 +26,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.geometry import Curve, FourierRZToroidalSurface
 from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux, LinearGridSurface
 from desc.integrals import surface_averages_map
-from desc.magnetic_fields import field_line_integrate
+from desc.magnetic_fields import OmnigenousField, field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
@@ -318,7 +318,7 @@ def _get_grid(thing, **kwargs):
             if key not in cls_args:
                 del grid_args[key]
         grid = LinearGridSurface(**grid_args)
-    elif isinstance(thing, Equilibrium):
+    elif isinstance(thing, Equilibrium) or isinstance(thing, OmnigenousField):
         sig = inspect.signature(LinearGridFlux.__init__)
         cls_args = list(sig.parameters.keys())
         for key in list(grid_args.keys()):
@@ -1224,6 +1224,7 @@ def plot_3d(  # noqa : C901
         len(kwargs) != 0,
         msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
     )
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["X", "Y", "Z"], grid=grid)
@@ -2350,17 +2351,6 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(eq, **grid_kwargs)
     nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
-    grid = CustomGridFlux(
-        map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        ),
-        sort=False,
-    )
 
     if colors is None:
         colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)

@@ -1563,7 +1563,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(
             eq.surface,
-            eval_grid=eval_grid,
+            eval_grid=surf_eval_grid,
             source_grid=external_field_grid,
             chunk_size=chunk_size,
             B_plasma_chunk_size=B_plasma_chunk_size,

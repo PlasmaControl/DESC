@@ -8,7 +8,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGridFlux
+from desc.grid import LinearGridFlux, LinearGridSurface
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -1093,7 +1093,14 @@ def compute_B_plasma(
         )
         interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     if hasattr(eq.surface, "Phi_mn"):
-        source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+        surf_source_grid = LinearGridSurface(
+            theta=source_grid.nodes[source_grid.unique_x1_idx, 1],
+            zeta=source_grid.nodes[source_grid.unique_x2_idx, 2],
+            NFP=source_grid.NFP,
+            sym=source_grid.sym,
+            endpoint=source_grid.endpoint,
+        )
+        source_data["K_vc"] += eq.surface.compute("K", grid=surf_source_grid)["K"]
     Bplasma = virtual_casing_biot_savart(
         eval_data, source_data, interpolator, chunk_size
     )

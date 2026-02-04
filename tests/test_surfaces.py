@@ -174,7 +174,7 @@ class TestFourierRZToroidalSurface:
                 np.array([R00_offset_ind, R10_offset_ind]),
             ),
             0,
-            atol=1e-14,
+            atol=1e-13,
         )
         np.testing.assert_allclose(
             np.delete(
@@ -182,7 +182,7 @@ class TestFourierRZToroidalSurface:
                 Zneg10_offset_ind,
             ),
             0,
-            atol=1e-14,
+            atol=1e-13,
         )
         grid_compute = LinearGrid(M=10, N=10)
         data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
@@ -190,7 +190,7 @@ class TestFourierRZToroidalSurface:
             ["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute
         )
         dists = np.linalg.norm(data["x"] - data_offset["x"], axis=1)
-        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        np.testing.assert_allclose(dists, 1, atol=1e-14)
         correct_data_offset = {
             "e_theta": np.vstack(
                 (

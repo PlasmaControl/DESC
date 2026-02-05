@@ -224,3 +224,86 @@ def test_resample_to_uniform_arclength():
 
     # All output should be finite
     assert np.isfinite(data_uniform).all()
+
+
+@pytest.mark.unit
+def test_compute_flux_tube_length():
+    """Test flux tube length computation."""
+    from desc.compute._turbulence import (
+        compute_arclength_via_gradpar,
+        compute_flux_tube_length,
+    )
+
+    npoints = 101
+    theta_pest = np.linspace(-np.pi, np.pi, npoints)
+
+    # Constant gradpar = 2: dl/dθ = 1/2, so total length = pi
+    gradpar = np.ones(npoints) * 2.0
+    length = compute_flux_tube_length(gradpar, theta_pest)
+
+    # Should equal the last value of cumulative arclength
+    arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
+    np.testing.assert_allclose(length, arclength[-1], rtol=1e-10)
+
+    # Expected value for constant gradpar
+    expected_length = np.pi
+    np.testing.assert_allclose(length, expected_length, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_solve_poloidal_turns_for_length():
+    """Test solving for poloidal turns to achieve target length."""
+    from desc.compute._turbulence import solve_poloidal_turns_for_length
+
+    # Create a simple length function: length = C * poloidal_turns
+    # where C depends on gradpar and theta range
+    # For gradpar=1: dl/dθ = 1, and θ range = 2*pi * poloidal_turns
+    # So length = 2*pi * poloidal_turns
+    def simple_length_fn(poloidal_turns):
+        return 2 * np.pi * poloidal_turns
+
+    # Solve for poloidal_turns = target_length / (2*pi)
+    target_length = 10.0
+    expected_turns = target_length / (2 * np.pi)
+
+    poloidal_turns = solve_poloidal_turns_for_length(
+        simple_length_fn, target_length, x0_guess=expected_turns
+    )
+
+    np.testing.assert_allclose(poloidal_turns, expected_turns, rtol=1e-6)
+
+
+@pytest.mark.unit
+def test_solve_poloidal_turns_nonlinear():
+    """Test solving for poloidal turns with nonlinear length function."""
+    from desc.compute._turbulence import solve_poloidal_turns_for_length
+
+    # Nonlinear length function: length = poloidal_turns^2 + poloidal_turns
+    def nonlinear_length_fn(poloidal_turns):
+        return poloidal_turns**2 + poloidal_turns
+
+    # Solve for target = 6: poloidal_turns^2 + poloidal_turns = 6
+    # (poloidal_turns - 2)(poloidal_turns + 3) = 0 -> poloidal_turns = 2
+    target_length = 6.0
+    expected_turns = 2.0
+
+    poloidal_turns = solve_poloidal_turns_for_length(
+        nonlinear_length_fn, target_length, x0_guess=1.5
+    )
+
+    np.testing.assert_allclose(poloidal_turns, expected_turns, rtol=1e-6)
+
+
+@pytest.mark.unit
+def test_solve_poloidal_turns_error():
+    """Test that solver raises error when target is out of bracket."""
+    from desc.compute._turbulence import solve_poloidal_turns_for_length
+
+    # Length function that saturates: length = tanh(poloidal_turns)
+    # Max achievable length ~ 1
+    def saturating_length_fn(poloidal_turns):
+        return np.tanh(poloidal_turns)
+
+    # Target length > max achievable should raise ValueError
+    with pytest.raises(ValueError, match="Could not find poloidal_turns"):
+        solve_poloidal_turns_for_length(saturating_length_fn, target_length=2.0)

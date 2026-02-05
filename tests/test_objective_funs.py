@@ -2634,7 +2634,7 @@ def test_plasma_vessel_distance_print(capsys):
     surface = FourierRZToroidalSurface(
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    surface_grid = LinearGridFlux(M=5, N=0)
+    surface_grid = LinearGridSurface(M=5, N=0)
     plasma_grid = LinearGridFlux(M=5, N=0)
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface

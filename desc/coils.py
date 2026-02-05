@@ -30,7 +30,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import LinearGridCurve, LinearGridFlux, LinearGridSurface
+from desc.grid import CustomGridSurface, LinearGridCurve, LinearGridFlux
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -3552,7 +3552,7 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
 
     coils = []
     for t in theta_offset:
-        grid = LinearGridSurface(theta=(theta + t) % (2 * np.pi), zeta=zeta)
+        grid = CustomGridSurface(theta=(theta + t) % (2 * np.pi), zeta=zeta)
         data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         offset = r_over_a * a - a
         x = data["x"] + offset * data["n_rho"]

@@ -2519,7 +2519,7 @@ def test_share_parameters():
     surf3.change_Phi_resolution(M=4, N=2)
 
     ## setup opt problem
-    surf_grid = LinearGridFlux(M=10, N=10, NFP=surf1.NFP)
+    surf_grid = LinearGridSurface(M=10, N=10, NFP=surf1.NFP)
     eval_grid = LinearGridFlux(M=10, N=10, NFP=surf1.NFP, sym=True)
     # let surfs and Phi change while keeping their geometry shared
     obj = ObjectiveFunction(

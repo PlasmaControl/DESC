@@ -27,7 +27,7 @@ from desc.coils import (
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.grid import LinearGridFlux
+from desc.grid import LinearGridFlux, LinearGridSurface
 from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
@@ -1483,7 +1483,7 @@ def test_quad_flux_with_surface_current_field():
             field=field,
             vacuum=True,
             eval_grid=LinearGridFlux(M=2, N=2, sym=True),
-            field_grid=LinearGridFlux(M=2, N=2),
+            field_grid=LinearGridSurface(M=2, N=2),
         ),
     )
     constraints = FixParameters(field, {"I": True, "G": True})

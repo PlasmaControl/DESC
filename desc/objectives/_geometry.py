@@ -496,9 +496,9 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    surface_grid : AbstractGridFlux, optional
+    surface_grid : AbstractGridSurface, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridSurface(M=eq.M_grid, N=eq.N_grid)``.
     plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
@@ -625,17 +625,24 @@ class PlasmaVesselDistance(_Objective):
             eq = self.things[0]
             surface = self.things[1]
         if self._surface_grid is None:
-            surface_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
             plasma_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
-        warnif(
-            not np.allclose(surface_grid.nodes[:, 0], 1),
-            UserWarning,
-            "Surface grid includes off-surface pts, should be rho=1.",
+        errorif(
+            not isinstance(surface_grid, AbstractGridSurface),
+            ValueError,
+            msg="Grid must be of type AbstractGridSurface, "
+            + f"but got type {type(surface_grid)}.",
+        )
+        errorif(
+            not isinstance(plasma_grid, AbstractGridFlux),
+            ValueError,
+            msg="Grid must be of type AbstractGridFlux, "
+            + f"but got type {type(plasma_grid)}.",
         )
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -689,10 +696,7 @@ class PlasmaVesselDistance(_Objective):
             has_axis=plasma_grid.axis.size,
         )
         surface_transforms = get_transforms(
-            self._surface_data_keys,
-            obj=surface,
-            grid=surface_grid,
-            has_axis=surface_grid.axis.size,
+            self._surface_data_keys, obj=surface, grid=surface_grid
         )
 
         # compute returns points on the grid of the surface

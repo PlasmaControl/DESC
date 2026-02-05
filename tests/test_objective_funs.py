@@ -3449,7 +3449,7 @@ class TestComputeScalarResolution:
         N0 = 5
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = LinearGridFlux(M=round(M0 * res), N=round(N0 * res))
+            grid = LinearGridSurface(M=round(M0 * res), N=round(N0 * res))
             obj = ObjectiveFunction(
                 SurfaceCurrentRegularization(field, source_grid=grid), use_jit=False
             )

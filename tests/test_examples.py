@@ -1229,14 +1229,15 @@ def test_non_eq_optimization():
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
 
-    grid = LinearGridFlux(M=18, N=0, NFP=eq.NFP)
+    surface_grid = LinearGridSurface(M=18, N=0, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=18, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=0.5,
         use_softmin=True,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         softmin_alpha=5000,
     )
     objective = ObjectiveFunction((obj,))
@@ -2393,13 +2394,14 @@ def test_signed_PlasmaVesselDistance():
 
     target_dist = -0.25
 
-    grid = LinearGridFlux(M=10, N=4, NFP=eq.NFP)
+    surface_grid = LinearGridSurface(M=10, N=4, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=10, N=4, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
         eq_fixed=True,
     )
@@ -2421,8 +2423,8 @@ def test_signed_PlasmaVesselDistance():
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
         use_softmin=True,
         softmin_alpha=100,
@@ -2448,14 +2450,15 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGridFlux(M=20, N=8, NFP=eq.NFP)
+    surface_grid = LinearGridSurface(M=20, N=8, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=20, N=8, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
     )
     objective = ObjectiveFunction(obj)

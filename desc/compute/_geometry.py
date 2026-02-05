@@ -429,7 +429,9 @@ def _S_fourier_rz_surface(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
-    data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
+    data["S(r)"] = surface_integrals(
+        transforms["grid"], data["|e_theta x e_zeta|"], surface_label="x0"
+    )
     return data
 
 

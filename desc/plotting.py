@@ -2,6 +2,7 @@
 
 import inspect
 import numbers
+import tkinter
 import warnings
 
 import matplotlib
@@ -97,7 +98,14 @@ rcParams["font.size"] = 10
 rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
 
-dpi = 100  # matplotlib default
+try:
+    tkroot = tkinter.Tk()
+    tkroot.withdraw()
+    dpi = tkroot.winfo_fpixels("1i")
+    tkroot.destroy()
+except tkinter._tkinter.TclError:
+    dpi = 72
+rcParams["figure.dpi"] = dpi
 rcParams["figure.autolayout"] = True
 rcParams["axes.spines.top"] = False
 rcParams["axes.spines.right"] = False

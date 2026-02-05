@@ -1736,7 +1736,7 @@ class Equilibrium(IOAble, Optimizable):
             "equilibrium which already has at least one kinetic profile assigned to"
             " it. The default is to use the equilibrium's assigned pressure profile"
             " for all computations. It is recommended to remove the unneeded "
-            "profile(s) to avoid unexpected behavior.",
+            "profile(s) to avoid unexpected behavior, by setting them to None",
         )
 
     @optimizable_parameter
@@ -1797,7 +1797,7 @@ class Equilibrium(IOAble, Optimizable):
             "equilibrium which already has an existing pressure profile. The default "
             "is to use the equilibrium's assigned pressure profile for all"
             " computations. It is recommended to remove the unneeded profile(s) "
-            "to avoid unexpected behavior.",
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -1838,7 +1838,7 @@ class Equilibrium(IOAble, Optimizable):
             "equilibrium which already has an existing pressure profile. The default "
             "is to use the equilibrium's assigned pressure profile for all"
             " computations. It is recommended to remove the unneeded profile(s) "
-            "to avoid unexpected behavior.",
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -1878,7 +1878,7 @@ class Equilibrium(IOAble, Optimizable):
             "equilibrium which already has an existing pressure profile. The default "
             "is to use the equilibrium's assigned pressure profile for all"
             " computations. It is recommended to remove the unneeded profile(s) "
-            "to avoid unexpected behavior.",
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -1917,7 +1917,7 @@ class Equilibrium(IOAble, Optimizable):
             "equilibrium which already has an existing pressure profile. The default "
             "is to use the equilibrium's assigned pressure profile for all"
             " computations. It is recommended to remove the unneeded profile(s) "
-            "to avoid unexpected behavior.",
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter

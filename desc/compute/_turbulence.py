@@ -751,3 +751,113 @@ def _global_avg_pool_1d(x):
         Output of shape (batch, channels)
     """
     return jnp.mean(x, axis=-1)
+
+
+# =============================================================================
+# CNN Forward Pass
+# =============================================================================
+#
+# Architecture overview (CyclicInvariantNet without BatchNorm):
+#   Input: (batch, 7, 96) - 7 GX features at 96 arclength points
+#   → 5 conv blocks: Conv1D(circular) → ReLU → MaxPool1D(2)
+#   → Global average pooling
+#   → Concatenate scalar inputs (a/LT, a/Ln)
+#   → 2 FC layers with ReLU
+#   → Output: log(Q)
+
+
+def _cyclic_invariant_forward(signals, scalars, weights):
+    """Forward pass through CyclicInvariantNet (no BatchNorm).
+
+    This architecture matches the zenodo ensemble models from Landreman et al.
+    2025 which use circular padding but no batch normalization.
+
+    Parameters
+    ----------
+    signals : jax.Array
+        Input signals of shape (batch, 7, length) - 7 GX geometric features:
+        [bmag, gbdrift, cvdrift, gbdrift0/shat, gds2, gds21/shat, gds22/shat²]
+    scalars : jax.Array
+        Scalar inputs of shape (batch, 2) - [a/LT, a/Ln]
+    weights : dict
+        Model weights (state_dict) with keys matching PyTorch CyclicInvariantNet:
+        - 'conv_layers.{i}.weight': shape (out_ch, in_ch, kernel_size)
+        - 'conv_layers.{i}.bias': shape (out_ch,)
+        - 'fc_layers.{i}.weight': shape (out_features, in_features)
+        - 'fc_layers.{i}.bias': shape (out_features,)
+        - 'output_layer.weight': shape (1, in_features)
+        - 'output_layer.bias': shape (1,)
+
+    Returns
+    -------
+    output : jax.Array
+        Predicted log(Q) of shape (batch, 1)
+
+    Notes
+    -----
+    Architecture after 5 conv blocks with input length 96:
+        96 → 48 → 24 → 12 → 6 → 3 (after max pools)
+        → global_avg_pool → shape (batch, conv_channels5)
+        → concat scalars → shape (batch, conv_channels5 + 2)
+        → fc1 → relu → fc2 → relu → output
+
+    The model predicts log(Q), not Q directly. Apply exp() to get Q.
+    """
+    x = signals
+
+    # 5 convolutional blocks (no BatchNorm)
+    for i in range(5):
+        conv_w = weights[f"conv_layers.{i}.weight"]
+        conv_b = weights[f"conv_layers.{i}.bias"]
+        kernel_size = conv_w.shape[2]
+        x = _conv1d_circular(x, conv_w, conv_b, kernel_size)
+        x = jax.nn.relu(x)
+        x = _max_pool_1d(x)
+
+    # Global average pooling: (batch, channels, 3) → (batch, channels)
+    x = _global_avg_pool_1d(x)
+
+    # Concatenate with scalar inputs: (batch, channels + 2)
+    x = jnp.concatenate([x, scalars], axis=-1)
+
+    # Fully connected layers
+    x = jnp.dot(x, weights["fc_layers.0.weight"].T) + weights["fc_layers.0.bias"]
+    x = jax.nn.relu(x)
+
+    x = jnp.dot(x, weights["fc_layers.1.weight"].T) + weights["fc_layers.1.bias"]
+    x = jax.nn.relu(x)
+
+    # Output layer: predict log(Q)
+    x = jnp.dot(x, weights["output_layer.weight"].T) + weights["output_layer.bias"]
+
+    return x
+
+
+def _ensemble_forward(signals, scalars, weights_list):
+    """Ensemble forward pass averaging predictions from multiple models.
+
+    Parameters
+    ----------
+    signals : jax.Array
+        Input signals of shape (batch, 7, length)
+    scalars : jax.Array
+        Scalar inputs of shape (batch, 2) - [a/LT, a/Ln]
+    weights_list : list of dict
+        List of weight dictionaries, one per ensemble member
+
+    Returns
+    -------
+    log_Q : jax.Array
+        Mean predicted log(Q) of shape (batch, 1)
+
+    Notes
+    -----
+    Uses a Python loop over models since ensemble members may have different
+    hyperparameters (different channel sizes, kernel sizes, etc.). The averaging
+    is done in log-space before returning.
+    """
+    predictions = []
+    for weights in weights_list:
+        log_Q = _cyclic_invariant_forward(signals, scalars, weights)
+        predictions.append(log_Q)
+    return jnp.mean(jnp.stack(predictions), axis=0)

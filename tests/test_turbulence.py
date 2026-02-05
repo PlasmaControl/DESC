@@ -399,3 +399,169 @@ def test_global_avg_pool_1d():
     assert pooled.shape == (batch, channels)
     # All ones should average to 1
     np.testing.assert_allclose(np.array(pooled), 1.0)
+
+
+# =============================================================================
+# CNN Forward Pass Tests
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_cyclic_invariant_forward_shape():
+    """Test CNN forward pass produces correct output shape."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _cyclic_invariant_forward
+
+    # Create random weights matching CyclicInvariantNet architecture
+    np.random.seed(42)
+
+    # Architecture hyperparameters (typical values)
+    conv_channels = [7, 16, 32, 16, 32, 16]  # input + 5 layers
+    kernel_sizes = [3, 3, 3, 3, 3]
+    fc_dims = [16 + 2, 32, 16]  # +2 for scalars
+
+    weights = {}
+    for i in range(5):
+        weights[f"conv_layers.{i}.weight"] = jnp.array(
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
+        ).astype(jnp.float32)
+        weights[f"conv_layers.{i}.bias"] = jnp.array(
+            np.random.randn(conv_channels[i + 1])
+        ).astype(jnp.float32)
+
+    weights["fc_layers.0.weight"] = jnp.array(np.random.randn(fc_dims[1], fc_dims[0])).astype(
+        jnp.float32
+    )
+    weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(jnp.float32)
+    weights["fc_layers.1.weight"] = jnp.array(np.random.randn(fc_dims[2], fc_dims[1])).astype(
+        jnp.float32
+    )
+    weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(jnp.float32)
+    weights["output_layer.weight"] = jnp.array(np.random.randn(1, fc_dims[2])).astype(jnp.float32)
+    weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
+
+    # Test forward pass
+    batch = 3
+    signals = jnp.array(np.random.randn(batch, 7, 96)).astype(jnp.float32)
+    scalars = jnp.array(np.random.randn(batch, 2)).astype(jnp.float32)
+
+    output = _cyclic_invariant_forward(signals, scalars, weights)
+
+    assert output.shape == (batch, 1)
+    assert np.isfinite(np.array(output)).all()
+
+
+@pytest.mark.slow
+def test_jax_vs_pytorch_forward_pass():
+    """Test that JAX forward pass matches PyTorch CyclicInvariantNet output.
+
+    Runs in subprocess due to JAX/PyTorch conflicts on some systems.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    pytest.importorskip("torch")
+
+    script = textwrap.dedent("""
+        import numpy as np
+        import torch
+        import torch.nn as nn
+        from desc.backend import jnp
+        from desc.compute._turbulence import _cyclic_invariant_forward
+
+        class CyclicNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                ch = [7, 16, 32, 16, 32, 16]
+                self.convs = nn.ModuleList([
+                    nn.Conv1d(ch[i], ch[i+1], 3, padding="same", padding_mode="circular")
+                    for i in range(5)
+                ])
+                self.pools = nn.ModuleList([nn.MaxPool1d(2, 2) for _ in range(5)])
+                self.fc1, self.fc2, self.out = nn.Linear(18, 32), nn.Linear(32, 16), nn.Linear(16, 1)
+
+            def forward(self, x, s):
+                x = x.transpose(1, 2)
+                for conv, pool in zip(self.convs, self.pools):
+                    x = pool(torch.relu(conv(x)))
+                return self.out(torch.relu(self.fc2(torch.relu(self.fc1(torch.cat([x.mean(-1), s], -1))))))
+
+        torch.manual_seed(42)
+        np.random.seed(42)
+        model = CyclicNet().eval()
+        sd = model.state_dict()
+
+        w = {}
+        for i in range(5):
+            w[f"conv_layers.{i}.weight"] = jnp.array(sd[f"convs.{i}.weight"].numpy())
+            w[f"conv_layers.{i}.bias"] = jnp.array(sd[f"convs.{i}.bias"].numpy())
+        w["fc_layers.0.weight"], w["fc_layers.0.bias"] = jnp.array(sd["fc1.weight"].numpy()), jnp.array(sd["fc1.bias"].numpy())
+        w["fc_layers.1.weight"], w["fc_layers.1.bias"] = jnp.array(sd["fc2.weight"].numpy()), jnp.array(sd["fc2.bias"].numpy())
+        w["output_layer.weight"], w["output_layer.bias"] = jnp.array(sd["out.weight"].numpy()), jnp.array(sd["out.bias"].numpy())
+
+        sig, sca = np.random.randn(2, 96, 7).astype(np.float32), np.random.randn(2, 2).astype(np.float32)
+        with torch.no_grad():
+            y_pt = model(torch.from_numpy(sig), torch.from_numpy(sca)).numpy()
+        y_jax = np.array(_cyclic_invariant_forward(jnp.array(sig.transpose(0,2,1)), jnp.array(sca), w))
+        assert np.allclose(y_jax, y_pt, rtol=1e-4, atol=1e-4), f"max_diff={np.max(np.abs(y_jax-y_pt))}"
+    """)
+
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        pytest.fail(f"JAX vs PyTorch mismatch:\n{result.stdout}\n{result.stderr}")
+
+
+@pytest.mark.unit
+def test_ensemble_forward():
+    """Test ensemble forward pass averages predictions correctly."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _cyclic_invariant_forward, _ensemble_forward
+
+    np.random.seed(42)
+
+    # Create two sets of weights with different values
+    def make_weights():
+        conv_channels = [7, 8, 8, 8, 8, 8]
+        kernel_sizes = [3, 3, 3, 3, 3]
+        fc_dims = [8 + 2, 8, 4]
+        weights = {}
+        for i in range(5):
+            weights[f"conv_layers.{i}.weight"] = jnp.array(
+                np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
+            ).astype(jnp.float32)
+            weights[f"conv_layers.{i}.bias"] = jnp.array(
+                np.random.randn(conv_channels[i + 1])
+            ).astype(jnp.float32)
+        weights["fc_layers.0.weight"] = jnp.array(np.random.randn(fc_dims[1], fc_dims[0])).astype(
+            jnp.float32
+        )
+        weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(jnp.float32)
+        weights["fc_layers.1.weight"] = jnp.array(np.random.randn(fc_dims[2], fc_dims[1])).astype(
+            jnp.float32
+        )
+        weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(jnp.float32)
+        weights["output_layer.weight"] = jnp.array(np.random.randn(1, fc_dims[2])).astype(
+            jnp.float32
+        )
+        weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
+        return weights
+
+    weights1 = make_weights()
+    weights2 = make_weights()
+    weights_list = [weights1, weights2]
+
+    # Test input
+    batch = 2
+    signals = jnp.array(np.random.randn(batch, 7, 96)).astype(jnp.float32)
+    scalars = jnp.array(np.random.randn(batch, 2)).astype(jnp.float32)
+
+    # Ensemble forward
+    ensemble_output = _ensemble_forward(signals, scalars, weights_list)
+
+    # Individual forward passes
+    out1 = _cyclic_invariant_forward(signals, scalars, weights1)
+    out2 = _cyclic_invariant_forward(signals, scalars, weights2)
+    expected_mean = (np.array(out1) + np.array(out2)) / 2
+
+    np.testing.assert_allclose(np.array(ensemble_output), expected_mean, rtol=1e-6)

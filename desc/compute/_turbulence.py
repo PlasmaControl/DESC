@@ -14,9 +14,11 @@ Some quantities may have singularities at the magnetic axis (ρ=0).
 Objectives using these quantities should use ρ > 0.
 """
 
+from scipy.constants import mu_0
+
 from desc.backend import jnp
 
-from ..utils import dot
+from ..utils import cross, dot
 from .data_index import register_compute_fun
 
 
@@ -155,5 +157,105 @@ def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
     s = data["rho"] ** 2
     data["gx_gds22_over_shat_squared"] = (
         data["|grad(psi)|^2"] / (L_ref**2 * B_ref**2 * s)
+    )
+    return data
+
+
+# =============================================================================
+# Drift Coefficients
+# =============================================================================
+
+
+@register_compute_fun(
+    name="gx_gbdrift",
+    label="\\mathrm{gbdrift}",
+    units="~",
+    units_long="dimensionless",
+    description="GX gbdrift: 2*B_ref*L_ref²*√s*(Bx∇|B|)·∇α / |B|³",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["a", "rho", "|B|", "grad(|B|)", "B", "grad(alpha)"],
+)
+def _gx_gbdrift(params, transforms, profiles, data, **kwargs):
+    sigma_Bxy = -1  # GX sign convention
+    psi_sign = jnp.sign(params["Psi"])
+    psi_b = params["Psi"] / (2 * jnp.pi)
+    B_ref = 2 * psi_b / data["a"] ** 2
+    L_ref = data["a"]
+    sqrt_s = data["rho"]
+    B_cross_grad_B = cross(data["B"], data["grad(|B|)"])
+    B_cross_grad_B_dot_grad_alpha = dot(B_cross_grad_B, data["grad(alpha)"])
+    data["gx_gbdrift"] = (
+        2
+        * sigma_Bxy
+        * psi_sign
+        * B_ref
+        * L_ref**2
+        * sqrt_s
+        * B_cross_grad_B_dot_grad_alpha
+        / data["|B|"] ** 3
+    )
+    return data
+
+
+@register_compute_fun(
+    name="gx_cvdrift",
+    label="\\mathrm{cvdrift}",
+    units="~",
+    units_long="dimensionless",
+    description="GX cvdrift: gbdrift + pressure term",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["a", "rho", "|B|", "gx_gbdrift", "p_r"],
+)
+def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
+    sigma_Bxy = -1  # GX sign convention
+    psi_sign = jnp.sign(params["Psi"])
+    psi_b = params["Psi"] / (2 * jnp.pi)
+    B_ref = 2 * psi_b / data["a"] ** 2
+    L_ref = data["a"]
+    sqrt_s = data["rho"]
+    d_pressure_d_s = data["p_r"] / (2 * sqrt_s)
+    pressure_term = (
+        2
+        * mu_0
+        * sigma_Bxy
+        * psi_sign
+        * B_ref
+        * L_ref**2
+        * sqrt_s
+        * d_pressure_d_s
+        / (psi_b * data["|B|"] ** 2)
+    )
+    data["gx_cvdrift"] = data["gx_gbdrift"] + pressure_term
+    return data
+
+
+@register_compute_fun(
+    name="gx_gbdrift0_over_shat",
+    label="\\mathrm{gbdrift0} / \\hat{s}",
+    units="~",
+    units_long="dimensionless",
+    description="GX gbdrift0/shat: 2*sign(Psi)*(Bx∇|B|)·∇ψ / (|B|³*√s)",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["rho", "|B|", "grad(|B|)", "B", "grad(psi)"],
+)
+def _gx_gbdrift0_over_shat(params, transforms, profiles, data, **kwargs):
+    psi_sign = jnp.sign(params["Psi"])
+    sqrt_s = data["rho"]
+    B_cross_grad_B = cross(data["B"], data["grad(|B|)"])
+    B_cross_grad_B_dot_grad_psi = dot(B_cross_grad_B, data["grad(psi)"])
+    data["gx_gbdrift0_over_shat"] = (
+        2 * psi_sign * B_cross_grad_B_dot_grad_psi / (data["|B|"] ** 3 * sqrt_s)
     )
     return data

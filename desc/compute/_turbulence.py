@@ -614,3 +614,140 @@ def solve_poloidal_turns_for_length(length_fn, target_length, x0_guess=1.0):
         ) from e
 
     return poloidal_turns
+
+
+# =============================================================================
+# CNN Layer Primitives for NNITGProxy
+# =============================================================================
+#
+# These functions implement the basic building blocks for the neural network
+# forward pass in JAX. The architecture is CyclicInvariantNet from Landreman
+# et al. 2025 (ensemble models without BatchNorm).
+#
+# The circular padding ensures translation invariance along the field line,
+# which is physically motivated since heat flux should be invariant to
+# the starting point along a periodic flux tube.
+
+
+def _circular_pad_1d(x, pad_left, pad_right):
+    """Apply circular padding to a 1D array along the last axis.
+
+    This wraps values from the end of the array to the beginning and vice versa,
+    implementing periodic boundary conditions.
+
+    Parameters
+    ----------
+    x : jax.Array
+        Input array of shape (..., length)
+    pad_left : int
+        Number of elements to pad on the left (from end of array)
+    pad_right : int
+        Number of elements to pad on the right (from start of array)
+
+    Returns
+    -------
+    padded : jax.Array
+        Padded array of shape (..., length + pad_left + pad_right)
+
+    Examples
+    --------
+    >>> x = jnp.array([1, 2, 3, 4, 5])
+    >>> _circular_pad_1d(x, 2, 2)
+    Array([4, 5, 1, 2, 3, 4, 5, 1, 2], dtype=int32)
+    """
+    left_pad = x[..., -pad_left:] if pad_left > 0 else x[..., :0]
+    right_pad = x[..., :pad_right] if pad_right > 0 else x[..., :0]
+    return jnp.concatenate([left_pad, x, right_pad], axis=-1)
+
+
+def _conv1d_circular(x, weight, bias, kernel_size):
+    """1D convolution with circular padding.
+
+    This implements the same behavior as PyTorch's Conv1d with
+    padding_mode='circular' and padding='same'.
+
+    Parameters
+    ----------
+    x : jax.Array
+        Input of shape (batch, in_channels, length)
+    weight : jax.Array
+        Convolution weights of shape (out_channels, in_channels, kernel_size)
+    bias : jax.Array
+        Bias of shape (out_channels,)
+    kernel_size : int
+        Size of the convolution kernel
+
+    Returns
+    -------
+    out : jax.Array
+        Output of shape (batch, out_channels, length)
+
+    Notes
+    -----
+    The circular padding ensures that conv1d output has the same length as
+    input (equivalent to PyTorch's padding='same' with padding_mode='circular').
+    This maintains the periodic structure of the flux tube geometry.
+    """
+    pad = (kernel_size - 1) // 2
+    x_padded = _circular_pad_1d(x, pad, pad)
+
+    out = jax.lax.conv_general_dilated(
+        x_padded,
+        weight,
+        window_strides=(1,),
+        padding="VALID",
+        dimension_numbers=("NCH", "OIH", "NCH"),
+    )
+    return out + bias[None, :, None]
+
+
+def _max_pool_1d(x, pool_size=2, stride=2):
+    """1D max pooling along the spatial dimension.
+
+    Parameters
+    ----------
+    x : jax.Array
+        Input of shape (batch, channels, length)
+    pool_size : int, optional
+        Size of the pooling window. Default 2.
+    stride : int, optional
+        Stride of the pooling operation. Default 2.
+
+    Returns
+    -------
+    out : jax.Array
+        Pooled output of shape (batch, channels, length // stride)
+
+    Notes
+    -----
+    After 5 pooling layers with stride 2, a length-96 input becomes length 3:
+    96 → 48 → 24 → 12 → 6 → 3
+    """
+    return jax.lax.reduce_window(
+        x,
+        -jnp.inf,
+        jax.lax.max,
+        window_dimensions=(1, 1, pool_size),
+        window_strides=(1, 1, stride),
+        padding="VALID",
+    )
+
+
+def _global_avg_pool_1d(x):
+    """Global average pooling over the spatial dimension.
+
+    Reduces a (batch, channels, length) tensor to (batch, channels) by
+    averaging over all spatial positions. This creates a fixed-size
+    representation regardless of input length.
+
+    Parameters
+    ----------
+    x : jax.Array
+        Input of shape (batch, channels, length)
+
+    Returns
+    -------
+    out : jax.Array
+        Output of shape (batch, channels)
+    """
+    return jnp.mean(x, axis=-1)

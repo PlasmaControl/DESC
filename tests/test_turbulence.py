@@ -307,3 +307,95 @@ def test_solve_poloidal_turns_error():
     # Target length > max achievable should raise ValueError
     with pytest.raises(ValueError, match="Could not find poloidal_turns"):
         solve_poloidal_turns_for_length(saturating_length_fn, target_length=2.0)
+
+
+# =============================================================================
+# CNN Layer Primitives Tests
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_circular_pad_1d():
+    """Test circular padding wraps values correctly."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _circular_pad_1d
+
+    x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    padded = _circular_pad_1d(x, pad_left=2, pad_right=2)
+
+    # Expected: [4, 5, 1, 2, 3, 4, 5, 1, 2]
+    expected = jnp.array([4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0])
+    np.testing.assert_array_equal(np.array(padded), np.array(expected))
+
+
+@pytest.mark.unit
+def test_circular_pad_1d_batched():
+    """Test circular padding works with batched inputs."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _circular_pad_1d
+
+    # Shape (batch=2, channels=3, length=4)
+    x = jnp.arange(24).reshape(2, 3, 4).astype(float)
+    padded = _circular_pad_1d(x, pad_left=1, pad_right=1)
+
+    # Shape should be (2, 3, 6)
+    assert padded.shape == (2, 3, 6)
+
+    # Check wrapping for first batch, first channel: [0,1,2,3] -> [3,0,1,2,3,0]
+    np.testing.assert_array_equal(np.array(padded[0, 0, :]), [3, 0, 1, 2, 3, 0])
+
+
+@pytest.mark.unit
+def test_conv1d_circular_shape():
+    """Test conv1d with circular padding produces correct output shape."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _conv1d_circular
+
+    batch, in_ch, length = 2, 7, 96
+    out_ch, kernel_size = 16, 3
+
+    x = jnp.ones((batch, in_ch, length))
+    weight = jnp.ones((out_ch, in_ch, kernel_size))
+    bias = jnp.zeros(out_ch)
+
+    out = _conv1d_circular(x, weight, bias, kernel_size)
+
+    # With circular padding='same', output length should equal input length
+    assert out.shape == (batch, out_ch, length)
+
+
+@pytest.mark.unit
+def test_max_pool_1d():
+    """Test max pooling reduces spatial dimension correctly."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _max_pool_1d
+
+    batch, channels, length = 2, 16, 96
+    x = jnp.arange(batch * channels * length).reshape(batch, channels, length).astype(float)
+
+    pooled = _max_pool_1d(x, pool_size=2, stride=2)
+
+    # Length should be halved
+    assert pooled.shape == (batch, channels, length // 2)
+
+    # After 5 pooling layers: 96 -> 48 -> 24 -> 12 -> 6 -> 3
+    x_five_pools = x
+    for _ in range(5):
+        x_five_pools = _max_pool_1d(x_five_pools)
+    assert x_five_pools.shape == (batch, channels, 3)
+
+
+@pytest.mark.unit
+def test_global_avg_pool_1d():
+    """Test global average pooling reduces to correct shape."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import _global_avg_pool_1d
+
+    batch, channels, length = 2, 32, 3
+    x = jnp.ones((batch, channels, length))
+
+    pooled = _global_avg_pool_1d(x)
+
+    assert pooled.shape == (batch, channels)
+    # All ones should average to 1
+    np.testing.assert_allclose(np.array(pooled), 1.0)

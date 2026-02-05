@@ -621,8 +621,8 @@ class NNITGProxy(_Objective):
 
         Returns
         -------
-        Q_mean : float
-            Mean heat flux over all alphas.
+        Q_per_alpha : ndarray, shape (num_alpha,)
+            Heat flux for each field line (alpha).
         signals_batch : ndarray, shape (num_alpha, 7, npoints)
             Resampled signals for return_signals mode.
         """
@@ -645,11 +645,40 @@ class NNITGProxy(_Objective):
             log_Q = _cyclic_invariant_forward(signals_batch, scalars_batch, nn_weights)
 
         Q_per_alpha = jnp.exp(log_Q[:, 0])
-        return jnp.mean(Q_per_alpha), signals_batch
+        return Q_per_alpha, signals_batch
 
-    def _build_return_value(self, Q_all, all_signals, feature_names, return_signals):
-        """Build final return value with optional signals info."""
-        Q_result = jnp.array(Q_all)
+    def _build_return_value(
+        self, Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+    ):
+        """Build final return value with optional signals info.
+
+        Parameters
+        ----------
+        Q_all_per_alpha : list of ndarray
+            List of Q arrays per rho, each shape (num_alpha,).
+        all_signals : list or None
+            List of signal arrays if return_signals, else None.
+        feature_names : list
+            Names of the 7 GX features.
+        return_signals : bool
+            Whether to include signals in return.
+        return_per_alpha : bool
+            If True, return Q per field line. If False, average over alpha.
+
+        Returns
+        -------
+        Q : ndarray
+            Shape (num_rho,) if return_per_alpha=False.
+            Shape (num_rho, num_alpha) if return_per_alpha=True.
+        signals_info : dict, optional
+            Only if return_signals=True.
+        """
+        Q_stacked = jnp.stack(Q_all_per_alpha)  # (num_rho, num_alpha)
+
+        if return_per_alpha:
+            Q_result = Q_stacked  # (num_rho, num_alpha)
+        else:
+            Q_result = jnp.mean(Q_stacked, axis=-1)  # (num_rho,)
 
         if return_signals:
             z_uniform = jnp.linspace(-jnp.pi, jnp.pi, self._npoints + 1)[:-1]
@@ -662,7 +691,7 @@ class NNITGProxy(_Objective):
 
         return Q_result
 
-    def compute(self, params, constants=None, return_signals=False):
+    def compute(self, params, constants=None, return_signals=False, return_per_alpha=False):
         """Compute the NN ITG heat flux prediction.
 
         Parameters
@@ -674,11 +703,17 @@ class NNITGProxy(_Objective):
         return_signals : bool, optional
             If True, also return the 7 GX input features used for CNN inference.
             Useful for debugging and validation. Default False.
+        return_per_alpha : bool, optional
+            If True, return Q values for each field line (alpha) separately,
+            with shape (num_rho, num_alpha). If False (default), return the
+            mean over alpha with shape (num_rho,).
 
         Returns
         -------
         Q : ndarray
-            Predicted heat flux for each flux surface, averaged over field lines.
+            Predicted heat flux for each flux surface.
+            Shape (num_rho,) if return_per_alpha=False (default).
+            Shape (num_rho, num_alpha) if return_per_alpha=True.
         signals_info : dict, optional
             Only returned if return_signals=True. Contains:
             - 'z': uniform arclength coordinates, shape (npoints,)
@@ -740,7 +775,7 @@ class NNITGProxy(_Objective):
             return self._compute_with_length_solving(
                 params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
                 minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
-                gx_keys, feature_names, constants, return_signals,
+                gx_keys, feature_names, constants, return_signals, return_per_alpha,
             )
 
         # =====================================================================
@@ -796,7 +831,7 @@ class NNITGProxy(_Objective):
         # Loop over rho (arclength varies per rho due to different iota)
         # =====================================================================
 
-        Q_all = []
+        Q_all_per_alpha = []
         all_signals = [] if return_signals else None
 
         for i_rho in range(num_rho):
@@ -804,20 +839,22 @@ class NNITGProxy(_Objective):
             signals_2d = jnp.stack([gx_features[k][:, i_rho, :] for k in gx_keys])
             theta_pest_offset_rho = iota_arr[i_rho] * zeta_offset
 
-            Q_mean, signals_batch = self._run_cnn_inference_for_rho(
+            Q_per_alpha, signals_batch = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset_rho,
                 a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha
             )
-            Q_all.append(Q_mean)
+            Q_all_per_alpha.append(Q_per_alpha)
             if return_signals:
                 all_signals.append(signals_batch)
 
-        return self._build_return_value(Q_all, all_signals, feature_names, return_signals)
+        return self._build_return_value(
+            Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+        )
 
     def _compute_with_length_solving(
         self, params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
         minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
-        gx_keys, feature_names, constants, return_signals,
+        gx_keys, feature_names, constants, return_signals, return_per_alpha,
     ):
         """Compute with exact flux tube length solving per rho.
 
@@ -831,7 +868,7 @@ class NNITGProxy(_Objective):
         target_length = constants["target_length"]
         toroidal_turns = constants["toroidal_turns"]
 
-        Q_all = []
+        Q_all_per_alpha = []
         all_signals = [] if return_signals else None
 
         for i_rho in range(num_rho):
@@ -907,12 +944,14 @@ class NNITGProxy(_Objective):
                 [gx_data[k].reshape(nz, num_alpha) for k in gx_keys]
             )
 
-            Q_mean, signals_batch = self._run_cnn_inference_for_rho(
+            Q_per_alpha, signals_batch = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset,
                 a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha
             )
-            Q_all.append(Q_mean)
+            Q_all_per_alpha.append(Q_per_alpha)
             if return_signals:
                 all_signals.append(signals_batch)
 
-        return self._build_return_value(Q_all, all_signals, feature_names, return_signals)
+        return self._build_return_value(
+            Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+        )

@@ -656,9 +656,15 @@ def _conv1d_circular(x, weight, bias, kernel_size):
     The circular padding ensures that conv1d output has the same length as
     input (equivalent to PyTorch's padding='same' with padding_mode='circular').
     This maintains the periodic structure of the flux tube geometry.
+
+    The padding is asymmetric for even kernel sizes to match PyTorch exactly:
+    - For kernel_size=3: pad_left=1, pad_right=1 (symmetric)
+    - For kernel_size=4: pad_left=1, pad_right=2 (asymmetric)
     """
-    pad = (kernel_size - 1) // 2
-    x_padded = _circular_pad_1d(x, pad, pad)
+    total_pad = kernel_size - 1
+    pad_left = total_pad // 2
+    pad_right = total_pad - pad_left
+    x_padded = _circular_pad_1d(x, pad_left, pad_right)
 
     out = jax.lax.conv_general_dilated(
         x_padded,

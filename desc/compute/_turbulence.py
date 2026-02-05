@@ -918,6 +918,25 @@ def _ensemble_forward(signals, scalars, weights_list, return_std=False):
     return mean_log_Q
 
 
+def _make_jit_forward(weights):
+    """Create JIT-compiled forward function with weights captured as constants.
+
+    Parameters
+    ----------
+    weights : dict
+        Model weights dictionary (JAX arrays).
+
+    Returns
+    -------
+    jit_forward : callable
+        JIT-compiled function with signature (signals, scalars) -> log_Q
+    """
+    @jax.jit
+    def jit_forward(signals, scalars):
+        return _cyclic_invariant_forward(signals, scalars, weights)
+    return jit_forward
+
+
 # =============================================================================
 # Model Loading and Caching
 # =============================================================================
@@ -944,7 +963,7 @@ def _convert_pytorch_weights(state_dict):
 
 
 def _load_nn_weights(model_path):
-    """Load PyTorch model weights and convert to JAX arrays.
+    """Load PyTorch model weights and create JIT-compiled forward function.
 
     Uses module-level cache to avoid reloading the same model multiple times.
 
@@ -957,6 +976,8 @@ def _load_nn_weights(model_path):
     -------
     weights : dict
         Dictionary of JAX arrays containing the model weights
+    jit_forward : callable
+        JIT-compiled forward function with signature (signals, scalars) -> log_Q
 
     Raises
     ------
@@ -979,12 +1000,14 @@ def _load_nn_weights(model_path):
         state_dict = checkpoint
 
     weights = _convert_pytorch_weights(state_dict)
-    _NN_WEIGHTS_CACHE[model_path] = weights
-    return weights
+    jit_forward = _make_jit_forward(weights)
+    result = (weights, jit_forward)
+    _NN_WEIGHTS_CACHE[model_path] = result
+    return result
 
 
 def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=False):
-    """Load top-k ensemble models based on validation loss from DeepHyper results.
+    """Load top-k ensemble models and create JIT-compiled forward functions.
 
     Parameters
     ----------
@@ -1003,6 +1026,8 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=
     -------
     weights_list : list of dict
         List of weight dictionaries, sorted by validation loss (best first)
+    jit_forwards : list of callable
+        List of JIT-compiled forward functions, one per model
 
     Raises
     ------
@@ -1039,19 +1064,22 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=
         print(f"Loading {len(df_sorted)} ensemble models from {model_dir}...")
 
     weights_list = []
+    jit_forwards = []
     for idx, task_id in enumerate(df_sorted["m:task_id"]):
         model_path = os.path.join(model_dir, f"model_{task_id}.pth")
         if not os.path.exists(model_path):
             continue
         state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
-        weights_list.append(_convert_pytorch_weights(state_dict))
+        weights = _convert_pytorch_weights(state_dict)
+        weights_list.append(weights)
+        jit_forwards.append(_make_jit_forward(weights))
         if verbose and (idx + 1) % 10 == 0:
             print(f"  Loaded {idx + 1}/{len(df_sorted)} models...")
 
     if verbose:
         print(f"  Successfully loaded {len(weights_list)}/{len(df_sorted)} models")
 
-    return weights_list
+    return weights_list, jit_forwards
 
 
 def _load_ensemble_weights_cached(
@@ -1062,6 +1090,13 @@ def _load_ensemble_weights_cached(
     Parameters are the same as _load_ensemble_weights. Uses module-level
     cache keyed by (model_dir, csv_path, top_k, pre_method).
     Verbose is only used on cache miss.
+
+    Returns
+    -------
+    weights_list : list of dict
+        List of weight dictionaries
+    jit_forwards : list of callable
+        List of JIT-compiled forward functions
     """
     cache_key = (model_dir, csv_path, top_k, pre_method)
     if cache_key not in _ENSEMBLE_WEIGHTS_CACHE:

@@ -497,8 +497,10 @@ class NNITGProxy(_Objective):
                 f"achieved L={length_fn(poloidal_turns):.2f}"
             )
 
-        # Load model weights (ensemble or single model)
-        nn_weights, ensemble_weights = self._load_model_weights(verbose)
+        # Load model weights and JIT-compiled forward functions
+        nn_weights, jit_forward, ensemble_weights, jit_forwards = (
+            self._load_model_weights(verbose)
+        )
 
         self._constants = {
             "rho": self._rho,
@@ -511,13 +513,15 @@ class NNITGProxy(_Objective):
             "a_over_LT": self._a_over_LT,
             "a_over_Ln": self._a_over_Ln,
             "nn_weights": nn_weights,
+            "jit_forward": jit_forward,
             "ensemble_weights": ensemble_weights,
+            "jit_forwards": jit_forwards,
             "quad_weights": 1.0,
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _load_model_weights(self, verbose):
-        """Load neural network weights (ensemble or single model).
+        """Load neural network weights and JIT-compiled forward functions.
 
         Parameters
         ----------
@@ -528,8 +532,12 @@ class NNITGProxy(_Objective):
         -------
         nn_weights : dict or None
             Single model weights, or None if using ensemble.
+        jit_forward : callable or None
+            JIT-compiled forward function for single model.
         ensemble_weights : list or None
             List of ensemble model weights, or None if using single model.
+        jit_forwards : list or None
+            List of JIT-compiled forward functions for ensemble.
 
         Raises
         ------
@@ -561,7 +569,7 @@ class NNITGProxy(_Objective):
             except Exception:
                 pass  # Use default
 
-            ensemble_weights = _load_ensemble_weights_cached(
+            ensemble_weights, jit_forwards = _load_ensemble_weights_cached(
                 self._ensemble_dir,
                 self._ensemble_csv,
                 self._n_ensemble,
@@ -570,11 +578,11 @@ class NNITGProxy(_Objective):
             )
             if verbose > 0:
                 print(f"NNITGProxy: Loaded {len(ensemble_weights)} ensemble models")
-            return None, ensemble_weights
+            return None, None, ensemble_weights, jit_forwards
 
         if self._model_path is not None:
-            nn_weights = _load_nn_weights(self._model_path)
-            return nn_weights, None
+            nn_weights, jit_forward = _load_nn_weights(self._model_path)
+            return nn_weights, jit_forward, None, None
 
         raise ValueError("Either model_path or ensemble_dir must be specified")
 
@@ -637,6 +645,7 @@ class NNITGProxy(_Objective):
     def _run_cnn_inference_for_rho(
         self, gradpar_2d, signals_2d, theta_pest_offset,
         a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+        jit_forward=None, jit_forwards=None,
         return_std=False,
     ):
         """Run CNN inference for a single rho slice.
@@ -646,6 +655,10 @@ class NNITGProxy(_Objective):
         gradpar_2d : ndarray, shape (nz, num_alpha)
         signals_2d : ndarray, shape (7, nz, num_alpha)
         theta_pest_offset : ndarray, shape (nz,)
+        jit_forward : callable or None
+            JIT-compiled forward function for single model.
+        jit_forwards : list of callable or None
+            List of JIT-compiled forward functions for ensemble.
         return_std : bool, optional
             If True and using ensemble, return std of predictions.
 
@@ -671,18 +684,32 @@ class NNITGProxy(_Objective):
             (num_alpha, 2),
         )
 
-        if ensemble_weights is not None:
+        # Use JIT-compiled functions when available
+        if jit_forwards is not None:
+            # Ensemble with JIT-compiled functions
+            predictions = [f(signals_batch, scalars_batch) for f in jit_forwards]
+            stacked = jnp.stack(predictions)
+            log_Q = jnp.mean(stacked, axis=0)
+            if return_std:
+                std_log_Q = jnp.std(stacked, axis=0)
+                Q_per_alpha = jnp.exp(log_Q[:, 0])
+                Q_std_per_alpha = Q_per_alpha * std_log_Q[:, 0]
+                return Q_per_alpha, signals_batch, Q_std_per_alpha
+        elif jit_forward is not None:
+            # Single model with JIT
+            log_Q = jit_forward(signals_batch, scalars_batch)
+        elif ensemble_weights is not None:
+            # Fallback: ensemble without JIT
             if return_std:
                 log_Q, std_log_Q = _ensemble_forward(
                     signals_batch, scalars_batch, ensemble_weights, return_std=True
                 )
                 Q_per_alpha = jnp.exp(log_Q[:, 0])
-                # Convert std from log-space using delta method:
-                # Var(Q) ~ Q^2 * Var(log_Q), so std(Q) ~ Q * std(log_Q)
                 Q_std_per_alpha = Q_per_alpha * std_log_Q[:, 0]
                 return Q_per_alpha, signals_batch, Q_std_per_alpha
             log_Q = _ensemble_forward(signals_batch, scalars_batch, ensemble_weights)
         else:
+            # Fallback: single model without JIT
             log_Q = _cyclic_invariant_forward(signals_batch, scalars_batch, nn_weights)
 
         Q_per_alpha = jnp.exp(log_Q[:, 0])
@@ -809,7 +836,9 @@ class NNITGProxy(_Objective):
         a_over_LT = constants["a_over_LT"]
         a_over_Ln = constants["a_over_Ln"]
         nn_weights = constants["nn_weights"]
+        jit_forward = constants.get("jit_forward")
         ensemble_weights = constants["ensemble_weights"]
+        jit_forwards = constants.get("jit_forwards")
 
         num_rho = len(rho_arr)
         num_alpha = len(alpha_arr)
@@ -851,9 +880,9 @@ class NNITGProxy(_Objective):
         if self._solve_length_at_compute:
             return self._compute_with_length_solving(
                 params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
-                minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
-                gx_keys, feature_names, constants, return_signals, return_per_alpha,
-                return_std,
+                minor_radius, a_over_LT, a_over_Ln, nn_weights, jit_forward,
+                ensemble_weights, jit_forwards, gx_keys, feature_names, constants,
+                return_signals, return_per_alpha, return_std,
             )
 
         # =====================================================================
@@ -921,6 +950,7 @@ class NNITGProxy(_Objective):
             result = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset_rho,
                 a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+                jit_forward=jit_forward, jit_forwards=jit_forwards,
                 return_std=return_std,
             )
             if return_std:
@@ -939,9 +969,9 @@ class NNITGProxy(_Objective):
 
     def _compute_with_length_solving(
         self, params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
-        minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
-        gx_keys, feature_names, constants, return_signals, return_per_alpha,
-        return_std=False,
+        minor_radius, a_over_LT, a_over_Ln, nn_weights, jit_forward,
+        ensemble_weights, jit_forwards, gx_keys, feature_names, constants,
+        return_signals, return_per_alpha, return_std=False,
     ):
         """Compute with exact flux tube length solving per rho.
 
@@ -1035,6 +1065,7 @@ class NNITGProxy(_Objective):
             result = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset,
                 a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+                jit_forward=jit_forward, jit_forwards=jit_forwards,
                 return_std=return_std,
             )
             if return_std:

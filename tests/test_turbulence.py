@@ -513,6 +513,60 @@ def test_ensemble_forward():
     assert std_output.shape == mean_output.shape
 
 
+@pytest.mark.unit
+def test_jit_forward_matches_original():
+    """Test JIT-compiled forward matches non-JIT version."""
+    from desc.backend import jnp
+    from desc.compute._turbulence import (
+        _cyclic_invariant_forward,
+        _make_jit_forward,
+    )
+
+    np.random.seed(42)
+
+    # Create mock weights
+    conv_channels = [7, 8, 8, 8, 8, 8]
+    kernel_sizes = [3, 3, 3, 3, 3]
+    fc_dims = [8 + 2, 8, 4]
+    weights = {}
+    for i in range(5):
+        weights[f"conv_layers.{i}.weight"] = jnp.array(
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
+        ).astype(jnp.float32)
+        weights[f"conv_layers.{i}.bias"] = jnp.array(
+            np.random.randn(conv_channels[i + 1])
+        ).astype(jnp.float32)
+    weights["fc_layers.0.weight"] = jnp.array(
+        np.random.randn(fc_dims[1], fc_dims[0])
+    ).astype(jnp.float32)
+    weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(
+        jnp.float32
+    )
+    weights["fc_layers.1.weight"] = jnp.array(
+        np.random.randn(fc_dims[2], fc_dims[1])
+    ).astype(jnp.float32)
+    weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(
+        jnp.float32
+    )
+    weights["output_layer.weight"] = jnp.array(
+        np.random.randn(1, fc_dims[2])
+    ).astype(jnp.float32)
+    weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
+
+    # Create JIT-compiled forward function
+    jit_forward = _make_jit_forward(weights)
+
+    # Test input
+    signals = jnp.array(np.random.randn(2, 7, 96)).astype(jnp.float32)
+    scalars = jnp.array(np.random.randn(2, 2)).astype(jnp.float32)
+
+    # Compare outputs
+    original = _cyclic_invariant_forward(signals, scalars, weights)
+    jitted = jit_forward(signals, scalars)
+
+    np.testing.assert_allclose(np.array(original), np.array(jitted), rtol=1e-5)
+
+
 # =============================================================================
 # NNITGProxy Objective Tests
 # =============================================================================
@@ -547,6 +601,15 @@ def _make_mock_weights():
     ).astype(jnp.float32)
     weights["output_layer.bias"] = jnp.zeros(1, dtype=jnp.float32)
     return weights
+
+
+def _make_mock_weights_tuple():
+    """Create mock weights and JIT-compiled forward function for testing."""
+    from desc.compute._turbulence import _make_jit_forward
+
+    weights = _make_mock_weights()
+    jit_forward = _make_jit_forward(weights)
+    return weights, jit_forward
 
 
 @pytest.mark.unit
@@ -596,12 +659,16 @@ def test_nnitgproxy_build():
 
     from desc.objectives._turbulence import NNITGProxy
 
+    from desc.compute._turbulence import _make_jit_forward
+
     eq = get("DSHAPE")
     mock_weights = _make_mock_weights()
+    mock_jit_forward = _make_jit_forward(mock_weights)
 
-    # Patch _load_nn_weights to return mock weights
+    # Patch _load_nn_weights to return (weights, jit_forward) tuple
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights",
+        return_value=(mock_weights, mock_jit_forward),
     ):
         obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
         obj.build(use_jit=False, verbose=0)
@@ -613,6 +680,7 @@ def test_nnitgproxy_build():
     assert "target_length" in obj.constants
     assert "a" in obj.constants
     assert "nn_weights" in obj.constants
+    assert "jit_forward" in obj.constants
     assert "a_over_LT" in obj.constants
     assert "a_over_Ln" in obj.constants
 
@@ -621,6 +689,7 @@ def test_nnitgproxy_build():
     assert obj.constants["target_length"] > 0
     assert obj.constants["a"] > 0
     assert obj.constants["nn_weights"] is not None
+    assert obj.constants["jit_forward"] is not None
     assert obj.constants["ensemble_weights"] is None
 
     # Check dimension
@@ -636,10 +705,10 @@ def test_nnitgproxy_compute():
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
-    mock_weights = _make_mock_weights()
+    mock_weights_tuple = _make_mock_weights_tuple()
 
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
         obj.build(use_jit=False, verbose=0)
@@ -662,10 +731,10 @@ def test_nnitgproxy_compute_return_signals():
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
-    mock_weights = _make_mock_weights()
+    mock_weights_tuple = _make_mock_weights_tuple()
 
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj = NNITGProxy(
             eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
@@ -708,10 +777,10 @@ def test_nnitgproxy_solve_length_at_compute():
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
-    mock_weights = _make_mock_weights()
+    mock_weights_tuple = _make_mock_weights_tuple()
 
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj = NNITGProxy(
             eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt", solve_length_at_compute=True
@@ -742,7 +811,7 @@ def test_nnitgproxy_return_per_alpha():
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
-    mock_weights = _make_mock_weights()
+    mock_weights_tuple = _make_mock_weights_tuple()
 
     num_rho = 2
     num_alpha = 3
@@ -750,7 +819,7 @@ def test_nnitgproxy_return_per_alpha():
     alpha_vals = [0, np.pi / 3, 2 * np.pi / 3]
 
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj = NNITGProxy(eq, rho=rho_vals, alpha=alpha_vals, model_path="/fake/path.pt")
         obj.build(use_jit=False, verbose=0)
@@ -781,7 +850,7 @@ def test_nnitgproxy_return_per_alpha():
         eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
     )
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj2.build(use_jit=False, verbose=0)
 
@@ -816,6 +885,7 @@ def test_nnitgproxy_return_std():
     pytest.importorskip("torch")
     from unittest.mock import patch
 
+    from desc.compute._turbulence import _make_jit_forward
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
@@ -825,13 +895,17 @@ def test_nnitgproxy_return_std():
     np.random.seed(123)
     mock_weights2 = _make_mock_weights()
 
+    # Create JIT-compiled forward functions for ensemble
+    jit_forward1 = _make_jit_forward(mock_weights)
+    jit_forward2 = _make_jit_forward(mock_weights2)
+
     num_rho = 2
     num_alpha = 2
 
     # Test with ensemble (should have non-zero std)
     with patch(
         "desc.objectives._turbulence._load_ensemble_weights_cached",
-        return_value=[mock_weights, mock_weights2],
+        return_value=([mock_weights, mock_weights2], [jit_forward1, jit_forward2]),
     ):
         obj_ensemble = NNITGProxy(
             eq,
@@ -867,8 +941,9 @@ def test_nnitgproxy_return_std():
     assert "signals" in signals_info
 
     # Test with single model (should have zero std)
+    mock_weights_tuple = _make_mock_weights_tuple()
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
     ):
         obj_single = NNITGProxy(
             eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt"

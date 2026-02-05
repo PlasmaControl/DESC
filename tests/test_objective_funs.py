@@ -755,22 +755,22 @@ class TestObjectiveFunction:
             R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
         # For equally spaced grids, should get true d=1
-        surf_grid = LinearGridFlux(M=5, N=6)
-        plas_grid = LinearGridFlux(M=5, N=6)
+        surface_grid = LinearGridSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         np.testing.assert_allclose(d, a_s - a_p)
 
         # for unequal M, should have error of order M_spacing*a_p
-        surf_grid = LinearGridFlux(M=5, N=6)
-        plas_grid = LinearGridFlux(M=10, N=6)
+        surface_grid = LinearGridSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=10, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             surface_fixed=True,
         )
@@ -778,18 +778,18 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq))
         assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
-        assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
+        assert abs(d.max() - (a_s - a_p)) < surface_grid.spacing[0, 1] * a_p
 
         # for unequal N, should have error of order N_spacing*R0
-        surf_grid = LinearGridFlux(M=5, N=6)
-        plas_grid = LinearGridFlux(M=5, N=12)
+        surface_grid = LinearGridSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=12)
         obj = PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert abs(d.min() - (a_s - a_p)) < 1e-14
-        assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+        assert abs(d.max() - (a_s - a_p)) < surface_grid.spacing[0, 2] * R0
         # ensure that it works (dimension-wise) when compute_scaled is called
         _ = obj.compute_scaled(*obj.xs(eq, surface))
 
@@ -805,12 +805,12 @@ class TestObjectiveFunction:
                 obj.build()
 
         # test softmin, should give approximate value
-        surf_grid = LinearGridFlux(M=5, N=6)
-        plas_grid = LinearGridFlux(M=5, N=6)
+        surface_grid = LinearGridSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             use_softmin=True,
             softmin_alpha=5,
@@ -823,8 +823,8 @@ class TestObjectiveFunction:
         # for large enough alpha, should be same as actual min
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             use_softmin=True,
             softmin_alpha=100,
@@ -1663,11 +1663,12 @@ class TestObjectiveFunction:
         surface = FourierRZToroidalSurface(
             R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
-        grid = LinearGridFlux(M=5, N=6)
+        surface_grid = LinearGridSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=grid,
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1687,11 +1688,10 @@ class TestObjectiveFunction:
             modes_R=[[0, 0], [1, 0]],
             modes_Z=[[-1, 0]],
         )
-        grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=grid,
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1701,11 +1701,11 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(d, a_s - a_p)
 
         # ensure it works with different sized grids (poloidal resolution different)
-        grid = LinearGridFlux(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=10, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=LinearGridFlux(M=10, N=6),
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1713,16 +1713,15 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
-        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+        assert abs(d.min() - (-a_s)) < plasma_grid.spacing[0, 1] * a_s
 
         # ensure it works with different sized grids (poloidal resolution different)
         # and using softmin (with deprecated name alpha)
-        grid = LinearGridFlux(M=5, N=6)
         with pytest.raises(FutureWarning):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGridFlux(M=10, N=6),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
                 use_softmin=True,
@@ -1732,24 +1731,26 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
-        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+        assert abs(d.min() - (-a_s)) < plasma_grid.spacing[0, 1] * a_s
         # test errors
         # differing grid zetas, same num_zeta
+        plasma_grid = LinearGridFlux(M=surface_grid.M, N=surface_grid.N, NFP=2)
         with pytest.raises(ValueError):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGridFlux(M=grid.M, N=grid.N, NFP=2),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
             )
             obj.build()
         # test with differing grid.num_zeta
+        plasma_grid = LinearGridFlux(M=surface_grid.M, N=surface_grid.N - 2)
         with pytest.raises(ValueError):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGridFlux(M=grid.M, N=grid.N - 2),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
             )
@@ -2633,10 +2634,10 @@ def test_plasma_vessel_distance_print(capsys):
     surface = FourierRZToroidalSurface(
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    surf_grid = LinearGridFlux(M=5, N=0)
-    plas_grid = LinearGridFlux(M=5, N=0)
+    surface_grid = LinearGridFlux(M=5, N=0)
+    plasma_grid = LinearGridFlux(M=5, N=0)
     obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
     )
     obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -2646,7 +2647,7 @@ def test_plasma_vessel_distance_print(capsys):
 
     obj = ObjectiveFunction(
         PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
     )
     obj.build(verbose=0)
@@ -2935,10 +2936,10 @@ def test_objective_fun_things():
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
     # For equally spaced grids, should get true d=1
-    surf_grid = LinearGridFlux(M=5, N=6)
-    plas_grid = LinearGridFlux(M=5, N=6)
+    surface_grid = LinearGridFlux(M=5, N=6)
+    plasma_grid = LinearGridFlux(M=5, N=6)
     obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -3211,12 +3212,18 @@ class TestComputeScalarResolution:
             R_lmn=[10, 1.5], Z_lmn=[-1.5], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
         for i, res in enumerate(self.res_array):
-            grid = LinearGridFlux(
+            surface_grid = LinearGridSurface(
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+            )
+            plasma_grid = LinearGridFlux(
                 M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
             )
             obj = ObjectiveFunction(
                 PlasmaVesselDistance(
-                    surface=surface, eq=self.eq, surface_grid=grid, plasma_grid=grid
+                    surface=surface,
+                    eq=self.eq,
+                    surface_grid=surface_grid,
+                    plasma_grid=plasma_grid,
                 ),
                 use_jit=False,
             )

@@ -1085,13 +1085,14 @@ def test_optimize_multiple_things_different_order():
 
     target_dist = 1
 
-    grid = LinearGridFlux(M=10, N=0, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=10, N=0, NFP=eq.NFP)
+    surface_grid = LinearGridSurface(M=10, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        plasma_grid=grid,
-        surface_grid=grid,
+        plasma_grid=plasma_grid,
+        surface_grid=surface_grid,
         surface_fixed=False,
     )
     objective = ObjectiveFunction((obj,))
@@ -1126,8 +1127,8 @@ def test_optimize_multiple_things_different_order():
         surface=surf,
         eq=eq,
         target=target_dist,
-        plasma_grid=grid,
-        surface_grid=grid,
+        plasma_grid=plasma_grid,
+        surface_grid=surface_grid,
         surface_fixed=False,
     )
     objective = ObjectiveFunction((obj,))

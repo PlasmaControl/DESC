@@ -314,6 +314,7 @@ class NNITGProxy(_Objective):
         "_ensemble_csv",
         "_n_ensemble",
         "_solve_length_at_compute",
+        "_models",
     ]
 
     _coordinates = "r"
@@ -528,8 +529,9 @@ class NNITGProxy(_Objective):
             print("Loading neural network weights")
         timer.start("Loading NN weights")
 
-        # Load JIT-compiled forward functions
-        models = self._load_model_weights(verbose)
+        # Load JIT-compiled forward functions (stored as static attr so JAX
+        # does not try to trace PjitFunction objects during pytree flattening)
+        self._models = self._load_model_weights(verbose)
 
         timer.stop("Loading NN weights")
         if verbose > 1:
@@ -545,7 +547,6 @@ class NNITGProxy(_Objective):
             "profiles": profiles,
             "a_over_LT": self._a_over_LT,
             "a_over_Ln": self._a_over_Ln,
-            "models": models,
             "quad_weights": 1.0,
         }
         super().build(use_jit=use_jit, verbose=verbose)
@@ -835,7 +836,7 @@ class NNITGProxy(_Objective):
         minor_radius = constants["a"]
         a_over_LT = constants["a_over_LT"]
         a_over_Ln = constants["a_over_Ln"]
-        models = constants["models"]
+        models = self._models
 
         num_rho = len(rho_arr)
         num_alpha = len(alpha_arr)

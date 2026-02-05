@@ -37,54 +37,30 @@ def test_gx_bmag_order_unity():
         assert np.all(data["gx_bmag"] < 10), f"bmag too large for {eq_name}"
 
 
-@pytest.mark.unit
-def test_gx_coefficients_tokamak():
-    """Test all GX coefficients on tokamak equilibrium."""
-    eq = get("DSHAPE")
-    rho = np.linspace(0.2, 0.8, 3)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-
-    quantities = [
-        "gx_bmag",
-        "gx_gds2",
-        "gx_gds21_over_shat",
-        "gx_gds22_over_shat_squared",
-        "gx_gbdrift",
-        "gx_cvdrift",
-        "gx_gbdrift0_over_shat",
-        "gx_gradpar",
-    ]
-    data = eq.compute(quantities, grid=grid)
-
-    for name in quantities:
-        assert np.isfinite(data[name]).all(), f"Non-finite values for {name}"
-
-    # Positivity checks for squared quantities
-    assert np.all(data["gx_bmag"] > 0)
-    assert np.all(data["gx_gds2"] > 0)
-    assert np.all(data["gx_gds22_over_shat_squared"] > 0)
+# GX coefficient names used in multiple tests
+GX_COEFFICIENT_NAMES = [
+    "gx_bmag",
+    "gx_gds2",
+    "gx_gds21_over_shat",
+    "gx_gds22_over_shat_squared",
+    "gx_gbdrift",
+    "gx_cvdrift",
+    "gx_gbdrift0_over_shat",
+    "gx_gradpar",
+]
 
 
 @pytest.mark.unit
-def test_gx_coefficients_stellarator():
-    """Test all GX coefficients on stellarator equilibrium."""
-    eq = get("HELIOTRON")
+@pytest.mark.parametrize("eq_name", ["DSHAPE", "HELIOTRON"])
+def test_gx_coefficients(eq_name):
+    """Test all GX coefficients on tokamak and stellarator equilibria."""
+    eq = get(eq_name)
     rho = np.linspace(0.2, 0.8, 3)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
-    quantities = [
-        "gx_bmag",
-        "gx_gds2",
-        "gx_gds21_over_shat",
-        "gx_gds22_over_shat_squared",
-        "gx_gbdrift",
-        "gx_cvdrift",
-        "gx_gbdrift0_over_shat",
-        "gx_gradpar",
-    ]
-    data = eq.compute(quantities, grid=grid)
+    data = eq.compute(GX_COEFFICIENT_NAMES, grid=grid)
 
-    for name in quantities:
+    for name in GX_COEFFICIENT_NAMES:
         assert np.isfinite(data[name]).all(), f"Non-finite values for {name}"
 
     # Positivity checks for squared quantities
@@ -224,30 +200,6 @@ def test_resample_to_uniform_arclength():
 
     # All output should be finite
     assert np.isfinite(data_uniform).all()
-
-
-@pytest.mark.unit
-def test_compute_flux_tube_length():
-    """Test flux tube length computation."""
-    from desc.compute._turbulence import (
-        compute_arclength_via_gradpar,
-        compute_flux_tube_length,
-    )
-
-    npoints = 101
-    theta_pest = np.linspace(-np.pi, np.pi, npoints)
-
-    # Constant gradpar = 2: dl/dθ = 1/2, so total length = pi
-    gradpar = np.ones(npoints) * 2.0
-    length = compute_flux_tube_length(gradpar, theta_pest)
-
-    # Should equal the last value of cumulative arclength
-    arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
-    np.testing.assert_allclose(length, arclength[-1], rtol=1e-10)
-
-    # Expected value for constant gradpar
-    expected_length = np.pi
-    np.testing.assert_allclose(length, expected_length, rtol=1e-3)
 
 
 @pytest.mark.unit
@@ -565,3 +517,115 @@ def test_ensemble_forward():
     expected_mean = (np.array(out1) + np.array(out2)) / 2
 
     np.testing.assert_allclose(np.array(ensemble_output), expected_mean, rtol=1e-6)
+
+
+# =============================================================================
+# NNITGProxy Objective Tests
+# =============================================================================
+
+
+def _make_mock_weights():
+    """Create mock CNN weights for testing."""
+    from desc.backend import jnp
+
+    np.random.seed(42)
+    conv_channels = [7, 16, 32, 16, 32, 16]
+    kernel_sizes = [3, 3, 3, 3, 3]
+    fc_dims = [16 + 2, 32, 16]  # +2 for scalars
+
+    weights = {}
+    for i in range(5):
+        weights[f"conv_layers.{i}.weight"] = jnp.array(
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i]) * 0.1
+        ).astype(jnp.float32)
+        weights[f"conv_layers.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+
+    weights["fc_layers.0.weight"] = jnp.array(
+        np.random.randn(fc_dims[1], fc_dims[0]) * 0.1
+    ).astype(jnp.float32)
+    weights["fc_layers.0.bias"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
+    weights["fc_layers.1.weight"] = jnp.array(
+        np.random.randn(fc_dims[2], fc_dims[1]) * 0.1
+    ).astype(jnp.float32)
+    weights["fc_layers.1.bias"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
+    weights["output_layer.weight"] = jnp.array(
+        np.random.randn(1, fc_dims[2]) * 0.1
+    ).astype(jnp.float32)
+    weights["output_layer.bias"] = jnp.zeros(1, dtype=jnp.float32)
+    return weights
+
+
+@pytest.mark.unit
+def test_nnitgproxy_init():
+    """Test NNITGProxy construction and parameter validation."""
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+
+    # Test basic construction with mock model_path
+    obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
+    assert obj._npoints == 96
+    assert obj._nz_internal == 1001
+    assert obj._target_flux_tube_length == 75.4
+    assert obj._a_over_LT == 3.0
+    assert obj._a_over_Ln == 1.0
+    np.testing.assert_array_equal(obj._rho, [0.5])
+
+    # Test with custom parameters
+    obj2 = NNITGProxy(
+        eq,
+        rho=[0.3, 0.5, 0.7],
+        alpha=[0, np.pi],
+        npoints=64,
+        nz_internal=501,
+        target_flux_tube_length=62.8,
+        a_over_LT=2.5,
+        a_over_Ln=0.5,
+        model_path="/fake/path.pt",
+    )
+    np.testing.assert_array_equal(obj2._rho, [0.3, 0.5, 0.7])
+    np.testing.assert_array_equal(obj2._alpha, [0, np.pi])
+    assert obj2._npoints == 64
+    assert obj2._target_flux_tube_length == 62.8
+
+    # Test error when ensemble_dir specified without ensemble_csv
+    with pytest.raises(ValueError, match="ensemble_csv must be specified"):
+        NNITGProxy(eq, rho=0.5, ensemble_dir="/fake/dir")
+
+
+@pytest.mark.unit
+def test_nnitgproxy_build():
+    """Test NNITGProxy build method with mock weights."""
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    # Patch _load_nn_weights to return mock weights
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
+        obj.build(use_jit=False, verbose=0)
+
+    # Check constants are populated
+    assert "rho" in obj.constants
+    assert "alpha" in obj.constants
+    assert "poloidal_turns" in obj.constants
+    assert "target_length" in obj.constants
+    assert "a" in obj.constants
+    assert "nn_weights" in obj.constants
+    assert "a_over_LT" in obj.constants
+    assert "a_over_Ln" in obj.constants
+
+    # Check values are reasonable
+    assert obj.constants["poloidal_turns"] > 0
+    assert obj.constants["target_length"] > 0
+    assert obj.constants["a"] > 0
+    assert obj.constants["nn_weights"] is not None
+    assert obj.constants["ensemble_weights"] is None
+
+    # Check dimension
+    assert obj._dim_f == 1  # Single rho value

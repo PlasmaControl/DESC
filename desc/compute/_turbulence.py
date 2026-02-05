@@ -509,37 +509,6 @@ def resample_to_uniform_arclength(arclength, data, npoints_out):
     return z_uniform, data_uniform
 
 
-def compute_flux_tube_length(gradpar, theta_pest):
-    """Compute total flux tube length from gradpar.
-
-    The flux tube length is the integral of dl along the field line,
-    where dl/d(theta_PEST) = 1/|gradpar|.
-
-    Parameters
-    ----------
-    gradpar : ndarray, shape (npoints,)
-        GX gradpar coefficient along the field line.
-    theta_pest : ndarray, shape (npoints,)
-        Straight-field-line poloidal angles (assumed uniformly spaced).
-
-    Returns
-    -------
-    length : float
-        Total flux tube length in units of L_ref (since gx_gradpar includes L_ref).
-
-    Notes
-    -----
-    This is equivalent to ``arclength[-1]`` from ``compute_arclength_via_gradpar``,
-    but provided as a separate function for clarity.
-
-    See Also
-    --------
-    compute_arclength_via_gradpar : Compute cumulative arclength.
-    """
-    arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
-    return arclength[-1]
-
-
 def solve_poloidal_turns_for_length(length_fn, target_length, x0_guess=1.0):
     """Solve for poloidal turns to achieve a target flux tube length.
 
@@ -581,7 +550,7 @@ def solve_poloidal_turns_for_length(length_fn, target_length, x0_guess=1.0):
 
     See Also
     --------
-    compute_flux_tube_length : Compute length from gradpar.
+    compute_arclength_via_gradpar : Compute cumulative arclength from gradpar.
 
     Examples
     --------
@@ -589,7 +558,7 @@ def solve_poloidal_turns_for_length(length_fn, target_length, x0_guess=1.0):
     ...     # Compute gradpar for this many poloidal turns
     ...     theta_pest = np.linspace(-np.pi * poloidal_turns, np.pi * poloidal_turns, 1001)
     ...     gradpar = compute_gradpar_for_field_line(eq, rho, alpha, theta_pest)
-    ...     return compute_flux_tube_length(gradpar, theta_pest)
+    ...     return np.abs(np.trapezoid(1.0 / gradpar, theta_pest))
     >>> poloidal_turns = solve_poloidal_turns_for_length(length_fn, target_length=75.4)
     """
     from scipy.optimize import brentq

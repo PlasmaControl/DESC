@@ -140,7 +140,7 @@ def test_compute_arclength_via_gradpar():
     # Arclength should be monotonically increasing (gradpar > 0)
     assert np.all(np.diff(arclength) > 0)
 
-    # For constant gradpar=2, dℓ/dθ = 1/2, so total length = π
+    # For constant gradpar=2, dl/dθ = 1/2, so total length = π
     expected_length = np.pi  # (2π range) / 2
     np.testing.assert_allclose(arclength[-1], expected_length, rtol=1e-3)
 
@@ -181,5 +181,46 @@ def test_compute_arclength_2d():
         assert np.all(np.diff(arclength_2d[:, a]) > 0)
 
     # Field line with larger gradpar should have shorter total length
-    # (dℓ/dθ = 1/gradpar)
+    # (dl/dθ = 1/gradpar)
     assert arclength_2d[-1, 1] < arclength_2d[-1, 0] < arclength_2d[-1, 2]
+
+
+@pytest.mark.unit
+def test_resample_to_uniform_arclength():
+    """Test resampling to uniform arclength grid."""
+    from desc.compute._turbulence import (
+        compute_arclength_via_gradpar,
+        resample_to_uniform_arclength,
+    )
+
+    # Create test data with known properties
+    npoints_in = 201
+    npoints_out = 96
+    theta_pest = np.linspace(-np.pi, np.pi, npoints_in)
+
+    # Varying gradpar creates non-uniform arclength
+    gradpar = 1.0 + 0.3 * np.cos(theta_pest)
+    arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
+
+    # Create test data: smooth functions
+    nfeatures = 3
+    data = np.zeros((nfeatures, npoints_in))
+    data[0] = np.sin(theta_pest)  # Oscillating
+    data[1] = theta_pest / np.pi  # Linear
+    data[2] = np.ones(npoints_in)  # Constant
+
+    z_uniform, data_uniform = resample_to_uniform_arclength(arclength, data, npoints_out)
+
+    # Output shape checks
+    assert z_uniform.shape == (npoints_out,)
+    assert data_uniform.shape == (nfeatures, npoints_out)
+
+    # z should be uniformly spaced in [-pi, pi)
+    dz = z_uniform[1] - z_uniform[0]
+    np.testing.assert_allclose(np.diff(z_uniform), dz, rtol=1e-10)
+
+    # Constant function should remain constant after resampling
+    np.testing.assert_allclose(data_uniform[2], 1.0, rtol=1e-3)
+
+    # All output should be finite
+    assert np.isfinite(data_uniform).all()

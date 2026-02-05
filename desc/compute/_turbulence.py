@@ -415,3 +415,95 @@ def compute_arclength_via_gradpar(gradpar, theta_pest):
         )
 
     return arclength
+
+
+def resample_to_uniform_arclength(arclength, data, npoints_out):
+    """Resample field line data from non-uniform to uniform arclength spacing.
+
+    This function takes data computed on a theta_PEST grid (with non-uniform
+    arclength spacing) and resamples it to a uniform arclength grid in [-pi, pi).
+    This matches the GX geometry conventions used for CNN training data.
+
+    Parameters
+    ----------
+    arclength : ndarray, shape (npoints_in,) or (npoints_in, num_alpha)
+        Cumulative arclength at each input point, as computed by
+        ``compute_arclength_via_gradpar``.
+    data : ndarray, shape (nfeatures, npoints_in) or (nfeatures, npoints_in, num_alpha)
+        Data to resample. First axis is features (e.g., 7 GX coefficients).
+    npoints_out : int
+        Number of output points. Output z will be uniformly spaced in [-pi, pi)
+        with the periodic endpoint excluded.
+
+    Returns
+    -------
+    z_uniform : ndarray, shape (npoints_out,)
+        Uniform arclength coordinates in [-pi, pi).
+    data_uniform : ndarray, same shape as data with npoints_in -> npoints_out
+        Resampled data on uniform arclength grid.
+
+    Notes
+    -----
+    The transformation maps the cumulative arclength [0, L] to z in [-pi, pi).
+    This normalization ensures the CNN sees features at evenly-spaced physical
+    distances along the field line, regardless of the underlying magnetic
+    geometry.
+
+    Requires ``interpax`` package for cubic interpolation.
+
+    See Also
+    --------
+    compute_arclength_via_gradpar : Compute cumulative arclength from gradpar.
+
+    Examples
+    --------
+    >>> # Compute arclength from gradpar
+    >>> arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
+    >>> # Stack 7 GX features
+    >>> signals = jnp.stack([bmag, gbdrift, cvdrift, ...])  # shape (7, npoints)
+    >>> # Resample to 96 points (CNN input resolution)
+    >>> z, signals_uniform = resample_to_uniform_arclength(arclength, signals, 96)
+    """
+    from interpax import interp1d
+
+    # Handle 1D and 2D cases
+    if arclength.ndim == 1:
+        # Single field line: arclength shape (npoints,), data shape (nfeatures, npoints)
+        L = arclength[-1]
+        z_orig = arclength * (2 * jnp.pi / L) - jnp.pi
+        z_uniform = jnp.linspace(-jnp.pi, jnp.pi, npoints_out + 1)[:-1]
+
+        nfeatures = data.shape[0]
+        data_uniform = jnp.stack(
+            [
+                interp1d(z_uniform, z_orig, data[i], method="cubic")
+                for i in range(nfeatures)
+            ]
+        )
+    else:
+        # Multiple field lines: arclength shape (npoints, num_alpha)
+        # data shape (nfeatures, npoints, num_alpha)
+        num_alpha = arclength.shape[1]
+        z_uniform = jnp.linspace(-jnp.pi, jnp.pi, npoints_out + 1)[:-1]
+
+        def resample_one_alpha(arc_1d, data_2d):
+            """Resample a single field line."""
+            L = arc_1d[-1]
+            z_orig = arc_1d * (2 * jnp.pi / L) - jnp.pi
+            return jnp.stack(
+                [
+                    interp1d(z_uniform, z_orig, data_2d[i], method="cubic")
+                    for i in range(data_2d.shape[0])
+                ]
+            )
+
+        # Process each alpha
+        data_uniform = jnp.stack(
+            [
+                resample_one_alpha(arclength[:, a], data[:, :, a])
+                for a in range(num_alpha)
+            ],
+            axis=2,
+        )
+
+    return z_uniform, data_uniform

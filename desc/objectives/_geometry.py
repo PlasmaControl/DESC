@@ -950,7 +950,7 @@ class NeutronWallLoading(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                sym=eq.sym,
+                sym=False,
             )
         else:
             surface_grid = self._surface_grid

@@ -615,7 +615,7 @@ def test_nnitgproxy_build():
     # Check constants are populated
     assert "rho" in obj.constants
     assert "alpha" in obj.constants
-    assert "poloidal_turns" in obj.constants
+    assert "toroidal_turns" in obj.constants
     assert "target_length" in obj.constants
     assert "a" in obj.constants
     assert "nn_weights" in obj.constants
@@ -623,7 +623,7 @@ def test_nnitgproxy_build():
     assert "a_over_Ln" in obj.constants
 
     # Check values are reasonable
-    assert obj.constants["poloidal_turns"] > 0
+    assert obj.constants["toroidal_turns"] > 0
     assert obj.constants["target_length"] > 0
     assert obj.constants["a"] > 0
     assert obj.constants["nn_weights"] is not None

@@ -478,10 +478,15 @@ class NNITGProxy(_Objective):
             length_fn, target_length, x0_guess=2.0 * abs(iota_ref)
         )
 
+        # Convert to toroidal_turns for dynamic adaptation during optimization.
+        # As iota changes, poloidal_turns = toroidal_turns * |iota| adapts to
+        # maintain approximately the same physical flux tube length.
+        toroidal_turns = poloidal_turns / abs(iota_ref)
+
         if verbose > 0:
             print(
                 f"NNITGProxy: target L={target_length:.2f}, "
-                f"poloidal_turns={poloidal_turns:.4f}, "
+                f"toroidal_turns={toroidal_turns:.4f}, "
                 f"achieved L={length_fn(poloidal_turns):.2f}"
             )
 
@@ -491,7 +496,7 @@ class NNITGProxy(_Objective):
         self._constants = {
             "rho": self._rho,
             "alpha": self._alpha,
-            "poloidal_turns": poloidal_turns,
+            "toroidal_turns": toroidal_turns,
             "target_length": target_length,
             "a": minor_radius,
             "iota_transforms": transforms,
@@ -569,7 +574,7 @@ class NNITGProxy(_Objective):
         eq = self.things[0]
         rho_arr = jnp.asarray(constants["rho"])
         alpha_arr = jnp.asarray(constants["alpha"])
-        poloidal_turns = constants["poloidal_turns"]
+        toroidal_turns = constants["toroidal_turns"]
         minor_radius = constants["a"]
         a_over_LT = constants["a_over_LT"]
         a_over_Ln = constants["a_over_Ln"]
@@ -615,30 +620,27 @@ class NNITGProxy(_Objective):
         # =====================================================================
         # BATCHED GRID CONSTRUCTION
         # Create all (nz x num_rho x num_alpha) points in one grid
+        # Using zeta (toroidal angle) parameterization for dynamic iota adaptation
         # =====================================================================
 
-        # Uniform theta_PEST offset (same for all rho/alpha)
-        theta_pest_offset = jnp.linspace(
-            -jnp.pi * poloidal_turns, jnp.pi * poloidal_turns, nz
+        # Uniform zeta offset (same for all rho/alpha)
+        # This keeps toroidal extent fixed; poloidal extent adapts with iota
+        zeta_offset = jnp.linspace(
+            -jnp.pi * toroidal_turns, jnp.pi * toroidal_turns, nz
         )
 
         # Create meshgrid: shapes will be (nz, num_rho, num_alpha)
-        # rho_mesh[i,j,k] = rho_arr[j]
-        # alpha_mesh[i,j,k] = alpha_arr[k]
-        # theta_offset_mesh[i,j,k] = theta_pest_offset[i]
         rho_mesh = jnp.broadcast_to(rho_arr[None, :, None], (nz, num_rho, num_alpha))
         alpha_mesh = jnp.broadcast_to(alpha_arr[None, None, :], (nz, num_rho, num_alpha))
-        theta_offset_mesh = jnp.broadcast_to(
-            theta_pest_offset[:, None, None], (nz, num_rho, num_alpha)
-        )
+        zeta_mesh = jnp.broadcast_to(zeta_offset[:, None, None], (nz, num_rho, num_alpha))
 
         # iota varies by rho: iota_mesh[i,j,k] = iota_arr[j]
         iota_mesh = jnp.broadcast_to(iota_arr[None, :, None], (nz, num_rho, num_alpha))
         iota_r_mesh = jnp.broadcast_to(iota_r_arr[None, :, None], (nz, num_rho, num_alpha))
 
-        # Compute theta_PEST and zeta
-        theta_pest_mesh = alpha_mesh + theta_offset_mesh
-        zeta_mesh = theta_offset_mesh / iota_mesh
+        # Compute theta_PEST from field line equation: theta_PEST = alpha + iota * zeta
+        # This varies by rho (different iota) while keeping toroidal extent fixed
+        theta_pest_mesh = alpha_mesh + iota_mesh * zeta_mesh
 
         # Flatten for coordinate mapping: total points = nz x num_rho x num_alpha
         rho_flat = rho_mesh.flatten()
@@ -709,8 +711,12 @@ class NNITGProxy(_Objective):
             # Stack 7 GX features: shape (7, nz, num_alpha)
             signals_2d = jnp.stack([gx_features[k][:, i_rho, :] for k in gx_keys])
 
+            # Compute theta_pest_offset for this rho (varies with iota)
+            # theta_pest = alpha + iota * zeta, so theta_pest_offset = iota * zeta_offset
+            theta_pest_offset_rho = iota_arr[i_rho] * zeta_offset
+
             # Compute arclength for each alpha (uses 2D version)
-            arclength_2d = compute_arclength_via_gradpar(gradpar_2d, theta_pest_offset)
+            arclength_2d = compute_arclength_via_gradpar(gradpar_2d, theta_pest_offset_rho)
 
             # Resample to uniform arclength: output shape (7, npoints, num_alpha)
             _, signals_resampled = resample_to_uniform_arclength(

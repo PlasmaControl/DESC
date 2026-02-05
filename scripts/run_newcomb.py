@@ -37,12 +37,16 @@ R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 
 # Input profiles
+fixed_iota = False
+if fixed_iota:
+    iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
+    iota_profile = PowerSeriesProfile(iota_coeffs)
+    I_profile = None
+else:
+    I_coeffs = np.array([0, 0, I, 0, - I/2])
+    I_profile = PowerSeriesProfile(I_coeffs)
 p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
 p_profile = PowerSeriesProfile(p_coeffs)
-I_coeffs = np.array([0, 0, I, 0, - I/2])
-I_profile = PowerSeriesProfile(I_coeffs)
-iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
-iota_profile = PowerSeriesProfile(iota_coeffs)
 
 # Save directory and filename
 save_path = "./high_aspect_ratio_tokamak/"

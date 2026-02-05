@@ -558,6 +558,7 @@ def _make_mock_weights():
 @pytest.mark.unit
 def test_nnitgproxy_init():
     """Test NNITGProxy construction and parameter validation."""
+    pytest.importorskip("torch")
     from desc.objectives._turbulence import NNITGProxy
 
     eq = get("DSHAPE")
@@ -596,6 +597,7 @@ def test_nnitgproxy_init():
 @pytest.mark.unit
 def test_nnitgproxy_build():
     """Test NNITGProxy build method with mock weights."""
+    pytest.importorskip("torch")
     from unittest.mock import patch
 
     from desc.objectives._turbulence import NNITGProxy
@@ -634,6 +636,7 @@ def test_nnitgproxy_build():
 @pytest.mark.unit
 def test_nnitgproxy_compute():
     """Test NNITGProxy compute method produces valid output."""
+    pytest.importorskip("torch")
     from unittest.mock import patch
 
     from desc.objectives._turbulence import NNITGProxy
@@ -659,6 +662,7 @@ def test_nnitgproxy_compute():
 @pytest.mark.unit
 def test_nnitgproxy_compute_return_signals():
     """Test NNITGProxy compute with return_signals=True."""
+    pytest.importorskip("torch")
     from unittest.mock import patch
 
     from desc.objectives._turbulence import NNITGProxy

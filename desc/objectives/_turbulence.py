@@ -235,6 +235,8 @@ class NNITGProxy(_Objective):
     geometric coefficients along a flux tube. The CNN was trained on over
     200,000 GX gyrokinetic simulations.
 
+    Note: Requires PyTorch for loading model weights (``pip install torch``).
+
     The model takes as input:
     - 7 geometric features along the field line (bmag, gbdrift, cvdrift, etc.)
     - Temperature gradient scale length (a/LT)
@@ -330,6 +332,15 @@ class NNITGProxy(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
+
+        # Check for torch dependency (required for loading .pth model weights)
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "NNITGProxy requires PyTorch for loading model weights. "
+                "Install with: pip install torch"
+            )
 
         # Validate ensemble parameters
         if ensemble_dir is not None and ensemble_csv is None:
@@ -555,8 +566,9 @@ class NNITGProxy(_Objective):
         if constants is None:
             constants = self.constants
 
-        rho_arr = constants["rho"]
-        alpha_arr = constants["alpha"]
+        eq = self.things[0]
+        rho_arr = jnp.asarray(constants["rho"])
+        alpha_arr = jnp.asarray(constants["alpha"])
         poloidal_turns = constants["poloidal_turns"]
         minor_radius = constants["a"]
         a_over_LT = constants["a_over_LT"]
@@ -564,16 +576,21 @@ class NNITGProxy(_Objective):
         nn_weights = constants["nn_weights"]
         ensemble_weights = constants["ensemble_weights"]
 
-        # Compute iota at each rho
+        num_rho = len(rho_arr)
+        num_alpha = len(alpha_arr)
+        nz = self._nz_internal
+
+        # Compute iota at each rho (compress from grid to unique rho values)
+        iota_grid = constants["iota_transforms"]["grid"]
         iota_data = compute_fun(
-            self.things[0],
+            eq,
             ["iota", "iota_r"],
             params,
             constants["iota_transforms"],
             constants["profiles"],
         )
-        iota_arr = iota_data["iota"]
-        iota_r_arr = iota_data["iota_r"]
+        iota_arr = iota_grid.compress(iota_data["iota"])
+        iota_r_arr = iota_grid.compress(iota_data["iota_r"])
 
         # GX features to compute (order matches CNN input)
         gx_keys = [
@@ -595,52 +612,134 @@ class NNITGProxy(_Objective):
             "gds22_over_shat_squared",
         ]
 
+        # =====================================================================
+        # BATCHED GRID CONSTRUCTION
+        # Create all (nz x num_rho x num_alpha) points in one grid
+        # =====================================================================
+
+        # Uniform theta_PEST offset (same for all rho/alpha)
+        theta_pest_offset = jnp.linspace(
+            -jnp.pi * poloidal_turns, jnp.pi * poloidal_turns, nz
+        )
+
+        # Create meshgrid: shapes will be (nz, num_rho, num_alpha)
+        # rho_mesh[i,j,k] = rho_arr[j]
+        # alpha_mesh[i,j,k] = alpha_arr[k]
+        # theta_offset_mesh[i,j,k] = theta_pest_offset[i]
+        rho_mesh = jnp.broadcast_to(rho_arr[None, :, None], (nz, num_rho, num_alpha))
+        alpha_mesh = jnp.broadcast_to(alpha_arr[None, None, :], (nz, num_rho, num_alpha))
+        theta_offset_mesh = jnp.broadcast_to(
+            theta_pest_offset[:, None, None], (nz, num_rho, num_alpha)
+        )
+
+        # iota varies by rho: iota_mesh[i,j,k] = iota_arr[j]
+        iota_mesh = jnp.broadcast_to(iota_arr[None, :, None], (nz, num_rho, num_alpha))
+        iota_r_mesh = jnp.broadcast_to(iota_r_arr[None, :, None], (nz, num_rho, num_alpha))
+
+        # Compute theta_PEST and zeta
+        theta_pest_mesh = alpha_mesh + theta_offset_mesh
+        zeta_mesh = theta_offset_mesh / iota_mesh
+
+        # Flatten for coordinate mapping: total points = nz x num_rho x num_alpha
+        rho_flat = rho_mesh.flatten()
+        theta_pest_flat = theta_pest_mesh.flatten()
+        zeta_flat = zeta_mesh.flatten()
+        iota_flat = iota_mesh.flatten()
+        iota_r_flat = iota_r_mesh.flatten()
+
+        # Single map_coordinates call for all points
+        coords_pest = jnp.column_stack([rho_flat, theta_pest_flat, zeta_flat])
+        desc_coords = eq.map_coordinates(
+            coords_pest,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            params=params,
+            tol=1e-10,
+            maxiter=50,
+        )
+        theta_desc_flat = desc_coords[:, 1]
+
+        # Fix theta wrapping for continuity
+        theta_desc_flat = theta_desc_flat + 2 * jnp.pi * jnp.round(
+            (theta_pest_flat - theta_desc_flat) / (2 * jnp.pi)
+        )
+
+        # Create single grid with all points
+        grid_coords = jnp.column_stack([rho_flat, theta_desc_flat, zeta_flat])
+        grid = Grid(grid_coords, sort=False, jitable=True)
+
+        # Single compute_fun call for all GX features
+        transforms = get_transforms(gx_keys + ["gx_gradpar"], eq, grid, jitable=True)
+        profiles = get_profiles(gx_keys + ["gx_gradpar"], eq, grid)
+
+        gx_data = compute_fun(
+            eq,
+            gx_keys + ["gx_gradpar"],
+            params,
+            transforms,
+            profiles,
+            data={
+                "a": minor_radius,
+                "iota": iota_flat,
+                "iota_r": iota_r_flat,
+                "rho": rho_flat,
+            },
+        )
+
+        # Reshape GX data to (nz, num_rho, num_alpha)
+        def reshape_gx(arr):
+            return arr.reshape(nz, num_rho, num_alpha)
+
+        gx_features = {k: reshape_gx(gx_data[k]) for k in gx_keys}
+        gradpar_3d = reshape_gx(gx_data["gx_gradpar"])
+
+        # =====================================================================
+        # RESAMPLING AND CNN INFERENCE
+        # Still loop over rho (arclength varies per rho due to different iota)
+        # But alpha dimension is batched for CNN
+        # =====================================================================
+
         Q_all = []
         all_signals = [] if return_signals else None
 
-        for i_rho, rho in enumerate(rho_arr):
-            rho = float(rho)
-            iota = float(iota_arr[i_rho])
-            iota_r = float(iota_r_arr[i_rho])
+        for i_rho in range(num_rho):
+            # Extract slice for this rho: shape (nz, num_alpha)
+            gradpar_2d = gradpar_3d[:, i_rho, :]
 
-            Q_alphas = []
-            alpha_signals = [] if return_signals else None
+            # Stack 7 GX features: shape (7, nz, num_alpha)
+            signals_2d = jnp.stack([gx_features[k][:, i_rho, :] for k in gx_keys])
 
-            for alpha in alpha_arr:
-                alpha = float(alpha)
+            # Compute arclength for each alpha (uses 2D version)
+            arclength_2d = compute_arclength_via_gradpar(gradpar_2d, theta_pest_offset)
 
-                # Compute GX features along field line
-                signals, theta_pest = self._compute_field_line_features(
-                    params, rho, alpha, iota, iota_r, minor_radius, poloidal_turns,
-                    gx_keys,
-                )
+            # Resample to uniform arclength: output shape (7, npoints, num_alpha)
+            _, signals_resampled = resample_to_uniform_arclength(
+                arclength_2d, signals_2d, self._npoints
+            )
 
-                # Resample to uniform arclength (96 points for CNN)
-                gradpar = signals[-1]  # gx_gradpar is last in compute list
-                arclength = compute_arclength_via_gradpar(gradpar, theta_pest)
-                _, signals_uniform = resample_to_uniform_arclength(
-                    arclength, signals[:-1], self._npoints  # exclude gradpar
-                )
-
-                if return_signals:
-                    alpha_signals.append(signals_uniform)
-
-                # Run CNN forward pass (cast to float32 for CNN weights)
-                signals_batch = signals_uniform[jnp.newaxis, :, :].astype(jnp.float32)
-                scalars_batch = jnp.array([[a_over_LT, a_over_Ln]], dtype=jnp.float32)
-
-                if ensemble_weights is not None:
-                    log_Q = _ensemble_forward(signals_batch, scalars_batch, ensemble_weights)
-                else:
-                    log_Q = _cyclic_invariant_forward(signals_batch, scalars_batch, nn_weights)
-
-                Q_alphas.append(jnp.exp(log_Q[0, 0]))
+            # Transpose to (num_alpha, 7, npoints) for batched CNN
+            signals_batch = jnp.transpose(signals_resampled, (2, 0, 1)).astype(
+                jnp.float32
+            )
 
             if return_signals:
-                all_signals.append(jnp.stack(alpha_signals))
+                all_signals.append(signals_batch)
 
-            # Average Q over field lines
-            Q_all.append(jnp.mean(jnp.array(Q_alphas)))
+            # Scalars: broadcast to (num_alpha, 2)
+            scalars_batch = jnp.broadcast_to(
+                jnp.array([[a_over_LT, a_over_Ln]], dtype=jnp.float32),
+                (num_alpha, 2),
+            )
+
+            # CNN forward pass (batched over alphas)
+            if ensemble_weights is not None:
+                log_Q = _ensemble_forward(signals_batch, scalars_batch, ensemble_weights)
+            else:
+                log_Q = _cyclic_invariant_forward(signals_batch, scalars_batch, nn_weights)
+
+            # Average Q over field lines (alphas)
+            Q_per_alpha = jnp.exp(log_Q[:, 0])
+            Q_all.append(jnp.mean(Q_per_alpha))
 
         Q_result = jnp.array(Q_all)
 
@@ -654,85 +753,3 @@ class NNITGProxy(_Objective):
             return Q_result, signals_info
 
         return Q_result
-
-    def _compute_field_line_features(
-        self, params, rho, alpha, iota, iota_r, minor_radius, poloidal_turns, gx_keys
-    ):
-        """Compute GX features along a single field line.
-
-        Parameters
-        ----------
-        params : dict
-            Equilibrium parameters.
-        rho, alpha : float
-            Flux surface and field line labels.
-        iota, iota_r : float
-            Rotational transform and its radial derivative.
-        minor_radius : float
-            Minor radius for normalization.
-        poloidal_turns : float
-            Number of poloidal turns for the flux tube.
-        gx_keys : list of str
-            GX coefficient names to compute.
-
-        Returns
-        -------
-        signals : ndarray, shape (8, nz_internal)
-            GX features (7) plus gradpar for arclength computation.
-        theta_pest : ndarray, shape (nz_internal,)
-            Straight-field-line poloidal angle grid.
-
-        """
-        eq = self.things[0]
-        nz = self._nz_internal
-
-        # Uniform theta_PEST grid
-        theta_pest_offset = jnp.linspace(
-            -jnp.pi * poloidal_turns, jnp.pi * poloidal_turns, nz
-        )
-        theta_pest = alpha + theta_pest_offset
-        zeta = theta_pest_offset / iota
-
-        # Map PEST -> DESC coordinates
-        rho_grid = jnp.full(nz, rho)
-        coords_pest = jnp.column_stack([rho_grid, theta_pest, zeta])
-        desc_coords = eq.map_coordinates(
-            coords_pest,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=params,
-            tol=1e-10,
-            maxiter=50,
-        )
-        theta_desc = desc_coords[:, 1]
-
-        # Fix theta wrapping for continuity
-        theta_desc = theta_desc + 2 * jnp.pi * jnp.round(
-            (theta_pest - theta_desc) / (2 * jnp.pi)
-        )
-
-        # Create grid and compute features
-        grid = Grid(
-            jnp.column_stack([rho_grid, theta_desc, zeta]), sort=False, jitable=True
-        )
-        transforms = get_transforms(gx_keys + ["gx_gradpar"], eq, grid, jitable=True)
-        profiles = get_profiles(gx_keys + ["gx_gradpar"], eq, grid)
-
-        data = compute_fun(
-            eq,
-            gx_keys + ["gx_gradpar"],
-            params,
-            transforms,
-            profiles,
-            data={
-                "a": minor_radius,
-                "iota": jnp.full(nz, iota),
-                "iota_r": jnp.full(nz, iota_r),
-                "rho": rho_grid,
-            },
-        )
-
-        # Stack features: 7 GX coefficients + gradpar
-        signals = jnp.stack([data[k] for k in gx_keys] + [data["gx_gradpar"]])
-
-        return signals, theta_pest

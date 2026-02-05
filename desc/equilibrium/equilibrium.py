@@ -1726,9 +1726,15 @@ class Equilibrium(IOAble, Optimizable):
         self._pressure = ensure_consistent_profile_eq_resolution(
             self._pressure, self, name="pressure"
         )
-        has_kinetic = any(
-            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
-        )
+        has_kinetic = (
+            any(
+                [
+                    getattr(self, name, None) is not None
+                    for name in _kinetic_profile_names
+                ]
+            )
+            and new is not None
+        )  # don't warn if pressure is being set to None
         warnif(
             has_kinetic,
             UserWarning,

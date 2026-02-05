@@ -3290,10 +3290,15 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
-        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
-        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
-        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
-        eq.atomic_number = 1.0
+        with pytest.warns(UserWarning, match="is being assigned"):
+            eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        with pytest.warns(UserWarning, match="is being assigned"):
+            eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        with pytest.warns(UserWarning, match="is being assigned"):
+            eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        with pytest.warns(UserWarning, match="is being assigned"):
+            eq.atomic_number = 1.0
+        eq.pressure = None
 
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):

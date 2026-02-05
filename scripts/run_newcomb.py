@@ -37,16 +37,16 @@ R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 
 # Input profiles
-p_coeffs = [0.125, 0, 0, 0, -0.125]
-p_profile = PowerSeriesProfile(np.array(p_coeffs))
-I_coeffs = [0, 0, I, 0, - I/2]
-I_profile = PowerSeriesProfile(np.array(I_coeffs))
-iota_coeffs = [0.9, 0, 0.1, 0, 0.1]
-iota_profile = PowerSeriesProfile(np.array(iota_coeffs))
+p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
+p_profile = PowerSeriesProfile(p_coeffs)
+I_coeffs = np.array([0, 0, I, 0, - I/2])
+I_profile = PowerSeriesProfile(I_coeffs)
+iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
+iota_profile = PowerSeriesProfile(iota_coeffs)
 
 # Save directory and filename
 save_path = "./high_aspect_ratio_tokamak/"
-save_tag = f"axisym_p_{"_".join(p_coeffs)}_I_{"_".join(I_coeffs)}_iota_{"_".join(iota_coeffs)}"
+save_tag = f"axisym_p_{"_".join(p_coeffs.astype(str))}_I_{"_".join(I_coeffs.astype(str))}_iota_{"_".join(iota_coeffs.astype(str))}"
 save_name = f"equilibrium_{save_tag}.h5"
 os.makedirs(save_path, exist_ok=True)
 
@@ -75,7 +75,7 @@ else:
         NFP=1,
         iota = iota_profile,
         current=I_profile,
-        pressure=p_coeffs,
+        pressure=p_profile,
         Psi=1,
     )
 

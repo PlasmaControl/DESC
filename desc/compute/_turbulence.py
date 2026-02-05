@@ -821,20 +821,18 @@ def _cyclic_invariant_forward(signals, scalars, weights):
     Parameters
     ----------
     signals : jax.Array
-        Input signals of shape (batch, 7, length) - 7 GX geometric features:
-        [bmag, gbdrift, cvdrift, gbdrift0/shat, gds2, gds21/shat, gds22/shat^2]
+        Input signals of shape (batch, n_features, length) - GX geometric features.
     scalars : jax.Array
-        Scalar inputs of shape (batch, 2) - [a/LT, a/Ln]
+        Scalar inputs of shape (batch, n_scalars) - e.g. [a/LT, a/Ln].
     weights : dict
-        Model weights (state_dict). Supports two formats:
+        Model weights (state_dict). Layer counts are inferred from weight keys.
+        Supports models with any number of conv and FC layers, with or without
+        BatchNorm. Expected key patterns:
 
-        Without BatchNorm:
-        - 'conv_layers.{i}.weight/bias'
-        - 'fc_layers.0/1.weight/bias', 'output_layer.weight/bias'
-
-        With BatchNorm:
-        - 'conv_layers.{i}.weight/bias', 'conv_batch_norms.{i}.*'
-        - 'fc_layers.0/1.weight/bias', 'fc_batch_norms.0/1.*', 'output_layer.*'
+        - 'conv_layers.{i}.weight/bias' for i in 0..n_conv-1
+        - 'fc_layers.{i}.weight/bias' for i in 0..n_fc-1
+        - 'output_layer.weight/bias'
+        - Optional: 'conv_batch_norms.{i}.*', 'fc_batch_norms.{i}.*'
 
     Returns
     -------
@@ -843,20 +841,28 @@ def _cyclic_invariant_forward(signals, scalars, weights):
     """
     use_bn = _has_batch_norm(weights)
 
-    # 5 convolutional blocks: Conv -> [BN] -> ReLU -> MaxPool
+    # Infer layer counts from weight keys
+    n_conv = sum(
+        1 for k in weights if k.startswith("conv_layers.") and k.endswith(".weight")
+    )
+    n_fc = sum(
+        1 for k in weights if k.startswith("fc_layers.") and k.endswith(".weight")
+    )
+
+    # Convolutional blocks: Conv -> [BN] -> ReLU -> MaxPool
     x = signals
-    for i in range(5):
+    for i in range(n_conv):
         x = _apply_conv_bn(x, weights, i, use_bn)
 
-    # Global average pooling: (batch, channels, 3) -> (batch, channels)
+    # Global average pooling -> (batch, channels)
     x = _global_avg_pool_1d(x)
 
-    # Concatenate with scalar inputs: (batch, channels + 2)
+    # Concatenate with scalar inputs
     x = jnp.concatenate([x, scalars], axis=-1)
 
-    # 2 fully connected blocks: Linear -> [BN] -> ReLU
-    x = _apply_fc_bn(x, weights, 0, use_bn)
-    x = _apply_fc_bn(x, weights, 1, use_bn)
+    # Fully connected blocks: Linear -> [BN] -> ReLU
+    for i in range(n_fc):
+        x = _apply_fc_bn(x, weights, i, use_bn)
 
     # Output layer: predict log(Q)
     x = jnp.dot(x, weights["output_layer.weight"].T) + weights["output_layer.bias"]

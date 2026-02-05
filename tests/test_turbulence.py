@@ -571,6 +571,10 @@ def test_jit_forward_matches_original():
 # NNITGProxy Objective Tests
 # =============================================================================
 
+# Use nz_internal=101 for all NNITGProxy tests (vs 1001 default).
+# This exercises the full code path (arclength, resampling, CNN) at ~10x less cost.
+_TEST_NZ_INTERNAL = 101
+
 
 def _make_mock_weights():
     """Create mock CNN weights for testing."""
@@ -612,16 +616,69 @@ def _make_mock_weights_tuple():
     return weights, jit_forward
 
 
+@pytest.fixture(scope="module")
+def dshape_eq():
+    """Module-scoped DSHAPE equilibrium (loaded once, shared across tests)."""
+    return get("DSHAPE")
+
+
+@pytest.fixture(scope="module")
+def single_model_obj(dshape_eq):
+    """Built NNITGProxy with 2 rho, 2 alpha, single model, nz_internal=101."""
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    mock_weights_tuple = _make_mock_weights_tuple()
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights",
+        return_value=mock_weights_tuple,
+    ):
+        obj = NNITGProxy(
+            dshape_eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2],
+            model_path="/fake/path.pt", nz_internal=_TEST_NZ_INTERNAL,
+        )
+        obj.build(use_jit=False, verbose=0)
+    return obj
+
+
+@pytest.fixture(scope="module")
+def ensemble_obj(dshape_eq):
+    """Built NNITGProxy with 2 rho, 2 alpha, ensemble of 2 models, nz_internal=101."""
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from desc.compute._turbulence import _make_jit_forward
+    from desc.objectives._turbulence import NNITGProxy
+
+    mock_weights = _make_mock_weights()
+    np.random.seed(123)
+    mock_weights2 = _make_mock_weights()
+    jit_forward1 = _make_jit_forward(mock_weights)
+    jit_forward2 = _make_jit_forward(mock_weights2)
+
+    with patch(
+        "desc.objectives._turbulence._load_ensemble_weights_cached",
+        return_value=([mock_weights, mock_weights2], [jit_forward1, jit_forward2]),
+    ):
+        obj = NNITGProxy(
+            dshape_eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2],
+            ensemble_dir="/fake/dir", ensemble_csv="/fake/results.csv",
+            nz_internal=_TEST_NZ_INTERNAL,
+        )
+        obj.build(use_jit=False, verbose=0)
+    return obj
+
+
 @pytest.mark.unit
-def test_nnitgproxy_init():
+def test_nnitgproxy_init(dshape_eq):
     """Test NNITGProxy construction and parameter validation."""
     pytest.importorskip("torch")
     from desc.objectives._turbulence import NNITGProxy
 
-    eq = get("DSHAPE")
-
     # Test basic construction with mock model_path
-    obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
+    obj = NNITGProxy(dshape_eq, rho=0.5, model_path="/fake/path.pt")
     assert obj._npoints == 96
     assert obj._nz_internal == 1001
     assert obj._target_flux_tube_length == 75.4
@@ -631,7 +688,7 @@ def test_nnitgproxy_init():
 
     # Test with custom parameters
     obj2 = NNITGProxy(
-        eq,
+        dshape_eq,
         rho=[0.3, 0.5, 0.7],
         alpha=[0, np.pi],
         npoints=64,
@@ -648,29 +705,29 @@ def test_nnitgproxy_init():
 
     # Test error when ensemble_dir specified without ensemble_csv
     with pytest.raises(ValueError, match="ensemble_csv must be specified"):
-        NNITGProxy(eq, rho=0.5, ensemble_dir="/fake/dir")
+        NNITGProxy(dshape_eq, rho=0.5, ensemble_dir="/fake/dir")
 
 
 @pytest.mark.unit
-def test_nnitgproxy_build():
+def test_nnitgproxy_build(dshape_eq):
     """Test NNITGProxy build method with mock weights."""
     pytest.importorskip("torch")
     from unittest.mock import patch
 
+    from desc.compute._turbulence import _make_jit_forward
     from desc.objectives._turbulence import NNITGProxy
 
-    from desc.compute._turbulence import _make_jit_forward
-
-    eq = get("DSHAPE")
     mock_weights = _make_mock_weights()
     mock_jit_forward = _make_jit_forward(mock_weights)
 
-    # Patch _load_nn_weights to return (weights, jit_forward) tuple
     with patch(
         "desc.objectives._turbulence._load_nn_weights",
         return_value=(mock_weights, mock_jit_forward),
     ):
-        obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
+        obj = NNITGProxy(
+            dshape_eq, rho=0.5, model_path="/fake/path.pt",
+            nz_internal=_TEST_NZ_INTERNAL,
+        )
         obj.build(use_jit=False, verbose=0)
 
     # Check constants are populated
@@ -679,8 +736,7 @@ def test_nnitgproxy_build():
     assert "toroidal_turns" in obj.constants
     assert "target_length" in obj.constants
     assert "a" in obj.constants
-    assert "nn_weights" in obj.constants
-    assert "jit_forward" in obj.constants
+    assert "models" in obj.constants
     assert "a_over_LT" in obj.constants
     assert "a_over_Ln" in obj.constants
 
@@ -688,271 +744,123 @@ def test_nnitgproxy_build():
     assert obj.constants["toroidal_turns"] > 0
     assert obj.constants["target_length"] > 0
     assert obj.constants["a"] > 0
-    assert obj.constants["nn_weights"] is not None
-    assert obj.constants["jit_forward"] is not None
-    assert obj.constants["ensemble_weights"] is None
+    assert len(obj.constants["models"]) == 1
+    assert callable(obj.constants["models"][0])
 
     # Check dimension
     assert obj._dim_f == 1  # Single rho value
 
 
 @pytest.mark.unit
-def test_nnitgproxy_compute():
-    """Test NNITGProxy compute method produces valid output."""
+def test_nnitgproxy_compute(single_model_obj):
+    """Test NNITGProxy compute: basic, return_signals, return_per_alpha, both."""
     pytest.importorskip("torch")
-    from unittest.mock import patch
+    obj = single_model_obj
+    params = obj.things[0].params_dict
+    num_rho, num_alpha = 2, 2
 
-    from desc.objectives._turbulence import NNITGProxy
-
-    eq = get("DSHAPE")
-    mock_weights_tuple = _make_mock_weights_tuple()
-
-    with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
-    ):
-        obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
-        obj.build(use_jit=False, verbose=0)
-
-    # Compute Q
-    Q = obj.compute(obj.things[0].params_dict)
-
-    # Check output shape and validity
-    assert Q.shape == (1,)  # Single rho value
+    # --- Basic output ---
+    Q = obj.compute(params)
+    assert Q.shape == (num_rho,)
     assert np.isfinite(Q).all()
-    assert Q[0] > 0  # Q should be positive (exp of log_Q)
+    assert np.all(Q > 0)
 
-
-@pytest.mark.unit
-def test_nnitgproxy_compute_return_signals():
-    """Test NNITGProxy compute with return_signals=True."""
-    pytest.importorskip("torch")
-    from unittest.mock import patch
-
-    from desc.objectives._turbulence import NNITGProxy
-
-    eq = get("DSHAPE")
-    mock_weights_tuple = _make_mock_weights_tuple()
-
-    with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
-    ):
-        obj = NNITGProxy(
-            eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
-        )
-        obj.build(use_jit=False, verbose=0)
-
-    # Compute Q with signals
-    Q, signals_info = obj.compute(obj.things[0].params_dict, return_signals=True)
-
-    # Check Q output
-    assert Q.shape == (2,)  # Two rho values
-    assert np.isfinite(Q).all()
-
-    # Check signals_info structure
+    # --- return_signals ---
+    Q_sig, signals_info = obj.compute(params, return_signals=True)
+    assert Q_sig.shape == (num_rho,)
+    assert np.isfinite(Q_sig).all()
     assert "z" in signals_info
     assert "signals" in signals_info
     assert "feature_names" in signals_info
-
-    # Check z coordinates
     z = signals_info["z"]
-    assert z.shape == (96,)  # Default npoints
+    assert z.shape == (96,)
     np.testing.assert_allclose(z[0], -np.pi, rtol=1e-5)
-
-    # Check signals shape: (num_rho, num_alpha, 7, npoints)
     signals = signals_info["signals"]
-    assert signals.shape == (2, 2, 7, 96)
+    assert signals.shape == (num_rho, num_alpha, 7, 96)
     assert np.isfinite(signals).all()
-
-    # Check feature names
     assert len(signals_info["feature_names"]) == 7
     assert signals_info["feature_names"][0] == "bmag"
 
+    # --- return_per_alpha ---
+    Q_pa = obj.compute(params, return_per_alpha=True)
+    assert Q_pa.shape == (num_rho, num_alpha)
+    assert np.isfinite(Q_pa).all()
+    assert np.all(Q_pa > 0)
+    # Mean over alpha should match default result
+    np.testing.assert_allclose(np.mean(Q_pa, axis=-1), Q, rtol=1e-5)
+
+    # --- return_per_alpha + return_signals ---
+    Q_both, sig_both = obj.compute(
+        params, return_signals=True, return_per_alpha=True
+    )
+    assert Q_both.shape == (num_rho, num_alpha)
+    assert sig_both["signals"].shape == (num_rho, num_alpha, 7, 96)
+    assert np.isfinite(sig_both["signals"]).all()
+
 
 @pytest.mark.unit
-def test_nnitgproxy_solve_length_at_compute():
+def test_nnitgproxy_solve_length(dshape_eq):
     """Test NNITGProxy compute with solve_length_at_compute=True path."""
     pytest.importorskip("torch")
     from unittest.mock import patch
 
     from desc.objectives._turbulence import NNITGProxy
 
-    eq = get("DSHAPE")
     mock_weights_tuple = _make_mock_weights_tuple()
 
     with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
+        "desc.objectives._turbulence._load_nn_weights",
+        return_value=mock_weights_tuple,
     ):
         obj = NNITGProxy(
-            eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt", solve_length_at_compute=True
+            dshape_eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt",
+            solve_length_at_compute=True, nz_internal=_TEST_NZ_INTERNAL,
         )
         obj.build(use_jit=False, verbose=0)
 
-    # Compute Q with solve_length_at_compute=True
     Q = obj.compute(obj.things[0].params_dict)
-
-    # Check output shape and validity
-    assert Q.shape == (1,)  # Single rho value
+    assert Q.shape == (1,)
     assert np.isfinite(Q).all()
-    assert Q[0] > 0  # Q should be positive (exp of log_Q)
+    assert Q[0] > 0
 
 
 @pytest.mark.unit
-def test_nnitgproxy_return_per_alpha():
-    """Test NNITGProxy return_per_alpha parameter with and without signals.
-
-    - Default (return_per_alpha=False): Q shape is (num_rho,)
-    - With return_per_alpha=True: Q shape is (num_rho, num_alpha)
-    - Verify that mean(Q_per_alpha, axis=-1) == Q_default
-    - Test with both return_signals=True and False
-    """
+def test_nnitgproxy_ensemble_std(ensemble_obj):
+    """Test return_std with ensemble: basic, per_alpha, signals."""
     pytest.importorskip("torch")
-    from unittest.mock import patch
-
-    from desc.objectives._turbulence import NNITGProxy
-
-    eq = get("DSHAPE")
-    mock_weights_tuple = _make_mock_weights_tuple()
-
-    num_rho = 2
-    num_alpha = 3
-    rho_vals = [0.4, 0.6]
-    alpha_vals = [0, np.pi / 3, 2 * np.pi / 3]
-
-    with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
-    ):
-        obj = NNITGProxy(eq, rho=rho_vals, alpha=alpha_vals, model_path="/fake/path.pt")
-        obj.build(use_jit=False, verbose=0)
-
+    obj = ensemble_obj
     params = obj.things[0].params_dict
+    num_rho, num_alpha = 2, 2
 
-    # Test default behavior (return_per_alpha=False)
-    Q_default = obj.compute(params)
-    assert Q_default.shape == (num_rho,), f"Expected ({num_rho},), got {Q_default.shape}"
-    assert np.isfinite(Q_default).all()
-    assert np.all(Q_default > 0)
-
-    # Test with return_per_alpha=True
-    Q_per_alpha = obj.compute(params, return_per_alpha=True)
-    assert Q_per_alpha.shape == (num_rho, num_alpha), (
-        f"Expected ({num_rho}, {num_alpha}), got {Q_per_alpha.shape}"
-    )
-    assert np.isfinite(Q_per_alpha).all()
-    assert np.all(Q_per_alpha > 0)
-
-    # Verify mean over alpha equals default result
-    Q_from_per_alpha = np.mean(Q_per_alpha, axis=-1)
-    np.testing.assert_allclose(Q_from_per_alpha, Q_default, rtol=1e-5)
-
-    # Test with both return_per_alpha=True and return_signals=True
-    num_alpha_signals = 2
-    obj2 = NNITGProxy(
-        eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
-    )
-    with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
-    ):
-        obj2.build(use_jit=False, verbose=0)
-
-    Q_signals, signals_info = obj2.compute(
-        obj2.things[0].params_dict, return_signals=True, return_per_alpha=True
-    )
-
-    # Check Q shape with return_per_alpha=True
-    assert Q_signals.shape == (num_rho, num_alpha_signals)
-    assert np.isfinite(Q_signals).all()
-    assert np.all(Q_signals > 0)
-
-    # Check signals shape: (num_rho, num_alpha, 7, npoints)
-    signals = signals_info["signals"]
-    assert signals.shape == (num_rho, num_alpha_signals, 7, 96)
-    assert np.isfinite(signals).all()
-
-    # Check z coordinates
-    z = signals_info["z"]
-    assert z.shape == (96,)
-    np.testing.assert_allclose(z[0], -np.pi, rtol=1e-5)
-
-
-@pytest.mark.unit
-def test_nnitgproxy_return_std():
-    """Test NNITGProxy return_std parameter for ensemble uncertainty.
-
-    - return_std=True with ensemble returns Q and Q_std
-    - return_std=True with single model returns zeros for std
-    - Q_std has same shape as Q
-    """
-    pytest.importorskip("torch")
-    from unittest.mock import patch
-
-    from desc.compute._turbulence import _make_jit_forward
-    from desc.objectives._turbulence import NNITGProxy
-
-    eq = get("DSHAPE")
-    mock_weights = _make_mock_weights()
-
-    # Create two different weight sets for ensemble (different random seeds)
-    np.random.seed(123)
-    mock_weights2 = _make_mock_weights()
-
-    # Create JIT-compiled forward functions for ensemble
-    jit_forward1 = _make_jit_forward(mock_weights)
-    jit_forward2 = _make_jit_forward(mock_weights2)
-
-    num_rho = 2
-    num_alpha = 2
-
-    # Test with ensemble (should have non-zero std)
-    with patch(
-        "desc.objectives._turbulence._load_ensemble_weights_cached",
-        return_value=([mock_weights, mock_weights2], [jit_forward1, jit_forward2]),
-    ):
-        obj_ensemble = NNITGProxy(
-            eq,
-            rho=[0.4, 0.6],
-            alpha=[0, np.pi / 2],
-            ensemble_dir="/fake/dir",
-            ensemble_csv="/fake/results.csv",
-        )
-        obj_ensemble.build(use_jit=False, verbose=0)
-
-    params = obj_ensemble.things[0].params_dict
-
-    # Test return_std=True with default (return_per_alpha=False)
-    Q, Q_std = obj_ensemble.compute(params, return_std=True)
+    # --- return_std basic ---
+    Q, Q_std = obj.compute(params, return_std=True)
     assert Q.shape == (num_rho,)
     assert Q_std.shape == (num_rho,)
     assert np.isfinite(Q).all()
     assert np.isfinite(Q_std).all()
     assert np.all(Q > 0)
-    assert np.all(Q_std >= 0)  # std should be non-negative
+    assert np.all(Q_std >= 0)
 
-    # Test return_std with return_per_alpha
-    Q_pa, Q_std_pa = obj_ensemble.compute(params, return_std=True, return_per_alpha=True)
+    # --- return_std + return_per_alpha ---
+    Q_pa, Q_std_pa = obj.compute(params, return_std=True, return_per_alpha=True)
     assert Q_pa.shape == (num_rho, num_alpha)
     assert Q_std_pa.shape == (num_rho, num_alpha)
 
-    # Test return_std with return_signals
-    Q_sig, Q_std_sig, signals_info = obj_ensemble.compute(
+    # --- return_std + return_signals ---
+    Q_sig, Q_std_sig, signals_info = obj.compute(
         params, return_std=True, return_signals=True
     )
     assert Q_sig.shape == (num_rho,)
     assert Q_std_sig.shape == (num_rho,)
     assert "signals" in signals_info
 
-    # Test with single model (should have zero std)
-    mock_weights_tuple = _make_mock_weights_tuple()
-    with patch(
-        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights_tuple
-    ):
-        obj_single = NNITGProxy(
-            eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt"
-        )
-        obj_single.build(use_jit=False, verbose=0)
 
-    Q_single, Q_std_single = obj_single.compute(
-        obj_single.things[0].params_dict, return_std=True
-    )
-    assert Q_single.shape == (1,)
-    assert Q_std_single.shape == (1,)
-    np.testing.assert_array_equal(Q_std_single, 0)  # Single model has no ensemble std
+@pytest.mark.unit
+def test_nnitgproxy_single_model_std(single_model_obj):
+    """Test return_std with single model returns zero std."""
+    pytest.importorskip("torch")
+    obj = single_model_obj
+    Q, Q_std = obj.compute(obj.things[0].params_dict, return_std=True)
+    assert Q.shape == (2,)
+    assert Q_std.shape == (2,)
+    np.testing.assert_array_equal(Q_std, 0)

@@ -931,3 +931,152 @@ def _ensemble_forward(signals, scalars, weights_list):
         log_Q = _cyclic_invariant_forward(signals, scalars, weights)
         predictions.append(log_Q)
     return jnp.mean(jnp.stack(predictions), axis=0)
+
+
+# =============================================================================
+# Model Loading and Caching
+# =============================================================================
+
+# Module-level caches to avoid reloading weights from disk
+_NN_WEIGHTS_CACHE = {}
+_ENSEMBLE_WEIGHTS_CACHE = {}
+
+
+def _convert_pytorch_weights(state_dict):
+    """Convert PyTorch state dict to JAX-compatible weight dictionary.
+
+    Parameters
+    ----------
+    state_dict : dict
+        PyTorch state dictionary (from torch.load)
+
+    Returns
+    -------
+    weights : dict
+        Dictionary with same keys but JAX arrays as values
+    """
+    return {k: jnp.array(v.numpy()) for k, v in state_dict.items()}
+
+
+def _load_nn_weights(model_path):
+    """Load PyTorch model weights and convert to JAX arrays.
+
+    Uses module-level cache to avoid reloading the same model multiple times.
+
+    Parameters
+    ----------
+    model_path : str
+        Path to the PyTorch checkpoint file (.pt or .pth)
+
+    Returns
+    -------
+    weights : dict
+        Dictionary of JAX arrays containing the model weights
+
+    Raises
+    ------
+    FileNotFoundError
+        If the model file does not exist
+    ImportError
+        If torch is not installed (required for loading .pt files)
+    """
+    if model_path in _NN_WEIGHTS_CACHE:
+        return _NN_WEIGHTS_CACHE[model_path]
+
+    import torch
+
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+
+    # Handle both checkpoint format and direct state_dict format
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    else:
+        state_dict = checkpoint
+
+    weights = _convert_pytorch_weights(state_dict)
+    _NN_WEIGHTS_CACHE[model_path] = weights
+    return weights
+
+
+def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0):
+    """Load top-k ensemble models based on validation loss from DeepHyper results.
+
+    Parameters
+    ----------
+    model_dir : str
+        Path to directory containing model .pth files
+    csv_path : str
+        Path to results.csv with DeepHyper hyperparameter search results
+    top_k : int, optional
+        Number of top-performing models to load. Default 10.
+    pre_method : int, optional
+        Preprocessing method to filter models by (0=log transform). Default 0.
+
+    Returns
+    -------
+    weights_list : list of dict
+        List of weight dictionaries, sorted by validation loss (best first)
+
+    Raises
+    ------
+    FileNotFoundError
+        If model_dir or csv_path don't exist
+    ImportError
+        If pandas or torch are not installed
+
+    Notes
+    -----
+    Supports both BatchNorm and non-BatchNorm models. The JAX forward pass
+    auto-detects the model type from weight keys. Architecture is inferred
+    from weight shapes rather than requiring hyperparameters.
+    """
+    import os
+
+    import pandas as pd
+    import torch
+
+    df = pd.read_csv(csv_path)
+
+    # Filter out failed runs and convert objective to float
+    df_valid = df[df["objective"] != "F"].copy()
+    df_valid["objective"] = df_valid["objective"].astype(float)
+
+    # Filter by pre_method if column exists
+    if "p:pre_method" in df_valid.columns:
+        df_valid = df_valid[df_valid["p:pre_method"] == pre_method]
+
+    # Sort by objective (higher = better = lower validation loss)
+    df_sorted = df_valid.sort_values("objective", ascending=False).head(top_k)
+
+    weights_list = []
+    for task_id in df_sorted["m:task_id"]:
+        model_path = os.path.join(model_dir, f"model_{task_id}.pth")
+        if not os.path.exists(model_path):
+            continue
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
+        weights_list.append(_convert_pytorch_weights(state_dict))
+
+    return weights_list
+
+
+def _load_ensemble_weights_cached(model_dir, csv_path, top_k=10, pre_method=0):
+    """Cached version of _load_ensemble_weights.
+
+    Parameters are the same as _load_ensemble_weights. Uses module-level
+    cache keyed by (model_dir, csv_path, top_k, pre_method).
+    """
+    cache_key = (model_dir, csv_path, top_k, pre_method)
+    if cache_key not in _ENSEMBLE_WEIGHTS_CACHE:
+        _ENSEMBLE_WEIGHTS_CACHE[cache_key] = _load_ensemble_weights(
+            model_dir, csv_path, top_k, pre_method
+        )
+    return _ENSEMBLE_WEIGHTS_CACHE[cache_key]
+
+
+def clear_nn_cache():
+    """Clear the neural network weights cache.
+
+    Call this if you need to reload models after they've been modified on disk.
+    """
+    _NN_WEIGHTS_CACHE.clear()
+    _ENSEMBLE_WEIGHTS_CACHE.clear()

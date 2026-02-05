@@ -580,19 +580,19 @@ class NNITGProxy(_Objective):
             # Auto-detect pre_method from CSV (most common among top-k)
             pre_method = 0  # Default
             try:
-                import pandas as pd
+                import csv
 
-                df = pd.read_csv(self._ensemble_csv)
-                if "p:pre_method" in df.columns:
-                    df_valid = df[df["objective"] != "F"].copy()
-                    if len(df_valid) > 0:
-                        df_valid["objective"] = df_valid["objective"].astype(float)
-                        df_sorted = df_valid.sort_values(
-                            "objective", ascending=False
-                        ).head(self._n_ensemble)
-                        pre_method = int(df_sorted["p:pre_method"].mode().iloc[0])
-                        if verbose > 0:
-                            print(f"NNITGProxy: Auto-detected pre_method={pre_method}")
+                with open(self._ensemble_csv, newline="") as f:
+                    reader = csv.DictReader(f)
+                    rows = [r for r in reader if r["objective"] != "F"]
+                if rows and "p:pre_method" in rows[0]:
+                    for r in rows:
+                        r["objective"] = float(r["objective"])
+                    rows.sort(key=lambda r: r["objective"], reverse=True)
+                    top = [int(r["p:pre_method"]) for r in rows[: self._n_ensemble]]
+                    pre_method = max(set(top), key=top.count)
+                    if verbose > 0:
+                        print(f"NNITGProxy: Auto-detected pre_method={pre_method}")
             except Exception:
                 pass  # Use default
 

@@ -1026,7 +1026,7 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=
     FileNotFoundError
         If model_dir or csv_path don't exist
     ImportError
-        If pandas or torch are not installed
+        If torch is not installed
 
     Notes
     -----
@@ -1034,31 +1034,34 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=
     auto-detects the model type from weight keys. Architecture is inferred
     from weight shapes rather than requiring hyperparameters.
     """
+    import csv
     import os
 
-    import pandas as pd
     import torch
 
-    df = pd.read_csv(csv_path)
+    # Read CSV and select top-k models by objective score
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = [r for r in reader if r["objective"] != "F"]
 
-    # Filter out failed runs and convert objective to float
-    df_valid = df[df["objective"] != "F"].copy()
-    df_valid["objective"] = df_valid["objective"].astype(float)
+    for r in rows:
+        r["objective"] = float(r["objective"])
 
     # Filter by pre_method if column exists
-    if "p:pre_method" in df_valid.columns:
-        df_valid = df_valid[df_valid["p:pre_method"] == pre_method]
+    if rows and "p:pre_method" in rows[0]:
+        rows = [r for r in rows if int(r["p:pre_method"]) == pre_method]
 
     # Sort by objective (higher = better = lower validation loss)
-    df_sorted = df_valid.sort_values("objective", ascending=False).head(top_k)
+    rows.sort(key=lambda r: r["objective"], reverse=True)
+    top_rows = rows[:top_k]
 
     if verbose:
-        print(f"Loading {len(df_sorted)} ensemble models from {model_dir}...")
+        print(f"Loading {len(top_rows)} ensemble models from {model_dir}...")
 
     weights_list = []
     jit_forwards = []
-    for idx, task_id in enumerate(df_sorted["m:task_id"]):
-        model_path = os.path.join(model_dir, f"model_{task_id}.pth")
+    for idx, row in enumerate(top_rows):
+        model_path = os.path.join(model_dir, f"model_{row['m:task_id']}.pth")
         if not os.path.exists(model_path):
             continue
         state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
@@ -1066,10 +1069,10 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=
         weights_list.append(weights)
         jit_forwards.append(_make_jit_forward(weights))
         if verbose and (idx + 1) % 10 == 0:
-            print(f"  Loaded {idx + 1}/{len(df_sorted)} models...")
+            print(f"  Loaded {idx + 1}/{len(top_rows)} models...")
 
     if verbose:
-        print(f"  Successfully loaded {len(weights_list)}/{len(df_sorted)} models")
+        print(f"  Successfully loaded {len(weights_list)}/{len(top_rows)} models")
 
     return weights_list, jit_forwards
 

@@ -629,3 +629,73 @@ def test_nnitgproxy_build():
 
     # Check dimension
     assert obj._dim_f == 1  # Single rho value
+
+
+@pytest.mark.unit
+def test_nnitgproxy_compute():
+    """Test NNITGProxy compute method produces valid output."""
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj = NNITGProxy(eq, rho=0.5, model_path="/fake/path.pt")
+        obj.build(use_jit=False, verbose=0)
+
+    # Compute Q
+    Q = obj.compute(obj.things[0].params_dict)
+
+    # Check output shape and validity
+    assert Q.shape == (1,)  # Single rho value
+    assert np.isfinite(Q).all()
+    assert Q[0] > 0  # Q should be positive (exp of log_Q)
+
+
+@pytest.mark.unit
+def test_nnitgproxy_compute_return_signals():
+    """Test NNITGProxy compute with return_signals=True."""
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj = NNITGProxy(
+            eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
+        )
+        obj.build(use_jit=False, verbose=0)
+
+    # Compute Q with signals
+    Q, signals_info = obj.compute(obj.things[0].params_dict, return_signals=True)
+
+    # Check Q output
+    assert Q.shape == (2,)  # Two rho values
+    assert np.isfinite(Q).all()
+
+    # Check signals_info structure
+    assert "z" in signals_info
+    assert "signals" in signals_info
+    assert "feature_names" in signals_info
+
+    # Check z coordinates
+    z = signals_info["z"]
+    assert z.shape == (96,)  # Default npoints
+    np.testing.assert_allclose(z[0], -np.pi, rtol=1e-5)
+
+    # Check signals shape: (num_rho, num_alpha, 7, npoints)
+    signals = signals_info["signals"]
+    assert signals.shape == (2, 2, 7, 96)
+    assert np.isfinite(signals).all()
+
+    # Check feature names
+    assert len(signals_info["feature_names"]) == 7
+    assert signals_info["feature_names"][0] == "bmag"

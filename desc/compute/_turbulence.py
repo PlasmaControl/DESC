@@ -120,16 +120,17 @@ def _gx_gds2(params, transforms, profiles, data, **kwargs):
     units_long="dimensionless",
     description="GX gds21/shat: cross term between x and y gradients",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["gx_L_reference", "grad(alpha)", "grad(psi)"],
+    data=["gx_B_reference", "grad(alpha)", "grad(psi)"],
 )
 def _gx_gds21_over_shat(params, transforms, profiles, data, **kwargs):
-    # Note: needs signed psi_b for physics, cannot use gx_B_reference
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["gx_L_reference"] ** 2
+    # gx_geometry: gds21/shat = sigma_Bxy * grad_alpha_dot_grad_psi / B_reference
+    # B_reference is UNSIGNED (2*|psi_edge|/a^2), matching gx_geometry desc.py:94.
+    # Note: the z-reversal for negative iota is corrected in NNITGProxy, not here.
+    B_ref = data["gx_B_reference"]
     grad_alpha_dot_grad_psi = dot(data["grad(alpha)"], data["grad(psi)"])
     data["gx_gds21_over_shat"] = _SIGMA_BXY * grad_alpha_dot_grad_psi / B_ref
     return data
@@ -210,8 +211,7 @@ def _gx_gbdrift(params, transforms, profiles, data, **kwargs):
     data=["gx_L_reference", "gx_B_reference", "rho", "|B|", "gx_gbdrift", "p_r"],
 )
 def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
-    psi_sign = jnp.sign(params["Psi"])
-    psi_b = jnp.abs(params["Psi"]) / (2 * jnp.pi)  # Still needed for pressure term
+    psi_b = jnp.abs(params["Psi"]) / (2 * jnp.pi)
     B_ref = data["gx_B_reference"]
     L_ref = data["gx_L_reference"]
     sqrt_s = data["rho"]
@@ -220,7 +220,6 @@ def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
         2
         * mu_0
         * _SIGMA_BXY
-        * psi_sign
         * B_ref
         * L_ref**2
         * sqrt_s
@@ -245,6 +244,10 @@ def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
     data=["rho", "|B|", "grad(|B|)", "B", "grad(psi)"],
 )
 def _gx_gbdrift0_over_shat(params, transforms, profiles, data, **kwargs):
+    # gx_geometry: gbdrift0/shat = 2 * toroidal_flux_sign * B_cross_gradB_dot_gradpsi
+    #              / (|B|^3 * sqrt_s)
+    # toroidal_flux_sign = sign(Psi), matching gx_geometry gx_grid.py:130
+    # Note: the z-reversal for negative iota is corrected in NNITGProxy, not here.
     psi_sign = jnp.sign(params["Psi"])
     sqrt_s = data["rho"]
     B_cross_grad_B = cross(data["B"], data["grad(|B|)"])

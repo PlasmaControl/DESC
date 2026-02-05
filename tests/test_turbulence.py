@@ -736,7 +736,7 @@ def test_nnitgproxy_build(dshape_eq):
     assert "toroidal_turns" in obj.constants
     assert "target_length" in obj.constants
     assert "a" in obj.constants
-    assert "models" in obj.constants
+    assert hasattr(obj, "_models") and len(obj._models) > 0
     assert "a_over_LT" in obj.constants
     assert "a_over_Ln" in obj.constants
 
@@ -744,8 +744,8 @@ def test_nnitgproxy_build(dshape_eq):
     assert obj.constants["toroidal_turns"] > 0
     assert obj.constants["target_length"] > 0
     assert obj.constants["a"] > 0
-    assert len(obj.constants["models"]) == 1
-    assert callable(obj.constants["models"][0])
+    assert len(obj._models) == 1
+    assert callable(obj._models[0])
 
     # Check dimension
     assert obj._dim_f == 1  # Single rho value

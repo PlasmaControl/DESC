@@ -943,6 +943,15 @@ class NNITGProxy(_Objective):
         for i_rho in range(num_rho):
             gradpar_2d = gradpar_3d[:, i_rho, :]
             signals_2d = jnp.stack([gx_features[k][:, i_rho, :] for k in gx_keys])
+
+            # Correct z-direction reversal for zeta parameterization.
+            # When iota < 0, uniform zeta traverses the field line opposite to
+            # the gx_geometry convention (uniform theta_pest), flipping the sign
+            # of anti-symmetric features along the field line.
+            iota_sign = jnp.sign(iota_arr[i_rho])
+            signals_2d = signals_2d.at[3].multiply(iota_sign)  # gbdrift0/shat
+            signals_2d = signals_2d.at[5].multiply(iota_sign)  # gds21/shat
+
             theta_pest_offset_rho = iota_arr[i_rho] * zeta_offset
 
             result = self._run_cnn_inference_for_rho(

@@ -53,7 +53,8 @@ p_profile = PowerSeriesProfile(p_coeffs)
 
 # Save directory and filename
 save_path = "./high_aspect_ratio_tokamak/"
-save_tag = f"axisym_p_{"_".join(p_coeffs.astype(str))}_I_{"_".join(I_coeffs.astype(str))}_iota_{"_".join(iota_coeffs.astype(str))}"
+profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
+save_tag = f"axisym_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 save_name = f"equilibrium_{save_tag}.h5"
 os.makedirs(save_path, exist_ok=True)
 

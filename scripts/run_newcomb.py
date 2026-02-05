@@ -41,10 +41,13 @@ fixed_iota = False
 if fixed_iota:
     iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
     iota_profile = PowerSeriesProfile(iota_coeffs)
+    I_coeffs = None
     I_profile = None
 else:
     I_coeffs = np.array([0, 0, I, 0, - I/2])
     I_profile = PowerSeriesProfile(I_coeffs)
+    iota_coeffs = None
+    iota_profile = None
 p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
 p_profile = PowerSeriesProfile(p_coeffs)
 

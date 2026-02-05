@@ -775,13 +775,19 @@ class TestBootstrapCompute:
         helicity = (1, 0)
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
-        eq.electron_density = PowerSeriesProfile(
-            5.0e20 * np.array([1, -1]), modes=[0, 8]
-        )
-        eq.electron_temperature = PowerSeriesProfile(
-            8e3 * np.array([1, -1]), modes=[0, 2]
-        )
-        eq.ion_temperature = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
+        with pytest.warns(UserWarning, match="existing pressure"):
+            eq.electron_density = PowerSeriesProfile(
+                5.0e20 * np.array([1, -1]), modes=[0, 8]
+            )
+        with pytest.warns(UserWarning, match="existing pressure"):
+            eq.electron_temperature = PowerSeriesProfile(
+                8e3 * np.array([1, -1]), modes=[0, 2]
+            )
+        with pytest.warns(UserWarning, match="existing pressure"):
+            eq.ion_temperature = PowerSeriesProfile(
+                8e3 * np.array([1, -1]), modes=[0, 2]
+            )
+        eq.pressure = None
         # Flip sign of sfincs data, since it was computed for a
         # configuration with iota>0 in vmec's left-handed coordinate
         # system, whereas here we use a config with iota>0 in desc's

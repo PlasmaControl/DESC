@@ -536,10 +536,37 @@ class NNITGProxy(_Objective):
         ValueError
             If neither model_path nor ensemble_dir is specified.
 
+        Notes
+        -----
+        For ensemble loading, auto-detects the most common pre_method among
+        the top-k models from the CSV file.
         """
         if self._ensemble_dir is not None:
+            # Auto-detect pre_method from CSV (most common among top-k)
+            pre_method = 0  # Default
+            try:
+                import pandas as pd
+
+                df = pd.read_csv(self._ensemble_csv)
+                if "p:pre_method" in df.columns:
+                    df_valid = df[df["objective"] != "F"].copy()
+                    if len(df_valid) > 0:
+                        df_valid["objective"] = df_valid["objective"].astype(float)
+                        df_sorted = df_valid.sort_values(
+                            "objective", ascending=False
+                        ).head(self._n_ensemble)
+                        pre_method = int(df_sorted["p:pre_method"].mode().iloc[0])
+                        if verbose > 0:
+                            print(f"NNITGProxy: Auto-detected pre_method={pre_method}")
+            except Exception:
+                pass  # Use default
+
             ensemble_weights = _load_ensemble_weights_cached(
-                self._ensemble_dir, self._ensemble_csv, self._n_ensemble
+                self._ensemble_dir,
+                self._ensemble_csv,
+                self._n_ensemble,
+                pre_method=pre_method,
+                verbose=(verbose > 0),
             )
             if verbose > 0:
                 print(f"NNITGProxy: Loaded {len(ensemble_weights)} ensemble models")
@@ -609,7 +636,8 @@ class NNITGProxy(_Objective):
 
     def _run_cnn_inference_for_rho(
         self, gradpar_2d, signals_2d, theta_pest_offset,
-        a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha
+        a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+        return_std=False,
     ):
         """Run CNN inference for a single rho slice.
 
@@ -618,6 +646,8 @@ class NNITGProxy(_Objective):
         gradpar_2d : ndarray, shape (nz, num_alpha)
         signals_2d : ndarray, shape (7, nz, num_alpha)
         theta_pest_offset : ndarray, shape (nz,)
+        return_std : bool, optional
+            If True and using ensemble, return std of predictions.
 
         Returns
         -------
@@ -625,6 +655,8 @@ class NNITGProxy(_Objective):
             Heat flux for each field line (alpha).
         signals_batch : ndarray, shape (num_alpha, 7, npoints)
             Resampled signals for return_signals mode.
+        Q_std_per_alpha : ndarray, shape (num_alpha,), optional
+            Std of heat flux. Only returned if return_std=True and using ensemble.
         """
         arclength_2d = compute_arclength_via_gradpar(gradpar_2d, theta_pest_offset)
         _, signals_resampled = resample_to_uniform_arclength(
@@ -640,15 +672,29 @@ class NNITGProxy(_Objective):
         )
 
         if ensemble_weights is not None:
+            if return_std:
+                log_Q, std_log_Q = _ensemble_forward(
+                    signals_batch, scalars_batch, ensemble_weights, return_std=True
+                )
+                Q_per_alpha = jnp.exp(log_Q[:, 0])
+                # Convert std from log-space using delta method:
+                # Var(Q) ~ Q^2 * Var(log_Q), so std(Q) ~ Q * std(log_Q)
+                Q_std_per_alpha = Q_per_alpha * std_log_Q[:, 0]
+                return Q_per_alpha, signals_batch, Q_std_per_alpha
             log_Q = _ensemble_forward(signals_batch, scalars_batch, ensemble_weights)
         else:
             log_Q = _cyclic_invariant_forward(signals_batch, scalars_batch, nn_weights)
 
         Q_per_alpha = jnp.exp(log_Q[:, 0])
+        if return_std:
+            # Single model has no ensemble uncertainty
+            Q_std_per_alpha = jnp.zeros_like(Q_per_alpha)
+            return Q_per_alpha, signals_batch, Q_std_per_alpha
         return Q_per_alpha, signals_batch
 
     def _build_return_value(
-        self, Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+        self, Q_all_per_alpha, all_signals, feature_names, return_signals,
+        return_per_alpha, Q_std_all_per_alpha=None,
     ):
         """Build final return value with optional signals info.
 
@@ -664,12 +710,16 @@ class NNITGProxy(_Objective):
             Whether to include signals in return.
         return_per_alpha : bool
             If True, return Q per field line. If False, average over alpha.
+        Q_std_all_per_alpha : list of ndarray or None
+            List of std arrays per rho if return_std, else None.
 
         Returns
         -------
         Q : ndarray
             Shape (num_rho,) if return_per_alpha=False.
             Shape (num_rho, num_alpha) if return_per_alpha=True.
+        Q_std : ndarray, optional
+            Same shape as Q. Only returned if Q_std_all_per_alpha provided.
         signals_info : dict, optional
             Only if return_signals=True.
         """
@@ -680,6 +730,21 @@ class NNITGProxy(_Objective):
         else:
             Q_result = jnp.mean(Q_stacked, axis=-1)  # (num_rho,)
 
+        # Handle std similarly
+        Q_std_result = None
+        if Q_std_all_per_alpha is not None:
+            Q_std_stacked = jnp.stack(Q_std_all_per_alpha)  # (num_rho, num_alpha)
+            if return_per_alpha:
+                Q_std_result = Q_std_stacked
+            else:
+                # When averaging Q over alpha, propagate std via quadrature
+                # std(mean) = sqrt(sum(std_i^2)) / N
+                Q_std_result = jnp.sqrt(jnp.mean(Q_std_stacked**2, axis=-1))
+
+        # Build return tuple
+        result = [Q_result]
+        if Q_std_result is not None:
+            result.append(Q_std_result)
         if return_signals:
             z_uniform = jnp.linspace(-jnp.pi, jnp.pi, self._npoints + 1)[:-1]
             signals_info = {
@@ -687,11 +752,16 @@ class NNITGProxy(_Objective):
                 "signals": jnp.stack(all_signals),
                 "feature_names": feature_names,
             }
-            return Q_result, signals_info
+            result.append(signals_info)
 
-        return Q_result
+        if len(result) == 1:
+            return result[0]
+        return tuple(result)
 
-    def compute(self, params, constants=None, return_signals=False, return_per_alpha=False):
+    def compute(
+        self, params, constants=None, return_signals=False, return_per_alpha=False,
+        return_std=False,
+    ):
         """Compute the NN ITG heat flux prediction.
 
         Parameters
@@ -707,6 +777,10 @@ class NNITGProxy(_Objective):
             If True, return Q values for each field line (alpha) separately,
             with shape (num_rho, num_alpha). If False (default), return the
             mean over alpha with shape (num_rho,).
+        return_std : bool, optional
+            If True, also return ensemble std of predictions. Requires ensemble
+            model (not single model). The std represents model uncertainty.
+            Default False.
 
         Returns
         -------
@@ -714,6 +788,9 @@ class NNITGProxy(_Objective):
             Predicted heat flux for each flux surface.
             Shape (num_rho,) if return_per_alpha=False (default).
             Shape (num_rho, num_alpha) if return_per_alpha=True.
+        Q_std : ndarray, optional
+            Only returned if return_std=True. Ensemble std of predictions,
+            same shape as Q.
         signals_info : dict, optional
             Only returned if return_signals=True. Contains:
             - 'z': uniform arclength coordinates, shape (npoints,)
@@ -776,6 +853,7 @@ class NNITGProxy(_Objective):
                 params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
                 minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
                 gx_keys, feature_names, constants, return_signals, return_per_alpha,
+                return_std,
             )
 
         # =====================================================================
@@ -832,6 +910,7 @@ class NNITGProxy(_Objective):
         # =====================================================================
 
         Q_all_per_alpha = []
+        Q_std_all_per_alpha = [] if return_std else None
         all_signals = [] if return_signals else None
 
         for i_rho in range(num_rho):
@@ -839,22 +918,30 @@ class NNITGProxy(_Objective):
             signals_2d = jnp.stack([gx_features[k][:, i_rho, :] for k in gx_keys])
             theta_pest_offset_rho = iota_arr[i_rho] * zeta_offset
 
-            Q_per_alpha, signals_batch = self._run_cnn_inference_for_rho(
+            result = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset_rho,
-                a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha
+                a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+                return_std=return_std,
             )
+            if return_std:
+                Q_per_alpha, signals_batch, Q_std_per_alpha = result
+                Q_std_all_per_alpha.append(Q_std_per_alpha)
+            else:
+                Q_per_alpha, signals_batch = result
             Q_all_per_alpha.append(Q_per_alpha)
             if return_signals:
                 all_signals.append(signals_batch)
 
         return self._build_return_value(
-            Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+            Q_all_per_alpha, all_signals, feature_names, return_signals,
+            return_per_alpha, Q_std_all_per_alpha,
         )
 
     def _compute_with_length_solving(
         self, params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
         minor_radius, a_over_LT, a_over_Ln, nn_weights, ensemble_weights,
         gx_keys, feature_names, constants, return_signals, return_per_alpha,
+        return_std=False,
     ):
         """Compute with exact flux tube length solving per rho.
 
@@ -869,6 +956,7 @@ class NNITGProxy(_Objective):
         toroidal_turns = constants["toroidal_turns"]
 
         Q_all_per_alpha = []
+        Q_std_all_per_alpha = [] if return_std else None
         all_signals = [] if return_signals else None
 
         for i_rho in range(num_rho):
@@ -944,14 +1032,21 @@ class NNITGProxy(_Objective):
                 [gx_data[k].reshape(nz, num_alpha) for k in gx_keys]
             )
 
-            Q_per_alpha, signals_batch = self._run_cnn_inference_for_rho(
+            result = self._run_cnn_inference_for_rho(
                 gradpar_2d, signals_2d, theta_pest_offset,
-                a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha
+                a_over_LT, a_over_Ln, nn_weights, ensemble_weights, num_alpha,
+                return_std=return_std,
             )
+            if return_std:
+                Q_per_alpha, signals_batch, Q_std_per_alpha = result
+                Q_std_all_per_alpha.append(Q_std_per_alpha)
+            else:
+                Q_per_alpha, signals_batch = result
             Q_all_per_alpha.append(Q_per_alpha)
             if return_signals:
                 all_signals.append(signals_batch)
 
         return self._build_return_value(
-            Q_all_per_alpha, all_signals, feature_names, return_signals, return_per_alpha
+            Q_all_per_alpha, all_signals, feature_names, return_signals,
+            return_per_alpha, Q_std_all_per_alpha,
         )

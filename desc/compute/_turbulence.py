@@ -878,7 +878,7 @@ def _cyclic_invariant_forward(signals, scalars, weights):
     return x
 
 
-def _ensemble_forward(signals, scalars, weights_list):
+def _ensemble_forward(signals, scalars, weights_list, return_std=False):
     """Ensemble forward pass averaging predictions from multiple models.
 
     Parameters
@@ -889,11 +889,16 @@ def _ensemble_forward(signals, scalars, weights_list):
         Scalar inputs of shape (batch, 2) - [a/LT, a/Ln]
     weights_list : list of dict
         List of weight dictionaries, one per ensemble member
+    return_std : bool, optional
+        If True, also return std of predictions in log-space. Default False.
 
     Returns
     -------
     log_Q : jax.Array
         Mean predicted log(Q) of shape (batch, 1)
+    std_log_Q : jax.Array, optional
+        Std of log(Q) predictions of shape (batch, 1). Only returned if
+        return_std=True. This represents ensemble uncertainty in log-space.
 
     Notes
     -----
@@ -905,7 +910,12 @@ def _ensemble_forward(signals, scalars, weights_list):
     for weights in weights_list:
         log_Q = _cyclic_invariant_forward(signals, scalars, weights)
         predictions.append(log_Q)
-    return jnp.mean(jnp.stack(predictions), axis=0)
+    stacked = jnp.stack(predictions)  # (n_ensemble, batch, 1)
+    mean_log_Q = jnp.mean(stacked, axis=0)
+    if return_std:
+        std_log_Q = jnp.std(stacked, axis=0)
+        return mean_log_Q, std_log_Q
+    return mean_log_Q
 
 
 # =============================================================================
@@ -973,7 +983,7 @@ def _load_nn_weights(model_path):
     return weights
 
 
-def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0):
+def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0, verbose=False):
     """Load top-k ensemble models based on validation loss from DeepHyper results.
 
     Parameters
@@ -986,6 +996,8 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0):
         Number of top-performing models to load. Default 10.
     pre_method : int, optional
         Preprocessing method to filter models by (0=log transform). Default 0.
+    verbose : bool, optional
+        If True, print progress during loading. Default False.
 
     Returns
     -------
@@ -1023,27 +1035,38 @@ def _load_ensemble_weights(model_dir, csv_path, top_k=10, pre_method=0):
     # Sort by objective (higher = better = lower validation loss)
     df_sorted = df_valid.sort_values("objective", ascending=False).head(top_k)
 
+    if verbose:
+        print(f"Loading {len(df_sorted)} ensemble models from {model_dir}...")
+
     weights_list = []
-    for task_id in df_sorted["m:task_id"]:
+    for idx, task_id in enumerate(df_sorted["m:task_id"]):
         model_path = os.path.join(model_dir, f"model_{task_id}.pth")
         if not os.path.exists(model_path):
             continue
         state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
         weights_list.append(_convert_pytorch_weights(state_dict))
+        if verbose and (idx + 1) % 10 == 0:
+            print(f"  Loaded {idx + 1}/{len(df_sorted)} models...")
+
+    if verbose:
+        print(f"  Successfully loaded {len(weights_list)}/{len(df_sorted)} models")
 
     return weights_list
 
 
-def _load_ensemble_weights_cached(model_dir, csv_path, top_k=10, pre_method=0):
+def _load_ensemble_weights_cached(
+    model_dir, csv_path, top_k=10, pre_method=0, verbose=False
+):
     """Cached version of _load_ensemble_weights.
 
     Parameters are the same as _load_ensemble_weights. Uses module-level
     cache keyed by (model_dir, csv_path, top_k, pre_method).
+    Verbose is only used on cache miss.
     """
     cache_key = (model_dir, csv_path, top_k, pre_method)
     if cache_key not in _ENSEMBLE_WEIGHTS_CACHE:
         _ENSEMBLE_WEIGHTS_CACHE[cache_key] = _load_ensemble_weights(
-            model_dir, csv_path, top_k, pre_method
+            model_dir, csv_path, top_k, pre_method, verbose=verbose
         )
     return _ENSEMBLE_WEIGHTS_CACHE[cache_key]
 

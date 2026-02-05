@@ -503,6 +503,15 @@ def test_ensemble_forward():
 
     np.testing.assert_allclose(np.array(ensemble_output), expected_mean, rtol=1e-6)
 
+    # Test return_std=True
+    mean_output, std_output = _ensemble_forward(
+        signals, scalars, weights_list, return_std=True
+    )
+    expected_std = np.std([np.array(out1), np.array(out2)], axis=0)
+    np.testing.assert_allclose(np.array(mean_output), expected_mean, rtol=1e-6)
+    np.testing.assert_allclose(np.array(std_output), expected_std, rtol=1e-6)
+    assert std_output.shape == mean_output.shape
+
 
 # =============================================================================
 # NNITGProxy Objective Tests
@@ -794,3 +803,81 @@ def test_nnitgproxy_return_per_alpha():
     z = signals_info["z"]
     assert z.shape == (96,)
     np.testing.assert_allclose(z[0], -np.pi, rtol=1e-5)
+
+
+@pytest.mark.unit
+def test_nnitgproxy_return_std():
+    """Test NNITGProxy return_std parameter for ensemble uncertainty.
+
+    - return_std=True with ensemble returns Q and Q_std
+    - return_std=True with single model returns zeros for std
+    - Q_std has same shape as Q
+    """
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    # Create two different weight sets for ensemble (different random seeds)
+    np.random.seed(123)
+    mock_weights2 = _make_mock_weights()
+
+    num_rho = 2
+    num_alpha = 2
+
+    # Test with ensemble (should have non-zero std)
+    with patch(
+        "desc.objectives._turbulence._load_ensemble_weights_cached",
+        return_value=[mock_weights, mock_weights2],
+    ):
+        obj_ensemble = NNITGProxy(
+            eq,
+            rho=[0.4, 0.6],
+            alpha=[0, np.pi / 2],
+            ensemble_dir="/fake/dir",
+            ensemble_csv="/fake/results.csv",
+        )
+        obj_ensemble.build(use_jit=False, verbose=0)
+
+    params = obj_ensemble.things[0].params_dict
+
+    # Test return_std=True with default (return_per_alpha=False)
+    Q, Q_std = obj_ensemble.compute(params, return_std=True)
+    assert Q.shape == (num_rho,)
+    assert Q_std.shape == (num_rho,)
+    assert np.isfinite(Q).all()
+    assert np.isfinite(Q_std).all()
+    assert np.all(Q > 0)
+    assert np.all(Q_std >= 0)  # std should be non-negative
+
+    # Test return_std with return_per_alpha
+    Q_pa, Q_std_pa = obj_ensemble.compute(params, return_std=True, return_per_alpha=True)
+    assert Q_pa.shape == (num_rho, num_alpha)
+    assert Q_std_pa.shape == (num_rho, num_alpha)
+
+    # Test return_std with return_signals
+    Q_sig, Q_std_sig, signals_info = obj_ensemble.compute(
+        params, return_std=True, return_signals=True
+    )
+    assert Q_sig.shape == (num_rho,)
+    assert Q_std_sig.shape == (num_rho,)
+    assert "signals" in signals_info
+
+    # Test with single model (should have zero std)
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj_single = NNITGProxy(
+            eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt"
+        )
+        obj_single.build(use_jit=False, verbose=0)
+
+    Q_single, Q_std_single = obj_single.compute(
+        obj_single.things[0].params_dict, return_std=True
+    )
+    assert Q_single.shape == (1,)
+    assert Q_std_single.shape == (1,)
+    np.testing.assert_array_equal(Q_std_single, 0)  # Single model has no ensemble std

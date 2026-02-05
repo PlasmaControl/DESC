@@ -109,3 +109,14 @@ def test_itg_proxy():
         # Scalar proxy should be finite and positive
         assert np.isfinite(data["ITG proxy"]), f"Non-finite proxy for {eq_name}"
         assert data["ITG proxy"] > 0, f"Non-positive proxy for {eq_name}"
+
+
+@pytest.mark.unit
+def test_itg_proxy_objective_import():
+    """Test that ITGProxy objective can be imported."""
+    from desc.objectives import ITGProxy
+
+    eq = get("DSHAPE")
+    obj = ITGProxy(eq, rho=0.5, nturns=1, nzetaperturn=20)
+    assert obj._nturns == 1
+    assert obj._nzetaperturn == 20

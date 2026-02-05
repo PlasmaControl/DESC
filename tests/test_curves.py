@@ -1278,4 +1278,26 @@ class TestFourierUmbilicCurve:
     @pytest.mark.unit
     def test_parameterization(self):
         """Verify the parameterization of curves in DESC coordinates."""
+        # TODO
+        # Define simple umbilic curve with n_umbilic=3,m_umbilic=2,
+        # a_n= 0, nfp = 5.
+
+        # Assert it has slope 2/3*5=10/3 in the sense
+        # that after zeta = 2pi, phi has changed 10/3*2pi
+
+        # Create now a curve with general a_n. It should close
+        # after delta theta = p 2pi = 10/3 2 pi k
+        # -> want smallest k such that 10/3 k is an integer.
+        # -> k=3. So compute curve theta for zeta=[0,2pi,4pi,6pi],
+        # verify theta-theta[0]=0 is nonzero for 2pi, 4pi but is zero
+        # for 6pi.
+        pass
+
+    @pytest.mark.unit
+    def test_from_values(self):
+        """Verify FourierUmbilicCurve can be created from input values."""
+        # TODO
+        # take a curve corresponding to n_umbilic=3, m_umbilic=2, etc.
+        # evaluate the theta and phi grid, pass it in to constructor and
+        # assert various things about the modes, check modes are correct.
         pass

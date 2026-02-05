@@ -82,10 +82,17 @@ class Transform(IOAble):
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
             and grid.node_pattern != "custom"
-            and np.any(self.grid.nodes[:, 2] != 0)
-            or self.grid.n_umbilic != self.basis.n_umbilic,
+            and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
+        )
+        # The integer N_scaling multiplies the total zeta domain by 2pi, so
+        # basis.N_scaling must equal grid.N_scaling
+        warnif(
+            np.any(self.grid.nodes[:, 2] != 0)
+            and self.grid.N_scaling != self.basis.N_scaling,
+            msg=f"Unequal toroidal scaling for grid {self.grid.N_scaling} and "
+            f"basis {self.basis.N_scaling}.",
         )
 
         self._built = False

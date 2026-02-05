@@ -1,4 +1,4 @@
-"""Classes for parameterized 3D umbilic space curves."""
+"""Classes for parameterized 3D space curves constrained to lie in flux surfaces."""
 
 import numpy as np
 
@@ -64,6 +64,14 @@ class FourierUmbilicCurve(FluxSurfaceCurve):
         "_m_umbilic",
     ]
 
+    _static_attrs = FluxSurfaceCurve._static_attrs + [
+        "_UC_basis",
+        "_sym",
+        "_NFP",
+        "_n_umbilic",
+        "_m_umbilic",
+    ]
+
     def __init__(
         self,
         a_n=0,
@@ -105,10 +113,16 @@ class FourierUmbilicCurve(FluxSurfaceCurve):
         self._UC_basis = FourierSeries(
             N,
             int(NFP),
-            n_umbilic=int(n_umbilic),
+            N_scaling=int(n_umbilic),
             sym="sin" if sym else False,
         )
         self._a_n = copy_coeffs(a_n, modes_UC, self.UC_basis.modes[:, 2])
+
+    def _set_up(self):
+        super()._set_up()
+        self._a_n = jnp.atleast_1d(self._a_n)
+        self._n_umbilic = int(self._n_umbilic)
+        self._m_umbilic = int(self._m_umbilic)
 
     @property
     def sym(self):
@@ -130,18 +144,15 @@ class FourierUmbilicCurve(FluxSurfaceCurve):
         """NFP umbilic factor. Effective NFP -> NFP/n_umbilic."""
         return self.__dict__.setdefault("_n_umbilic", 1)
 
-    def _n_umbilic(self):
-        """NFP umbilic factor. Effective NFP -> NFP/n_umbilic."""
-        self._n_umbilic = self.n_umbilic
+    @property
+    def N_scaling(self):
+        """Alias for n_umbilic."""
+        return self.__dict__.setdefault("_n_umbilic", 1)
 
     @property
     def m_umbilic(self):
         """Slope parameter for curve in (theta,zeta) plane."""
         return self.__dict__.setdefault("_m_umbilic", 1)
-
-    def _m_umbilic(self):
-        """Slope parameter for curve in (theta,zeta) plane."""
-        self._m_umbilic = self.m_umbilic
 
     @property
     def N(self):

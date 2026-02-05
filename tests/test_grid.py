@@ -845,6 +845,12 @@ class TestGrid:
             z = grid.meshgrid_flatten(y, order)
             np.testing.assert_allclose(x, z)
 
+    @pytest.mark.unit
+    def test_N_scaling(self):
+        """Test that toroidal scaling parameter works correctly."""
+        # TODO
+        pass
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():

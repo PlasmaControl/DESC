@@ -5,6 +5,7 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import get_params
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
@@ -1403,8 +1404,6 @@ class UmbilicHighCurvature(_Objective):
     curve_grid : Grid, optional
         Collocation grid containing phi values along the curve at
         which to calculate the objective.
-    eq_fixed: bool, optional
-        Whether the equilibrium is fixed during optimization or not.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1437,7 +1436,6 @@ class UmbilicHighCurvature(_Objective):
         bounds=None,
         weight=1,
         curve_grid=None,
-        eq_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
@@ -1450,11 +1448,16 @@ class UmbilicHighCurvature(_Objective):
 
         self._eq = eq
         self._curve = curve
-
-        self._eq_fixed = eq_fixed
+        errorif(
+            eq.NFP != curve.NFP,
+            ValueError,
+            "Expect same number of field periods"
+            + f"for equilibrium and curve, got {eq.NFP}"
+            + f" and {curve.NFP}.",
+        )
         self._curve_grid = curve_grid
 
-        things = [curve] if self._eq_fixed else [curve, eq]
+        things = [curve, eq]
         super().__init__(
             things=things,
             target=target,
@@ -1488,7 +1491,7 @@ class UmbilicHighCurvature(_Objective):
             )
             phi_arr = phi_arr.ravel()
 
-            curve_grid = LinearGrid(zeta=phi_arr, n_umbilic=curve.n_umbilic)
+            curve_grid = LinearGrid(zeta=phi_arr, N_scaling=curve.n_umbilic)
         else:
             curve_grid = self._curve_grid
 
@@ -1546,10 +1549,12 @@ class UmbilicHighCurvature(_Objective):
 
         """
         constants = setdefault(constants, self.constants)
-        params_1 = setdefault(params_1, self.things[0].params_dict)
-        curve_params = params_1
-        if self._eq_fixed:
-            equil_params = setdefault(params_2, self.things[1].params_dict)
+        if params_1 is None:
+            curve_params = get_params(self._curve_data_keys, obj=self.things[0])
+        else:
+            curve_params = params_1
+
+        equil_params = setdefault(params_2, self.things[1].params_dict)
 
         curve_data = compute_fun(
             self._curve,
@@ -1582,9 +1587,7 @@ class UmbilicHighCurvature(_Objective):
 
         # now compute the curvature
         data = compute_fun(
-            setdefault(
-                self._eq, "desc.equilibrium.equilibrium.Equilibrium", self._eq_fixed
-            ),
+            self._eq,
             self._equil_data_keys,
             params=equil_params,
             profiles=equil_profiles,

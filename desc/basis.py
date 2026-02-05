@@ -31,7 +31,7 @@ class _Basis(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        # --no-verify "_N_scaling",
+        "_N_scaling",
         "_modes",
         "_sym",
         "_spectral_indexing",
@@ -44,6 +44,7 @@ class _Basis(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
+        "_N_scaling",
         "_sym",
         "_spectral_indexing",
     ]

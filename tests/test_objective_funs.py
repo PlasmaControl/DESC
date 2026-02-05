@@ -3556,6 +3556,12 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_umbilic_high_curv(self):
+        """Umbilic High Curvature."""
+        # TODO
+        pass
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_omnigenity(self):
         """Omnigenity."""
         surf = FourierRZToroidalSurface.from_qp_model(
@@ -3934,6 +3940,12 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(field))
         assert not np.any(np.isnan(g)), "surface current regularization"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_umbilic_high_curv(self):
+        """Umbilic High Curvature."""
+        # TODO
+        pass
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

@@ -111,13 +111,13 @@ class FourierRZCurve(Curve):
         self._R_basis = FourierSeries(
             N,
             int(NFP),
-            n_umbilic=int(1),
+            N_scaling=int(1),
             sym="cos" if sym else False,
         )
         self._Z_basis = FourierSeries(
             N,
             int(NFP),
-            n_umbilic=int(1),
+            N_scaling=int(1),
             sym="sin" if sym else False,
         )
 
@@ -166,13 +166,13 @@ class FourierRZCurve(Curve):
             self.R_basis.change_resolution(
                 N=N,
                 NFP=self.NFP,
-                n_umbilic=1,
+                N_scaling=1,
                 sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
                 N=N,
                 NFP=self.NFP,
-                n_umbilic=1,
+                N_scaling=1,
                 sym="sin" if self.sym else self.sym,
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
@@ -445,9 +445,9 @@ class FourierXYZCurve(Curve):
         assert Z_n.size == modes.size, "Z_n and modes must be the same size"
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
-        self._Y_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
-        self._Z_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
+        self._X_basis = FourierSeries(N, NFP=1, N_scaling=1, sym=False)
+        self._Y_basis = FourierSeries(N, NFP=1, N_scaling=1, sym=False)
+        self._Z_basis = FourierSeries(N, NFP=1, N_scaling=1, sym=False)
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
@@ -731,7 +731,7 @@ class FourierPlanarCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._r_basis = FourierSeries(N, NFP=1, n_umbilic=1, sym=False)
+        self._r_basis = FourierSeries(N, NFP=1, N_scaling=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
         self._basis = basis

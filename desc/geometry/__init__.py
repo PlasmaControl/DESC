@@ -1,6 +1,6 @@
 """Classes for representing geometric objects like curves and surfaces."""
 
-from .core import Curve, Surface, UmbilicCurve
+from .core import Curve, FluxSurfaceCurve, Surface
 from .curve import (
     FourierPlanarCurve,
     FourierRZCurve,

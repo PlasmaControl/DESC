@@ -12,6 +12,9 @@ Reference quantities use the following normalizations:
 
 Some quantities may have singularities at the magnetic axis (ρ=0).
 Objectives using these quantities should use ρ > 0.
+
+Flux tube utilities use the θ_PEST (straight-field-line) parameterization
+for arclength computation, which matches the GX training data conventions.
 """
 
 import jax
@@ -346,3 +349,69 @@ def _itg_proxy(params, transforms, profiles, data, **kwargs):
     """
     data["ITG proxy"] = jnp.mean(data["ITG proxy integrand"])
     return data
+
+
+# =============================================================================
+# Flux Tube Utilities
+# =============================================================================
+
+
+def compute_arclength_via_gradpar(gradpar, theta_pest):
+    """Compute cumulative arclength along a field line using θ_PEST parameterization.
+
+    This function integrates 1/|gradpar| along the field line to obtain the
+    cumulative arclength. This is the recommended method for NNITGProxy as it
+    matches the GX training data conventions.
+
+    Parameters
+    ----------
+    gradpar : ndarray, shape (npoints,) or (npoints, num_alpha)
+        GX gradpar coefficient along the field line. This already includes the
+        L_ref factor: gradpar = L_ref x b·∇θ_PEST.
+    theta_pest : ndarray, shape (npoints,)
+        Straight-field-line poloidal angles (assumed uniformly spaced).
+
+    Returns
+    -------
+    arclength : ndarray, same shape as gradpar
+        Cumulative arclength s(θ_PEST) in units of L_ref. Starts at 0 for the
+        first point.
+
+    Notes
+    -----
+    The arclength element is:
+        dl/dθ_PEST = L_ref / |gradpar|
+
+    Since gx_gradpar already includes L_ref, we have:
+        dl/dθ_PEST = L_ref² / |gx_gradpar|
+
+    For normalized arclength (setting L_ref=1):
+        dl/dθ_PEST = 1 / |gradpar|
+
+    The integration uses the trapezoidal rule for accuracy.
+
+    See Also
+    --------
+    resample_to_uniform_arclength : Resample data to uniform arclength grid.
+    """
+    # dl/dθ_PEST = 1 / |gradpar| (for normalized arclength)
+    dl_dtheta = 1.0 / jnp.abs(gradpar)
+
+    # Trapezoidal integration
+    dtheta = theta_pest[1] - theta_pest[0]
+
+    # Handle both 1D and 2D cases
+    if dl_dtheta.ndim == 1:
+        integrand_half = 0.5 * (dl_dtheta[1:] + dl_dtheta[:-1])
+        arclength = dtheta * jnp.concatenate(
+            [jnp.array([0.0]), jnp.cumsum(integrand_half)]
+        )
+    else:
+        # Shape (npoints, num_alpha) - integrate along axis 0
+        integrand_half = 0.5 * (dl_dtheta[1:] + dl_dtheta[:-1])
+        arclength = dtheta * jnp.concatenate(
+            [jnp.zeros((1, dl_dtheta.shape[1])), jnp.cumsum(integrand_half, axis=0)],
+            axis=0,
+        )
+
+    return arclength

@@ -120,3 +120,66 @@ def test_itg_proxy_objective_import():
     obj = ITGProxy(eq, rho=0.5, nturns=1, nzetaperturn=20)
     assert obj._nturns == 1
     assert obj._nzetaperturn == 20
+
+
+@pytest.mark.unit
+def test_compute_arclength_via_gradpar():
+    """Test arclength computation using gradpar."""
+    from desc.compute._turbulence import compute_arclength_via_gradpar
+
+    # Test 1: Constant gradpar should give linear arclength
+    npoints = 101
+    theta_pest = np.linspace(-np.pi, np.pi, npoints)
+    gradpar_const = np.ones(npoints) * 2.0  # constant gradpar
+
+    arclength = compute_arclength_via_gradpar(gradpar_const, theta_pest)
+
+    # Arclength should start at 0
+    assert arclength[0] == 0.0
+
+    # Arclength should be monotonically increasing (gradpar > 0)
+    assert np.all(np.diff(arclength) > 0)
+
+    # For constant gradpar=2, dℓ/dθ = 1/2, so total length = π
+    expected_length = np.pi  # (2π range) / 2
+    np.testing.assert_allclose(arclength[-1], expected_length, rtol=1e-3)
+
+    # Test 2: Varying gradpar
+    gradpar_var = 1.0 + 0.5 * np.sin(theta_pest)
+    arclength_var = compute_arclength_via_gradpar(gradpar_var, theta_pest)
+
+    assert arclength_var[0] == 0.0
+    assert np.all(np.diff(arclength_var) > 0)  # Still monotonic
+    assert np.isfinite(arclength_var).all()
+
+
+@pytest.mark.unit
+def test_compute_arclength_2d():
+    """Test arclength computation with multiple field lines."""
+    from desc.compute._turbulence import compute_arclength_via_gradpar
+
+    npoints = 51
+    num_alpha = 3
+    theta_pest = np.linspace(-np.pi, np.pi, npoints)
+
+    # Different gradpar for each field line
+    gradpar_2d = np.ones((npoints, num_alpha))
+    gradpar_2d[:, 0] = 1.0
+    gradpar_2d[:, 1] = 2.0
+    gradpar_2d[:, 2] = 0.5
+
+    arclength_2d = compute_arclength_via_gradpar(gradpar_2d, theta_pest)
+
+    # Shape should be preserved
+    assert arclength_2d.shape == (npoints, num_alpha)
+
+    # Each field line should start at 0
+    np.testing.assert_array_equal(arclength_2d[0, :], 0.0)
+
+    # Each field line should be monotonically increasing
+    for a in range(num_alpha):
+        assert np.all(np.diff(arclength_2d[:, a]) > 0)
+
+    # Field line with larger gradpar should have shorter total length
+    # (dℓ/dθ = 1/gradpar)
+    assert arclength_2d[-1, 1] < arclength_2d[-1, 0] < arclength_2d[-1, 2]

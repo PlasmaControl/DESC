@@ -753,6 +753,41 @@ def _global_avg_pool_1d(x):
     return jnp.mean(x, axis=-1)
 
 
+def _batch_norm_1d(x, gamma, beta, running_mean, running_var, eps=1e-5):
+    """Apply BatchNorm1d in inference mode (using running statistics).
+
+    Uses pre-computed running mean and variance rather than batch statistics,
+    making the output deterministic and independent of other samples in the batch.
+
+    Parameters
+    ----------
+    x : jax.Array
+        Input of shape (batch, channels, length).
+    gamma : jax.Array
+        Scale parameter (weight) of shape (channels,).
+    beta : jax.Array
+        Shift parameter (bias) of shape (channels,).
+    running_mean : jax.Array
+        Running mean of shape (channels,).
+    running_var : jax.Array
+        Running variance of shape (channels,).
+    eps : float, optional
+        Small constant for numerical stability. Default 1e-5.
+
+    Returns
+    -------
+    out : jax.Array
+        Normalized output of shape (batch, channels, length).
+    """
+    # Reshape params for broadcasting: (channels,) -> (1, channels, 1)
+    mean = running_mean[None, :, None]
+    var = running_var[None, :, None]
+    scale = gamma[None, :, None]
+    shift = beta[None, :, None]
+
+    return scale * (x - mean) / jnp.sqrt(var + eps) + shift
+
+
 # =============================================================================
 # CNN Forward Pass
 # =============================================================================
@@ -766,66 +801,101 @@ def _global_avg_pool_1d(x):
 #   → Output: log(Q)
 
 
-def _cyclic_invariant_forward(signals, scalars, weights):
-    """Forward pass through CyclicInvariantNet (no BatchNorm).
+def _has_batch_norm(weights):
+    """Check if model weights include BatchNorm parameters.
 
-    This architecture matches the zenodo ensemble models from Landreman et al.
-    2025 which use circular padding but no batch normalization.
+    Supports two naming conventions from different model versions:
+    - 'conv_layers.0.bn.weight' (older integrated format)
+    - 'conv_batch_norms.0.weight' (current separate format)
+    """
+    return "conv_layers.0.bn.weight" in weights or "conv_batch_norms.0.weight" in weights
+
+
+def _apply_conv_bn(x, weights, layer_idx, use_bn):
+    """Apply conv block: Conv1D(circular) -> [BatchNorm] -> ReLU -> MaxPool."""
+    conv_w = weights[f"conv_layers.{layer_idx}.weight"]
+    conv_b = weights[f"conv_layers.{layer_idx}.bias"]
+    kernel_size = conv_w.shape[2]
+
+    x = _conv1d_circular(x, conv_w, conv_b, kernel_size)
+
+    if use_bn:
+        prefix = f"conv_batch_norms.{layer_idx}"
+        x = _batch_norm_1d(
+            x,
+            weights[f"{prefix}.weight"],
+            weights[f"{prefix}.bias"],
+            weights[f"{prefix}.running_mean"],
+            weights[f"{prefix}.running_var"],
+        )
+
+    x = jax.nn.relu(x)
+    return _max_pool_1d(x)
+
+
+def _apply_fc_bn(x, weights, layer_idx, use_bn):
+    """Apply FC block: Linear -> [BatchNorm] -> ReLU."""
+    x = jnp.dot(x, weights[f"fc_layers.{layer_idx}.weight"].T)
+    x = x + weights[f"fc_layers.{layer_idx}.bias"]
+
+    if use_bn:
+        # BatchNorm expects 3D input; reshape (batch, features) -> (batch, features, 1)
+        prefix = f"fc_batch_norms.{layer_idx}"
+        x = _batch_norm_1d(
+            x[:, :, None],
+            weights[f"{prefix}.weight"],
+            weights[f"{prefix}.bias"],
+            weights[f"{prefix}.running_mean"],
+            weights[f"{prefix}.running_var"],
+        )[:, :, 0]
+
+    return jax.nn.relu(x)
+
+
+def _cyclic_invariant_forward(signals, scalars, weights):
+    """Forward pass through CyclicInvariantNet (with or without BatchNorm).
+
+    Automatically detects whether the model uses BatchNorm based on weight keys.
 
     Parameters
     ----------
     signals : jax.Array
         Input signals of shape (batch, 7, length) - 7 GX geometric features:
-        [bmag, gbdrift, cvdrift, gbdrift0/shat, gds2, gds21/shat, gds22/shat²]
+        [bmag, gbdrift, cvdrift, gbdrift0/shat, gds2, gds21/shat, gds22/shat^2]
     scalars : jax.Array
         Scalar inputs of shape (batch, 2) - [a/LT, a/Ln]
     weights : dict
-        Model weights (state_dict) with keys matching PyTorch CyclicInvariantNet:
-        - 'conv_layers.{i}.weight': shape (out_ch, in_ch, kernel_size)
-        - 'conv_layers.{i}.bias': shape (out_ch,)
-        - 'fc_layers.{i}.weight': shape (out_features, in_features)
-        - 'fc_layers.{i}.bias': shape (out_features,)
-        - 'output_layer.weight': shape (1, in_features)
-        - 'output_layer.bias': shape (1,)
+        Model weights (state_dict). Supports two formats:
+
+        Without BatchNorm:
+        - 'conv_layers.{i}.weight/bias'
+        - 'fc_layers.0/1.weight/bias', 'output_layer.weight/bias'
+
+        With BatchNorm:
+        - 'conv_layers.{i}.weight/bias', 'conv_batch_norms.{i}.*'
+        - 'fc_layers.0/1.weight/bias', 'fc_batch_norms.0/1.*', 'output_layer.*'
 
     Returns
     -------
     output : jax.Array
-        Predicted log(Q) of shape (batch, 1)
-
-    Notes
-    -----
-    Architecture after 5 conv blocks with input length 96:
-        96 → 48 → 24 → 12 → 6 → 3 (after max pools)
-        → global_avg_pool → shape (batch, conv_channels5)
-        → concat scalars → shape (batch, conv_channels5 + 2)
-        → fc1 → relu → fc2 → relu → output
-
-    The model predicts log(Q), not Q directly. Apply exp() to get Q.
+        Predicted log(Q) of shape (batch, 1).
     """
+    use_bn = _has_batch_norm(weights)
+
+    # 5 convolutional blocks: Conv -> [BN] -> ReLU -> MaxPool
     x = signals
-
-    # 5 convolutional blocks (no BatchNorm)
     for i in range(5):
-        conv_w = weights[f"conv_layers.{i}.weight"]
-        conv_b = weights[f"conv_layers.{i}.bias"]
-        kernel_size = conv_w.shape[2]
-        x = _conv1d_circular(x, conv_w, conv_b, kernel_size)
-        x = jax.nn.relu(x)
-        x = _max_pool_1d(x)
+        x = _apply_conv_bn(x, weights, i, use_bn)
 
-    # Global average pooling: (batch, channels, 3) → (batch, channels)
+    # Global average pooling: (batch, channels, 3) -> (batch, channels)
     x = _global_avg_pool_1d(x)
 
     # Concatenate with scalar inputs: (batch, channels + 2)
     x = jnp.concatenate([x, scalars], axis=-1)
 
-    # Fully connected layers
-    x = jnp.dot(x, weights["fc_layers.0.weight"].T) + weights["fc_layers.0.bias"]
-    x = jax.nn.relu(x)
-
-    x = jnp.dot(x, weights["fc_layers.1.weight"].T) + weights["fc_layers.1.bias"]
-    x = jax.nn.relu(x)
+    # 2 fully connected blocks: Linear -> [BN] -> ReLU
+    x = _apply_fc_bn(x, weights, 0, use_bn)
+    x = _apply_fc_bn(x, weights, 1, use_bn)
 
     # Output layer: predict log(Q)
     x = jnp.dot(x, weights["output_layer.weight"].T) + weights["output_layer.bias"]

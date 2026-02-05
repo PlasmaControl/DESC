@@ -52,6 +52,7 @@ def test_gx_coefficients_tokamak():
         "gx_gbdrift",
         "gx_cvdrift",
         "gx_gbdrift0_over_shat",
+        "gx_gradpar",
     ]
     data = eq.compute(quantities, grid=grid)
 
@@ -79,6 +80,7 @@ def test_gx_coefficients_stellarator():
         "gx_gbdrift",
         "gx_cvdrift",
         "gx_gbdrift0_over_shat",
+        "gx_gradpar",
     ]
     data = eq.compute(quantities, grid=grid)
 

@@ -259,3 +259,31 @@ def _gx_gbdrift0_over_shat(params, transforms, profiles, data, **kwargs):
         2 * psi_sign * B_cross_grad_B_dot_grad_psi / (data["|B|"] ** 3 * sqrt_s)
     )
     return data
+
+
+# =============================================================================
+# Parallel Gradient
+# =============================================================================
+
+
+@register_compute_fun(
+    name="gx_gradpar",
+    label="L_{\\mathrm{ref}} \\mathbf{b} \\cdot \\nabla",
+    units="~",
+    units_long="dimensionless",
+    description="GX gradpar: L_ref * (B^θ*(1+λ_θ) + B^ζ*λ_ζ) / |B|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["a", "|B|", "B^theta", "B^zeta", "lambda_t", "lambda_z"],
+)
+def _gx_gradpar(params, transforms, profiles, data, **kwargs):
+    L_ref = data["a"]
+    data["gx_gradpar"] = (
+        L_ref
+        * (data["B^theta"] * (1 + data["lambda_t"]) + data["B^zeta"] * data["lambda_z"])
+        / data["|B|"]
+    )
+    return data

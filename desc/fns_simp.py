@@ -134,7 +134,7 @@ def _compute_magnetic_field_from_Current(Kgrid,
     if basis == "rpz":
         coords = rpz2xyz(coords)
     else:
-        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
+        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1],)
     
     surface_grid = Kgrid
 
@@ -161,6 +161,86 @@ def _compute_magnetic_field_from_Current(Kgrid,
         rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
         fj = biot_savart_general( coords, rs, K, _dV,
+        )
+        f += fj
+        return f
+    
+    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    
+    if basis == "rpz":
+        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        
+    return B
+
+def _compute_magnetic_field_from_Current_reg(Kgrid,
+                                         K_at_grid, 
+                                         surface, 
+                                         eq,
+                                         Bgrid,
+                                         basis="rpz",
+                                            patch = 1e-3):
+    
+    """Compute magnetic field at a set of points.
+
+    Parameters
+    ----------
+    K_at_grid : ndarray, shape (num_nodes,3)
+        Surface current evaluated at points on a grid, which you want to calculate
+        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
+        by "basis" argument
+    surface : FourierRZToroidalSurface
+        surface object upon which the surface current K_at_grid lies
+    coords : array-like shape(N,3) or Grid
+        cylindrical or cartesian coordinates to evlauate B at
+    grid : Grid,
+        source grid upon which to evaluate the surface current density K
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic field
+
+    Returns
+    -------
+    field : ndarray, shape(N,3)
+        magnetic field at specified points
+
+    """
+
+    Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
+    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
+    
+    assert basis.lower() in ["rpz", "xyz"]
+    if hasattr(coords, "nodes"):
+        coords = coords.nodes
+    coords = jnp.atleast_2d(coords)
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+    else:
+        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
+    
+    surface_grid = Kgrid
+
+    # compute and store grid quantities
+    # needed for integration
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
+
+    _rs = xyz2rpz(data["x"])
+    _K = K_at_grid
+
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+            2 * jnp.pi
+        )
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = biot_savart_general_reg( coords, rs, K, _dV, patch = patch,
         )
         f += fj
         return f
@@ -255,447 +335,6 @@ def _compute_magnetic_field_from_Current_Contour(Kgrid,
         
     return B
 
-def _compute_magnetic_field_from_Current_reg(Kgrid,
-                                             K_at_grid, 
-                                             surface, 
-                                             eq,
-                                             Bgrid,
-                                             basis="rpz"):
-    
-    """Compute magnetic field at a set of points.
-
-    Parameters
-    ----------
-    K_at_grid : ndarray, shape (num_nodes,3)
-        Surface current evaluated at points on a grid, which you want to calculate
-        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
-        by "basis" argument
-    surface : FourierRZToroidalSurface
-        surface object upon which the surface current K_at_grid lies
-    coords : array-like shape(N,3) or Grid
-        cylindrical or cartesian coordinates to evlauate B at
-    grid : Grid,
-        source grid upon which to evaluate the surface current density K
-    basis : {"rpz", "xyz"}
-        basis for input coordinates and returned magnetic field
-
-    Returns
-    -------
-    field : ndarray, shape(N,3)
-        magnetic field at specified points
-
-    """
-
-    Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
-    
-    assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
-    coords = jnp.atleast_2d(coords)
-    if basis == "rpz":
-        coords = rpz2xyz(coords)
-    else:
-        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
-    
-    surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
-
-    _rs = xyz2rpz(data["x"])
-    _K = K_at_grid
-
-    # surface element, must divide by NFP to remove the NFP multiple on the
-    # surface grid weights, as we account for that when doing the for loop
-    # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        K = rpz2xyz_vec(_K, phi=phi)
-        fj = biot_savart_general_reg( coords, rs, K, _dV,
-        )
-        f += fj
-        return f
-    
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-    
-    if basis == "rpz":
-        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        
-    return B
-
-def _compute_magnetic_field_from_potential(Kgrid,
-                                             psi_at_grid, 
-                                             surface,
-                                           surface_eq,
-                                             eq,
-                                             Bgrid,
-                                             basis="rpz"):
-    
-    """Compute magnetic field at a set of points.
-
-    Parameters
-    ----------
-    K_at_grid : ndarray, shape (num_nodes,3)
-        Surface current evaluated at points on a grid, which you want to calculate
-        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
-        by "basis" argument
-    surface : FourierRZToroidalSurface
-        surface object upon which the surface current K_at_grid lies
-    coords : array-like shape(N,3) or Grid
-        cylindrical or cartesian coordinates to evlauate B at
-    grid : Grid,
-        source grid upon which to evaluate the surface current density K
-    basis : {"rpz", "xyz"}
-        basis for input coordinates and returned magnetic field
-
-    Returns
-    -------
-    field : ndarray, shape(N,3)
-        magnetic field at specified points
-
-    """
-
-    Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
-    
-    assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
-    coords = jnp.atleast_2d(coords)
-    if basis == "rpz":
-        coords = rpz2xyz(coords)
-    #else:
-        #K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
-    
-    surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|",
-                            "n_rho",], grid=surface_grid, basis="xyz")
-    
-    datas = surface_eq.compute(["e^theta","e^zeta",
-                             "n_rho","n_rho_t","n_rho_z"], grid=surface_grid, basis="xyz")
-    
-    datas["e^theta_gamma"] = datas["e^theta"] - (dot(datas["e^theta"],datas["n_rho"])*datas["n_rho"].T).T
-    datas["e^zeta_gamma"] = datas["e^zeta"] - (dot(datas["e^zeta"],datas["n_rho"])*datas["n_rho"].T).T
-    
-    datas["nabla_gamma_dot_n"] = (dot(datas["e^theta_gamma"],datas["n_rho_t"]) 
-                                 + dot(datas["e^zeta_gamma"],datas["n_rho_z"])
-                                )
-    
-    # Data on the evaluation surface
-    datae = eq.compute(["e_rho","e_theta","e_zeta",
-                        "e^rho","e^theta","e^zeta"], grid=Bgrid, basis="xyz")
-
-    _rs = xyz2rpz(data["x"])
-    #_K = K_at_grid
-
-    # surface element, must divide by NFP to remove the NFP multiple on the
-    # surface grid weights, as we account for that when doing the for loop
-    # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        #K = rpz2xyz_vec(_K, phi=phi)
-        fj = biot_savart_potential(coords,
-                                   rs,
-                                   psi_at_grid,
-                                   _dV,
-                                   data["n_rho"],datas["nabla_gamma_dot_n"],
-                                   datae["e^rho"], datae["e^theta"], datae["e^zeta"],
-                                   datae["e_rho"], datae["e_theta"], datae["e_zeta"]
-                                  )
-        f += fj
-        return f
-    
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-    
-    if basis == "rpz":
-        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        
-    return B
-
-def _compute_surface_divergence_from_Current(Kgrid,
-                                             K_at_grid, 
-                                             surface, 
-                                             eq,
-                                             Bgrid,
-                                             ed,
-                                             basis="rpz"):
-    """Compute magnetic field at a set of points.
-
-    Parameters
-    ----------
-    K_at_grid : ndarray, shape (num_nodes,3)
-        Surface current evaluated at points on a grid, which you want to calculate
-        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
-        by "basis" argument
-    surface : FourierRZToroidalSurface
-        surface object upon which the surface current K_at_grid lies
-    coords : array-like shape(N,3) or Grid
-        cylindrical or cartesian coordinates to evlauate B at
-    grid : Grid,
-        source grid upon which to evaluate the surface current density K
-    basis : {"rpz", "xyz"}
-        basis for input coordinates and returned magnetic field
-
-    Returns
-    -------
-    field : ndarray, shape(N,3)
-        magnetic field at specified points
-
-    """
-
-    Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
-    
-    Bdata = eq.compute(["e_theta","e_zeta"], grid = Bgrid,basis = "xyz")
-    r_t = Bdata["e_theta"]#rpz2xyz_vec(ed["e_theta"], phi=phi)
-    r_z = Bdata["e_zeta"]
-    
-    #pos_t = r_t #np.vstack([ed["X_t"],ed["Y_t"],ed["Z_t"]]).T
-    #pos_z = r_z #np.vstack([ed["X_z"],ed["Y_z"],ed["Z_z"]]).T
-    etg = Bdata["e^theta_gamma"]
-    ezg = Bdata["e^zeta_gamma"]
-    n = Bdata["n_rho"]
-    nt = Bdata["n_rho_t"]
-    nz = Bdata["n_rho_z"]
-    
-    assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
-    coords = jnp.atleast_2d(coords)
-    if basis == "rpz":
-        coords = rpz2xyz(coords)
-    else:
-        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
-    surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
-
-    _rs = xyz2rpz(data["x"])
-    _K = K_at_grid
-
-    # surface element, must divide by NFP to remove the NFP multiple on the
-    # surface grid weights, as we account for that when doing the for loop
-    # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        K = rpz2xyz_vec(_K, phi=phi)
-        
-        
-        fj = surf_div_general(coords,
-                              rs,
-                              K,
-                              _dV,
-                              r_t, r_z,
-                              etg, ezg,
-                              n,
-                              nt,nz,
-                             )
-        f += fj
-        return f
-    
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-    
-    if basis == "rpz":
-        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        
-    return B
-
-def _compute_vector_potential_from_Current(Kgrid,
-                                             K_at_grid, 
-                                             surface, 
-                                             eq,
-                                             Bgrid,
-                                             basis="rpz"):
-    """Compute vector potential at a set of points.
-
-    Parameters
-    ----------
-    K_at_grid : ndarray, shape (num_nodes,3)
-        Surface current evaluated at points on a grid, which you want to calculate
-        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
-        by "basis" argument
-    surface : FourierRZToroidalSurface
-        surface object upon which the surface current K_at_grid lies
-    coords : array-like shape(N,3) or Grid
-        cylindrical or cartesian coordinates to evlauate B at
-    grid : Grid,
-        source grid upon which to evaluate the surface current density K
-    basis : {"rpz", "xyz"}
-        basis for input coordinates and returned magnetic field
-
-    Returns
-    -------
-    field : ndarray, shape(N,3)
-        Vector potential at specified points
-
-    """
-
-    Bdata = eq.compute(["R","phi","Z","n_rho"], grid = Bgrid)
-    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
-    
-    assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
-    coords = jnp.atleast_2d(coords)
-    if basis == "rpz":
-        coords = rpz2xyz(coords)
-    else:
-        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
-    surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
-
-    _rs = xyz2rpz(data["x"])
-    _K = K_at_grid
-
-    # surface element, must divide by NFP to remove the NFP multiple on the
-    # surface grid weights, as we account for that when doing the for loop
-    # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        K = rpz2xyz_vec(_K, phi=phi)
-        fj = vector_potential_general(
-            coords,
-            rs,
-            K,
-            _dV,
-        )
-        f += fj
-        return f
-    
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-    
-    if basis == "rpz":
-        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        
-    return B
-
-def _compute_vector_potential_from_potential(Kgrid,
-                                             K_at_grid, 
-                                             surface, 
-                                             eq,
-                                             Bgrid,
-                                             basis="rpz"):
-    """Compute vector potential at a set of points.
-
-    Parameters
-    ----------
-    K_at_grid : ndarray, shape (num_nodes,3)
-        Surface current evaluated at points on a grid, which you want to calculate
-        B from, should be in cartesian ("xyz") or cylindrical ("rpz") specifiec
-        by "basis" argument
-    surface : FourierRZToroidalSurface
-        surface object upon which the surface current K_at_grid lies
-    coords : array-like shape(N,3) or Grid
-        cylindrical or cartesian coordinates to evlauate B at
-    grid : Grid,
-        source grid upon which to evaluate the surface current density K
-    basis : {"rpz", "xyz"}
-        basis for input coordinates and returned magnetic field
-
-    Returns
-    -------
-    field : ndarray, shape(N,3)
-        Vector potential at specified points
-
-    """
-
-    Bdata = eq.compute(["R","phi","Z"], grid = Bgrid)
-    coords = jnp.vstack([Bdata["R"],Bdata["phi"],Bdata["Z"]]).T
-    
-    assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
-    coords = jnp.atleast_2d(coords)
-    if basis == "rpz":
-        coords = rpz2xyz(coords)
-    else:
-        K_at_grid = xyz2rpz_vec(K_at_grid, x=coords[:, 0], y=coords[:, 1])
-    surface_grid = Kgrid
-
-    # compute and store grid quantities
-    # needed for integration
-    # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surface_grid, basis="xyz")
-
-    _rs = xyz2rpz(data["x"])
-    _K = K_at_grid
-
-    # surface element, must divide by NFP to remove the NFP multiple on the
-    # surface grid weights, as we account for that when doing the for loop
-    # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        K = rpz2xyz_vec(_K, phi=phi)
-        fj = vector_potential_potential(
-            coords,
-            rs,
-            K,
-            _dV,
-        )
-        f += fj
-        return f
-    
-    A = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-    
-    if basis == "rpz":
-        A = xyz2rpz_vec(A, x=coords[:, 0], y=coords[:, 1])
-        
-    return A
-
 def plot_xy(var, 
             grid, # grid to plot on
             title, # title for the figure
@@ -755,6 +394,32 @@ def plot_figure(var,   # variable to plot
               
     return None
 
+def plot_figure4(var, grid, title, N=None):
+
+    Z = var.reshape(grid.num_theta, grid.num_zeta, order="F")
+
+    plt.figure(figsize=(6,5)).set_tight_layout(False)
+
+    cf = plt.contourf(
+        grid.nodes[grid.unique_zeta_idx, 2],
+        grid.nodes[grid.unique_theta_idx, 1],
+        Z,
+        #levels=[-0.01,0.25, 0.5, 1.01],
+        #cmap="gray"
+        levels = [-0.01, 0.1, 0.9, 1.01],
+        colors = ["black", "orange", "white"]
+    )
+
+    plt.ylabel(r'$\theta$', fontsize=20)
+    plt.xlabel(r'$\zeta$', fontsize=20)
+    plt.title(title, fontsize=20)
+
+    cbar = plt.colorbar(cf, ticks=[0,0.5, 1])
+    cbar.ax.set_yticklabels(['0','0.5', '1'])
+    cbar.ax.tick_params(labelsize=15)
+
+    return None
+    
 def plot_figure3(var,   # variable to plot
                 grid, # grid to plot on
                 title, # title for the figure
@@ -762,8 +427,8 @@ def plot_figure3(var,   # variable to plot
                ):
     
     levels = jnp.arange(min(var),
-                        max(var)*1.05,
-                        (1.01*max(var)-min(var))/N
+                        jnp.max(var)*1.05,
+                        (1.01*jnp.max(var)-jnp.min(var))/N
                        )
 
     plt.figure(figsize=(6,5)).set_tight_layout(False)
@@ -803,7 +468,7 @@ def plot_figure2(var,   # variable to plot
               
     return None
 
-def plot_figure4(var,   # variable to plot
+def plot_figure5(var,   # variable to plot
                 grid, # grid to plot on
                 title, # title for the figure
                  a,
@@ -839,62 +504,21 @@ def plot_figure4(var,   # variable to plot
               
     return None
 
-# Define function to minimize Bn
-def eqn_residual(data, 
-                 b_basis,
-                 f_basis,
-                 transform1,
-                 y,
-                 K_s
-                ):
-
-    
-    b_mn = y[0:b_basis.num_modes]
-    f_mn = y[b_basis.num_modes: b_basis.num_modes + f_basis.num_modes]
-    
-    # Compute V, rho and derivatives on the grid
-    fs = {# a
-        "b": transform1.transform(b_mn),
-        # First derivatives of rho
-        "b_t": transform1.transform(b_mn, dt = 1),
-        "b_z": transform1.transform(b_mn, dz = 1),
-        # f
-        "f": transform1.transform(f_mn),
-        # First derivatives of rho
-        "f_t": transform1.transform(f_mn, dt = 1),
-        "f_z": transform1.transform(f_mn, dz = 1),
-         }
-    
-    # Define nabla_gamma_b
-    nabla_gamma_b = ((y[b_basis.num_modes 
-                           + f_basis.num_modes]*data["theta"]**(0) 
-                         + fs["b_t"])*data["e^theta_gamma"].T 
-                         + (y[b_basis.num_modes 
-                              + f_basis.num_modes + 1]*data["zeta"]**(0) 
-                            + fs["b_z"])*data["e^zeta_gamma"].T).T
-    
-    # Define f
-    f = (y[b_basis.num_modes + f_basis.num_modes + 2]*data["theta"] 
-         + y[b_basis.num_modes + f_basis.num_modes + 3]*data["zeta"]
-         + fs["f"])
-    
-    # Define nabla_gamma_f
-    nabla_gamma_f = ((y[b_basis.num_modes 
-                           + f_basis.num_modes + 2]*data["theta"]**(0) 
-                         + fs["f_t"])*data["e^theta_gamma"].T 
-                         + (y[b_basis.num_modes 
-                              + f_basis.num_modes + 3]*data["zeta"]**(0) 
-                            + fs["f_z"])*data["e^zeta_gamma"].T).T
-    
-    error_v = nabla_gamma_f - (f*nabla_gamma_b.T).T - K_s
-    
-    return dot(error_v,error_v)
 
 def surf_int(f,data,grid):
 
     Q = f*data["|e_theta x e_zeta|"]
     
     integrand = grid.spacing[:, 1] * grid.spacing[:, 2] * Q
+    desired_rho_surface = 1.0
+    indices = jnp.where(grid.nodes[:, 0] == desired_rho_surface)[0]
+    integrand = integrand[indices]
+    
+    return integrand.sum()
+
+def sqr_int(f,data,grid):
+    
+    integrand = grid.spacing[:, 1] * grid.spacing[:, 2] * f
     desired_rho_surface = 1.0
     indices = jnp.where(grid.nodes[:, 0] == desired_rho_surface)[0]
     integrand = integrand[indices]

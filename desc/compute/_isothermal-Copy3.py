@@ -2,7 +2,10 @@
 
 Notes
 -----
-
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
 """
 
 import jax
@@ -15,6 +18,720 @@ from desc.utils import cross, dot, flatten_list
 
 from .data_index import register_compute_fun
 
+
+@register_compute_fun(
+    name="e_v",
+    label="\\e_{v}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "u_iso_t",
+        "u_iso_z",
+        "v_iso_t",
+        "v_iso_z",
+        "e_theta",
+        "e_zeta",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def e_v(params, transforms, profiles, data, **kwargs):
+
+    l = data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"]
+
+    data["e_v"] = (
+        (1 / l)
+        * (-data["u_iso_z"] * data["e_theta"].T + data["u_iso_t"] * data["e_zeta"].T)
+    ).T
+
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_v"] = rpz2xyz_vec(data["e_u"], phi=data["phi"])
+
+    return data
+
+
+@register_compute_fun(
+    name="e_u",
+    label="\\e_{u}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "u_iso_t",
+        "u_iso_z",
+        "v_iso_t",
+        "v_iso_z",
+        "e_theta",
+        "e_zeta",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def e_u(params, transforms, profiles, data, **kwargs):
+
+    l = data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"]
+
+    data["e_u"] = (
+        (1 / l)
+        * (data["v_iso_z"] * data["e_theta"].T - data["v_iso_t"] * data["e_zeta"].T)
+    ).T
+
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_u"] = rpz2xyz_vec(data["e_u"], phi=data["phi"])
+
+    return data
+
+
+@register_compute_fun(
+    name="lambda_iso_v",
+    label="\\lambda_{iso,v}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_t", "u_iso_z", "v_iso_t", "v_iso_z", "lambda_iso_t", "lambda_iso_z"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def lambda_iso_v(params, transforms, profiles, data, **kwargs):
+
+    data["lambda_iso_v"] = (
+        -data["u_iso_z"] * data["lambda_iso_t"] + data["u_iso_t"] * data["lambda_iso_z"]
+    ) / (data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"])
+
+    return data
+
+
+@register_compute_fun(
+    name="lambda_iso_u",
+    label="\\lambda_{iso,u}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_t", "u_iso_z", "v_iso_t", "v_iso_z", "lambda_iso_t", "lambda_iso_z"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def lambda_iso_u(params, transforms, profiles, data, **kwargs):
+
+    data["lambda_iso_u"] = (
+        data["v_iso_z"] * data["lambda_iso_t"] - data["v_iso_t"] * data["lambda_iso_z"]
+    ) / (data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"])
+
+    return data
+
+
+@register_compute_fun(
+    name="lambda_iso_z",
+    label="\\lambda_{iso,z}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "lambda_iso",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def lambda_iso_z(params, transforms, profiles, data, **kwargs):
+
+    data["lambda_iso_z"] = first_derivative_z(
+        data["lambda_iso"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="lambda_iso_t",
+    label="\\lambda_{iso,t}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "lambda_iso",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def lambda_iso_t(params, transforms, profiles, data, **kwargs):
+
+    data["lambda_iso_t"] = first_derivative_t(
+        data["lambda_iso"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="lambda_iso",
+    label="\\psi_{iso,tz}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "H_1",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def lambda_iso(params, transforms, profiles, data, **kwargs):
+
+    data["lambda_iso"] = jnp.sum(data["H_1"] * data["H_1"], axis=-1) ** (-1 / 2)
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso_tt",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_tt", "V_iso_tt", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso_tt(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso_tt"] = data["lambda_ratio"] * (
+        data["V_iso_tt"] + data["b_iso"] * data["u_iso_tt"]
+    )
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso_tz",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_tz", "V_iso_tz", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso_tz(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso_tz"] = data["lambda_ratio"] * (
+        data["V_iso_tz"] + data["b_iso"] * data["u_iso_tz"]
+    )
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso_zz",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_zz", "V_iso_zz", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso_zz(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso_zz"] = data["lambda_ratio"] * (
+        data["V_iso_zz"] + data["b_iso"] * data["u_iso_zz"]
+    )
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso_t",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_t", "V_iso_t", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso_t(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso_t"] = data["lambda_ratio"] * (
+        data["V_iso_t"] + data["b_iso"] * data["u_iso_t"]
+    )
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso_z",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso_z", "V_iso_z", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso_z(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso_z"] = data["lambda_ratio"] * (
+        data["V_iso_z"] + data["b_iso"] * data["u_iso_z"]
+    )
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="v_iso",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["u_iso", "V_iso", "b_iso", "lambda_ratio"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def v_iso(params, transforms, profiles, data, **kwargs):
+
+    data["v_iso"] = data["lambda_ratio"] * (
+        data["V_iso"] + data["b_iso"] * data["u_iso"]
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso_tt",
+    label="\\u_{iso,t}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of toroidal isothermal coordinate ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "u_iso_t"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso_tt(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso_tt"] = -first_derivative_t(
+        data["u_iso_t"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso_tz",
+    label="\\u_{iso,tz}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of toroidal isothermal coordinate ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "u_iso_t"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso_tz(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso_tz"] = -first_derivative_z(
+        data["u_iso_t"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso_zz",
+    label="\\u_{iso,zz}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of toroidal isothermal coordinate ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "u_iso_z"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso_zz(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso_zz"] = -first_derivative_z(
+        data["u_iso_z"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso_t",
+    label="\\u_{iso,t}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of toroidal isothermal coordinate ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "phi_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso_t(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso_t"] = -first_derivative_t(
+        data["phi_iso"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso_z",
+    label="\\u_{iso,t}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of toroidal isothermal coordinate ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "phi_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso_z(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso_z"] = 1 - first_derivative_z(
+        data["phi_iso"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="u_iso",
+    label="\\u_{iso}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["zeta", "phi_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def u_iso(params, transforms, profiles, data, **kwargs):
+
+    data["u_iso"] = data["zeta"] - data["phi_iso"]
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso_tt",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["Psi_iso_tt"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso_tt(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso_tt"] = -data["Psi_iso_tt"]
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso_tz",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["Psi_iso_tz"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso_tz(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso_tz"] = -data["Psi_iso_tz"]
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso_zz",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["Psi_iso_zz"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso_zz(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso_zz"] = -data["Psi_iso_zz"]
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso_t",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["Psi_iso_t"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso_t(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso_t"] = 1 - data["Psi_iso_t"]
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso_z",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["Psi_iso_z"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso_z(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso_z"] = -data["Psi_iso_z"]
+
+    return data
+
+
+# Find a toroidal harmonic vector on a surface
+@register_compute_fun(
+    name="V_iso",
+    label="\\mathrm{H}_1",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "Psi_iso"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def V_iso(params, transforms, profiles, data, **kwargs):
+
+    data["V_iso"] = data["theta"] - data["Psi_iso"]
+
+    return data
+
+
+# Find a poloidal harmonic vector on a surface
+@register_compute_fun(
+    name="H_2",
+    label="\\mathrm{H}_2",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[
+        "theta",
+        "zeta",
+        "e^theta_s",
+        "e^zeta_s",
+        "H_1",
+        "nabla_s_V_iso",
+        "lambda_ratio",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def H2(params, transforms, profiles, data, **kwargs):
+
+    # Normalize H_2 to match same magnitude of H_1 (?)
+    data["H_2"] = data["lambda_ratio"] * (
+        data["nabla_s_V_iso"] + data["b_iso"] * data["H_1"]
+    )
+    # - data["lambda_ratio"] * ( data["H_1"] + data["b_iso"] * data["nabla_s_V_iso"] )
+
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["H_2"] = rpz2xyz_vec(data["H_2"], phi=data["phi"])
+
+    return data
+
+
+#
 @register_compute_fun(
     name="tau",
     label="\tau",
@@ -49,16 +766,24 @@ def tau(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=["b_iso"],
+    data=["lambda_ratio", "b_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
 def tau_1(params, transforms, profiles, data, **kwargs):
 
-    data["tau_1"] = data["b_iso"]
+    #
+    data["tau_1"] = (
+        data["b_iso"]
+        * data["lambda_ratio"]
+        / (1 + (data["b_iso"] * data["lambda_ratio"]) ** 2)
+    )
+
     return data
 
+
+#
 @register_compute_fun(
     name="tau_2",
     label="\tau_2",
@@ -70,17 +795,22 @@ def tau_1(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=["lambda_ratio"],
+    data=["lambda_ratio", "b_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
 def tau_2(params, transforms, profiles, data, **kwargs):
 
-    data["tau_2"] = data["lambda_ratio"]**(-1)
+    #
+    data["tau_2"] = data["lambda_ratio"] / (
+        1 + (data["b_iso"] * data["lambda_ratio"]) ** 2
+    )
+
     return data
 
 
+#
 @register_compute_fun(
     name="omega_1",
     label="\\omega_1",
@@ -99,9 +829,13 @@ def tau_2(params, transforms, profiles, data, **kwargs):
 )
 def omega_1(params, transforms, profiles, data, **kwargs):
 
-    data["omega_1"] = 2 * jnp.pi * data["lambda_ratio"]
+    #
+    data["omega_1"] = (
+        2 * jnp.pi + 2 * jnp.pi * data["b_iso"] * data["lambda_ratio"] * 1j
+    )
+
     return data
-    
+
 
 @register_compute_fun(
     name="omega_2",
@@ -121,514 +855,15 @@ def omega_1(params, transforms, profiles, data, **kwargs):
 )
 def omega_2(params, transforms, profiles, data, **kwargs):
 
-    data["omega_2"] = 2 * jnp.pi * (data["lambda_ratio"] * data["b_iso"] + 1j)
-    return data
-
-@register_compute_fun(
-    name="e_v",
-    label="\\e_{v}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["u_iso_t", "u_iso_z",
-          "e_theta", "e_zeta",
-          'det',
-    ],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def e_v(params, transforms, profiles, data, **kwargs):
-
-    #l = data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"]
-
-    data["e_v"] = ( data['det']**(-1) * (-data["u_iso_z"] * data["e_theta"].T + data["u_iso_t"] * data["e_zeta"].T)
-                   ).T
-
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_v"] = rpz2xyz_vec(data["e_u"], phi=data["phi"])
+    data["omega_2"] = 2 * jnp.pi * data["lambda_ratio"] * 1j
 
     return data
 
 
-@register_compute_fun(
-    name="e_u",
-    label="\\e_{u}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["v_iso_t", "v_iso_z",
-          "e_theta", "e_zeta",
-          'det',
-    ],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def e_u(params, transforms, profiles, data, **kwargs):
-
-    #l = data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"]
-
-    data["e_u"] = ( data['det'] ** (-1) * (data["v_iso_z"] * data["e_theta"].T - data["v_iso_t"] * data["e_zeta"].T)
-                   ).T
-
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_u"] = rpz2xyz_vec(data["e_u"], phi=data["phi"])
-
-    return data
-
-
-@register_compute_fun(
-    name="lambda_iso_v",
-    label="\\lambda_{iso,v}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["u_iso_t", "u_iso_z", 
-          "lambda_iso_t", "lambda_iso_z","det"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def lambda_iso_v(params, transforms, profiles, data, **kwargs):
-
-    data["lambda_iso_v"] = ( - data["u_iso_z"] * data["lambda_iso_t"] + data["u_iso_t"] * data["lambda_iso_z"]
-                            ) * data['det']**(-1)
-    #/ (data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"])
-
-    return data
-
-
-@register_compute_fun(
-    name="lambda_iso_u",
-    label="\\lambda_{iso,u}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["v_iso_t", "v_iso_z", 
-          "lambda_iso_t", "lambda_iso_z",'det'],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def lambda_iso_u(params, transforms, profiles, data, **kwargs):
-
-    data["lambda_iso_u"] = (
-        data["v_iso_z"] * data["lambda_iso_t"] - data["v_iso_t"] * data["lambda_iso_z"]
-    ) * data['det']**(-1)
-    #/ (data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"])
-
-    return data
-
-
-@register_compute_fun(
-    name="det",
-    label="\\e_{u}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["u_iso_t", "u_iso_z",
-          "v_iso_t", "v_iso_z",
-          ],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def determinant(params, transforms, profiles, data, **kwargs):
-
-    data["det"] = data["u_iso_t"] * data["v_iso_z"] - data["u_iso_z"] * data["v_iso_t"]
-    return data
-
-    
-@register_compute_fun(
-    name="lambda_iso_z",
-    label="\\lambda_{iso,z}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["lambda_iso",],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def lambda_iso_z(params, transforms, profiles, data, **kwargs):
-
-    data["lambda_iso_z"] = first_derivative_z(data["lambda_iso"],
-                                            data,
-                                            2 * (transforms["grid"].M) + 1,
-                                            2 * (transforms["grid"].N) + 1,
-                                        )
-
-    return data
-
-
-@register_compute_fun(
-    name="lambda_iso_t",
-    label="\\lambda_{iso,t}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["lambda_iso",],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def lambda_iso_t(params, transforms, profiles, data, **kwargs):
-
-    data["lambda_iso_t"] = first_derivative_t(data["lambda_iso"],
-                                            data,
-                                            2 * (transforms["grid"].M) + 1,
-                                            2 * (transforms["grid"].N) + 1,
-                                        )
-
-    return data
-
-
-@register_compute_fun(
-    name="lambda_iso",
-    label="\\psi_{iso,tz}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=[
-        "H_2",
-    ],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def lambda_iso(params, transforms, profiles, data, **kwargs):
-
-    data["lambda_iso"] = jnp.sum(data["H_2"] * data["H_2"], axis=-1) ** (-1 / 2)
-
-    return data
-
-    
-@register_compute_fun(
-    name="u_iso_t",
-    label="\\u_{iso,t}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal derivative of toroidal isothermal coordinate ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=['U_iso_t', 'lambda_ratio','V_iso_t'],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ], 
-)
-def u_iso_t(params, transforms, profiles, data, **kwargs):
-
-    data["u_iso_t"] = data["lambda_ratio"] * ( data["U_iso_t"] + data['b_iso'] * data['V_iso_t'] )
-
-    return data
-
-
-@register_compute_fun(
-    name="u_iso_z",
-    label="\\u_{iso,t}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal derivative of toroidal isothermal coordinate ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=[#"theta", "zeta", 
-          'U_iso_z',#"phi_iso","phi_iso_z",
-          'lambda_ratio','V_iso_z'],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def u_iso_z(params, transforms, profiles, data, **kwargs):
-
-    data["u_iso_z"] = data["lambda_ratio"] * ( data["U_iso_z"] + data['b_iso'] * data['V_iso_z'] )
-
-    return data
-
-
-@register_compute_fun(
-    name="u_iso",
-    label="\\u_{iso}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=['U_iso',#"zeta", "phi_iso", 
-          'lambda_ratio','b_iso', 'V_iso'],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def u_iso(params, transforms, profiles, data, **kwargs):
-
-    data["u_iso"] = data['lambda_ratio'] * ( data["U_iso"] + data['b_iso'] * data['V_iso']
-                                           )
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="v_iso_t",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["V_iso_t"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def v_iso_t(params, transforms, profiles, data, **kwargs):
-
-    data["v_iso_t"] = data["V_iso_t"]
-    return data
-
-
-@register_compute_fun(
-    name="v_iso_z",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["V_iso_z",],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def v_iso_z(params, transforms, profiles, data, **kwargs):
-
-    data["v_iso_z"] = data["V_iso_z"]
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="v_iso",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["V_iso"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def v_iso(params, transforms, profiles, data, **kwargs):
-
-    data["v_iso"] = data["V_iso"]
-    return data
-    
-
-@register_compute_fun(
-    name="V_iso_t",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["psi_iso_t"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def V_iso_t(params, transforms, profiles, data, **kwargs):
-
-    data["V_iso_t"] = 1 - data["psi_iso_t"]
-
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="V_iso_z",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["psi_iso_z"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def V_iso_z(params, transforms, profiles, data, **kwargs):
-
-    data["V_iso_z"] = -data["psi_iso_z"]
-
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="V_iso",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["theta", "psi_iso"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def V_iso(params, transforms, profiles, data, **kwargs):
-
-    data["V_iso"] = data["theta"] - data["psi_iso"] - jnp.pi
-
-    return data
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="U_iso_t",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["phi_iso_t"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def U_iso_t(params, transforms, profiles, data, **kwargs):
-
-    data["U_iso_t"] = - data["phi_iso_t"]
-
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="U_iso_z",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["phi_iso_z"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def U_iso_z(params, transforms, profiles, data, **kwargs):
-
-    data["U_iso_z"] = 1 - data["phi_iso_z"]
-
-    return data
-
-
-# Find a toroidal harmonic vector on a surface
-@register_compute_fun(
-    name="U_iso",
-    label="\\mathrm{H}_1",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["zeta", "phi_iso"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def U_iso(params, transforms, profiles, data, **kwargs):
-
-    data["U_iso"] = data["zeta"] - data["phi_iso"] - jnp.pi
-
-    return data
-    
 # Find a toroidal harmonic vector on a surface
 @register_compute_fun(
     name="lambda_ratio",
-    label="\\lambda",
+    label="\\mathrm{H}_1",
     units="m^{-1}",
     units_long="Inverse meters",
     description="Toroidal Harmonic Vector on a given surface ",
@@ -637,26 +872,27 @@ def U_iso(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=["H_2", 'nabla_s_U_iso', "b_iso"],
+    data=["theta", "zeta", "e^theta_s", "e^zeta_s", "H_1", "nabla_s_V_iso", "b_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
 def lambda_ratio(params, transforms, profiles, data, **kwargs):
 
-    lambda_temp = data["nabla_s_U_iso"] + data["b_iso"] * data["H_2"]
+    lambda_temp = data["nabla_s_V_iso"] + data["b_iso"] * data["H_1"]
     #
     data["lambda_ratio"] = jnp.mean(
         jnp.sqrt(
-            jnp.sum(data["H_2"] * data["H_2"], axis=-1)
+            jnp.sum(data["H_1"] * data["H_1"], axis=-1)
             / jnp.sum(lambda_temp * lambda_temp, axis=-1)
         )
     )
     return data
-# Find a poloidal harmonic vector on a surface
+
+
 @register_compute_fun(
-    name="H_2",
-    label="\\mathrm{H}_2",
+    name="psi_iso",
+    label="\\psi_{iso}",
     units="m^{-1}",
     units_long="Inverse meters",
     description="Poloidal Harmonic Vector on a given surface ",
@@ -665,24 +901,18 @@ def lambda_ratio(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=[
-        "nabla_s_V_iso",
-    ],
+    data=["theta", "zeta", "Psi_iso", "b_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def H2(params, transforms, profiles, data, **kwargs):
+def psi_iso(params, transforms, profiles, data, **kwargs):
 
-    # Normalize H_2 to match same magnitude of H_1 (?)
-    data["H_2"] = data["nabla_s_V_iso"]
-    # - data["lambda_ratio"] * ( data["H_1"] + data["b_iso"] * data["nabla_s_V_iso"] )
-
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["H_2"] = rpz2xyz_vec(data["H_2"], phi=data["phi"])
+    data["psi_iso"] = data["b_iso"] * data["Psi_iso"]
 
     return data
-    
+
+
 @register_compute_fun(
     name="b_iso",
     label="\\mathrm{H}_2",
@@ -694,52 +924,26 @@ def H2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=["theta", "zeta", "nabla_s_U_iso", "nabla_s_V_iso"],
+    data=["theta", "zeta", "e^theta_s", "e^zeta_s", "H_1", "nabla_s_V_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
 def b_iso(params, transforms, profiles, data, **kwargs):
 
-    data["b_iso"] = - jnp.mean(
-        jnp.sum(data["nabla_s_V_iso"] * data["nabla_s_U_iso"], axis=-1)
-        / jnp.sum(data["nabla_s_V_iso"] * data["nabla_s_V_iso"], axis=-1)
+    data["b_iso"] = -jnp.mean(
+        jnp.sum(data["nabla_s_V_iso"] * data["H_1"], axis=-1)
+        / jnp.sum(data["H_1"] * data["H_1"], axis=-1)
     )
+    # - jnp.mean( jnp.sum( data["H_1"] * data["H_1"] , axis=-1
+    #                   ) / jnp.sum( data["nabla_s_V_iso"] * data["H_1"] , axis=-1
+    #                              )
+    #          )
+
     return data
 
 
 # Find a poloidal harmonic vector on a surface
-@register_compute_fun(
-    name="nabla_s_U_iso",
-    label="\\nabla_s U_{iso}",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rpz",
-    data=["e^theta_s", "e^zeta_s", "phi_iso"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def nabla_s_U_iso(params, transforms, profiles, data, **kwargs):
-
-    data["nabla_s_U_iso"] = data["e^zeta_s"] - grad_(
-        data["phi_iso"],
-        data,
-        2 * (transforms["grid"].M) + 1,
-        2 * (transforms["grid"].N) + 1,
-    )
-
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["nabla_s_U_iso"] = rpz2xyz_vec(data["nabla_s_U_iso"], phi=data["phi"])
-
-    return data
-
-    
 @register_compute_fun(
     name="nabla_s_V_iso",
     label="\\nabla_s V_{iso}",
@@ -751,7 +955,7 @@ def nabla_s_U_iso(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=["theta", "zeta", "e^theta_s", "e^zeta_s", "psi_iso"],
+    data=["theta", "zeta", "e^theta_s", "e^zeta_s", "Psi_iso"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
@@ -759,7 +963,7 @@ def nabla_s_U_iso(params, transforms, profiles, data, **kwargs):
 def nabla_s_V_iso(params, transforms, profiles, data, **kwargs):
 
     data["nabla_s_V_iso"] = data["e^theta_s"] - grad_(
-        data["psi_iso"],
+        data["Psi_iso"],
         data,
         2 * (transforms["grid"].M) + 1,
         2 * (transforms["grid"].N) + 1,
@@ -770,34 +974,93 @@ def nabla_s_V_iso(params, transforms, profiles, data, **kwargs):
 
     return data
 
+
 @register_compute_fun(
-    name="H_1",
-    label="\\mathrm{H}_1",
+    name="Psi_iso_tt",
+    label="\\Psi_{iso,tt}",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Toroidal Harmonic Vector on a given surface ",
+    description="Poloidal Harmonic Vector on a given surface ",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=['nabla_s_U_iso', 'lambda_ratio', 'b_iso', 'H_2'
-    ],
+    data=["theta", "zeta", "Psi_iso_t"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def H1(params, transforms, profiles, data, **kwargs):
+def Psi_iso_tt(params, transforms, profiles, data, **kwargs):
 
-    data["H_1"] = data["lambda_ratio"] * ( data["nabla_s_U_iso"] + data["b_iso"] * data["H_2"])
-
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["H_1"] = rpz2xyz_vec(data["H_1"], phi=data["phi"])
+    data["Psi_iso_tt"] = first_derivative_t(
+        data["Psi_iso_t"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
 
     return data
-  
+
+
 @register_compute_fun(
-    name="psi_iso_t",
+    name="Psi_iso_tz",
+    label="\\psi_{iso,tz}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "Psi_iso_t"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def Psi_iso_tz(params, transforms, profiles, data, **kwargs):
+
+    data["Psi_iso_tz"] = first_derivative_z(
+        data["Psi_iso_t"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="Psi_iso_zz",
+    label="\\Psi_{iso,zz}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=["theta", "zeta", "Psi_iso_z"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def Psi_iso_zz(params, transforms, profiles, data, **kwargs):
+
+    data["Psi_iso_zz"] = first_derivative_z(
+        data["Psi_iso_z"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="Psi_iso_t",
     label="\\Psi_{iso,t}",
     units="m^{-1}",
     units_long="Inverse meters",
@@ -812,10 +1075,10 @@ def H1(params, transforms, profiles, data, **kwargs):
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def psi_iso_t(params, transforms, profiles, data, **kwargs):
+def Psi_iso_t(params, transforms, profiles, data, **kwargs):
 
-    data["psi_iso_t"] = first_derivative_t(
-        data["psi_iso"],
+    data["Psi_iso_t"] = first_derivative_t(
+        data["Psi_iso"],
         data,
         2 * (transforms["grid"].M) + 1,
         2 * (transforms["grid"].N) + 1,
@@ -825,7 +1088,7 @@ def psi_iso_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="psi_iso_z",
+    name="Psi_iso_z",
     label="\\Psi_{iso,z}",
     units="m^{-1}",
     units_long="Inverse meters",
@@ -837,16 +1100,16 @@ def psi_iso_t(params, transforms, profiles, data, **kwargs):
     coordinates="rpz",
     data=[
         "theta",
-        "zeta","psi_iso"
+        "zeta",
     ],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def psi_iso_z(params, transforms, profiles, data, **kwargs):
+def Psi_iso_z(params, transforms, profiles, data, **kwargs):
 
-    data["psi_iso_z"] = first_derivative_z(
-        data["psi_iso"],
+    data["Psi_iso_z"] = first_derivative_z(
+        data["Psi_iso"],
         data,
         2 * (transforms["grid"].M) + 1,
         2 * (transforms["grid"].N) + 1,
@@ -854,8 +1117,9 @@ def psi_iso_z(params, transforms, profiles, data, **kwargs):
 
     return data
 
+
 @register_compute_fun(
-    name="psi_iso",
+    name="Psi_iso",
     label="\\Psi_{iso}",
     units="m^{-1}",
     units_long="Inverse meters",
@@ -880,9 +1144,9 @@ def psi_iso_z(params, transforms, profiles, data, **kwargs):
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def psi_iso(params, transforms, profiles, data, **kwargs):
+def Psi_iso(params, transforms, profiles, data, **kwargs):
 
-    data["psi_iso"] = find_phi(
+    data["Psi_iso"] = find_phi(
         data,
         2 * (transforms["grid"].M) + 1,
         2 * (transforms["grid"].N) + 1,
@@ -891,33 +1155,40 @@ def psi_iso(params, transforms, profiles, data, **kwargs):
 
     return data
 
-    
+
 @register_compute_fun(
-    name="phi_iso_z",
-    label="\\phi_{iso}_z",
+    name="H_1",
+    label="\\mathrm{H}_1",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Poloidal Harmonic Vector on a given surface ",
+    description="Toroidal Harmonic Vector on a given surface ",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rpz",
-    data=[  # "theta","zeta",
+    data=[
+        "theta",
+        "zeta",
+        "e^theta_s",
+        "e^zeta_s",
         "phi_iso",
     ],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
     ],
 )
-def phi_iso_z(params, transforms, profiles, data, **kwargs):
+def H1(params, transforms, profiles, data, **kwargs):
 
-    data["phi_iso_z"] = first_derivative_z(
+    data["H_1"] = data["e^zeta_s"] - grad_(
         data["phi_iso"],
         data,
         2 * (transforms["grid"].M) + 1,
         2 * (transforms["grid"].N) + 1,
     )
+
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["H_1"] = rpz2xyz_vec(data["H_1"], phi=data["phi"])
 
     return data
 
@@ -950,7 +1221,37 @@ def phi_iso_t(params, transforms, profiles, data, **kwargs):
     )
 
     return data
-    
+
+
+@register_compute_fun(
+    name="phi_iso_z",
+    label="\\phi_{iso}_z",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal Harmonic Vector on a given surface ",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rpz",
+    data=[  # "theta","zeta",
+        "phi_iso",
+    ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def phi_iso_z(params, transforms, profiles, data, **kwargs):
+
+    data["phi_iso_z"] = first_derivative_z(
+        data["phi_iso"],
+        data,
+        2 * (transforms["grid"].M) + 1,
+        2 * (transforms["grid"].N) + 1,
+    )
+
+    return data
+
 
 @register_compute_fun(
     name="phi_iso",

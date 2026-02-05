@@ -2215,10 +2215,9 @@ def _G_from_external_field(external_field, eq, external_field_grid, chunk_size=N
 
 ###################################################################################################################
 # Generate a modified class to handle FourierCurrentPotential and Thickness field
-class FourierThicknessCurrentPotentialField(
-    _MagneticField, FourierRZToroidalSurface, Optimizable
-):
-    """Magnetic field due to a surface current potential on a toroidal surface and corresponding thickness variation
+#################################################################################################
+class sigmaVoltageFourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
 
     Surface current K is assumed given by
 
@@ -2226,15 +2225,10 @@ class FourierThicknessCurrentPotentialField(
 
     Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-    b(θ,ζ) = bₛᵥ(θ,ζ) + (b_G)ζ+ (b_I)θ
-
     where:
 
         - n is the winding surface unit normal.
         - Phi is the current potential function, which is a function of theta and zeta,
-          and is given as a secular linear term in theta/zeta and a double Fourier
-          series in theta/zeta.
-        - b is the non-dimensional thickness variation, which is a function of theta and zeta,
           and is given as a secular linear term in theta/zeta and a double Fourier
           series in theta/zeta.
 
@@ -2245,15 +2239,16 @@ class FourierThicknessCurrentPotentialField(
     ----------
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
+        Has units of Amperes.
     modes_Phi : array-like, shape(k,2)
         Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
         coefficients.
     I : float
         Net current linking the plasma and the surface toroidally
-        Denoted I in the algorithm
+        Denoted I in the algorithm, has units of Amperes.
     G : float
         Net current linking the plasma and the surface poloidally
-        Denoted G in the algorithm
+        Denoted G in the algorithm, has units of Amperes.
         NOTE: a negative G will tend to produce a positive toroidal magnetic field
         B in DESC, as in DESC the poloidal angle is taken to be positive
         and increasing when going in the clockwise direction, which with the
@@ -2292,8 +2287,26 @@ class FourierThicknessCurrentPotentialField(
     _io_attrs_ = (
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
-        + ["_b_mn", "_b_I", "_b_G", "_b_basis", "_M_b", "_N_b", "_sym_b"]
+        + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi",
+          "_sigma_mn", "_sigma_basis", "_M_sigma", "_N_sigma", 
+          "_V_mn", "_I_V", "_G_V", "_V_basis", "_M_V", "_N_V", ]
+    )
+
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + [
+            "_M_Phi",
+            "_N_Phi",
+            "_M_sigma",
+            "_N_sigma",
+            "_M_V",
+            "_N_V",
+            "_sym_Phi",
+            "_Phi_basis",
+            "_sigma_basis",
+            "_V_basis",
+        ]
     )
 
     def __init__(
@@ -2303,17 +2316,18 @@ class FourierThicknessCurrentPotentialField(
         I=0,
         G=0,
         sym_Phi=False,
+        sigma_mn=np.array([0.0]),
+        modes_sigma=np.array([[0, 0]]),
+        I_V=0, # Secular term for voltage
+        G_V=0, # Secular term for voltage
+        V_mn=np.array([0.0]),
+        modes_V=np.array([[0, 0]]),
         M_Phi=None,
         N_Phi=None,
-        ### Add atributes for b
-        b_mn=np.array([0.0]),
-        modes_b=np.array([[0, 0]]),
-        b_I=0,
-        b_G=0,
-        sym_b=False,
-        M_b=None,
-        N_b=None,
-        ####
+        M_sigma=None, # Sigma terms
+        N_sigma=None,
+        M_V=None, # Voltage terms
+        N_V=None,
         R_lmn=None,
         Z_lmn=None,
         modes_R=None,
@@ -2332,39 +2346,47 @@ class FourierThicknessCurrentPotentialField(
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
+        sigma_mn, modes_sigma = map(np.asarray, (sigma_mn, modes_sigma))
+        assert (
+            sigma_mn.size == modes_sigma.shape[0]
+        ), "sigma_mn size and modes_sigma.shape[0] must be the same size!"
+
+        assert np.issubdtype(modes_sigma.dtype, np.integer)
+
+        V_mn, modes_V = map(np.asarray, (V_mn, modes_V))
+        assert (
+            V_mn.size == modes_V.shape[0]
+        ), "V_mn size and modes_sigma.shape[0] must be the same size!"
+
+        assert np.issubdtype(modes_V.dtype, np.integer)
+
         M_Phi = setdefault(M_Phi, np.max(abs(modes_Phi[:, 0])))
         N_Phi = setdefault(N_Phi, np.max(abs(modes_Phi[:, 1])))
 
         self._M_Phi = M_Phi
         self._N_Phi = N_Phi
 
+        self._M_sigma = M_sigma
+        self._N_sigma = N_sigma
+
+        self._M_V = M_V
+        self._N_V = N_V
+
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
+        
+        self._sigma_basis = DoubleFourierSeries(M=M_sigma, N=N_sigma, NFP=NFP, sym=sym_Phi)
+        self._sigma_mn = copy_coeffs(sigma_mn, modes_sigma, self._sigma_basis.modes[:, 1:])
+
+        self._V_basis = DoubleFourierSeries(M=M_V, N=N_V, NFP=NFP, sym=sym_Phi)
+        self._V_mn = copy_coeffs(V_mn, modes_V, self._V_basis.modes[:, 1:])
 
         self._I = float(np.squeeze(I))
         self._G = float(np.squeeze(G))
-
-        #### Stuff for b
-        b_mn, modes_b = map(np.asarray, (b_mn, modes_b))
-        assert (
-            b_mn.size == modes_b.shape[0]
-        ), "b_mn size and modes_Phi.shape[0] must be the same size!"
-
-        assert np.issubdtype(modes_b.dtype, np.integer)
-
-        M_b = setdefault(M_b, np.max(abs(modes_b[:, 0])))
-        N_b = setdefault(N_b, np.max(abs(modes_b[:, 1])))
-
-        self._M_b = M_b
-        self._N_b = N_b
-
-        self._sym_b = sym_b
-        self._b_basis = DoubleFourierSeries(M=M_b, N=N_b, NFP=NFP, sym=sym_b)
-        self._b_mn = copy_coeffs(b_mn, modes_b, self._b_basis.modes[:, 1:])
-
-        self._b_I = float(np.squeeze(b_I))
-        self_b_G = float(np.squeeze(b_G))
+        
+        self._I_V = float(np.squeeze(I_V))
+        self._G_V = float(np.squeeze(G_V))
 
         super().__init__(
             R_lmn=R_lmn,
@@ -2401,6 +2423,26 @@ class FourierThicknessCurrentPotentialField(
 
     @optimizable_parameter
     @property
+    def I_V(self):  # noqa: E743
+        """Net current linking the plasma and the surface toroidally."""
+        return self._I_V
+
+    @I.setter
+    def I_V(self, new):  # noqa: E743
+        self._I_V = float(np.squeeze(new))
+
+    @optimizable_parameter
+    @property
+    def G_V(self):
+        """Net current linking the plasma and the surface poloidally."""
+        return self._G_V
+
+    @G.setter
+    def G_V(self, new):
+        self._G_V = float(np.squeeze(new))
+        
+    @optimizable_parameter
+    @property
     def Phi_mn(self):
         """Fourier coefficients describing single-valued part of potential."""
         return self._Phi_mn
@@ -2415,10 +2457,52 @@ class FourierThicknessCurrentPotentialField(
                 + f"basis with {self.Phi_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
+    @property
+    def sigma_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._sigma_mn
+
+    @sigma_mn.setter
+    def sigma_mn(self, new):
+        if len(new) == self.sigma_basis.num_modes:
+            self._sigma_mn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Phi_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.sigma_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def V_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._V_mn
+
+    @V_mn.setter
+    def V_mn(self, new):
+        if len(new) == self.V_basis.num_modes:
+            self._V_mn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"V_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.V_basis.num_modes} modes."
+            )
+            
     @property
     def Phi_basis(self):
         """DoubleFourierSeries: Spectral basis for Phi."""
         return self._Phi_basis
+
+    @property
+    def sigma_basis(self):
+        """DoubleFourierSeries: Spectral basis for sigma."""
+        return self._sigma_basis
+        
+    @property
+    def V_basis(self):
+        """DoubleFourierSeries: Spectral basis for V."""
+        return self._V_basis
 
     @property
     def sym_Phi(self):
@@ -2435,63 +2519,25 @@ class FourierThicknessCurrentPotentialField(
         """int: Toroidal resolution of periodic part of Phi."""
         return self._N_Phi
 
-    ############################################################
-    # Stuff for b
-    @optimizable_parameter
     @property
-    def b_I(self):  # noqa: E743
-        """Net current linking the plasma and the surface toroidally."""
-        return self._b_I
-
-    @b_I.setter
-    def b_I(self, new):  # noqa: E743
-        self._b_I = float(np.squeeze(new))
-
-    @optimizable_parameter
-    @property
-    def b_G(self):
-        """Net current linking the plasma and the surface poloidally."""
-        return self._b_G
-
-    @b_G.setter
-    def b_G(self, new):
-        self._G = float(np.squeeze(new))
-
-    @optimizable_parameter
-    @property
-    def b_mn(self):
-        """Fourier coefficients describing single-valued part of potential."""
-        return self._b_mn
-
-    @b_mn.setter
-    def b_mn(self, new):
-        if len(new) == self.b_basis.num_modes:
-            self._b_mn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"b_mn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.b_basis.num_modes} modes."
-            )
+    def M_sigma(self):
+        """int: Poloidal resolution of periodic part of sigma."""
+        return self._M_sigma
 
     @property
-    def b_basis(self):
-        """DoubleFourierSeries: Spectral basis for Phi."""
-        return self._b_basis
+    def N_sigma(self):
+        """int: Toroidal resolution of periodic part of sigma."""
+        return self._N_sigma
 
     @property
-    def sym_b(self):
-        """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
-        return self._sym_b
+    def M_V(self):
+        """int: Poloidal resolution of periodic part of V."""
+        return self._M_V
 
     @property
-    def M_b(self):
-        """int: Poloidal resolution of periodic part of Phi."""
-        return self._M_b
-
-    @property
-    def N_b(self):
-        """int: Toroidal resolution of periodic part of Phi."""
-        return self._N_b
+    def N_V(self):
+        """int: Toroidal resolution of periodic part of V."""
+        return self._N_V
 
     def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
         """Change the maximum poloidal and toroidal resolution for Phi.
@@ -2516,7 +2562,7 @@ class FourierThicknessCurrentPotentialField(
 
         """
         M = M or self._M_Phi
-        N = N or self._M_Phi
+        N = N or self._N_Phi
         NFP = NFP or self.NFP
         sym_Phi = sym_Phi or self.sym_Phi
 
@@ -2531,7 +2577,7 @@ class FourierThicknessCurrentPotentialField(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
 
-    def change_b_resolution(self, M=None, N=None, NFP=None, sym_b=None):
+    def change_sigma_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
         """Change the maximum poloidal and toroidal resolution for Phi.
 
         Parameters
@@ -2547,24 +2593,64 @@ class FourierThicknessCurrentPotentialField(
             If None, defaults to current NFP.
             Note: will change the NFP of the surface geometry as well as the
             Phi basis.
-        sym_b :  {"auto","cos","sin",False}
+        sym_Phi :  {"auto","cos","sin",False}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
             current potential. Default is "auto" which enforces if modes are symmetric.
             If True, non-symmetric modes will be truncated.
 
         """
-        M = M or self._M_b
-        N = N or self._M_b
+        M = M or self._M_sigma
+        N = N or self._N_sigma
         NFP = NFP or self.NFP
-        sym_b = sym_b or self.sym_b
+        # This line might not be needed
+        sym_Phi = sym_Phi or self.sym_Phi
 
-        b_modes_old = self.b_basis.modes
-        self.b_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_b)
+        sigma_modes_old = self.sigma_basis.modes
+        self.sigma_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
 
-        self._b_mn = copy_coeffs(self.b_mn, b_modes_old, self.b_basis.modes)
-        self._M_b = M
-        self._N_b = N
-        self._sym_b = sym_b
+        self._sigma_mn = copy_coeffs(self.sigma_mn, sigma_modes_old, self.sigma_basis.modes)
+        self._M_sigma = M
+        self._N_sigma = N
+        self._sym_sigma = sym_Phi
+        self.change_resolution(
+            NFP=NFP
+        )  # make sure surface and Phi basis NFP are the same
+
+    def change_V_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
+        """Change the maximum poloidal and toroidal resolution for Phi.
+
+        Parameters
+        ----------
+        M : int
+            Poloidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis poloidal resolution
+        N : int
+            Toroidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis toroidal resolution
+        NFP : int
+            Number of field periods for surface and Phi basis.
+            If None, defaults to current NFP.
+            Note: will change the NFP of the surface geometry as well as the
+            Phi basis.
+        sym_Phi :  {"auto","cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Default is "auto" which enforces if modes are symmetric.
+            If True, non-symmetric modes will be truncated.
+
+        """
+        M = M or self._M_V
+        N = N or self._N_V
+        NFP = NFP or self.NFP
+        # This line might not be needed
+        sym_Phi = sym_Phi or self.sym_Phi
+
+        V_modes_old = self.V_basis.modes
+        self.V_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
+
+        self._V_mn = copy_coeffs(self.V_mn, V_modes_old, self.V_basis.modes)
+        self._M_V = M
+        self._N_V = N
+        self._sym_V = sym_Phi
         self.change_resolution(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
@@ -2577,6 +2663,7 @@ class FourierThicknessCurrentPotentialField(
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -2595,6 +2682,10 @@ class FourierThicknessCurrentPotentialField(
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2615,10 +2706,17 @@ class FourierThicknessCurrentPotentialField(
             source_grid=source_grid,
             transforms=transforms,
             compute_A_or_B=compute_A_or_B,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -2634,6 +2732,10 @@ class FourierThicknessCurrentPotentialField(
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2641,7 +2743,49 @@ class FourierThicknessCurrentPotentialField(
             magnetic field at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        This assumes the Coulomb gauge.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            Magnetic vector potential at specified points.
+
+        """
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_surface(
@@ -2649,21 +2793,23 @@ class FourierThicknessCurrentPotentialField(
         surface,
         Phi_mn=np.array([0.0]),
         modes_Phi=np.array([[0, 0]]),
+        sigma_mn=np.array([0.0]),
+        modes_sigma=np.array([[0, 0]]),
+        V_mn=np.array([0.0]),
+        modes_V=np.array([[0, 0]]),
         I=0,
         G=0,
+        I_V=0,
+        G_V=0,
         sym_Phi="auto",
         M_Phi=None,
         N_Phi=None,
-        # Stuff for b
-        b_mn=np.array([0.0]),
-        modes_b=np.array([[0, 0]]),
-        b_I=0,
-        b_G=0,
-        sym_b="auto",
-        M_b=None,
-        N_b=None,
+        M_sigma=None,
+        N_sigma=None,
+        M_V=None,
+        N_V=None,
     ):
-        """Create FourierThicknessCurrentPotentialField using geometry of given surface.
+        """Create sigmaVoltageFourierCurrentPotentialField using geometry of given surface.
 
         Parameters
         ----------
@@ -2714,20 +2860,21 @@ class FourierThicknessCurrentPotentialField(
         return cls(
             Phi_mn=Phi_mn,
             modes_Phi=modes_Phi,
+            sigma_mn=sigma_mn,
+            modes_sigma=modes_sigma,
+            V_mn=V_mn,
+            modes_V=modes_V,
             I=I,
             G=G,
+            I_V=I_V,
+            G_V=G_V,
             sym_Phi=sym_Phi,
             M_Phi=M_Phi,
             N_Phi=N_Phi,
-            ### Stuff for b
-            b_mn=b_mn,
-            modes_b=modes_b,
-            b_I=b_I,
-            b_G=b_G,
-            sym_b=sym_b,
-            M_b=M_b,
-            N_b=N_b,
-            ############
+            M_sigma=M_sigma,
+            N_sigma=N_sigma,
+            M_V=M_V,
+            N_V=N_V,
             R_lmn=R_lmn,
             Z_lmn=Z_lmn,
             modes_R=modes_R,

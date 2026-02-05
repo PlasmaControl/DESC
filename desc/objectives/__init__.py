@@ -16,6 +16,10 @@ from ._coils import (
     QuadraticFlux,
     SurfaceCurrentRegularization,
     ToroidalFlux,
+    bRegularization_fd,
+    bRegularization_fd2,
+    x_at_theta_0_contour,
+    GV_IV,
 )
 from ._equilibrium import (
     CurrentDensity,
@@ -46,6 +50,8 @@ from ._geometry import (
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
+    Surf_Jacobian_Norm_Variation,
+    Surf_Jacobian_Variation,
 )
 from ._neoclassical import EffectiveRipple
 from ._omnigenity import (

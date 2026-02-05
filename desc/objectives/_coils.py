@@ -24,7 +24,7 @@ from desc.utils import (
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 from .utils import softmax, softmin
-
+from desc.compute._isothermal import first_derivative_t, first_derivative_z, first_derivative_t2, first_derivative_z2
 
 class _CoilObjective(_Objective):
     """Base class for calculating coil objectives.
@@ -1467,6 +1467,7 @@ class QuadraticFlux(_Objective):
         self,
         eq,
         field,
+        #tf = None, # Toroidal Field coils object
         target=None,
         bounds=None,
         weight=1,
@@ -1490,6 +1491,7 @@ class QuadraticFlux(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
+        #self._tf = tf
         self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._vacuum = vacuum
@@ -1527,6 +1529,7 @@ class QuadraticFlux(_Objective):
         from desc.magnetic_fields import SumMagneticField
 
         eq = self._eq
+        #tf = self._tf
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
@@ -1575,6 +1578,18 @@ class QuadraticFlux(_Objective):
             )
         )
 
+        #Btf = (
+        #    jnp.zeros(eval_grid.num_nodes)
+        #    if tf == None
+        #    else jnp.sum(tf.compute_magnetic_field(
+        #        coords = jnp.vstack([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,#eq,
+        #        #eval_grid = eval_grid,
+        #        source_grid = self._source_grid,
+        #        #normal_only=True,
+        #        #chunk_size=self._B_plasma_chunk_size,
+        #    ) * eval_data['n_rho'], axis = 1)
+        #)
+
         self._constants = {
             "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
@@ -1583,6 +1598,7 @@ class QuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
+            #"B_tf": Btf,
         }
 
         timer.stop("Precomputing transforms")
@@ -1618,6 +1634,7 @@ class QuadraticFlux(_Objective):
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
+        #B_tf = constants["B_tf"]
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
@@ -1630,7 +1647,9 @@ class QuadraticFlux(_Objective):
             chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        f = (B_ext + B_plasma 
+             #+ B_tf
+            ) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 
@@ -2686,3 +2705,1429 @@ class SurfaceCurrentRegularization(_Objective):
         elif self._regularization == "sqrt(Phi)":
             K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
         return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+####################################################################################################################    
+## Adding objective for sigma variation
+#################################################################################################################### 
+class SigmaVariation_fourier(_Objective):
+    """Target the thickness of the single coil not to surpass a current density limit.
+
+    compute::
+
+        w * ||K|| * e^{b_max - b}
+
+    where K is the winding surface current density, w is the
+    regularization parameter (the weight on this objective)
+
+    This is intended to be used with a surface current::
+
+        K = n x ∇ Φ
+
+    i.e. a CurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective.
+
+    Parameters
+    ----------
+    surface_current_field : CurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with its ``field_grid`` matching this ``source_grid``, this replicates the
+        REGCOIL algorithm described in [1]_ .
+
+    """
+
+    weight_str = (
+        "weight : {float, ndarray}, optional"
+        "\n\tWeighting to apply to the Objective, relative to other Objectives."
+        "\n\tMust be broadcastable to to Objective.dim_f"
+        "\n\tWhen used with QuadraticFlux objective, this acts as the regularization"
+        "\n\tparameter (with w^2 = lambda), with 0 corresponding to no regularization."
+        "\n\tThe larger this parameter is, the less complex the surface current will "
+        "be,\n\tbut the worse the normal field."
+    )
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        loss_detail=" Note: has no effect for this objective.",
+        overwrite={"weight": weight_str},
+    )
+
+    _coordinates = "tz"
+    _units = "A/m"
+    _print_value_fmt = "Coil Thickness Regularization: "
+
+    def __init__(
+        self,
+        surface_current_field,
+        M_b = 0,
+        N_b = 0,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        source_grid=None,
+        name="surface-current-regularization",
+    ):
+        from desc.magnetic_fields import (
+            CurrentPotentialField,
+            FourierCurrentPotentialField,
+        )
+
+        if target is None and bounds is None:
+            target = 0
+        assert isinstance(
+            surface_current_field, (CurrentPotentialField, FourierCurrentPotentialField)
+        ), (
+            "surface_current_field must be a CurrentPotentialField or "
+            + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
+        )
+        self._surface_current_field = surface_current_field
+        #self._b_field = b_field
+        self._M_b = M_b
+        self._N_b = N_b
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field,
+                    #b_field
+                   ],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.magnetic_fields import FourierCurrentPotentialField
+
+        surface_current_field = self.things[0]
+        if isinstance(surface_current_field, FourierCurrentPotentialField):
+            M_Phi = surface_current_field._M_Phi
+            N_Phi = surface_current_field._N_Phi
+        else:
+            M_Phi = surface_current_field.M + 1
+            N_Phi = surface_current_field.N + 1
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=3 * M_Phi + 1,
+                N=3 * N_Phi + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["K", "|e_theta x e_zeta|",
+                                   "theta","zeta",
+                                   "x_s","y_s","z_s",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+        
+        # Generate a basis for the single value component of the non-dimensional thickness
+        b_sv_basis = DoubleFourierSeries(M = self._M_b, 
+                                         N = self._N_b, 
+                                         NFP = surface_current_field.NFP, #eq.NFP, 
+                                         #sym = "sin",
+                                        )
+        
+        b_sv_trans = Transform(source_grid, 
+                                           b_sv_basis, 
+                                           derivs=1, 
+                                           rcond='auto', 
+                                           build=True, 
+                                           build_pinv=False, 
+                                           method='auto')
+        
+        #######################################################
+        if self._normalize:
+            if isinstance(surface_current_field, FourierCurrentPotentialField):
+                self._normalization = np.max(
+                    [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
+                )
+            else:  # it does not have I,G bc is CurrentPotentialField
+                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
+                self._normalization = np.max(
+                    [
+                        np.mean(np.abs(Phi)),
+                        1,
+                    ]
+                )
+
+        self._constants = {
+            #"surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+            "b_sv_basis": b_sv_basis,
+            "b_sv_trans": b_sv_trans,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, 
+                surface_params,#=None, 
+                #b_params,
+                constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        b_params : dict
+            Dictionary of surface degrees of freedom
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_transforms = get_transforms(self._surface_data_keys, 
+                                            obj=self._surface_current_field, 
+                                            grid=self._source_grid, 
+                                            jitable = True,)
+        
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            #transforms=constants["surface_transforms"],
+            transforms=surface_transforms,
+            profiles={},
+        )
+        
+        #b_soln = b_eval(constants["b_sv_basis"], constants["b_sv_trans"], surface_data)
+        
+        fs_t, fs_z = db_eval(constants["b_sv_basis"], constants["b_sv_trans"], surface_data)
+        
+        #K_mag = safenorm(surface_data["K"], axis=-1)
+        #return K_mag * jnp.exp(jnp.max(b_soln) - b_soln) #* jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        
+        #return b_soln * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        return jnp.sqrt( ( fs_t**2 + fs_z**2 ) * surface_data["|e_theta x e_zeta|"] )
+
+def b_eval(basis,trans,data):
+    
+    # Initial guess for modes
+    x = jnp.ones(basis.num_modes + 0)
+    fun_wrapped = lambda x : a_matrix(basis, trans, x, data["x_s"], data["y_s"])
+    
+    # Implement chunk method to reduce memory costs
+    A = Derivative(fun_wrapped,deriv_mode="looped").compute(x)
+    b_soln = jnp.linalg.pinv(A) @ data["z_s"]
+    
+    return (#b_soln[basis.num_modes] * data["theta"]
+            #+ b_soln[basis.num_modes + 1] * data["zeta"]
+            trans.transform(b_soln[0 : basis.num_modes], dt=0, dz=0)
+           )
+
+def db_eval(basis,trans,data):
+    
+    # Initial guess for modes
+    x = jnp.ones(basis.num_modes + 2)
+    fun_wrapped = lambda x : a_matrix(basis, trans, x, data["x_s"], data["y_s"])
+    
+    # Implement chunk method to reduce memory costs
+    #A = jax.jacfwd(fun_wrapped)(x)
+    #A = Derivative(fun_wrapped,deriv_mode="looped").compute(x)
+    
+    # Invert the matrix and find the solution
+    b_soln_ = jnp.linalg.pinv( Derivative(fun_wrapped,deriv_mode="looped").compute(x)
+                             ) @ data["z_s"]
+    
+    fst = b_soln_[basis.num_modes] + trans.transform(b_soln_[0 : basis.num_modes], dr=0, dt=1, dz=0)
+    fsz = b_soln_[basis.num_modes + 1] + trans.transform(b_soln_[0 : basis.num_modes], dr=0, dt=0, dz=1)
+    
+    return fst, fsz
+
+def a_matrix(basis, trans, xu, x_, y_,):
+    
+    x_mn = xu[0 : basis.num_modes]
+
+    fs_ = {"bf_t": trans.transform(x_mn, dt = 1),
+           "bf_z": trans.transform(x_mn, dz = 1),
+          }
+    
+    return (x_*(fs_["bf_t"] 
+                #+ xu[basis.num_modes] 
+               )
+            - y_*(fs_["bf_z"]  
+                  #+ xu[basis.num_modes + 1]
+                 )
+           )
+
+class SigmaVariation_fd(_Objective):
+    """Minimize error between σ ∇ V and K_s
+
+    compute:
+
+        w*|σ ∇ V - K_s|^2
+
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        σ = e^b
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective, to form
+    the REGCOIL algorithm described in [1]_.
+
+    [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    Parameters
+    ----------
+    surface_current_field : FourierCurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #soff_min,
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["K_eng",#"b_s","b_t","b_z",
+                                   "|e_theta x e_zeta|",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            basis="rpz",
+        )
+        
+        return safenorm( surface_data["K_eng"] - surface_data["K"], axis=-1 ) * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+    
+##########################################################################################################################
+##########################################################################################################################
+##########################################################################################################################
+class x_at_theta_0_contour(_Objective):
+    """Minimize x at a fixed contour
+
+    compute:
+
+       w*x^2
+
+    where w is the regularization parameter (the weight on this objective).
+        
+    where:
+    
+        z = K_^t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K^t, K^z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective, to form
+    the REGCOIL algorithm described in [1]_.
+
+    [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    Parameters
+    ----------
+    surface_current_field : FourierCurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #soff_min,
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["x_s",'theta',
+                                   #"|e_theta x e_zeta|",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            basis="rpz",
+        )
+
+        # Now just obtain the row that contains the objective we want to penalize
+        #test = surface_data["x_s"] * jnp.sqrt( surface_data["|e_theta x e_zeta|"] )
+        return jnp.where(surface_data["theta"] == 0, surface_data["x_s"], 0) * jnp.sqrt( surface_data["|e_theta x e_zeta|"] )
+
+####################################################################################################################    
+## Adding objective for sigma variation
+#################################################################################################################### 
+class bRegularization_fd(_Objective):
+    """Minimize variation of conductivity distribution
+
+    compute:
+
+        w*(b_t^2 + b_z^2) or w*b^2
+
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective, to form
+    the REGCOIL algorithm described in [1]_.
+
+    [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    Parameters
+    ----------
+    surface_current_field : FourierCurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #sorf_min
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["b_s",
+                                   #"b_t","b_z",
+                                   "|e_theta x e_zeta|",
+                                   #"K",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            #basis="rpz",
+            #basis="rpz",
+        )
+        
+        #b_soln = surface_data["b_s"]
+        #K_mag = safenorm(surface_data["K"], axis=-1)
+        #return K_mag * jnp.exp(jnp.max(b_soln) - b_soln) * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        return surface_data["b_s"] * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        #return jnp.sqrt(surface_data["b_t"]**2 + surface_data["b_z"]**2) * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+class bRegularization_fd2(_Objective):
+
+    """Minimize variation of conductivity distribution
+
+    compute:
+
+        w*(b_t^2 + b_z^2) or w*b^2
+
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Gζ/2π + Φ_b
+
+    Φ_b is a potential defined on grid points on the winding surface
+
+    Parameters
+    ----------
+    surface_current_field : FourierCurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization with double FD:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #sorf_min
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = [#"zeta",
+                                   #"e_theta","e_zeta",
+                                   #"e_theta_t", "e_theta_z",
+                                   #"e_zeta_t", "e_zeta_z"
+                                   "|e_theta x e_zeta|", 
+                                   # "|e_theta x e_zeta|_t","|e_theta x e_zeta|_z",
+                                   "b_t","b_z",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+        )
+        
+        #b_soln = surface_data["b_s"]
+        #K_mag = safenorm(surface_data["K"], axis=-1)
+        return jnp.sqrt(surface_data["b_t"] ** 2 + surface_data["b_z"] ** 2) * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+class JRegularization_fd(_Objective):
+    """Minimize variation of conductivity distribution
+
+    compute:
+
+        w*(b_t^2 + b_z^2) or w*b^2
+
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #sorf_min
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["b_s",
+                                   "b_t","b_z",
+                                   "|e_theta x e_zeta|",
+                                   "K",
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            #basis="rpz",
+            #basis="rpz",
+        )
+        
+        return jnp.sqrt( surface_data["b_s"] ** 2 * surface_data["|e_theta x e_zeta|"] )
+
+# Define the objective for the ratio of secular potential functions
+class GV_IV(_Objective):
+    """Minimize variation of conductivity distribution
+
+    compute:
+
+        w*(b_t^2 + b_z^2) or w*b^2
+
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
+
+    This is intended to be used with a surface current:
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Sigma Regularization:"
+
+    def __init__(
+        self,
+        surface_current_field,
+        ratio = None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        #sorf_min
+        deriv_mode="auto",
+        source_grid=None,
+        name="Variable-Conductivity-Regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+        self._ratio = ratio
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ['I_V','G_V',
+                                  ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+        )
+        
+        #return jnp.sqrt( (surface_data["I_V"] - self._ratio * surface_data["G_V"]) ** 2 * surface_data["|e_theta x e_zeta|"] )
+        #return jnp.sqrt( ( ( surface_data["G_V"] / surface_data["I_V"] ** (-1) ) ** 2
+        #                  - self._ratio ) ** 2  * surface_data["|e_theta x e_zeta|"] )
+        return jnp.sqrt( ( ( surface_data["G_V"] / surface_data["I_V"] ) ** 2 
+                          - self._ratio ** 2 ) ** 2
+                       ) * surface_data["|e_theta x e_zeta|"]
+
+##########################################################################################################################
+##########################################################################################################################
+##########################################################################################################################

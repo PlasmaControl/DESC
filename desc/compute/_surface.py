@@ -10,10 +10,17 @@ from desc.compute._isothermal import (
 
 # TODO: review when zeta no longer equals phi
 from desc.derivatives import Derivative
-
 from .data_index import register_compute_fun
 
-
+def sqr_int(f,data,grid):
+    
+    integrand = grid.spacing[:, 1] * grid.spacing[:, 2] * f
+    desired_rho_surface = 1.0
+    indices = jnp.where(grid.nodes[:, 0] == desired_rho_surface)[0]
+    integrand = integrand[indices]
+    
+    return integrand.sum()
+    
 @register_compute_fun(
     name="e_rho",
     label="\\mathbf{e}_{\\rho}",
@@ -1104,8 +1111,6 @@ def _z_s_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
 ################################################################################################################
 
 # Thickness through Fourier modes
-
-
 @register_compute_fun(
     name="bf",
     label="b",
@@ -1240,6 +1245,28 @@ def _b_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
     return data
 
 
+@register_compute_fun(
+    name="sigma",
+    label="\sigma",
+    units="S",
+    units_long="Siemens",
+    description="Variable conductivity.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["b_s"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _sigma_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+
+    data["sigma"] = jnp.exp(data["b_s"])
+    return data
+
+    
 @register_compute_fun(
     name="b_s",
     label="b_s",
@@ -1431,6 +1458,55 @@ def _Keng_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     ).T
     return data
 
+@register_compute_fun(
+    name="I_V",
+    label="I_V",
+    units="~",
+    units_long="~",
+    description="Poloidal current from voltage",
+    dim=1,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=['V_t',#"theta", "zeta",
+         ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _I_V_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    
+    data["I_V"] = sqr_int(data['V_t'],data, transforms["grid"]) * (2 * jnp.pi) ** (-2)
+
+    return data
+
+@register_compute_fun(
+    name="G_V",
+    label="G_V",
+    units="~",
+    units_long="~",
+    description="Toroidal current from voltage",
+    dim=1,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=['V_z',#"theta", "zeta",
+         ],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _G_V_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    
+    data["G_V"] = - sqr_int(data['V_z'],data, transforms["grid"]) * (2 * jnp.pi) ** (-2)
+
+    return data
 
 @register_compute_fun(
     name="V_t",
@@ -1445,18 +1521,24 @@ def _Keng_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="tz",
-    data=["theta", "zeta", "V_s"],
+    data=["theta", "zeta",
+          'sigma', 'y_s',
+          # "V_s",
+         ],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _V_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["V_t"] = first_derivative_t2(
-        data["V_s"],
-        data,
-        2 * (transforms["grid"].M) + 1,
-        2 * (transforms["grid"].N) + 1,
-    )
+    
+    data["V_t"] = data['sigma'] ** (-1) * data['y_s'] 
+    
+    #data["V_t"] = first_derivative_t2(
+    #    data["V_s"],
+    #    data,
+    #    2 * (transforms["grid"].M) + 1,
+    #    2 * (transforms["grid"].N) + 1,
+    #)
 
     return data
 
@@ -1474,19 +1556,24 @@ def _V_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
     },
     profiles=[],
     coordinates="tz",
-    data=["theta", "zeta", "V_s"],
+    data=["theta", "zeta",
+          'sigma', "x_s",
+          #'V_s',
+         ],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _V_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
 
-    data["V_z"] = first_derivative_z2(
-        data["V_s"],
-        data,
-        2 * (transforms["grid"].M) + 1,
-        2 * (transforms["grid"].N) + 1,
-    )
+    data["V_z"] = data['sigma'] ** (-1) * data['x_s'] 
+    
+    #data["V_z"] = first_derivative_z2(
+    #    data["V_s"],
+    #    data,
+    #    2 * (transforms["grid"].M) + 1,
+    #    2 * (transforms["grid"].N) + 1,
+    #)
 
     return data
 

@@ -50,7 +50,7 @@ from desc.utils import (
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
+def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None,):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
@@ -93,7 +93,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
-def biot_savart_general_reg(re, rs, J, dV):
+def biot_savart_general_reg(re, rs, J, dV=jnp.array([1.0]), chunk_size=None, patch = 1e-3):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
@@ -113,18 +113,22 @@ def biot_savart_general_reg(re, rs, J, dV):
         magnetic field in cartesian components at specified points
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-    assert J.shape == rs.shape
-    JdV = J * dV[:, None]
-    B = jnp.zeros_like(re)
+    JdV = J * dV[:, jnp.newaxis]
+    assert JdV.shape == rs.shape
+    
+    #B = jnp.zeros_like(re)
 
-    def body(i, B):
-        r = re - rs[i, :]
-        num = jnp.cross(JdV[i, :], r, axis=-1)
-        den = jnp.linalg.norm(r, axis=-1) ** 3
-        B = B + jnp.where(den[:, None] <= 1e-9, 0, num / den[:, None])
-        return B
+    def biot(re):
+        dr = rs - re
+        num = jnp.cross(dr, JdV, axis=-1)
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        #B = B + jnp.where(den[:, None] <= 1e-9, 0, num / den[:, None])
+        #return B
+        #return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        return jnp.where(den <= patch, 0 * safediv(num, den), safediv(num, den)).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    #return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
 def biot_savart_general_vector_potential(

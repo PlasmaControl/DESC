@@ -490,7 +490,7 @@ class TrappedResonance(_Objective):
         name="TrappedResonance",
         jac_chunk_size=None,
         pitch_invs=None,
-        N=0, # QA is default
+        N=0, # QA is default, not with nfp
         QS_flag=True,
         m_max = 10,
         n_max = 5,
@@ -501,6 +501,7 @@ class TrappedResonance(_Objective):
         rt_filter_flag = True,
         STAB_SACRIFICE = True,
         LOSS_FRAC_WEIGHT = True,
+        DEBUG = False,
         verbose = False,
         wd_blur = 1.25, # DeltaOmega
         pitch_batch_size = 1,
@@ -545,6 +546,7 @@ class TrappedResonance(_Objective):
             "rt_filter_flag": rt_filter_flag,
             "STAB_SACRIFICE": STAB_SACRIFICE,
             "LOSS_FRAC_WEIGHT": LOSS_FRAC_WEIGHT,
+            "DEBUG": DEBUG,
             "verbose": verbose,
             "wd_blur": wd_blur,
             'M': M,
@@ -553,7 +555,7 @@ class TrappedResonance(_Objective):
             'num_transit': num_transit,
             'pitch_method': pitch_method
         }
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "f_tr2"
         self._params2 = { # other non-static params       
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),

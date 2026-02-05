@@ -559,6 +559,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     res_arr = kwargs.get("res_arr",None)
     q_arr = kwargs.get("q_arr",None)
     pitch_method = kwargs.get("pitch_method",1)
+    psi_a = data["Psi"][-1] # Total toroidal flux
 
     # Bounce integral parameters
     quad = kwargs.get("quad",None)
@@ -576,6 +577,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     STAB_SACRIFICE = kwargs.get("STAB_SACRIFICE",True)
     QS_flag = kwargs.get("QS_flag",False) # True for QS (QA, QH configurations, not QI)
     LOSS_FRAC_WEIGHT = kwargs.get("LOSS_FRAC_WEIGHT",True)
+    DEBUG = kwargs.get("DEBUG",False)
 
 
     # Setup energies
@@ -586,7 +588,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     v2 = 2*KE/m_alpha # m/s
 
     # Setup other grid-related parameters
-    rhos = grid.nodes[grid.unique_rho_idx, 0]
+    rhos = grid.nodes[grid.unique_rho_idx, 0] # := (rho)
     iotas = grid.compress(data['iota']) # only look at the iotas on the surfaces specified by user\
     # alphas = grid.nodes[grid.unique_alpha_idx, 1]
     # thetas = grid_og.nodes[grid_og.unique_theta_idx, 1]
@@ -746,9 +748,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     # Check if wd needs to be cropped if resolution or shear issues
     wd_max = softmax(omega_arr,alpha=50,axis=0) # := (Bcrit,well)
-    wd_max = jnp.ones(wd_max.shape) * 0.05 * wd_max # if all elements needed to be cropped
+    wd_max = jnp.ones(wd_max.shape) * 0.0005 * wd_max # if all elements needed to be cropped
     wd_min = softmin(omega_arr,alpha=50,axis=0) # := (Bcrit,well)
-    wd_min = jnp.ones(wd_min.shape) * 0.01 * wd_max # if all elements needed to be cropped
+    wd_min = jnp.ones(wd_min.shape) * 0.0001 * wd_max # if all elements needed to be cropped
     wd = jnp.where(wd > wd_max,wd_max,wd) # limit max size of wd based on 10% of wd_max
     wd = jnp.where(wd < wd_min,wd_min,wd) # limit min size of wd based on 1% of wd_max
 
@@ -795,14 +797,14 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         Deltarho_4 = safediv(psi_drift_out , q_broad**2) # := (rho,Bcrit,well,res)
     else:
         omega_prime = jnp.where(omega_arr == 11.0, 0 , jnp.gradient(omega_arr,rho_res,axis=0))# := (rho,Bcrit,well), omega_arr is :=(rho,Bcrit,well)
-        omega_prime = jnp.broadcast_to(omega_prime[...,:],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+        omega_prime = jnp.broadcast_to(omega_prime[...,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
         Deltarho_4 = safediv(psi_drift_out , omega_prime*(q_broad**2)) # := (rho,Bcrit,well,res)
-
+    rhos_broad = jnp.broadcast_to(rhos[...,None,None,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+    Deltarho_4 = safediv(Deltarho_4,(psi_a**4)*(rhos_broad**3)) # one rhos_broad factor cancels with Jacobian
 
     ##### WEIGHTING BASED ON PLASMA EDGE VICINITY #####
-    # rhos = grid.nodes[:,0]
     if LOSS_FRAC_WEIGHT:
-        rho_max = jnp.broadcast_to(rhos[...,None,None,None],(omega_arr.shape[0], omega_arr.shape[1], omega_arr.shape[2], q_arr.shape[0])) # := (rho,Bcrit,well,res)
+        rho_max = rhos_broad**2
     else:
         rho_max=1 # no weighting
 
@@ -810,37 +812,37 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     ##### PHASE-SPACE AVERAGING #####
     f = jnp.sum( rho_max * f_b * Deltarho_4 ,axis=-1) # := (rho,Bcrit,well)
 
-    # First sum over rho
-    # iotas_sum = jnp.broadcast_to(iotas[...,None,None],(iotas.shape[0], ado_shape[2], ado_shape[3])) # := (rho,Bcrit,well)
-    # f_tr2_out = rho_res * jnp.sum( safediv( f , iotas_sum) , axis=0 )  # := (Bcrit,well)
-
     # Sum over Bcrit
     f_tr2_out = jnp.broadcast_to(f[...,None],(ado_shape[0],ado_shape[2],ado_shape[3],ado_shape[1])) # := (rho,Bcrit,well,alpha)
     f_tr2_out = jnp.transpose(f_tr2_out,(0,3,1,2)) # := (rho,alpha,Bcrit,well)
     pitch_invs = jnp.broadcast_to(pitch_invs[...,None,None],(ado_shape[0],ado_shape[2],ado_shape[1],ado_shape[3])) # := (rho,Bcrit,alpha,well)
     pitch_invs = jnp.transpose(pitch_invs,(0,2,1,3)) # := (rho,alpha,Bcrit,well)
     Bcrit_res = jnp.broadcast_to(Bcrit_res[:,None,None,None],(ado_shape[0],ado_shape[1],ado_shape[2],ado_shape[3])) # := (rho,alpha,Bcrit,well))
-    f_tr2_out = jnp.sum(Bcrit_res * f_tr2_out * tau_arr * pitch_invs**(-2) , axis=2 ) # := (rho,alpha,well)
+    f_tr2_out = jnp.sum( safediv(Bcrit_res * f_tr2_out * tau_arr , pitch_invs**2) , axis=2 ) # := (rho,alpha,well)
 
     # Second sum over alpha
     f_tr2_out = alpha_res * jnp.sum(f_tr2_out, axis=1) # := (rho,well)
 
-    # Second sum over rho
-    rhos = jnp.broadcast_to(rhos[...,None],(ado_shape[0],ado_shape[3])) # := (rho,well)
-    f_tr2_out = rho_res * jnp.sum(rhos * f_tr2_out, axis=0) # := (well)
+    # Sum over rho
+    f_tr2_out = rho_res * jnp.sum(f_tr2_out, axis=0) # := (well)
 
     # Sum over wells
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
 
-
-    data["f_tr2"] = f_tr2_out # full output
-    # data["f_tr2"] = { # for plotting/debugging
-    #     'omega_arr':omega_arr,
-    #     'f_b': f_b,
-    #     'f_tr2_out':f_tr2_out,
-    #     'rhos': rhos,
-    #     'res_arr': res_arr,
-    #     'pitch_inv': data['pitch_inv'],
-    #     'p_res': data['Bcrit_res']
-    #     }
+    if DEBUG:
+        data["f_tr2"] = { # for plotting/debugging
+            'omega_arr':omega_arr,
+            'f_b': f_b,
+            'f_tr2_out':f_tr2_out,
+            'rhos': rhos,
+            'res_arr': res_arr,
+            'pitch_inv': data['pitch_inv'],
+            'p_res': data['Bcrit_res'],
+            'Deltarho_4': Deltarho_4,
+            'Omega_prime': omega_prime,
+            'wd': wd,
+            }
+    else:
+        data["f_tr2"] = f_tr2_out # full output
+        
     return data

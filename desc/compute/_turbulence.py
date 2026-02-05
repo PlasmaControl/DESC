@@ -14,12 +14,17 @@ Some quantities may have singularities at the magnetic axis (ρ=0).
 Objectives using these quantities should use ρ > 0.
 """
 
+import jax
+
 from scipy.constants import mu_0
 
 from desc.backend import jnp
 
 from ..utils import cross, dot
 from .data_index import register_compute_fun
+
+# Slope for smooth Heaviside (sigmoid) used in ITG proxy
+_HEAVISIDE_SMOOTH_K = 10.0
 
 
 # =============================================================================
@@ -286,4 +291,58 @@ def _gx_gradpar(params, transforms, profiles, data, **kwargs):
         * (data["B^theta"] * (1 + data["lambda_t"]) + data["B^zeta"] * data["lambda_z"])
         / data["|B|"]
     )
+    return data
+
+
+# =============================================================================
+# ITG Proxy (Landreman et al. 2025)
+# =============================================================================
+
+
+@register_compute_fun(
+    name="ITG proxy integrand",
+    label="f_Q \\mathrm{integrand}",
+    units="~",
+    units_long="dimensionless",
+    description="Integrand for ITG proxy: (sigmoid(k*cvdrift) + 0.2) * |grad_x|^3 / B",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["gx_cvdrift", "gx_bmag", "gx_gds22_over_shat_squared"],
+)
+def _itg_proxy_integrand(params, transforms, profiles, data, **kwargs):
+    """Compute the integrand for ITG proxy from Landreman et al. 2025.
+
+    Uses a smooth sigmoid in place of Heaviside for differentiability.
+    The sign of cvdrift is negated to match GX convention where
+    positive cvdrift indicates bad curvature regions.
+    """
+    cvdrift_gx_convention = -data["gx_cvdrift"]
+    grad_x_cubed = data["gx_gds22_over_shat_squared"] ** 1.5
+    smooth_step = jax.nn.sigmoid(_HEAVISIDE_SMOOTH_K * cvdrift_gx_convention)
+    data["ITG proxy integrand"] = (smooth_step + 0.2) * grad_x_cubed / data["gx_bmag"]
+    return data
+
+
+@register_compute_fun(
+    name="ITG proxy",
+    label="f_Q",
+    units="~",
+    units_long="dimensionless",
+    description="ITG turbulence proxy: mean of integrand over field line",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["ITG proxy integrand"],
+)
+def _itg_proxy(params, transforms, profiles, data, **kwargs):
+    """Compute ITG proxy from Landreman et al. 2025.
+
+    f_Q = mean((sigmoid(cvdrift) + 0.2) * |grad_x|^3 / B)
+    """
+    data["ITG proxy"] = jnp.mean(data["ITG proxy integrand"])
     return data

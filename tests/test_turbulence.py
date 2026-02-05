@@ -91,3 +91,21 @@ def test_gx_coefficients_stellarator():
     assert np.all(data["gx_bmag"] > 0)
     assert np.all(data["gx_gds2"] > 0)
     assert np.all(data["gx_gds22_over_shat_squared"] > 0)
+
+
+@pytest.mark.unit
+def test_itg_proxy():
+    """Test ITG proxy compute functions."""
+    for eq_name in ["DSHAPE", "HELIOTRON"]:
+        eq = get(eq_name)
+        rho = np.linspace(0.2, 0.8, 3)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        data = eq.compute(["ITG proxy integrand", "ITG proxy"], grid=grid)
+
+        # Integrand should be finite and positive (sigmoid + 0.2 >= 0.2)
+        assert np.isfinite(data["ITG proxy integrand"]).all(), f"Non-finite for {eq_name}"
+        assert np.all(data["ITG proxy integrand"] >= 0), f"Negative integrand for {eq_name}"
+
+        # Scalar proxy should be finite and positive
+        assert np.isfinite(data["ITG proxy"]), f"Non-finite proxy for {eq_name}"
+        assert data["ITG proxy"] > 0, f"Non-positive proxy for {eq_name}"

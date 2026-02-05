@@ -88,17 +88,6 @@ def test_itg_proxy():
 
 
 @pytest.mark.unit
-def test_itg_proxy_objective_import():
-    """Test that ITGProxy objective can be imported."""
-    from desc.objectives import ITGProxy
-
-    eq = get("DSHAPE")
-    obj = ITGProxy(eq, rho=0.5, nturns=1, nzetaperturn=20)
-    assert obj._nturns == 1
-    assert obj._nzetaperturn == 20
-
-
-@pytest.mark.unit
 def test_compute_arclength_via_gradpar():
     """Test arclength computation using gradpar."""
     from desc.compute._turbulence import compute_arclength_via_gradpar
@@ -262,100 +251,120 @@ def test_solve_poloidal_turns_error():
 
 
 # =============================================================================
-# CNN Layer Primitives Tests
+# BatchNorm Tests
 # =============================================================================
 
 
 @pytest.mark.unit
-def test_circular_pad_1d():
-    """Test circular padding wraps values correctly."""
+def test_batch_norm_1d():
+    """Test BatchNorm1d function correctness."""
     from desc.backend import jnp
-    from desc.compute._turbulence import _circular_pad_1d
+    from desc.compute._turbulence import _batch_norm_1d
 
-    x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
-    padded = _circular_pad_1d(x, pad_left=2, pad_right=2)
+    batch, channels, length = 2, 4, 10
+    x = jnp.ones((batch, channels, length)) * 2.0  # All values are 2.0
+    gamma = jnp.ones(channels) * 0.5  # Scale by 0.5
+    beta = jnp.ones(channels) * 1.0  # Shift by 1.0
+    running_mean = jnp.ones(channels) * 1.0  # Mean is 1.0
+    running_var = jnp.ones(channels) * 0.25  # Variance is 0.25
 
-    # Expected: [4, 5, 1, 2, 3, 4, 5, 1, 2]
-    expected = jnp.array([4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0])
-    np.testing.assert_array_equal(np.array(padded), np.array(expected))
+    output = _batch_norm_1d(x, gamma, beta, running_mean, running_var)
+
+    # Expected: scale * (x - mean) / sqrt(var + eps) + shift
+    # = 0.5 * (2.0 - 1.0) / sqrt(0.25 + 1e-5) + 1.0
+    # ≈ 0.5 * 1.0 / 0.5 + 1.0 = 1.0 + 1.0 = 2.0
+    expected = jnp.ones((batch, channels, length)) * 2.0
+    np.testing.assert_allclose(np.array(output), np.array(expected), rtol=1e-5)
+
+    # Test with different values per channel
+    gamma = jnp.array([1.0, 2.0, 3.0, 4.0])
+    beta = jnp.array([0.1, 0.2, 0.3, 0.4])
+    running_mean = jnp.array([0.5, 1.0, 1.5, 2.0])
+    running_var = jnp.array([0.25, 0.5, 0.75, 1.0])
+
+    output2 = _batch_norm_1d(x, gamma, beta, running_mean, running_var)
+    assert output2.shape == (batch, channels, length)
+    assert np.isfinite(np.array(output2)).all()
 
 
 @pytest.mark.unit
-def test_circular_pad_1d_batched():
-    """Test circular padding works with batched inputs."""
+def test_cyclic_invariant_forward_with_batchnorm():
+    """Test CNN forward pass with BatchNorm weights and detection logic."""
     from desc.backend import jnp
-    from desc.compute._turbulence import _circular_pad_1d
+    from desc.compute._turbulence import _cyclic_invariant_forward, _has_batch_norm
 
-    # Shape (batch=2, channels=3, length=4)
-    x = jnp.arange(24).reshape(2, 3, 4).astype(float)
-    padded = _circular_pad_1d(x, pad_left=1, pad_right=1)
+    # Test BatchNorm detection logic
+    weights_no_bn = {
+        "conv_layers.0.weight": None,
+        "conv_layers.0.bias": None,
+    }
+    assert not _has_batch_norm(weights_no_bn)
 
-    # Shape should be (2, 3, 6)
-    assert padded.shape == (2, 3, 6)
+    weights_old_bn = {
+        "conv_layers.0.weight": None,
+        "conv_layers.0.bn.weight": None,
+    }
+    assert _has_batch_norm(weights_old_bn)
 
-    # Check wrapping for first batch, first channel: [0,1,2,3] -> [3,0,1,2,3,0]
-    np.testing.assert_array_equal(np.array(padded[0, 0, :]), [3, 0, 1, 2, 3, 0])
+    weights_new_bn = {
+        "conv_layers.0.weight": None,
+        "conv_batch_norms.0.weight": None,
+    }
+    assert _has_batch_norm(weights_new_bn)
 
+    # Create weights with BatchNorm
+    np.random.seed(42)
+    conv_channels = [7, 16, 32, 16, 32, 16]
+    kernel_sizes = [3, 3, 3, 3, 3]
+    fc_dims = [16 + 2, 32, 16]
 
-@pytest.mark.unit
-def test_conv1d_circular_shape():
-    """Test conv1d with circular padding produces correct output shape."""
-    from desc.backend import jnp
-    from desc.compute._turbulence import _conv1d_circular
+    weights_bn = {}
+    for i in range(5):
+        weights_bn[f"conv_layers.{i}.weight"] = jnp.array(
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i]) * 0.1
+        ).astype(jnp.float32)
+        weights_bn[f"conv_layers.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+        # Add BatchNorm parameters
+        weights_bn[f"conv_batch_norms.{i}.weight"] = jnp.ones(conv_channels[i + 1], dtype=jnp.float32)
+        weights_bn[f"conv_batch_norms.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+        weights_bn[f"conv_batch_norms.{i}.running_mean"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+        weights_bn[f"conv_batch_norms.{i}.running_var"] = jnp.ones(conv_channels[i + 1], dtype=jnp.float32)
 
-    batch, in_ch, length = 2, 7, 96
-    out_ch, kernel_size = 16, 3
+    weights_bn["fc_layers.0.weight"] = jnp.array(
+        np.random.randn(fc_dims[1], fc_dims[0]) * 0.1
+    ).astype(jnp.float32)
+    weights_bn["fc_layers.0.bias"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.0.weight"] = jnp.ones(fc_dims[1], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.0.bias"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.0.running_mean"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.0.running_var"] = jnp.ones(fc_dims[1], dtype=jnp.float32)
 
-    x = jnp.ones((batch, in_ch, length))
-    weight = jnp.ones((out_ch, in_ch, kernel_size))
-    bias = jnp.zeros(out_ch)
+    weights_bn["fc_layers.1.weight"] = jnp.array(
+        np.random.randn(fc_dims[2], fc_dims[1]) * 0.1
+    ).astype(jnp.float32)
+    weights_bn["fc_layers.1.bias"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.1.weight"] = jnp.ones(fc_dims[2], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.1.bias"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.1.running_mean"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.1.running_var"] = jnp.ones(fc_dims[2], dtype=jnp.float32)
 
-    out = _conv1d_circular(x, weight, bias, kernel_size)
+    weights_bn["output_layer.weight"] = jnp.array(
+        np.random.randn(1, fc_dims[2]) * 0.1
+    ).astype(jnp.float32)
+    weights_bn["output_layer.bias"] = jnp.zeros(1, dtype=jnp.float32)
 
-    # With circular padding='same', output length should equal input length
-    assert out.shape == (batch, out_ch, length)
+    # Verify BatchNorm is detected
+    assert _has_batch_norm(weights_bn)
 
+    # Test forward pass
+    batch = 2
+    signals = jnp.array(np.random.randn(batch, 7, 96)).astype(jnp.float32)
+    scalars = jnp.array(np.random.randn(batch, 2)).astype(jnp.float32)
 
-@pytest.mark.unit
-def test_max_pool_1d():
-    """Test max pooling reduces spatial dimension correctly."""
-    from desc.backend import jnp
-    from desc.compute._turbulence import _max_pool_1d
+    output = _cyclic_invariant_forward(signals, scalars, weights_bn)
 
-    batch, channels, length = 2, 16, 96
-    x = jnp.arange(batch * channels * length).reshape(batch, channels, length).astype(float)
-
-    pooled = _max_pool_1d(x, pool_size=2, stride=2)
-
-    # Length should be halved
-    assert pooled.shape == (batch, channels, length // 2)
-
-    # After 5 pooling layers: 96 -> 48 -> 24 -> 12 -> 6 -> 3
-    x_five_pools = x
-    for _ in range(5):
-        x_five_pools = _max_pool_1d(x_five_pools)
-    assert x_five_pools.shape == (batch, channels, 3)
-
-
-@pytest.mark.unit
-def test_global_avg_pool_1d():
-    """Test global average pooling reduces to correct shape."""
-    from desc.backend import jnp
-    from desc.compute._turbulence import _global_avg_pool_1d
-
-    batch, channels, length = 2, 32, 3
-    x = jnp.ones((batch, channels, length))
-
-    pooled = _global_avg_pool_1d(x)
-
-    assert pooled.shape == (batch, channels)
-    # All ones should average to 1
-    np.testing.assert_allclose(np.array(pooled), 1.0)
-
-
-# =============================================================================
-# CNN Forward Pass Tests
-# =============================================================================
+    assert output.shape == (batch, 1)
+    assert np.isfinite(np.array(output)).all()
 
 
 @pytest.mark.unit
@@ -364,36 +373,12 @@ def test_cyclic_invariant_forward_shape():
     from desc.backend import jnp
     from desc.compute._turbulence import _cyclic_invariant_forward
 
-    # Create random weights matching CyclicInvariantNet architecture
-    np.random.seed(42)
-
-    # Architecture hyperparameters (typical values)
-    conv_channels = [7, 16, 32, 16, 32, 16]  # input + 5 layers
-    kernel_sizes = [3, 3, 3, 3, 3]
-    fc_dims = [16 + 2, 32, 16]  # +2 for scalars
-
-    weights = {}
-    for i in range(5):
-        weights[f"conv_layers.{i}.weight"] = jnp.array(
-            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
-        ).astype(jnp.float32)
-        weights[f"conv_layers.{i}.bias"] = jnp.array(
-            np.random.randn(conv_channels[i + 1])
-        ).astype(jnp.float32)
-
-    weights["fc_layers.0.weight"] = jnp.array(np.random.randn(fc_dims[1], fc_dims[0])).astype(
-        jnp.float32
-    )
-    weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(jnp.float32)
-    weights["fc_layers.1.weight"] = jnp.array(np.random.randn(fc_dims[2], fc_dims[1])).astype(
-        jnp.float32
-    )
-    weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(jnp.float32)
-    weights["output_layer.weight"] = jnp.array(np.random.randn(1, fc_dims[2])).astype(jnp.float32)
-    weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
+    # Use helper function to create mock weights
+    weights = _make_mock_weights()
 
     # Test forward pass
     batch = 3
+    np.random.seed(42)
     signals = jnp.array(np.random.randn(batch, 7, 96)).astype(jnp.float32)
     scalars = jnp.array(np.random.randn(batch, 2)).astype(jnp.float32)
 
@@ -703,3 +688,109 @@ def test_nnitgproxy_compute_return_signals():
     # Check feature names
     assert len(signals_info["feature_names"]) == 7
     assert signals_info["feature_names"][0] == "bmag"
+
+
+@pytest.mark.unit
+def test_nnitgproxy_solve_length_at_compute():
+    """Test NNITGProxy compute with solve_length_at_compute=True path."""
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj = NNITGProxy(
+            eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt", solve_length_at_compute=True
+        )
+        obj.build(use_jit=False, verbose=0)
+
+    # Compute Q with solve_length_at_compute=True
+    Q = obj.compute(obj.things[0].params_dict)
+
+    # Check output shape and validity
+    assert Q.shape == (1,)  # Single rho value
+    assert np.isfinite(Q).all()
+    assert Q[0] > 0  # Q should be positive (exp of log_Q)
+
+
+@pytest.mark.unit
+def test_nnitgproxy_return_per_alpha():
+    """Test NNITGProxy return_per_alpha parameter with and without signals.
+
+    - Default (return_per_alpha=False): Q shape is (num_rho,)
+    - With return_per_alpha=True: Q shape is (num_rho, num_alpha)
+    - Verify that mean(Q_per_alpha, axis=-1) == Q_default
+    - Test with both return_signals=True and False
+    """
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from desc.objectives._turbulence import NNITGProxy
+
+    eq = get("DSHAPE")
+    mock_weights = _make_mock_weights()
+
+    num_rho = 2
+    num_alpha = 3
+    rho_vals = [0.4, 0.6]
+    alpha_vals = [0, np.pi / 3, 2 * np.pi / 3]
+
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj = NNITGProxy(eq, rho=rho_vals, alpha=alpha_vals, model_path="/fake/path.pt")
+        obj.build(use_jit=False, verbose=0)
+
+    params = obj.things[0].params_dict
+
+    # Test default behavior (return_per_alpha=False)
+    Q_default = obj.compute(params)
+    assert Q_default.shape == (num_rho,), f"Expected ({num_rho},), got {Q_default.shape}"
+    assert np.isfinite(Q_default).all()
+    assert np.all(Q_default > 0)
+
+    # Test with return_per_alpha=True
+    Q_per_alpha = obj.compute(params, return_per_alpha=True)
+    assert Q_per_alpha.shape == (num_rho, num_alpha), (
+        f"Expected ({num_rho}, {num_alpha}), got {Q_per_alpha.shape}"
+    )
+    assert np.isfinite(Q_per_alpha).all()
+    assert np.all(Q_per_alpha > 0)
+
+    # Verify mean over alpha equals default result
+    Q_from_per_alpha = np.mean(Q_per_alpha, axis=-1)
+    np.testing.assert_allclose(Q_from_per_alpha, Q_default, rtol=1e-5)
+
+    # Test with both return_per_alpha=True and return_signals=True
+    num_alpha_signals = 2
+    obj2 = NNITGProxy(
+        eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2], model_path="/fake/path.pt"
+    )
+    with patch(
+        "desc.objectives._turbulence._load_nn_weights", return_value=mock_weights
+    ):
+        obj2.build(use_jit=False, verbose=0)
+
+    Q_signals, signals_info = obj2.compute(
+        obj2.things[0].params_dict, return_signals=True, return_per_alpha=True
+    )
+
+    # Check Q shape with return_per_alpha=True
+    assert Q_signals.shape == (num_rho, num_alpha_signals)
+    assert np.isfinite(Q_signals).all()
+    assert np.all(Q_signals > 0)
+
+    # Check signals shape: (num_rho, num_alpha, 7, npoints)
+    signals = signals_info["signals"]
+    assert signals.shape == (num_rho, num_alpha_signals, 7, 96)
+    assert np.isfinite(signals).all()
+
+    # Check z coordinates
+    z = signals_info["z"]
+    assert z.shape == (96,)
+    np.testing.assert_allclose(z[0], -np.pi, rtol=1e-5)

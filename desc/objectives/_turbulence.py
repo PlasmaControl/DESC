@@ -15,7 +15,7 @@ from desc.compute._turbulence import (
 )
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid
-from desc.utils import setdefault
+from desc.utils import Timer, setdefault
 
 from .objective_funs import _Objective, collect_docs
 
@@ -124,6 +124,12 @@ class ITGProxy(_Objective):
         self._iota_keys = ["iota", "iota_r", "shear", "a"]
 
         eq = self.things[0]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
         iota_grid = LinearGrid(
             rho=np.append(self._rho, 1) if self._add_lcfs else self._rho,
             M=eq.M_grid,
@@ -149,6 +155,11 @@ class ITGProxy(_Objective):
             "profiles": profiles,
             "quad_weights": 1.0,
         }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -404,6 +415,12 @@ class NNITGProxy(_Objective):
         self._iota_keys = ["iota", "iota_r", "shear", "a", "p_r"]
 
         eq = self.things[0]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
         iota_grid = LinearGrid(
             rho=self._rho,
             M=eq.M_grid,
@@ -414,6 +431,10 @@ class NNITGProxy(_Objective):
         self._dim_f = len(self._rho)
         transforms = get_transforms(self._iota_keys, eq, iota_grid)
         profiles = get_profiles(self._iota_keys + self._gx_keys, eq, iota_grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
         # Compute target flux tube length
         eq_data = eq.compute(["a"])
@@ -481,9 +502,17 @@ class NNITGProxy(_Objective):
             # L = ∫ dθ_PEST / |gradpar|
             return jnp.abs(jnp.trapezoid(1.0 / data["gx_gradpar"], theta_pest))
 
+        if verbose > 0:
+            print("Solving for poloidal turns")
+        timer.start("Solving poloidal turns")
+
         poloidal_turns = solve_poloidal_turns_for_length(
             length_fn, target_length, x0_guess=2.0 * abs(iota_ref)
         )
+
+        timer.stop("Solving poloidal turns")
+        if verbose > 1:
+            timer.disp("Solving poloidal turns")
 
         # Convert to toroidal_turns for dynamic adaptation during optimization.
         # As iota changes, poloidal_turns = toroidal_turns * |iota| adapts to
@@ -497,10 +526,18 @@ class NNITGProxy(_Objective):
                 f"achieved L={length_fn(poloidal_turns):.2f}"
             )
 
+        if verbose > 0:
+            print("Loading neural network weights")
+        timer.start("Loading NN weights")
+
         # Load model weights and JIT-compiled forward functions
         nn_weights, jit_forward, ensemble_weights, jit_forwards = (
             self._load_model_weights(verbose)
         )
+
+        timer.stop("Loading NN weights")
+        if verbose > 1:
+            timer.disp("Loading NN weights")
 
         self._constants = {
             "rho": self._rho,

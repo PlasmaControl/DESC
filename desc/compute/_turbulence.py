@@ -1,18 +1,7 @@
 """Compute functions for ITG turbulence proxies and related quantities.
 
-This module provides GX geometric coefficients and ITG turbulence proxies
-for gyrokinetic turbulence prediction. The implementation follows the
-conventions established in Landreman et al. 2025 (arXiv:2502.11657).
-
 Notes
 -----
-Reference quantities use the following normalizations:
-- B_reference = 2|ψ_b|/a² where ψ_b is the boundary toroidal flux
-- L_reference = a (minor radius)
-
-Some quantities may have singularities at the magnetic axis (ρ=0).
-Objectives using these quantities should use ρ > 0.
-
 Flux tube utilities use the θ_PEST (straight-field-line) parameterization
 for arclength computation, which matches the GX training data conventions.
 """
@@ -29,6 +18,9 @@ from .data_index import register_compute_fun
 # Slope for smooth Heaviside (sigmoid) used in ITG proxy
 _HEAVISIDE_SMOOTH_K = 10.0
 
+# GX sign convention for Bxy direction (Landreman et al. 2025)
+_SIGMA_BXY = -1
+
 
 # =============================================================================
 # Reference Quantities
@@ -40,7 +32,7 @@ _HEAVISIDE_SMOOTH_K = 10.0
     label="B_{\\mathrm{ref}}",
     units="T",
     units_long="Tesla",
-    description="GX reference magnetic field: B_ref = 2|ψ_b|/a²",
+    description="GX reference magnetic field strength",
     dim=0,
     params=["Psi"],
     transforms={},
@@ -59,7 +51,7 @@ def _gx_B_reference(params, transforms, profiles, data, **kwargs):
     label="L_{\\mathrm{ref}}",
     units="m",
     units_long="meters",
-    description="GX reference length: L_ref = a (minor radius)",
+    description="GX reference length (minor radius)",
     dim=0,
     params=[],
     transforms={},
@@ -84,16 +76,14 @@ def _gx_L_reference(params, transforms, profiles, data, **kwargs):
     units_long="dimensionless",
     description="Normalized magnetic field magnitude |B|/B_ref for GX",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "a"],
+    data=["|B|", "gx_B_reference"],
 )
 def _gx_bmag(params, transforms, profiles, data, **kwargs):
-    psi_b = jnp.abs(params["Psi"]) / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["a"] ** 2
-    data["gx_bmag"] = data["|B|"] / B_ref
+    data["gx_bmag"] = data["|B|"] / data["gx_B_reference"]
     return data
 
 
@@ -107,16 +97,16 @@ def _gx_bmag(params, transforms, profiles, data, **kwargs):
     label="|\\nabla \\alpha|^2 L_{\\mathrm{ref}}^2 s",
     units="~",
     units_long="dimensionless",
-    description="GX gds2: |grad(alpha)|^2 * L_ref^2 * s, where s = rho^2",
+    description="GX gds2: perpendicular wavenumber squared in y direction",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "rho", "grad(alpha)"],
+    data=["gx_L_reference", "rho", "grad(alpha)"],
 )
 def _gx_gds2(params, transforms, profiles, data, **kwargs):
-    L_ref = data["a"]
+    L_ref = data["gx_L_reference"]
     s = data["rho"] ** 2
     grad_alpha_sq = dot(data["grad(alpha)"], data["grad(alpha)"])
     data["gx_gds2"] = grad_alpha_sq * L_ref**2 * s
@@ -128,20 +118,20 @@ def _gx_gds2(params, transforms, profiles, data, **kwargs):
     label="\\mathrm{gds21} / \\hat{s}",
     units="~",
     units_long="dimensionless",
-    description="GX gds21/shat: grad(alpha).grad(psi) * sigma_Bxy / B_ref",
+    description="GX gds21/shat: cross term between x and y gradients",
     dim=1,
     params=["Psi"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "grad(alpha)", "grad(psi)"],
+    data=["gx_L_reference", "grad(alpha)", "grad(psi)"],
 )
 def _gx_gds21_over_shat(params, transforms, profiles, data, **kwargs):
-    sigma_Bxy = -1  # GX sign convention
+    # Note: needs signed psi_b for physics, cannot use gx_B_reference
     psi_b = params["Psi"] / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["a"] ** 2
+    B_ref = 2 * psi_b / data["gx_L_reference"] ** 2
     grad_alpha_dot_grad_psi = dot(data["grad(alpha)"], data["grad(psi)"])
-    data["gx_gds21_over_shat"] = sigma_Bxy * grad_alpha_dot_grad_psi / B_ref
+    data["gx_gds21_over_shat"] = _SIGMA_BXY * grad_alpha_dot_grad_psi / B_ref
     return data
 
 
@@ -150,18 +140,17 @@ def _gx_gds21_over_shat(params, transforms, profiles, data, **kwargs):
     label="\\mathrm{gds22} / \\hat{s}^2",
     units="~",
     units_long="dimensionless",
-    description="GX gds22/shat^2: |grad(psi)|^2 / (L_ref^2 * B_ref^2 * s)",
+    description="GX gds22/shat^2: perpendicular wavenumber squared in x direction",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "rho", "|grad(psi)|^2"],
+    data=["gx_L_reference", "gx_B_reference", "rho", "|grad(psi)|^2"],
 )
 def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["a"] ** 2
-    L_ref = data["a"]
+    L_ref = data["gx_L_reference"]
+    B_ref = data["gx_B_reference"]
     s = data["rho"] ** 2
     data["gx_gds22_over_shat_squared"] = (
         data["|grad(psi)|^2"] / (L_ref**2 * B_ref**2 * s)
@@ -179,26 +168,24 @@ def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
     label="\\mathrm{gbdrift}",
     units="~",
     units_long="dimensionless",
-    description="GX gbdrift: 2*B_ref*L_ref²*√s*(Bx∇|B|)·∇α / |B|³",
+    description="GX gbdrift: grad-B drift dotted with grad y",
     dim=1,
     params=["Psi"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "rho", "|B|", "grad(|B|)", "B", "grad(alpha)"],
+    data=["gx_L_reference", "gx_B_reference", "rho", "|B|", "grad(|B|)", "B", "grad(alpha)"],
 )
 def _gx_gbdrift(params, transforms, profiles, data, **kwargs):
-    sigma_Bxy = -1  # GX sign convention
     psi_sign = jnp.sign(params["Psi"])
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["a"] ** 2
-    L_ref = data["a"]
+    B_ref = data["gx_B_reference"]
+    L_ref = data["gx_L_reference"]
     sqrt_s = data["rho"]
     B_cross_grad_B = cross(data["B"], data["grad(|B|)"])
     B_cross_grad_B_dot_grad_alpha = dot(B_cross_grad_B, data["grad(alpha)"])
     data["gx_gbdrift"] = (
         2
-        * sigma_Bxy
+        * _SIGMA_BXY
         * psi_sign
         * B_ref
         * L_ref**2
@@ -214,26 +201,25 @@ def _gx_gbdrift(params, transforms, profiles, data, **kwargs):
     label="\\mathrm{cvdrift}",
     units="~",
     units_long="dimensionless",
-    description="GX cvdrift: gbdrift + pressure term",
+    description="GX cvdrift: curvature drift dotted with grad y",
     dim=1,
     params=["Psi"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "rho", "|B|", "gx_gbdrift", "p_r"],
+    data=["gx_L_reference", "gx_B_reference", "rho", "|B|", "gx_gbdrift", "p_r"],
 )
 def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
-    sigma_Bxy = -1  # GX sign convention
     psi_sign = jnp.sign(params["Psi"])
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    B_ref = 2 * psi_b / data["a"] ** 2
-    L_ref = data["a"]
+    psi_b = jnp.abs(params["Psi"]) / (2 * jnp.pi)  # Still needed for pressure term
+    B_ref = data["gx_B_reference"]
+    L_ref = data["gx_L_reference"]
     sqrt_s = data["rho"]
     d_pressure_d_s = data["p_r"] / (2 * sqrt_s)
     pressure_term = (
         2
         * mu_0
-        * sigma_Bxy
+        * _SIGMA_BXY
         * psi_sign
         * B_ref
         * L_ref**2
@@ -250,7 +236,7 @@ def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
     label="\\mathrm{gbdrift0} / \\hat{s}",
     units="~",
     units_long="dimensionless",
-    description="GX gbdrift0/shat: 2*sign(Psi)*(Bx∇|B|)·∇ψ / (|B|³*√s)",
+    description="GX gbdrift0/shat: grad-B drift dotted with grad x",
     dim=1,
     params=["Psi"],
     transforms={},
@@ -279,16 +265,16 @@ def _gx_gbdrift0_over_shat(params, transforms, profiles, data, **kwargs):
     label="L_{\\mathrm{ref}} \\mathbf{b} \\cdot \\nabla",
     units="~",
     units_long="dimensionless",
-    description="GX gradpar: L_ref * (B^θ*(1+λ_θ) + B^ζ*λ_ζ) / |B|",
+    description="GX gradpar: parallel gradient operator coefficient",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "|B|", "B^theta", "B^zeta", "lambda_t", "lambda_z"],
+    data=["gx_L_reference", "|B|", "B^theta", "B^zeta", "lambda_t", "lambda_z"],
 )
 def _gx_gradpar(params, transforms, profiles, data, **kwargs):
-    L_ref = data["a"]
+    L_ref = data["gx_L_reference"]
     data["gx_gradpar"] = (
         L_ref
         * (data["B^theta"] * (1 + data["lambda_t"]) + data["B^zeta"] * data["lambda_z"])
@@ -307,7 +293,7 @@ def _gx_gradpar(params, transforms, profiles, data, **kwargs):
     label="f_Q \\mathrm{integrand}",
     units="~",
     units_long="dimensionless",
-    description="Integrand for ITG proxy: (sigmoid(k*cvdrift) + 0.2) * |grad_x|^3 / B",
+    description="Integrand for ITG turbulence proxy",
     dim=1,
     params=[],
     transforms={},
@@ -334,7 +320,7 @@ def _itg_proxy_integrand(params, transforms, profiles, data, **kwargs):
     label="f_Q",
     units="~",
     units_long="dimensionless",
-    description="ITG turbulence proxy: mean of integrand over field line",
+    description="ITG turbulence proxy scalar",
     dim=0,
     params=[],
     transforms={},

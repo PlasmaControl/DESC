@@ -25,7 +25,12 @@ from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux, LinearGridSurface
+from desc.grid import (
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
@@ -1229,7 +1234,7 @@ def test_non_eq_optimization():
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
 
-    surface_grid = LinearGridSurface(M=18, N=0, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=18, N=0, NFP=eq.NFP)
     plasma_grid = LinearGridFlux(M=18, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1491,12 +1496,12 @@ def test_regcoil_axisymmetric():
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
-    grid = LinearGridSurface(N=10, M=10, NFP=surface_current_field.NFP)
+    grid = LinearGridToroidalSurface(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
@@ -1507,7 +1512,7 @@ def test_regcoil_axisymmetric():
         surface_current_field,
         eq=eq,
         eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGridSurface(M=40, N=40, NFP=eq.NFP),
+        source_grid=LinearGridToroidalSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
         regularization_type="simple",
@@ -1522,7 +1527,7 @@ def test_regcoil_axisymmetric():
     )
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
@@ -1532,7 +1537,7 @@ def test_regcoil_axisymmetric():
         surface_current_field,
         eq=eq,
         eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGridSurface(M=40, N=80, NFP=eq.NFP),
+        source_grid=LinearGridToroidalSurface(M=40, N=80, NFP=eq.NFP),
         lambda_regularization=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
@@ -1553,7 +1558,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridSurface(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf * 2, rtol=1e-4, atol=1e-8)
@@ -1580,7 +1585,9 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGridSurface(M=60, N=60, NFP=surface_current_field.NFP),
+        source_grid=LinearGridToroidalSurface(
+            M=60, N=60, NFP=surface_current_field.NFP
+        ),
         basis="rpz",
         chunk_size=20,
     )
@@ -2394,7 +2401,7 @@ def test_signed_PlasmaVesselDistance():
 
     target_dist = -0.25
 
-    surface_grid = LinearGridSurface(M=10, N=4, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=10, N=4, NFP=eq.NFP)
     plasma_grid = LinearGridFlux(M=10, N=4, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -2450,7 +2457,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    surface_grid = LinearGridSurface(M=20, N=8, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=20, N=8, NFP=eq.NFP)
     plasma_grid = LinearGridFlux(M=20, N=8, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
@@ -2522,7 +2529,7 @@ def test_share_parameters():
     surf3.change_Phi_resolution(M=4, N=2)
 
     ## setup opt problem
-    surf_grid = LinearGridSurface(M=10, N=10, NFP=surf1.NFP)
+    surf_grid = LinearGridToroidalSurface(M=10, N=10, NFP=surf1.NFP)
     eval_grid = LinearGridFlux(M=10, N=10, NFP=surf1.NFP, sym=True)
     # let surfs and Phi change while keeping their geometry shared
     obj = ObjectiveFunction(

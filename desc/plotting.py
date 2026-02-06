@@ -24,7 +24,12 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import map_coordinates
 from desc.geometry import Curve, FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux, LinearGridSurface
+from desc.grid import (
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import OmnigenousField, field_line_integrate
 from desc.particles import trace_particles
@@ -312,12 +317,12 @@ def _get_grid(thing, **kwargs):
                 del grid_args[key]
         grid = LinearGridCurve(**grid_args)
     elif isinstance(thing, FourierRZToroidalSurface):
-        sig = inspect.signature(LinearGridSurface.__init__)
+        sig = inspect.signature(LinearGridToroidalSurface.__init__)
         cls_args = list(sig.parameters.keys())
         for key in list(grid_args.keys()):
             if key not in cls_args:
                 del grid_args[key]
-        grid = LinearGridSurface(**grid_args)
+        grid = LinearGridToroidalSurface(**grid_args)
     elif isinstance(thing, Equilibrium) or isinstance(thing, OmnigenousField):
         sig = inspect.signature(LinearGridFlux.__init__)
         cls_args = list(sig.parameters.keys())
@@ -444,7 +449,7 @@ def _compute_Bn(
     elif (
         (
             isinstance(plot_grid, LinearGridFlux)
-            or isinstance(plot_grid, LinearGridSurface)
+            or isinstance(plot_grid, LinearGridToroidalSurface)
         )
         and not plot_grid.sym
         and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
@@ -470,8 +475,8 @@ def _compute_Bn(
         source_grid = LinearGridFlux(
             M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
         )
-    # compute_Bnormal requires a LinearGridSurface
-    surf_eval_grid = LinearGridSurface(
+    # compute_Bnormal requires a LinearGridToroidalSurface
+    surf_eval_grid = LinearGridToroidalSurface(
         theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
         zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
         NFP=eval_grid.NFP,

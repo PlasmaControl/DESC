@@ -18,9 +18,9 @@ from desc.backend import (
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.grid import (
     CustomGridFlux,
-    CustomGridSurface,
+    CustomGridToroidalSurface,
     LinearGridFlux,
-    LinearGridSurface,
+    LinearGridToroidalSurface,
 )
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -631,7 +631,7 @@ class FourierRZToroidalSurface(Surface):
             ValueError,
             "surface has no volume for abs(twist)%1 == 0.5",
         )
-        grid = LinearGridSurface(M=30, N=30, NFP=NFP, endpoint=True)
+        grid = LinearGridToroidalSurface(M=30, N=30, NFP=NFP, endpoint=True)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
 
@@ -688,12 +688,12 @@ class FourierRZToroidalSurface(Surface):
         offset : float
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
-        grid : AbstractGridSurface, optional
+        grid : AbstractGridToroidalSurface, optional
             Grid of the points on the given surface to evaluate the offset points at,
             from which the offset surface will be created by fitting offset points with
             the basis defined by the given M and N. If None, defaults to a
-            LinearGridSurface with M and N and NFP equal to the base_surface.M and
-            base_surface.N and base_surface.NFP
+            LinearGridToroidalSurface with M and N and NFP equal to the base_surface.M
+            and base_surface.N and base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
@@ -732,7 +732,7 @@ class FourierRZToroidalSurface(Surface):
 
         base_surface = self
         if grid is None:
-            grid = LinearGridSurface(
+            grid = LinearGridToroidalSurface(
                 M=base_surface.M * 2,
                 N=base_surface.N * 2,
                 NFP=base_surface.NFP,
@@ -750,7 +750,9 @@ class FourierRZToroidalSurface(Surface):
 
             data = base_surface.compute(
                 ["X", "Y", "Z", "n_rho"],
-                grid=CustomGridSurface(theta=theta, zeta=phi, jitable=True, sort=False),
+                grid=CustomGridToroidalSurface(
+                    theta=theta, zeta=phi, jitable=True, sort=False
+                ),
                 method="jitable",
             )
 
@@ -822,7 +824,7 @@ class FourierRZToroidalSurface(Surface):
         from desc.geometry import FourierRZCurve
 
         # over-sample to get a good axis fit
-        grid = LinearGridSurface(theta=2, zeta=self.N * 4, NFP=self.NFP)
+        grid = LinearGridToroidalSurface(theta=2, zeta=self.N * 4, NFP=self.NFP)
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]

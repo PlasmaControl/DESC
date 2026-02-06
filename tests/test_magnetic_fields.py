@@ -19,7 +19,7 @@ from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import LinearGridCurve, LinearGridFlux, LinearGridSurface
+from desc.grid import LinearGridCurve, LinearGridFlux, LinearGridToroidalSurface
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -353,7 +353,10 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field(
                 [10.0, 0, 0],
-                source_grid=[None, LinearGridSurface(M=30, N=30, NFP=surface.NFP)],
+                source_grid=[
+                    None,
+                    LinearGridToroidalSurface(M=30, N=30, NFP=surface.NFP),
+                ],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
@@ -415,7 +418,7 @@ class TestMagneticFields:
         curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
-        surface_grid = LinearGridSurface(M=60, N=60, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=60, N=60, NFP=10)
 
         A_xyz = field.compute_magnetic_vector_potential(
             curve_data["x"], basis="xyz", source_grid=surface_grid
@@ -483,7 +486,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        surface_grid = LinearGridSurface(M=120, N=120, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=120, N=120, NFP=10)
 
         phi_mn = np.zeros((basis.num_modes,))
 
@@ -745,7 +748,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        surface_grid = LinearGridSurface(M=60, N=60, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=60, N=60, NFP=10)
 
         phi_mn = np.zeros((basis.num_modes,))
 
@@ -1395,7 +1398,7 @@ class TestMagneticFields:
         path = tmpdir.join("BNORM_desc.txt")
         tfield = ToroidalMagneticField(2, 1)
         eq = get("DSHAPE")
-        grid = LinearGridSurface(M=20, N=20, NFP=eq.NFP)
+        grid = LinearGridToroidalSurface(M=20, N=20, NFP=eq.NFP)
         x = eq.surface.compute("x", grid=grid, basis="rpz")["x"]
         Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
             eq.surface, eval_grid=grid, source_grid=grid, basis="rpz"
@@ -1431,7 +1434,7 @@ class TestMagneticFields:
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)
         eq = get("HELIOTRON")
-        grid = LinearGridSurface(M=20, N=20, NFP=eq.NFP)
+        grid = LinearGridToroidalSurface(M=20, N=20, NFP=eq.NFP)
         x = eq.surface.compute("x", grid=grid, basis="xyz")["x"]
         Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
             eq.surface, eval_grid=grid, basis="xyz"
@@ -1558,7 +1561,7 @@ class TestMagneticFields:
             solve_regularized_surface_current(field, eq, external_field=eq)
         field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
         grid_flux = LinearGridFlux(M=1, N=1)
-        grid_surf = LinearGridSurface(M=1, N=1)
+        grid_surf = LinearGridToroidalSurface(M=1, N=1)
         # nested with pytest.warns, if a warning is not detected it is re-emitted and
         # goes through the higher level context, this lets us test 3 different warnings
         # with one function call here

@@ -30,7 +30,7 @@ from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import AbstractGridFlux, LinearGridFlux, LinearGridSurface
+from desc.grid import AbstractGridFlux, LinearGridFlux, LinearGridToroidalSurface
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
@@ -356,9 +356,9 @@ class _MagneticField(IOAble, ABC):
             If an Equilibrium is supplied, will use its boundary surface,
             and also include the contribution from the equilibrium currents
             using the virtual casing principle.
-        eval_grid : AbstractGridSurface, optional
+        eval_grid : AbstractGridToroidalSurface, optional
             Grid of points on the surface to calculate the Bnormal at, if None defaults
-            to a LinearGridSurface with twice the surface poloidal and toroidal
+            to a LinearGridToroidalSurface with twice the surface poloidal and toroidal
             resolutions points are in surface angular coordinates i.e theta and zeta.
         source_grid : AbstractGrid, int or None
             Grid used to discretize MagneticField object if calculating B from
@@ -402,7 +402,7 @@ class _MagneticField(IOAble, ABC):
             eq = surface
             surface = eq.surface
         if eval_grid is None:
-            eval_grid = LinearGridSurface(
+            eval_grid = LinearGridToroidalSurface(
                 M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
 
@@ -472,9 +472,9 @@ class _MagneticField(IOAble, ABC):
         basis_N : int, optional
             Toroidal resolution of the DoubleFourierSeries used to fit the Bnormal
             on the plasma surface, by default 24
-        eval_grid : AbstractGridSurface, optional
+        eval_grid : AbstractGridToroidalSurface, optional
             Grid of points on the surface to calculate the Bnormal at, if None defaults
-            to a LinearGridSurface with twice the surface poloidal and toroidal
+            to a LinearGridToroidalSurface with twice the surface poloidal and toroidal
             resolutions points are in surface angular coordinates i.e theta and zeta.
         source_grid : AbstractGrid, int or None
             Grid used to discretize MagneticField object if calculating B from
@@ -525,7 +525,9 @@ class _MagneticField(IOAble, ABC):
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
         if eval_grid is None:
-            eval_grid = LinearGridSurface(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
+            eval_grid = LinearGridToroidalSurface(
+                M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
+            )
         fname = os.path.expanduser(fname)
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)

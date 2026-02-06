@@ -9,7 +9,7 @@ from .core import AbstractGrid
 from .utils import periodic_spacing
 
 
-class AbstractGridSurface(AbstractGrid):
+class AbstractGridToroidalSurface(AbstractGrid):
     """Base class for collocation grids along 2D geometric surfaces."""
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP", "_sym"]
@@ -151,7 +151,7 @@ class AbstractGridSurface(AbstractGrid):
         return self.__dict__.setdefault("_sym", False)
 
 
-class LinearGridSurface(AbstractGridSurface):
+class LinearGridToroidalSurface(AbstractGridToroidalSurface):
     """Grid in which the nodes are linearly spaced in the surface coordinate.
 
     Parameters
@@ -186,12 +186,12 @@ class LinearGridSurface(AbstractGridSurface):
         Note that if supplied the values may be reordered in the resulting grid.
     """
 
-    _io_attrs_ = AbstractGridSurface._io_attrs_ + [
+    _io_attrs_ = AbstractGridToroidalSurface._io_attrs_ + [
         "_poloidal_endpoint",
         "_toroidal_endpoint",
     ]
 
-    _static_attrs = AbstractGridSurface._static_attrs + ["_endpoint"]
+    _static_attrs = AbstractGridToroidalSurface._static_attrs + ["_endpoint"]
 
     def __init__(
         self,
@@ -487,7 +487,7 @@ class LinearGridSurface(AbstractGridSurface):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class CustomGridSurface(AbstractGridSurface):
+class CustomGridToroidalSurface(AbstractGridToroidalSurface):
     """Collocation grid with custom node placement.
 
     Parameters

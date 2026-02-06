@@ -7,9 +7,9 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import (
     AbstractGridFlux,
-    AbstractGridSurface,
+    AbstractGridToroidalSurface,
     LinearGridFlux,
-    LinearGridSurface,
+    LinearGridToroidalSurface,
     QuadratureGridFlux,
 )
 from desc.utils import (
@@ -112,13 +112,15 @@ class AspectRatio(_Objective):
             )
         else:  # FourierRZToroidalSurface
             if self._grid is None:
-                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
+                )
             else:
                 grid = self._grid
             errorif(
-                not isinstance(grid, AbstractGridSurface),
+                not isinstance(grid, AbstractGridToroidalSurface),
                 ValueError,
-                msg="Grid must be of type AbstractGridSurface, "
+                msg="Grid must be of type AbstractGridToroidalSurface, "
                 + f"but got type {type(grid)}.",
             )
 
@@ -187,7 +189,8 @@ class Elongation(_Objective):
     grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridSurface(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N)`` for
+        ``FourierRZToroidalSurface``.
 
     """
 
@@ -260,13 +263,15 @@ class Elongation(_Objective):
             )
         else:  # FourierRZToroidalSurface
             if self._grid is None:
-                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
+                )
             else:
                 grid = self._grid
             errorif(
-                not isinstance(grid, AbstractGridSurface),
+                not isinstance(grid, AbstractGridToroidalSurface),
                 ValueError,
-                msg="Grid must be of type AbstractGridSurface, "
+                msg="Grid must be of type AbstractGridToroidalSurface, "
                 + f"but got type {type(grid)}.",
             )
 
@@ -406,13 +411,15 @@ class Volume(_Objective):
             )
         else:  # FourierRZToroidalSurface
             if self._grid is None:
-                grid = LinearGridSurface(M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False)
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
+                )
             else:
                 grid = self._grid
             errorif(
-                not isinstance(grid, AbstractGridSurface),
+                not isinstance(grid, AbstractGridToroidalSurface),
                 ValueError,
-                msg="Grid must be of type AbstractGridSurface, "
+                msg="Grid must be of type AbstractGridToroidalSurface, "
                 + f"but got type {type(grid)}.",
             )
 
@@ -496,9 +503,9 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    surface_grid : AbstractGridSurface, optional
+    surface_grid : AbstractGridToroidalSurface, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGridSurface(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid)``.
     plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
@@ -625,7 +632,9 @@ class PlasmaVesselDistance(_Objective):
             eq = self.things[0]
             surface = self.things[1]
         if self._surface_grid is None:
-            surface_grid = LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGridToroidalSurface(
+                M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
@@ -633,9 +642,9 @@ class PlasmaVesselDistance(_Objective):
         else:
             plasma_grid = self._plasma_grid
         errorif(
-            not isinstance(surface_grid, AbstractGridSurface),
+            not isinstance(surface_grid, AbstractGridToroidalSurface),
             ValueError,
-            msg="Grid must be of type AbstractGridSurface, "
+            msg="Grid must be of type AbstractGridToroidalSurface, "
             + f"but got type {type(surface_grid)}.",
         )
         errorif(

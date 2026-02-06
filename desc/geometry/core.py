@@ -17,10 +17,10 @@ from desc.compute.utils import (
 from desc.grid import (
     AbstractGridCurve,
     AbstractGridFlux,
-    AbstractGridSurface,
+    AbstractGridToroidalSurface,
     LinearGridCurve,
     LinearGridFlux,
-    LinearGridSurface,
+    LinearGridToroidalSurface,
     QuadratureGridFlux,
 )
 from desc.io import IOAble
@@ -527,13 +527,13 @@ class Surface(IOAble, Optimizable, ABC):
 
         if hasattr(self, "rho"):  # FourierRZToroidalSurface
             if grid is None:
-                grid = LinearGridSurface(
+                grid = LinearGridToroidalSurface(
                     M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
-            if not isinstance(grid, AbstractGridSurface):
+            if not isinstance(grid, AbstractGridToroidalSurface):
                 raise TypeError(
-                    "Must pass in an AbstractGridSurface object for argument grid, "
-                    + f"but got type {type(grid)}.",
+                    "Must pass in an AbstractGridToroidalSurface object for argument "
+                    + f"grid, but got type {type(grid)}.",
                 )
         elif hasattr(self, "zeta"):  # ZernikeRZToroidalSection
             if grid is None:

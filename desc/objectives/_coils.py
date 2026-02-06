@@ -9,10 +9,10 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import (
     AbstractGrid,
-    AbstractGridSurface,
+    AbstractGridToroidalSurface,
     LinearGridCurve,
     LinearGridFlux,
-    LinearGridSurface,
+    LinearGridToroidalSurface,
 )
 from desc.integrals import compute_B_plasma
 from desc.utils import (
@@ -1665,11 +1665,11 @@ class SurfaceQuadraticFlux(_Objective):
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided QFM surface. May be fixed
         by passing in ``field_fixed=True``
-    eval_grid : AbstractGridSurface, optional
+    eval_grid : AbstractGridToroidalSurface, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors. Defaults to
-        ``LinearGridSurface(M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP,``
-        ``sym=False)``.
+        ``LinearGridToroidalSurface(M=surface.M_grid, N=surface.N_grid,``
+        ``NFP=surface.NFP, sym=False)``.
     field_grid : AbstractGrid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object,
@@ -1751,7 +1751,7 @@ class SurfaceQuadraticFlux(_Objective):
         surface = self._surface
 
         if self._eval_grid is None:
-            eval_grid = LinearGridSurface(
+            eval_grid = LinearGridToroidalSurface(
                 M=2 * surface.M,
                 N=2 * surface.N,
                 NFP=surface.NFP,
@@ -2509,7 +2509,7 @@ class SurfaceCurrentRegularization(_Objective):
         of this will be optimized to minimize the objective.
     regularization : str, optional
         Regularization method. One of {'K', 'Phi', 'sqrt(Phi)'}. Default = 'K'.
-    source_grid : LinearGridSurface, optional
+    source_grid : LinearGridToroidalSurface, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the
@@ -2613,15 +2613,15 @@ class SurfaceCurrentRegularization(_Objective):
             N_Phi = surface_current_field.N
 
         if self._source_grid is None:
-            source_grid = LinearGridSurface(
+            source_grid = LinearGridToroidalSurface(
                 M=3 * M_Phi + 1, N=3 * N_Phi + 1, NFP=surface_current_field.NFP
             )
         else:
             source_grid = self._source_grid
         errorif(
-            not isinstance(source_grid, AbstractGridSurface),
+            not isinstance(source_grid, AbstractGridToroidalSurface),
             ValueError,
-            msg="Grid must be of type AbstractGridSurface, "
+            msg="Grid must be of type AbstractGridToroidalSurface, "
             + f"but got type {type(source_grid)}.",
         )
 

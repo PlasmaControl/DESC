@@ -6,7 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put
-from desc.grid import CustomGridCurve, CustomGridFlux, CustomGridSurface
+from desc.grid import CustomGridCurve, CustomGridFlux, CustomGridToroidalSurface
 from desc.io import IOAble
 from desc.utils import combination_permutation, warnif
 
@@ -80,7 +80,7 @@ class Transform(IOAble):
             and not (
                 isinstance(grid, CustomGridCurve)
                 or isinstance(grid, CustomGridFlux)
-                or isinstance(grid, CustomGridSurface)
+                or isinstance(grid, CustomGridToroidalSurface)
             )
             and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "

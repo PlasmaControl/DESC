@@ -23,7 +23,7 @@ from desc.grid import (
     ConcentricGridFlux,
     CustomGridFlux,
     LinearGridFlux,
-    LinearGridSurface,
+    LinearGridToroidalSurface,
     QuadratureGridFlux,
 )
 from desc.integrals import surface_averages
@@ -158,7 +158,7 @@ class TestPlot1D:
     def test_plot_1d_surface(self):
         """Test plot_1d function for Surface objects."""
         surf = FourierRZToroidalSurface()
-        fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGridSurface(M=50))
+        fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGridToroidalSurface(M=50))
         return fig
 
     @pytest.mark.unit

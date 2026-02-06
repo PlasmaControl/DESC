@@ -13,7 +13,11 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import CustomGridSurface, LinearGridFlux, LinearGridSurface
+from desc.grid import (
+    CustomGridToroidalSurface,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.integrals import compute_B_plasma
 from desc.optimizable import optimizable_parameter
 from desc.utils import (
@@ -248,7 +252,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGridSurface(
+        source_grid = source_grid or LinearGridToroidalSurface(
             M=30 + 2 * self.M, N=30 + 2 * self.N, NFP=self.NFP
         )
         return _compute_A_or_B_from_CurrentPotentialField(
@@ -669,7 +673,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field or vector potential at specified points
 
         """
-        source_grid = source_grid or LinearGridSurface(
+        source_grid = source_grid or LinearGridToroidalSurface(
             M=30 + 2 * max(self.M, self.M_Phi),
             N=30 + 2 * max(self.N, self.N_Phi),
             NFP=self.NFP,
@@ -975,7 +979,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
                 )
                 K = self.compute(
                     "K",
-                    grid=LinearGridSurface(
+                    grid=LinearGridToroidalSurface(
                         theta=contour_theta[j][0], zeta=contour_zeta[j][0]
                     ),
                     basis="xyz",
@@ -1245,11 +1249,11 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     eval_grid : AbstractGridFlux, optional
         Grid upon which to evaluate the normal field on the plasma surface, and at which
         the normal field is minimized. Defaults to
-        ``LinearGridSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
-    source_grid : AbstractGridSurface, optional
+        ``LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
+    source_grid : AbstractGridToroidalSurface, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
-        ``LinearGridSurface(M=max(3 * current_potential_field.M_Phi, 30),
+        ``LinearGridToroidalSurface(M=max(3 * current_potential_field.M_Phi, 30),
         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)``
     vc_source_grid : LinearGridFlux
         LinearGridFlux to use for the singular integral for the virtual casing
@@ -1393,15 +1397,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         data["external_field_grid"] = external_field_grid
 
     if source_grid is None:
-        source_grid = LinearGridSurface(
+        source_grid = LinearGridToroidalSurface(
             M=max(3 * current_potential_field.M_Phi, 30),
             N=max(3 * current_potential_field.N_Phi, 30),
             NFP=int(eq.NFP),
         )
     if eval_grid is None:
         eval_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
-    # compute_Bnormal requires a LinearGridSurface
-    surf_eval_grid = LinearGridSurface(
+    # compute_Bnormal requires a LinearGridToroidalSurface
+    surf_eval_grid = LinearGridToroidalSurface(
         theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
         zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
         NFP=eval_grid.NFP,
@@ -1842,7 +1846,7 @@ def _find_current_potential_contours(
 
     theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
 
-    grid = CustomGridSurface(
+    grid = CustomGridToroidalSurface(
         theta=theta_full_2D.flatten(order="F"),
         zeta=zeta_full_2D.flatten(order="F"),
         sort=False,
@@ -2029,7 +2033,7 @@ def _find_XYZ_points(
     for thetas, zetas in zip(theta_pts, zeta_pts):
         coords = surface.compute(
             "x",
-            grid=CustomGridSurface(theta=thetas, zeta=zetas, sort=False),
+            grid=CustomGridToroidalSurface(theta=thetas, zeta=zetas, sort=False),
             basis="xyz",
         )["x"]
         contour_X.append(coords[:, 0])

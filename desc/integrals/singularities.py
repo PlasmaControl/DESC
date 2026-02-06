@@ -8,7 +8,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGridFlux, LinearGridSurface
+from desc.grid import LinearGridFlux, LinearGridToroidalSurface
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -1093,7 +1093,7 @@ def compute_B_plasma(
         )
         interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     if hasattr(eq.surface, "Phi_mn"):
-        surf_source_grid = LinearGridSurface(
+        surf_source_grid = LinearGridToroidalSurface(
             theta=source_grid.nodes[source_grid.unique_x1_idx, 1],
             zeta=source_grid.nodes[source_grid.unique_x2_idx, 2],
             NFP=source_grid.NFP,

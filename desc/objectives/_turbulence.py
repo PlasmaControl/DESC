@@ -65,7 +65,7 @@ class ITGProxy(_Objective):
     def __init__(
         self,
         eq,
-        rho,
+        rho=0.5,
         target=None,
         bounds=None,
         weight=1,
@@ -324,7 +324,7 @@ class NNITGProxy(_Objective):
     def __init__(
         self,
         eq,
-        rho,
+        rho=0.5,
         target=None,
         bounds=None,
         weight=1,

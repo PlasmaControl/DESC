@@ -11,7 +11,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..utils import cross, dot
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 # Slope for smooth Heaviside (sigmoid) used in ITG proxy
@@ -152,8 +152,8 @@ def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
     L_ref = data["gx_L_reference"]
     B_ref = data["gx_B_reference"]
     s = data["rho"] ** 2
-    data["gx_gds22_over_shat_squared"] = data["|grad(psi)|^2"] / (
-        L_ref**2 * B_ref**2 * s
+    data["gx_gds22_over_shat_squared"] = safediv(
+        data["|grad(psi)|^2"], L_ref**2 * B_ref**2 * s
     )
     return data
 

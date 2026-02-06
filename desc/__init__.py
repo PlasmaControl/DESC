@@ -67,7 +67,10 @@ config = {
     "avail_mems": None,
     "kind": None,
     "num_device": None,
+    # Set to True if CUDA-aware MPI is installed
     "mpi-cuda": False,
+    # Suppress the warning in `desc.backend.safe_transfer_to_device`
+    "SUPPRESS_GPU_MEMORY_WARNING": False,
 }
 
 

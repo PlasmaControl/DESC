@@ -603,8 +603,19 @@ if use_jax:  # noqa: C901
 
         # this can still fail if arr is big even for CPU
         if desc_config["kind"] == "cpu" or size_gb > desc_config["avail_mems"][0] * 0.9:
-            return jnp.array(arr, device=jax.devices("cpu")[0])
-        return jax.array(arr)
+            if (
+                not desc_config["SUPPRESS_GPU_MEMORY_WARNING"]
+                and desc_config["kind"] == "gpu"
+            ):
+                warnings.warn(
+                    "The total size of the arrays exceeds the available memory of the "
+                    "GPU[id=0]. Moving the array to CPU. This may cause performance "
+                    "degredation. To suppress this warning, use \n"
+                    "`from desc import config as desc_config` \n"
+                    "`desc_config['SUPPRESS_GPU_MEMORY_WARNING'] = True`"
+                )
+            return jnp.asarray(arr, device=jax.devices("cpu")[0])
+        return jnp.asarray(arr)
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

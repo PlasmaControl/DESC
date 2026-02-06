@@ -793,11 +793,12 @@ class TestObjectiveFunction:
         # ensure that it works (dimension-wise) when compute_scaled is called
         _ = obj.compute_scaled(*obj.xs(eq, surface))
 
-        grid = LinearGridFlux(L=3, M=3, N=3)
+        surface_grid = LinearGridSurface(M=3, N=3)
+        plasma_grid = LinearGridFlux(L=3, M=3, N=3)
         eq = Equilibrium()
         surf = FourierRZToroidalSurface()
         obj = PlasmaVesselDistance(
-            surface=surf, surface_grid=grid, plasma_grid=grid, eq=eq
+            surface=surf, surface_grid=surface_grid, plasma_grid=plasma_grid, eq=eq
         )
         with pytest.raises(UserWarning):
             with warnings.catch_warnings():
@@ -2936,7 +2937,7 @@ def test_objective_fun_things():
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
     # For equally spaced grids, should get true d=1
-    surface_grid = LinearGridFlux(M=5, N=6)
+    surface_grid = LinearGridSurface(M=5, N=6)
     plasma_grid = LinearGridFlux(M=5, N=6)
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface

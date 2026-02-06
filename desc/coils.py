@@ -343,6 +343,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
@@ -366,6 +367,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -434,6 +439,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
+        # Perturb coil position and tangent if requested
+        if perturbations is not None:
+            data["x"] += perturbations[: len(data["x"])]
+            data["x_s"] += perturbations[len(data["x"]) :]
+
         AB = op(
             coords,
             data["x"],
@@ -453,6 +463,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis="rpz",
         source_grid=None,
         transforms=None,
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
@@ -473,6 +484,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -493,7 +508,14 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         return self._compute_A_or_B(
-            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            perturbations,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_vector_potential(
@@ -1194,6 +1216,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
@@ -1217,6 +1240,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -1265,6 +1292,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
         )
+        if perturbations is not None:
+            data["x"] += perturbations[: len(data["x"])]
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)
@@ -1288,6 +1317,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         basis="rpz",
         source_grid=None,
         transforms=None,
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
@@ -1326,7 +1356,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         """
         return self._compute_A_or_B(
-            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            perturbations,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_vector_potential(
@@ -1750,6 +1787,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
@@ -1770,6 +1808,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -1838,6 +1880,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     params=x,
                     basis="rpz",
                     source_grid=source_grid,
+                    perturbations=perturbations,
                     chunk_size=chunk_size,
                 )
                 return AB, None
@@ -1865,6 +1908,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis="rpz",
         source_grid=None,
         transforms=None,
+        perturbations=None,
         chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
@@ -1882,6 +1926,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -1894,7 +1942,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         return self._compute_A_or_B(
-            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            perturbations,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_vector_potential(

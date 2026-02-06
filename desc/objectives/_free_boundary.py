@@ -20,6 +20,7 @@ from desc.utils import (
 )
 
 from ..integrals.singularities import best_params, best_ratio
+from ._coils import StochasticOptimizationSettings
 from .normalization import compute_scaling_factors
 
 
@@ -56,6 +57,13 @@ class VacuumBoundaryError(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    stochastic_optimization_settings : dict
+        dictionary of settings to use for stochastic coil optimization. See
+        StochasticOptimizationSettings. Note that this is only used to perturb
+        the coilset during the free-boundary solve, but unlike the robust
+        stage 2 coil optimization, we are not taking an expected value, we
+        just are using this to evaluate a single perturbed coilset
+        for the free-boundary solve.
 
     """
 
@@ -67,6 +75,7 @@ class VacuumBoundaryError(_Objective):
         "_bs_chunk_size",
         "_eq_data_keys",
         "_field_fixed",
+        "_use_perturbation",
     ]
 
     _scalar = False
@@ -93,6 +102,7 @@ class VacuumBoundaryError(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
+        stochastic_optimization_settings=None,
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -119,6 +129,12 @@ class VacuumBoundaryError(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
         )
+        if stochastic_optimization_settings:
+            # Validate the settings
+            StochasticOptimizationSettings(**stochastic_optimization_settings)
+            self._stochastic_settings = stochastic_optimization_settings
+        else:
+            self._stochastic_settings = None
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -175,6 +191,32 @@ class VacuumBoundaryError(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
+
+        if self._stochastic_settings:
+            if self._field_grid is None:
+                # TODO: should really make this on a per-coil basis
+                # so can use each's defaults
+                self._field_grid = LinearGrid(N=100)
+            self._stochastic_settings["number_of_discretization_points"] = int(
+                self._field_grid.num_zeta
+            )
+            assert self._stochastic_settings["number_of_samples"] == 1
+            self._stochastic_settings["index_array_for_samples"] = jnp.arange(
+                self._stochastic_settings["number_of_samples"]
+            )
+            self._stochastic_settings["zero_mean_array"] = jnp.zeros(
+                2 * self._stochastic_settings["number_of_discretization_points"]
+            )
+            stochastic = StochasticOptimizationSettings(**self._stochastic_settings)
+            self._stochastic_settings["covariance_matrix"] = (
+                stochastic._compute_covariance_matrix()
+            )
+            stochastic = StochasticOptimizationSettings(**self._stochastic_settings)
+            self._perturbations = stochastic.perturbations.copy()
+            self._use_perturbation = True
+            del self._stochastic_settings
+        else:
+            self._use_perturbation = False
 
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid)
         transforms = get_transforms(self._eq_data_keys, obj=eq, grid=grid)
@@ -236,14 +278,25 @@ class VacuumBoundaryError(_Objective):
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=self._field_grid,
-            basis="rpz",
-            params=field_params,
-            chunk_size=self._bs_chunk_size,
-        )
+        if not self._use_perturbation:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
+        else:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+                perturbations=self._perturbations,
+            )
         Bex_total = Bext
+
         Bin_total = data["B"]
         Bn = jnp.sum(Bex_total * data["n_rho"], axis=-1)
 
@@ -419,6 +472,13 @@ class BoundaryError(_Objective):
         Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``bs_chunk_size``.
+    stochastic_optimization_settings : dict
+        dictionary of settings to use for stochastic coil optimization. See
+        StochasticOptimizationSettings. Note that this is only used to perturb
+        the coilset during the free-boundary solve, but unlike the robust
+        stage 2 coil optimization, we are not taking an expected value, we
+        just are using this to evaluate a single perturbed coilset
+        for the free-boundary solve.
 
     """
 
@@ -452,6 +512,7 @@ class BoundaryError(_Objective):
         "_sheet_current",
         "_sheet_data_keys",
         "_use_same_grid",
+        "_use_perturbation",
     ]
 
     _scalar = False
@@ -483,6 +544,7 @@ class BoundaryError(_Objective):
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
+        stochastic_optimization_settings=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -516,6 +578,12 @@ class BoundaryError(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
         )
+        if stochastic_optimization_settings:
+            # Validate the settings
+            StochasticOptimizationSettings(**stochastic_optimization_settings)
+            self._stochastic_settings = stochastic_optimization_settings
+        else:
+            self._stochastic_settings = None
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -627,6 +695,32 @@ class BoundaryError(_Objective):
             eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
 
         neq = 3 if self._sheet_current else 2  # number of equations we're using
+
+        if self._stochastic_settings:
+            if self._field_grid is None:
+                # TODO: should really make this on a per-coil basis
+                # so can use each's defaults
+                self._field_grid = LinearGrid(N=100)
+            self._stochastic_settings["number_of_discretization_points"] = int(
+                self._field_grid.num_zeta
+            )
+            assert self._stochastic_settings["number_of_samples"] == 1
+            self._stochastic_settings["index_array_for_samples"] = jnp.arange(
+                self._stochastic_settings["number_of_samples"]
+            )
+            self._stochastic_settings["zero_mean_array"] = jnp.zeros(
+                2 * self._stochastic_settings["number_of_discretization_points"]
+            )
+            stochastic = StochasticOptimizationSettings(**self._stochastic_settings)
+            self._stochastic_settings["covariance_matrix"] = (
+                stochastic._compute_covariance_matrix()
+            )
+            stochastic = StochasticOptimizationSettings(**self._stochastic_settings)
+            self._perturbations = stochastic.perturbations.copy()
+            self._use_perturbation = True
+            del self._stochastic_settings
+        else:
+            self._use_perturbation = False
 
         self._constants = {
             "eval_transforms": eval_transforms,
@@ -757,13 +851,23 @@ class BoundaryError(_Objective):
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=self._field_grid,
-            basis="rpz",
-            params=field_params,
-            chunk_size=self._bs_chunk_size,
-        )
+        if not self._use_perturbation:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
+        else:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+                perturbations=self._perturbations,
+            )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
         Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)

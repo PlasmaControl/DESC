@@ -748,11 +748,16 @@ class FourierRZToroidalSurface(Surface):
             theta = nodes[:, 1]
             phi = nodes[:, 2]
 
+            nodes = jnp.array(
+                [
+                    jnp.zeros_like(theta),
+                    jnp.atleast_1d(jnp.asarray(theta)),
+                    jnp.atleast_1d(jnp.asarray(phi)),
+                ]
+            ).T
             data = base_surface.compute(
                 ["X", "Y", "Z", "n_rho"],
-                grid=CustomGridToroidalSurface(
-                    theta=theta, zeta=phi, jitable=True, sort=False
-                ),
+                grid=CustomGridToroidalSurface(nodes, jitable=True, sort=False),
                 method="jitable",
             )
 

@@ -529,9 +529,8 @@ class CustomGridFlux(AbstractGridFlux):
             Node coordinates, in (rho,theta,zeta).
 
         """
+        # do not alter nodes given by the user for custom grids.
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2π or 2π/NFP.
         return nodes
 
     def _sort_nodes(self):

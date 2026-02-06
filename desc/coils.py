@@ -3552,7 +3552,14 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
 
     coils = []
     for t in theta_offset:
-        grid = CustomGridToroidalSurface(theta=(theta + t) % (2 * np.pi), zeta=zeta)
+        nodes = np.array(
+            [
+                np.zeros_like(theta),
+                np.atleast_1d(np.asarray((theta + t) % (2 * np.pi))),
+                np.atleast_1d(np.asarray(zeta)),
+            ]
+        ).T
+        grid = CustomGridToroidalSurface(nodes)
         data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
         offset = r_over_a * a - a
         x = data["x"] + offset * data["n_rho"]

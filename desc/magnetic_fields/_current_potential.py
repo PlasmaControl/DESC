@@ -1846,11 +1846,14 @@ def _find_current_potential_contours(
 
     theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
 
-    grid = CustomGridToroidalSurface(
-        theta=theta_full_2D.flatten(order="F"),
-        zeta=zeta_full_2D.flatten(order="F"),
-        sort=False,
-    )
+    nodes = jnp.array(
+        [
+            jnp.zeros_like(theta_full_2D.flatten(order="F")),
+            jnp.atleast_1d(jnp.asarray(theta_full_2D.flatten(order="F"))),
+            jnp.atleast_1d(jnp.asarray(zeta_full_2D.flatten(order="F"))),
+        ]
+    ).T
+    grid = CustomGridToroidalSurface(nodes, sort=False)
     phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"].reshape(
         theta_full.size, zeta_full.size, order="F"
     )
@@ -2031,10 +2034,15 @@ def _find_XYZ_points(
     contour_Z = []
 
     for thetas, zetas in zip(theta_pts, zeta_pts):
+        nodes = jnp.array(
+            [
+                jnp.zeros_like(thetas),
+                jnp.atleast_1d(jnp.asarray(thetas)),
+                jnp.atleast_1d(jnp.asarray(zetas)),
+            ]
+        ).T
         coords = surface.compute(
-            "x",
-            grid=CustomGridToroidalSurface(theta=thetas, zeta=zetas, sort=False),
-            basis="xyz",
+            "x", grid=CustomGridToroidalSurface(nodes, sort=False), basis="xyz"
         )["x"]
         contour_X.append(coords[:, 0])
         contour_Y.append(coords[:, 1])

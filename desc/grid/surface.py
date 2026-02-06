@@ -492,10 +492,8 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
 
     Parameters
     ----------
-    theta : ndarray of float, size(num_nodes,)
-        Poloidal coordinates.
-    zeta : ndarray of float, size(num_nodes,)
-        Toroidal coordinates.
+    nodes : ndarray of float, size(num_nodes,3)
+        Node coordinates, in (_,theta,zeta).
     spacing : ndarray of float, size(num_nodes,)
         Spacing between each node.
     weights : ndarray of float, size(num_nodes,)
@@ -512,8 +510,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
 
     def __init__(
         self,
-        theta,
-        zeta,
+        nodes,
         spacing=None,
         weights=None,
         NFP=1,
@@ -527,7 +524,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
         self._fft_x1 = False
         self._fft_x2 = False
         self._can_fft2 = False
-        self._nodes = self._create_nodes(theta, zeta)
+        self._nodes = self._create_nodes(nodes)
         self._spacing = (
             jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
             if spacing is not None
@@ -575,26 +572,22 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
         self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 
-    def _create_nodes(self, theta, zeta):
+    def _create_nodes(self, nodes):
         """Allow for custom node creation.
 
         Parameters
         ----------
-        theta : ndarray of float, size(num_nodes,)
-            Poloidal coordinates.
-        zeta : ndarray of float, size(num_nodes,)
-            Toroidal coordinates.
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (_,theta,zeta).
 
         Returns
         -------
         nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (_,_,s).
+            Node coordinates, in (_,theta,zeta).
 
         """
-        theta = jnp.atleast_1d(jnp.asarray(theta))
-        zeta = jnp.atleast_1d(jnp.asarray(zeta))
-        nodes = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
         # do not alter nodes given by the user for custom grids
+        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         return nodes
 
     def _sort_nodes(self):

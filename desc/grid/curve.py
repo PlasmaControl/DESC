@@ -271,8 +271,8 @@ class CustomGridCurve(AbstractGridCurve):
 
     Parameters
     ----------
-    s : ndarray of float, size(num_nodes,)
-        Node coordinates, in s.
+    nodes : ndarray of float, size(num_nodes,3)
+        Node coordinates, in (_,_,s).
     spacing : ndarray of float, size(num_nodes,)
         Spacing between each node.
     weights : ndarray of float, size(num_nodes,)
@@ -289,7 +289,7 @@ class CustomGridCurve(AbstractGridCurve):
 
     def __init__(
         self,
-        s,
+        nodes,
         spacing=None,
         weights=None,
         NFP=1,
@@ -303,15 +303,9 @@ class CustomGridCurve(AbstractGridCurve):
         self._fft_x1 = False
         self._fft_x2 = False
         self._can_fft2 = False
-        self._nodes = self._create_nodes(s)
+        self._nodes = self._create_nodes(nodes)
         self._spacing = (
-            jnp.array(
-                [
-                    jnp.ones_like(spacing),
-                    jnp.ones_like(spacing),
-                    jnp.atleast_1d(spacing),
-                ]
-            ).T
+            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
             if spacing is not None
             else None
         )
@@ -352,13 +346,13 @@ class CustomGridCurve(AbstractGridCurve):
         self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 
-    def _create_nodes(self, s):
+    def _create_nodes(self, nodes):
         """Allow for custom node creation.
 
         Parameters
         ----------
-        s : ndarray of float, size(num_nodes,)
-            Node coordinates, in s.
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (_,_,s).
 
         Returns
         -------
@@ -366,9 +360,8 @@ class CustomGridCurve(AbstractGridCurve):
             Node coordinates, in (_,_,s).
 
         """
-        s = jnp.atleast_1d(jnp.asarray(s))
-        nodes = jnp.array([jnp.zeros_like(s), jnp.zeros_like(s), s]).T
         # do not alter nodes given by the user for custom grids
+        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         return nodes
 
     def _sort_nodes(self):

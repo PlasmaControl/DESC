@@ -314,8 +314,8 @@ class TestFourierRZCurve:
             atol=1e-12,
         )
         # pass in non-monotonic phi
-        phi_non_monotonic = np.array([0, 3, 2, 4, 1])
-        grid = CustomGridCurve(s=phi_non_monotonic)
+        s = np.array([0, 3, 2, 4, 1])
+        grid = CustomGridCurve(np.array([np.zeros_like(s), np.zeros_like(s), s]).T)
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
@@ -1136,14 +1136,18 @@ class TestSplineXYZCurve:
         R = 3
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=False)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        x, y, z = c.compute("x", grid=CustomGridCurve(s=0.0), basis="xyz")["x"].T
+        x, y, z = c.compute("x", grid=CustomGridCurve(np.zeros(1, 3)), basis="xyz")[
+            "x"
+        ].T
         np.testing.assert_allclose(x, R)
         np.testing.assert_allclose(y, 0, atol=1e-15)
         np.testing.assert_allclose(z, 0, atol=1e-15)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        r, p, z = c.compute("x", grid=CustomGridCurve(s=0.0), basis="rpz")["x"].T
+        r, p, z = c.compute("x", grid=CustomGridCurve(np.zeros(1, 3)), basis="rpz")[
+            "x"
+        ].T
         np.testing.assert_allclose(r, np.sqrt(1**2 + (R - 1) ** 2))
         np.testing.assert_allclose(p, np.arctan2(-(R - 1), 1))
         np.testing.assert_allclose(z, 1)

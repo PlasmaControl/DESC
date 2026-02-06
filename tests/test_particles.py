@@ -6,7 +6,12 @@ import pytest
 from desc.backend import jit, jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
-from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
+from desc.grid import (
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.magnetic_fields import (
     MagneticFieldFromUser,
     ToroidalMagneticField,
@@ -360,7 +365,7 @@ def test_init_surface_particles():
     surf = eq.get_surface_at(rho=rho)
     # rho=0.8 surface is not inside eq but inside eq_large
     surf_large = eq_large.get_surface_at(rho=rho)
-    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid)
+    grid = LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid)
 
     N = 100
     particles = SurfaceParticleInitializer(

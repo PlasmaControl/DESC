@@ -1136,7 +1136,7 @@ class TestSplineXYZCurve:
         R = 3
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=False)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        x, y, z = c.compute("x", grid=CustomGridCurve(np.zeros(1, 3)), basis="xyz")[
+        x, y, z = c.compute("x", grid=CustomGridCurve(np.zeros((1, 3))), basis="xyz")[
             "x"
         ].T
         np.testing.assert_allclose(x, R)
@@ -1145,7 +1145,7 @@ class TestSplineXYZCurve:
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        r, p, z = c.compute("x", grid=CustomGridCurve(np.zeros(1, 3)), basis="rpz")[
+        r, p, z = c.compute("x", grid=CustomGridCurve(np.zeros((1, 3))), basis="rpz")[
             "x"
         ].T
         np.testing.assert_allclose(r, np.sqrt(1**2 + (R - 1) ** 2))

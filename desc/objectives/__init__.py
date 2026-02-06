@@ -29,6 +29,7 @@ from ._equilibrium import (
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import (
+    DeflationOperator,
     ExternalObjective,
     GenericObjective,
     LinearObjectiveFromUser,

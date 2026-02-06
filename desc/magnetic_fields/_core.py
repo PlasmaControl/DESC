@@ -30,7 +30,7 @@ from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
@@ -2598,6 +2598,8 @@ def field_line_integrate(
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
     bs_chunk_size=None,
+    iota=False,
+    axis=None,
     options=None,
     return_aux=False,
 ):
@@ -2641,6 +2643,14 @@ def field_line_integrate(
     bs_chunk_size: int or None
         Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
         evaluates all the source grid points at once. Defaults to None.
+    iota: bool
+        Whether or not to also find the rotational transform of each field line. If
+        True, requires axis to be passed in. iota is computed assuming the poloidal
+        angle is increasing counter-clockwise about the axis as the field line
+        moves along increasing toroidal angle phi.
+    axis: Curve
+        The magnetic axis relative to which the rotational transform is computed. Only
+        required if iota=True.
     options : dict, optional
         Additional arguments to pass to the diffrax diffeqsolve.
     return_aux : bool, optional
@@ -2650,15 +2660,18 @@ def field_line_integrate(
 
     Returns
     -------
-    r, z : ndarray
+    r, z : ndarray of shape [n_phis, n_initial_points]
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
+    iotas : 1-D ndarray of shape [n_initial_points]
+        if iota=True, the rotational transform computed for each field line traced.
     """
     if options is None:
         options = {}
 
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    errorif(iota and axis is None, ValueError, "Must pass in an axis if iota=True")
 
     min_step_size = jnp.where(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
@@ -2693,6 +2706,8 @@ def field_line_integrate(
         adjoint=adjoint,
         chunk_size=chunk_size,
         bs_chunk_size=bs_chunk_size,
+        iota=iota,
+        axis=axis,
         options=options,
         return_aux=return_aux,
     )
@@ -2715,6 +2730,8 @@ def _field_line_integrate(
     options,
     chunk_size=None,
     bs_chunk_size=None,
+    iota=False,
+    axis=None,
     return_aux=False,
 ):
     """JIT/AD friendly field line integrator.
@@ -2744,35 +2761,90 @@ def _field_line_integrate(
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
     # scale to make toroidal field (bp) positive
     scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
+    if iota:
+        data_ax = axis.compute(["R", "Z"], grid=LinearGrid(zeta=phis[0]))
+        dR = x0[:, 0] - data_ax["R"].squeeze()
+        dZ = x0[:, 2] - data_ax["Z"].squeeze()
+        theta0 = np.arctan2(dZ, dR)
+        x0 = np.hstack([x0, theta0[:, None]])
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        out = vmap_chunked(
-            _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
-        )(
-            x0,
-            field,
-            params,
-            source_grid,
-            phis,
-            scale,
-            solver,
-            max_steps,
-            min_step_size,
-            saveat,
-            stepsize_controller,
-            event,
-            adjoint,
-            bs_chunk_size,
-            options,
-        )
+        if iota is False:
+            out = vmap_chunked(
+                _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
+            )(
+                x0,
+                field,
+                params,
+                source_grid,
+                phis,
+                scale,
+                solver,
+                max_steps,
+                min_step_size,
+                saveat,
+                stepsize_controller,
+                event,
+                adjoint,
+                bs_chunk_size,
+                options,
+            )
+        else:
+            out = vmap_chunked(
+                _intfun_wrapper_iota, in_axes=(0,) + 15 * (None,), chunk_size=chunk_size
+            )(
+                x0,
+                field,
+                params,
+                source_grid,
+                phis,
+                scale,
+                solver,
+                max_steps,
+                min_step_size,
+                saveat,
+                stepsize_controller,
+                event,
+                adjoint,
+                bs_chunk_size,
+                options,
+                axis,
+            )
 
     x = out.ys
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
+    theta = x[:, :, 3].squeeze().T.reshape((phis.size, *rshape))
+    if iota:
+        # compute the iota = 1/N sum(dtheta_n / dphi_n)
+        # using WBA: iota = 1/normalization * sum(w(n/N) dtheta_n / dphi_n)
+        # where w(x) = exp(-[x(1-x)]^-1) and normalization is the
+        # normalization for that weight fxn
+        N = phis.size
+
+        def weight(n, N):
+            x = n / N
+            return jnp.exp(-(x ** (-1)) * (1 - x) ** (-1))
+
+        dts = jnp.diff(theta, axis=0)  # [nphi-1 x nfieldlines]
+        dphis = jnp.diff(phis, axis=0)
+        normalization = np.sum([weight(n, N) for n in range(1, N)])
+        # n+1 here is bc the sum is really from n=0 to N-1 inclusive,
+        #  but n=0 contributes nothing so we ignore it
+        weighted_sum = np.sum(
+            jnp.asarray([weight(n + 1, N) * dts[n] / dphis[n] for n in range(N - 1)]),
+            axis=0,
+        )
+        iota = weighted_sum / normalization
+
+        if return_aux:
+            return r, z, iota, (out.stats, out.result)
+        else:
+            return r, z, iota
 
     if return_aux:
         return r, z, (out.stats, out.result)
@@ -2828,6 +2900,91 @@ def _odefun(s, rpz, args):
     return jnp.array(
         [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
     ).squeeze()
+
+
+def _intfun_wrapper_iota(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    bs_chunk_size,
+    options,
+    axis,
+):
+    """Wrapper for field line integration + iota."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun_iota),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid, bs_chunk_size, axis],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    )
+
+
+@jit
+def _odefun_iota(s, rpzt, args):
+    field, params, scale, source_grid, bs_chunk_size, axis = args
+    r = rpzt[0]
+    phi = rpzt[1]
+    z = rpzt[2]
+    trans = get_transforms(
+        ["x", "x_s"],
+        axis,
+        grid=Grid(
+            jnp.array([jnp.zeros_like(phi), jnp.zeros_like(phi), phi]).squeeze(),
+            jitable=True,
+        ),
+        jitable=True,
+    )
+    data_axis = axis.compute(["x", "x_s"], transforms=trans, params=axis.params_dict)
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpzt[:-1],
+            params,
+            basis="rpz",
+            source_grid=source_grid,
+            chunk_size=bs_chunk_size,
+        ).squeeze()
+    )
+
+    dR_ds = r * br / bp * jnp.sign(bp)
+    dphi_ds = jnp.sign(bp)
+    dZ_ds = r * bz / bp * jnp.sign(bp)
+    # delta_X is the rel. position w.r.t. the magnetic axis
+    delta_R = r - data_axis["x"][:, 0].squeeze()
+    delta_Z = z - data_axis["x"][:, 2].squeeze()
+    d_delta_R_ds = dR_ds - data_axis["x_s"][:, 0].squeeze()
+    d_delta_Z_ds = dZ_ds - data_axis["x_s"][:, 2].squeeze()
+    # one negative sign bc this is based off taking a deriv of
+    # arctan(delta_Z/delta_R), and the arctan angle definition
+    # is opposite what we define as increasing poloidal angle
+    # (i.e. CCW field line rotation is decreasing arctan angle,
+    # but increasing DESC poloidal angle)
+    # sign(bp) to account for when s and Bphi are opposing
+    dtheta_ds = (
+        -jnp.sign(bp)
+        * (delta_R * d_delta_Z_ds - delta_Z * d_delta_R_ds)
+        / (delta_R**2 + delta_Z**2)
+    )
+    return jnp.array([dR_ds, dphi_ds, dZ_ds, dtheta_ds]).squeeze()
 
 
 class OmnigenousField(Optimizable, IOAble):

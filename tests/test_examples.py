@@ -33,6 +33,7 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
+    field_line_integrate,
     solve_regularized_surface_current,
 )
 from desc.objectives import (
@@ -1560,9 +1561,11 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     surface_current_field = initial_surface_current_field.copy()
 
     np.testing.assert_array_less(chi_B, 1e-6)
-    coords = eq.compute(["R", "phi", "Z", "B"], grid=LinearGrid(M=20, N=20, NFP=eq.NFP))
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    data_eq = eq.compute(
+        ["R", "phi", "Z", "B", "iota"], grid=LinearGrid(M=20, N=20, NFP=eq.NFP)
+    )
+    B = data_eq["B"]
+    coords = np.vstack([data_eq["R"], data_eq["phi"], data_eq["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
@@ -1570,6 +1573,26 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=5e-4)
+
+    # test iota against the equilibrium iota
+    data_eq = eq.compute(
+        ["R", "phi", "Z", "B", "iota"], grid=LinearGrid(rho=0.6, NFP=eq.NFP)
+    )
+    iota_eq = data_eq["iota"][0]
+    r0 = data_eq["R"][0]
+    z0 = data_eq["Z"][0]
+    phi0 = data_eq["phi"][0]
+    phis = np.linspace(phi0, 2 * np.pi / eq.NFP * 25, 2)
+    _, _, iota_field = field_line_integrate(
+        r0,
+        z0,
+        phis,
+        field=surface_current_field,
+        iota=True,
+        axis=eq.axis,
+        chunk_size=20,
+    )
+    np.testing.assert_allclose(iota_field, iota_eq, rtol=1e-2)
 
 
 @pytest.mark.regression

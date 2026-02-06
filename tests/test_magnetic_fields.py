@@ -18,7 +18,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
@@ -1199,17 +1199,22 @@ class TestMagneticFields:
             field.compute_magnetic_vector_potential(np.array([1.75, 0.0, 0.0]))
 
     @pytest.mark.unit
-    def test_field_line_integrate(self):
-        """Test field line integration."""
+    def test_field_line_integrate_iota(self):
+        """Test field line integration and iota computation."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
+        # expect iota of ~-0.25 (negative bc CW poloidal rotation is
+        # negative in DESC convention)
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi]
-        r, z = field_line_integrate(r0, z0, phis, field)
+        r, z, iota = field_line_integrate(
+            r0, z0, phis, field, iota=True, axis=FourierRZCurve(R_n=10)
+        )
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(iota[0], -0.25, rtol=1e-3)
 
     @pytest.mark.unit
     def test_field_line_integrate_jax_transforms(self, capsys):
@@ -1326,17 +1331,73 @@ class TestMagneticFields:
         np.testing.assert_allclose(df_dr, 1, rtol=1e-8, atol=1e-8)
 
     @pytest.mark.unit
-    def test_field_line_integrate_long(self):
-        """Test field line integration for long distance along line."""
+    def test_field_line_integrate_long_iota(self):
+        """Test field line/iota integration for long distance along line."""
+
+        def test(field, target_R, target_Z, target_iota, axis, name):
+            r0 = [10.001]
+            z0 = [0.0]
+            phis = np.linspace(0, 2 * np.pi * 25, 1000)
+            r, z, iota = field_line_integrate(
+                r0,
+                z0,
+                phis,
+                field,
+                solver=Dopri5(),
+                iota=True,
+                axis=axis,
+            )
+            np.testing.assert_allclose(
+                r[-1], target_R, rtol=1e-6, atol=1e-6, err_msg=name
+            )
+            np.testing.assert_allclose(
+                z[-1], target_Z, rtol=1e-6, atol=1e-6, err_msg=name
+            )
+            np.testing.assert_allclose(iota[0], target_iota, rtol=1e-5, err_msg=name)
+
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
-        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        r0 = [10.001]
-        z0 = [0.0]
-        phis = [0, 2 * np.pi * 25]
-        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
-        np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
-        np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+        # +TF and +PF, should be negative iota and go from outboard midplane to
+        # top center
+        test(
+            ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25),
+            target_R=10,
+            target_Z=0.001,
+            target_iota=-0.25,
+            axis=FourierRZCurve(R_n=10),
+            name="+TF +PF",
+        )
+        # +TF and -PF, should be positive iota and go from outboard midplane to
+        # bot center
+        test(
+            ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, -0.25),
+            target_R=10,
+            target_Z=-0.001,
+            target_iota=0.25,
+            axis=FourierRZCurve(R_n=10),
+            name="+TF -PF",
+        )
+        # -TF and +PF, should be positive iota and go from outboard midplane to
+        # bot center. Also tests with an axis where x_s positive in -phi direction
+        test(
+            ToroidalMagneticField(-2, 10) + PoloidalMagneticField(2, 10, 0.25),
+            target_R=10,
+            target_Z=-0.001,
+            target_iota=0.25,
+            axis=FourierXYZCurve(X_n=[0, 0, 10], Y_n=[-10, 0, 0], Z_n=[0, 0, 0]),
+            name="+TF -PF",
+        )
+        # -TF and -PF, should be negative iota and go from outboard midplane to
+        # bot center. Also tests with an axis where x_s positive in -phi direction
+        test(
+            ToroidalMagneticField(-2, 10) + PoloidalMagneticField(2, 10, -0.25),
+            target_R=10,
+            target_Z=0.001,
+            target_iota=-0.25,
+            axis=FourierXYZCurve(X_n=[0, 0, 10], Y_n=[-10, 0, 0], Z_n=[0, 0, 0]),
+            name="-TF -PF",
+        )
 
     @pytest.mark.unit
     def test_field_line_integrate_early_terminate_default(self):

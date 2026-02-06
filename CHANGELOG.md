@@ -94,6 +94,8 @@ New Features
 - Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
 - Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
 - Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+- Adds ability to compute rotational transform by integrating magnetic field object (for example, from coils) by passing `iota=True` and a `desc.geometry.core.Curve` object as `axis=curve`to the `desc.magnetic_fields.field_line_integrate` function.
+
 
 Bug Fixes
 

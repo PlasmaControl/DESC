@@ -311,7 +311,7 @@ class FourierRZCurve(Curve):
             not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
         )
 
-        grid = LinearGridCurve(s=phi, NFP=1, sym=sym)
+        grid = LinearGridCurve(s=phi, NFP=1)
         R_basis = FourierSeries(N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = FourierSeries(N=N, NFP=NFP, sym="sin" if sym else False)
         with warnings.catch_warnings():
@@ -621,7 +621,7 @@ class FourierXYZCurve(Curve):
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
 
-        grid = LinearGridCurve(s=s, NFP=1, sym=False)
+        grid = LinearGridCurve(s=s, NFP=1)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(X)

@@ -10,7 +10,10 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
     get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import (
@@ -574,6 +577,10 @@ class ProximalProjection(ObjectiveFunction):
         during the projection step.
     name : str
         Name of the objective function.
+    solve_method: str
+        Method to use for internal equilibrium solve. Options are 'lcfs' and 'section'.
+        'lcfs' uses fixed boundary constraints, 'section' uses fixed cross-section
+        constraints. Default is 'lcfs'.
     """
 
     def __init__(
@@ -584,12 +591,18 @@ class ProximalProjection(ObjectiveFunction):
         perturb_options=None,
         solve_options=None,
         name="ProximalProjection",
+        solve_method="lcfs",
     ):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
         )
         assert isinstance(constraint, ObjectiveFunction), (
             "constraint should be instance of ObjectiveFunction." ""
+        )
+        errorif(
+            solve_method not in ["lcfs", "section"],
+            ValueError,
+            "solve_method must be either 'lcfs' or 'section'.",
         )
         for con in constraint.objectives:
             errorif(
@@ -624,20 +637,43 @@ class ProximalProjection(ObjectiveFunction):
         self._compiled = False
         self._eq = eq
         self._name = name
+        self._solve_method = solve_method
 
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
+        if self._solve_method == "lcfs":
+            args2remove = [
+                "R_lmn",
+                "Z_lmn",
+                "L_lmn",
+                "Ra_n",
+                "Za_n",
+                "Rp_lmn",
+                "Zp_lmn",
+            ]
+        elif self._solve_method == "section":
+            args2remove = [
+                "R_lmn",
+                "Z_lmn",
+                "L_lmn",
+                "Ra_n",
+                "Za_n",
+                "Rb_lmn",
+                "Zb_lmn",
+                "Lp_lmn",
+            ]
         # the eq optimizable variables for proximal are the Rb, Zb and profile
-        # coefficients. Once these are chosen, we will solve the equilibrium to
-        # find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
+        # coefficients (or Poincare). Once these are chosen, we will solve the eq
+        # to find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
         # from the list of optimizable variables. This is accompanied by not including
         # self-consistency constraints (see get_combined_constraint_objectives in
         # desc.optimize.optimizer) and also removing columns corresponding to these
         # variables from the constraint matrix A in
         # desc.objectives.utils.factorize_linear_constraints.
-        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
-            self._args.remove(arg)
+        for arg in args2remove:
+            if arg in self._args:
+                self._args.remove(arg)
 
         (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
@@ -649,7 +685,7 @@ class ProximalProjection(ObjectiveFunction):
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
@@ -667,6 +703,19 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
+            if arg == "Rp_lmn":
+                c = get_instance(self._eq_linear_constraints, SectionRSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["R_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdRp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
+                dxdc.append(dxdRp)
+            if arg == "Zp_lmn":
+                c = get_instance(self._eq_linear_constraints, SectionZSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["Z_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdZp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+                dxdc.append(dxdZp)
+
         # dxdc is a matrix that when multiplied by the optimization variables (only
         # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
         # Zb_lmn part will be 0, but they will be represented by the equivalent
@@ -697,7 +746,14 @@ class ProximalProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
+        # Depending on the solve_method, ProximalProjection will solve the equilibrium
+        # at each step with 'fixed lcfs' or 'fixed section' constraints.
+        if self._solve_method == "lcfs":
+            self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
+        else:
+            self._eq_linear_constraints = get_fixed_xsection_constraints(
+                eq=self._eq, fix_lambda=False
+            )
         self._eq_linear_constraints = maybe_add_self_consistency(
             self._eq, self._eq_linear_constraints
         )

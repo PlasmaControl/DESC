@@ -12,6 +12,9 @@ from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
     FixIota,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     ObjectiveFunction,
     maybe_add_self_consistency,
 )
@@ -573,7 +576,7 @@ def _parse_constraints(constraints):
 
 
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraints, method, options
+    eq, objective, nonlinear_constraints, method, options, eq_solve_method
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
@@ -607,9 +610,26 @@ def _maybe_wrap_nonlinear_constraints(
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
+            solve_method=eq_solve_method,
         )
         nonlinear_constraints = ()
     return objective, nonlinear_constraints
+
+
+def get_eq_solve_method(linear_constraints):
+    """Get the solve method for the internal equilibrium.
+
+    If any of the linear constraints are FixSectionR, FixSectionZ, or FixSectionLambda,
+    the solve method is set to "section". Otherwise, it is set to "lcfs".
+    """
+    if any(
+        isinstance(lc, FixSectionR)
+        or isinstance(lc, FixSectionZ)
+        or isinstance(lc, FixSectionLambda)
+        for lc in linear_constraints
+    ):
+        return "section"
+    return "lcfs"
 
 
 def get_combined_constraint_objectives(  # noqa: C901
@@ -631,8 +651,9 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+    eq_solve_method = get_eq_solve_method(linear_constraints)
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-        eq, objective, nonlinear_constraints, opt_method, options
+        eq, objective, nonlinear_constraints, opt_method, options, eq_solve_method
     )
     is_prox = isinstance(objective, ProximalProjection)
     for t in things:

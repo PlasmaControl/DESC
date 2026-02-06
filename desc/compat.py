@@ -61,6 +61,7 @@ def ensure_positive_jacobian(eq):
 
         eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
+        eq.xsection = eq.get_surface_at(zeta=0)
 
         sign = np.sign(
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
@@ -108,6 +109,7 @@ def flip_helicity(eq):
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_surface_at(zeta=0)
 
     return eq
 
@@ -148,6 +150,7 @@ def flip_theta(eq):
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_surface_at(zeta=0)
 
     return eq
 
@@ -260,9 +263,10 @@ def rescale(
     if eq.current is not None:
         eq.current *= cL * cB
 
-    # boundary & axis
+    # boundary & axis & cross-section
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_surface_at(zeta=eq.xsection.zeta)
 
     return eq
 
@@ -330,6 +334,7 @@ def rotate_zeta(eq, angle, copy=False):
     eq_rotated.Z_lmn = _get_new_coeffs(fun="Z")
     eq_rotated.L_lmn = _get_new_coeffs(fun="L")
 
+    eq_rotated.xsection = eq_rotated.get_surface_at(zeta=0.0)
     eq_rotated.surface = eq_rotated.get_surface_at(rho=1.0)
     eq_rotated.axis = eq_rotated.get_axis()
 

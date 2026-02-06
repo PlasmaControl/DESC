@@ -101,16 +101,11 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
         Number of field periods of the Equilibrium.
     sym : bool
         Stellarator symmetry of the Equilibrium.
-    spectral_indexing : {"ansi", "fringe"}
-        Spectral indexing scheme of the Equilibrium.
 
     Returns
     -------
-    surface : Surface
-        Parsed surface object, either FourierRZToroidalSurface or
-        ZernikeRZToroidalSection.
-    bdry_mode : str
-        Either "lcfs" or "poincare"
+    surface : FourierRZToroidalSurface
+        Parsed surface object.
     """
     if isinstance(surface, Surface):
         surface = surface
@@ -127,28 +122,15 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 sym,
                 check_orientation=False,
             )
-        elif np.all(surface[:, 2] == 0):
-            surface = ZernikeRZToroidalSection(
-                surface[:, 3],
-                surface[:, 4],
-                surface[:, :2].astype(int),
-                surface[:, :2].astype(int),
-                spectral_indexing,
-                sym,
-            )
         else:
-            raise ValueError("boundary should either have l=0 or n=0")
+            raise ValueError("boundary surface should have l=0")
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
-    if isinstance(surface, FourierRZToroidalSurface):
-        bdry_mode = "lcfs"
-    if isinstance(surface, ZernikeRZToroidalSection):
-        bdry_mode = "poincare"
-    return surface, bdry_mode
+    return surface
 
 
-def parse_axis(axis, NFP=1, sym=True, surface=None):
+def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     """Parse axis input into Curve object.
 
     Parameters
@@ -159,6 +141,11 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
         Number of field periods of the Equilibrium.
     sym : bool
         Stellarator symmetry of the Equilibrium.
+    surface: FourierRZToroidalSurface
+        Last closed flux surface to get axis from
+    xsection: ZernikeRZToroidalSection
+        Poincare cross-section at given zeta toroidal angle
+        If supplied, axis will be axisymmetic
 
     Returns
     -------
@@ -180,8 +167,44 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     elif axis is None:  # use the center of surface
         if isinstance(surface, FourierRZToroidalSurface):
             axis = surface.get_axis()
-        elif isinstance(surface, ZernikeRZToroidalSection):
-            axis = surface.get_axis()
+        elif isinstance(xsection, ZernikeRZToroidalSection):
+            axis = xsection.get_axis()
+            # ZernikeRZToroidalSection doesn't have NFP, so we need to
+            # set it manually
+            axis._NFP = NFP
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
+
+
+def parse_section(xsection=None, surface=None, sym=True, spectral_indexing="ansi"):
+    """Parse section input into ZernikeRZToroidalSection object.
+
+    Parameters
+    ----------
+    xsection : ZernikeRZToroidalSection, None
+        Poincare surface object to parse.
+    surface: FourierRZToroidalSurface
+        Last closed flux surface to get section from. Only used for resolution.
+        The proper coefficients will be set after set_initial_guess.
+    sym : bool
+        Stellarator symmetry of the Equilibrium.
+    spectral_indexing : {"ansi", "fringe"}
+        Spectral indexing scheme of the Equilibrium.
+
+    Returns
+    -------
+    xsection : ZernikeRZToroidalSection
+        Parsed Poincare section object.
+    """
+    if isinstance(xsection, ZernikeRZToroidalSection):
+        _xsection = xsection
+    elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
+        raise NotImplementedError(
+            "ZernikeRZToroidalSection from input file not implemented"
+        )
+    else:
+        _xsection = ZernikeRZToroidalSection(
+            L=surface.M, M=surface.M, sym=sym, spectral_indexing=spectral_indexing
+        )
+    return _xsection

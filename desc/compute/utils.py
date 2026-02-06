@@ -9,6 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
+from ..diffmat_utils import DiffMat
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
@@ -66,12 +67,14 @@ def compute(  # noqa: C901
 
     """
     basis = kwargs.pop("basis", "rpz").lower()
+
     errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     if basis == "xyz" and "phi" not in names:
         names = names + ["phi"]
+
     # this allows the DeprecationWarning to be thrown in this file
     with warnings.catch_warnings():
         warnings.simplefilter("always", DeprecationWarning)
@@ -87,6 +90,24 @@ def compute(  # noqa: C901
                     "instead.",
                     DeprecationWarning,
                 )
+
+    # RG: normalize transforms so diffmat is passed via transforms, not as a kwarg ---
+    # We only absorb 'diffmat'. We intentionally DO NOT move 'grid' from kwargs into
+    # transforms here, because Equilibrium.compute's existing plumbing correctly
+    # constructs/wraps the source_grid when grid is passed as a kwarg.
+    if transforms is None:
+        transforms = {}
+    else:
+        transforms = dict(transforms)
+
+    # Always remove `diffmat` from kwargs so it never reaches the bad-kwarg check,
+    # regardless of whether get_transforms already set transforms["diffmat"].
+    dm_kw = kwargs.pop("diffmat", None)
+
+    # If get_transforms didn't already provide transforms["diffmat"], wire it now:
+    if "diffmat" not in transforms and dm_kw is not None:
+        transforms["diffmat"] = dm_kw
+
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -512,7 +533,7 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
-def get_transforms(
+def get_transforms(  # noqa: C901
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):
     """Get transforms needed to compute a given quantity on a given grid.
@@ -548,6 +569,13 @@ def get_transforms(
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
+
+    # We do not build a Transform, just ensure the dict is present.
+    # If not in transforms, Look in kwargs here.
+    if "diffmat" in kwargs and kwargs["diffmat"] is not None:
+        dm = kwargs["diffmat"]
+        transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
+
     for c in derivs.keys():
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
@@ -637,6 +665,14 @@ def get_transforms(
                 build_pinv=False,
                 method=method,
             )
+        elif c == "diffmat":
+            errorif(
+                "diffmat" not in transforms,
+                ValueError,
+                "Compute requested 'diffmat' but none was provided. "
+                "Call eq.compute(..., diffmat=DiffMat(...)) or set eq.diffmat first.",
+            )
+
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

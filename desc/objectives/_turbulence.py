@@ -613,7 +613,9 @@ class NNITGProxy(_Objective):
 
         raise ValueError("Either model_path or ensemble_dir must be specified")
 
-    def _map_pest_to_desc_coords(self, eq, params, rho_flat, theta_pest_flat, zeta_flat):
+    def _map_pest_to_desc_coords(
+        self, eq, params, rho_flat, theta_pest_flat, zeta_flat
+    ):
         """Map (rho, theta_PEST, zeta) to DESC theta coordinates.
 
         Returns
@@ -638,8 +640,16 @@ class NNITGProxy(_Objective):
         return theta_desc_flat
 
     def _compute_gx_features_on_grid(
-        self, eq, params, rho_flat, theta_desc_flat, zeta_flat,
-        iota_flat, iota_r_flat, minor_radius, gx_keys
+        self,
+        eq,
+        params,
+        rho_flat,
+        theta_desc_flat,
+        zeta_flat,
+        iota_flat,
+        iota_r_flat,
+        minor_radius,
+        gx_keys,
     ):
         """Compute GX features on a field-line grid.
 
@@ -650,7 +660,8 @@ class NNITGProxy(_Objective):
         """
         grid = Grid(
             jnp.column_stack([rho_flat, theta_desc_flat, zeta_flat]),
-            sort=False, jitable=True,
+            sort=False,
+            jitable=True,
         )
         transforms = get_transforms(gx_keys + ["gx_gradpar"], eq, grid, jitable=True)
         profiles = get_profiles(gx_keys + ["gx_gradpar"], eq, grid)
@@ -670,8 +681,14 @@ class NNITGProxy(_Objective):
         )
 
     def _run_cnn_inference_for_rho(
-        self, gradpar_2d, signals_2d, theta_pest_offset,
-        a_over_LT, a_over_Ln, models, num_alpha,
+        self,
+        gradpar_2d,
+        signals_2d,
+        theta_pest_offset,
+        a_over_LT,
+        a_over_Ln,
+        models,
+        num_alpha,
         return_std=False,
     ):
         """Run CNN inference for a single rho slice.
@@ -721,8 +738,13 @@ class NNITGProxy(_Objective):
         return Q_per_alpha, signals_batch
 
     def _build_return_value(
-        self, Q_all_per_alpha, all_signals, feature_names, return_signals,
-        return_per_alpha, Q_std_all_per_alpha=None,
+        self,
+        Q_all_per_alpha,
+        all_signals,
+        feature_names,
+        return_signals,
+        return_per_alpha,
+        Q_std_all_per_alpha=None,
     ):
         """Build final return value with optional signals info.
 
@@ -787,7 +809,11 @@ class NNITGProxy(_Objective):
         return tuple(result)
 
     def compute(
-        self, params, constants=None, return_signals=False, return_per_alpha=False,
+        self,
+        params,
+        constants=None,
+        return_signals=False,
+        return_per_alpha=False,
         return_std=False,
     ):
         """Compute the NN ITG heat flux prediction.
@@ -877,10 +903,22 @@ class NNITGProxy(_Objective):
         # Branch based on solve_length_at_compute option
         if self._solve_length_at_compute:
             return self._compute_with_length_solving(
-                params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
-                minor_radius, a_over_LT, a_over_Ln, models,
-                gx_keys, feature_names, constants,
-                return_signals, return_per_alpha, return_std,
+                params,
+                eq,
+                rho_arr,
+                alpha_arr,
+                iota_arr,
+                iota_r_arr,
+                minor_radius,
+                a_over_LT,
+                a_over_Ln,
+                models,
+                gx_keys,
+                feature_names,
+                constants,
+                return_signals,
+                return_per_alpha,
+                return_std,
             )
 
         # =====================================================================
@@ -897,12 +935,18 @@ class NNITGProxy(_Objective):
 
         # Create meshgrid: shapes will be (nz, num_rho, num_alpha)
         rho_mesh = jnp.broadcast_to(rho_arr[None, :, None], (nz, num_rho, num_alpha))
-        alpha_mesh = jnp.broadcast_to(alpha_arr[None, None, :], (nz, num_rho, num_alpha))
-        zeta_mesh = jnp.broadcast_to(zeta_offset[:, None, None], (nz, num_rho, num_alpha))
+        alpha_mesh = jnp.broadcast_to(
+            alpha_arr[None, None, :], (nz, num_rho, num_alpha)
+        )
+        zeta_mesh = jnp.broadcast_to(
+            zeta_offset[:, None, None], (nz, num_rho, num_alpha)
+        )
 
         # iota varies by rho: iota_mesh[i,j,k] = iota_arr[j]
         iota_mesh = jnp.broadcast_to(iota_arr[None, :, None], (nz, num_rho, num_alpha))
-        iota_r_mesh = jnp.broadcast_to(iota_r_arr[None, :, None], (nz, num_rho, num_alpha))
+        iota_r_mesh = jnp.broadcast_to(
+            iota_r_arr[None, :, None], (nz, num_rho, num_alpha)
+        )
 
         # Compute theta_PEST from field line equation: theta_PEST = alpha + iota * zeta
         # This varies by rho (different iota) while keeping toroidal extent fixed
@@ -920,8 +964,15 @@ class NNITGProxy(_Objective):
             eq, params, rho_flat, theta_pest_flat, zeta_flat
         )
         gx_data = self._compute_gx_features_on_grid(
-            eq, params, rho_flat, theta_desc_flat, zeta_flat,
-            iota_flat, iota_r_flat, minor_radius, gx_keys
+            eq,
+            params,
+            rho_flat,
+            theta_desc_flat,
+            zeta_flat,
+            iota_flat,
+            iota_r_flat,
+            minor_radius,
+            gx_keys,
         )
 
         # Reshape GX data to (nz, num_rho, num_alpha)
@@ -955,8 +1006,13 @@ class NNITGProxy(_Objective):
             theta_pest_offset_rho = iota_arr[i_rho] * zeta_offset
 
             result = self._run_cnn_inference_for_rho(
-                gradpar_2d, signals_2d, theta_pest_offset_rho,
-                a_over_LT, a_over_Ln, models, num_alpha,
+                gradpar_2d,
+                signals_2d,
+                theta_pest_offset_rho,
+                a_over_LT,
+                a_over_Ln,
+                models,
+                num_alpha,
                 return_std=return_std,
             )
             if return_std:
@@ -969,19 +1025,37 @@ class NNITGProxy(_Objective):
                 all_signals.append(signals_batch)
 
         return self._build_return_value(
-            Q_all_per_alpha, all_signals, feature_names, return_signals,
-            return_per_alpha, Q_std_all_per_alpha,
+            Q_all_per_alpha,
+            all_signals,
+            feature_names,
+            return_signals,
+            return_per_alpha,
+            Q_std_all_per_alpha,
         )
 
     def _compute_with_length_solving(
-        self, params, eq, rho_arr, alpha_arr, iota_arr, iota_r_arr,
-        minor_radius, a_over_LT, a_over_Ln, models,
-        gx_keys, feature_names, constants,
-        return_signals, return_per_alpha, return_std=False,
+        self,
+        params,
+        eq,
+        rho_arr,
+        alpha_arr,
+        iota_arr,
+        iota_r_arr,
+        minor_radius,
+        a_over_LT,
+        a_over_Ln,
+        models,
+        gx_keys,
+        feature_names,
+        constants,
+        return_signals,
+        return_per_alpha,
+        return_std=False,
     ):
         """Compute with exact flux tube length solving per rho.
 
-        This is the accurate but slower code path used when solve_length_at_compute=True.
+        This is the accurate but slower code path used when
+        solve_length_at_compute=True.
         For each rho, we solve for the exact poloidal_turns that achieves target_length,
         then compute GX features and run CNN inference.
         """
@@ -1017,10 +1091,13 @@ class NNITGProxy(_Objective):
                 )
                 grid = Grid(
                     jnp.column_stack([rho_grid, theta_desc, zeta]),
-                    sort=False, jitable=True
+                    sort=False,
+                    jitable=True,
                 )
                 data = compute_fun(
-                    eq, ["gx_gradpar"], params,
+                    eq,
+                    ["gx_gradpar"],
+                    params,
                     get_transforms(["gx_gradpar"], eq, grid, jitable=True),
                     get_profiles(["gx_gradpar"], eq, grid),
                     data={
@@ -1058,19 +1135,29 @@ class NNITGProxy(_Objective):
                 eq, params, rho_flat, theta_pest_flat, zeta_flat
             )
             gx_data = self._compute_gx_features_on_grid(
-                eq, params, rho_flat, theta_desc_flat, zeta_flat,
-                iota_flat, iota_r_flat, minor_radius, gx_keys
+                eq,
+                params,
+                rho_flat,
+                theta_desc_flat,
+                zeta_flat,
+                iota_flat,
+                iota_r_flat,
+                minor_radius,
+                gx_keys,
             )
 
             # Reshape to (nz, num_alpha) and run CNN
             gradpar_2d = gx_data["gx_gradpar"].reshape(nz, num_alpha)
-            signals_2d = jnp.stack(
-                [gx_data[k].reshape(nz, num_alpha) for k in gx_keys]
-            )
+            signals_2d = jnp.stack([gx_data[k].reshape(nz, num_alpha) for k in gx_keys])
 
             result = self._run_cnn_inference_for_rho(
-                gradpar_2d, signals_2d, theta_pest_offset,
-                a_over_LT, a_over_Ln, models, num_alpha,
+                gradpar_2d,
+                signals_2d,
+                theta_pest_offset,
+                a_over_LT,
+                a_over_Ln,
+                models,
+                num_alpha,
                 return_std=return_std,
             )
             if return_std:
@@ -1083,6 +1170,10 @@ class NNITGProxy(_Objective):
                 all_signals.append(signals_batch)
 
         return self._build_return_value(
-            Q_all_per_alpha, all_signals, feature_names, return_signals,
-            return_per_alpha, Q_std_all_per_alpha,
+            Q_all_per_alpha,
+            all_signals,
+            feature_names,
+            return_signals,
+            return_per_alpha,
+            Q_std_all_per_alpha,
         )

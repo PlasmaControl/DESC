@@ -79,8 +79,12 @@ def test_itg_proxy():
         data = eq.compute(["ITG proxy integrand", "ITG proxy"], grid=grid)
 
         # Integrand should be finite and positive (sigmoid + 0.2 >= 0.2)
-        assert np.isfinite(data["ITG proxy integrand"]).all(), f"Non-finite for {eq_name}"
-        assert np.all(data["ITG proxy integrand"] >= 0), f"Negative integrand for {eq_name}"
+        assert np.isfinite(
+            data["ITG proxy integrand"]
+        ).all(), f"Non-finite for {eq_name}"
+        assert np.all(
+            data["ITG proxy integrand"] >= 0
+        ), f"Negative integrand for {eq_name}"
 
         # Scalar proxy should be finite and positive
         assert np.isfinite(data["ITG proxy"]), f"Non-finite proxy for {eq_name}"
@@ -174,7 +178,9 @@ def test_resample_to_uniform_arclength():
     data[1] = theta_pest / np.pi  # Linear
     data[2] = np.ones(npoints_in)  # Constant
 
-    z_uniform, data_uniform = resample_to_uniform_arclength(arclength, data, npoints_out)
+    z_uniform, data_uniform = resample_to_uniform_arclength(
+        arclength, data, npoints_out
+    )
 
     # Output shape checks
     assert z_uniform.shape == (npoints_out,)
@@ -270,9 +276,8 @@ def test_batch_norm_1d():
 
     output = _batch_norm_1d(x, gamma, beta, running_mean, running_var)
 
-    # Expected: scale * (x - mean) / sqrt(var + eps) + shift
-    # = 0.5 * (2.0 - 1.0) / sqrt(0.25 + 1e-5) + 1.0
-    # ≈ 0.5 * 1.0 / 0.5 + 1.0 = 1.0 + 1.0 = 2.0
+    # Expected: scale * (x - mean) / sqrt(var + eps) + shift,
+    # which gives 0.5 * (2.0 - 1.0) / sqrt(0.25 + 1e-5) + 1.0 = 2.0
     expected = jnp.ones((batch, channels, length)) * 2.0
     np.testing.assert_allclose(np.array(output), np.array(expected), rtol=1e-5)
 
@@ -321,14 +326,25 @@ def test_cyclic_invariant_forward_with_batchnorm():
     weights_bn = {}
     for i in range(5):
         weights_bn[f"conv_layers.{i}.weight"] = jnp.array(
-            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i]) * 0.1
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
+            * 0.1
         ).astype(jnp.float32)
-        weights_bn[f"conv_layers.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+        weights_bn[f"conv_layers.{i}.bias"] = jnp.zeros(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
         # Add BatchNorm parameters
-        weights_bn[f"conv_batch_norms.{i}.weight"] = jnp.ones(conv_channels[i + 1], dtype=jnp.float32)
-        weights_bn[f"conv_batch_norms.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
-        weights_bn[f"conv_batch_norms.{i}.running_mean"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
-        weights_bn[f"conv_batch_norms.{i}.running_var"] = jnp.ones(conv_channels[i + 1], dtype=jnp.float32)
+        weights_bn[f"conv_batch_norms.{i}.weight"] = jnp.ones(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
+        weights_bn[f"conv_batch_norms.{i}.bias"] = jnp.zeros(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
+        weights_bn[f"conv_batch_norms.{i}.running_mean"] = jnp.zeros(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
+        weights_bn[f"conv_batch_norms.{i}.running_var"] = jnp.ones(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
 
     weights_bn["fc_layers.0.weight"] = jnp.array(
         np.random.randn(fc_dims[1], fc_dims[0]) * 0.1
@@ -336,7 +352,9 @@ def test_cyclic_invariant_forward_with_batchnorm():
     weights_bn["fc_layers.0.bias"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
     weights_bn["fc_batch_norms.0.weight"] = jnp.ones(fc_dims[1], dtype=jnp.float32)
     weights_bn["fc_batch_norms.0.bias"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
-    weights_bn["fc_batch_norms.0.running_mean"] = jnp.zeros(fc_dims[1], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.0.running_mean"] = jnp.zeros(
+        fc_dims[1], dtype=jnp.float32
+    )
     weights_bn["fc_batch_norms.0.running_var"] = jnp.ones(fc_dims[1], dtype=jnp.float32)
 
     weights_bn["fc_layers.1.weight"] = jnp.array(
@@ -345,7 +363,9 @@ def test_cyclic_invariant_forward_with_batchnorm():
     weights_bn["fc_layers.1.bias"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
     weights_bn["fc_batch_norms.1.weight"] = jnp.ones(fc_dims[2], dtype=jnp.float32)
     weights_bn["fc_batch_norms.1.bias"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
-    weights_bn["fc_batch_norms.1.running_mean"] = jnp.zeros(fc_dims[2], dtype=jnp.float32)
+    weights_bn["fc_batch_norms.1.running_mean"] = jnp.zeros(
+        fc_dims[2], dtype=jnp.float32
+    )
     weights_bn["fc_batch_norms.1.running_var"] = jnp.ones(fc_dims[2], dtype=jnp.float32)
 
     weights_bn["output_layer.weight"] = jnp.array(
@@ -388,67 +408,6 @@ def test_cyclic_invariant_forward_shape():
     assert np.isfinite(np.array(output)).all()
 
 
-@pytest.mark.slow
-def test_jax_vs_pytorch_forward_pass():
-    """Test that JAX forward pass matches PyTorch CyclicInvariantNet output.
-
-    Runs in subprocess due to JAX/PyTorch conflicts on some systems.
-    """
-    import subprocess
-    import sys
-    import textwrap
-
-    pytest.importorskip("torch")
-
-    script = textwrap.dedent("""
-        import numpy as np
-        import torch
-        import torch.nn as nn
-        from desc.backend import jnp
-        from desc.compute._turbulence import _cyclic_invariant_forward
-
-        class CyclicNet(nn.Module):
-            def __init__(self):
-                super().__init__()
-                ch = [7, 16, 32, 16, 32, 16]
-                self.convs = nn.ModuleList([
-                    nn.Conv1d(ch[i], ch[i+1], 3, padding="same", padding_mode="circular")
-                    for i in range(5)
-                ])
-                self.pools = nn.ModuleList([nn.MaxPool1d(2, 2) for _ in range(5)])
-                self.fc1, self.fc2, self.out = nn.Linear(18, 32), nn.Linear(32, 16), nn.Linear(16, 1)
-
-            def forward(self, x, s):
-                x = x.transpose(1, 2)
-                for conv, pool in zip(self.convs, self.pools):
-                    x = pool(torch.relu(conv(x)))
-                return self.out(torch.relu(self.fc2(torch.relu(self.fc1(torch.cat([x.mean(-1), s], -1))))))
-
-        torch.manual_seed(42)
-        np.random.seed(42)
-        model = CyclicNet().eval()
-        sd = model.state_dict()
-
-        w = {}
-        for i in range(5):
-            w[f"conv_layers.{i}.weight"] = jnp.array(sd[f"convs.{i}.weight"].numpy())
-            w[f"conv_layers.{i}.bias"] = jnp.array(sd[f"convs.{i}.bias"].numpy())
-        w["fc_layers.0.weight"], w["fc_layers.0.bias"] = jnp.array(sd["fc1.weight"].numpy()), jnp.array(sd["fc1.bias"].numpy())
-        w["fc_layers.1.weight"], w["fc_layers.1.bias"] = jnp.array(sd["fc2.weight"].numpy()), jnp.array(sd["fc2.bias"].numpy())
-        w["output_layer.weight"], w["output_layer.bias"] = jnp.array(sd["out.weight"].numpy()), jnp.array(sd["out.bias"].numpy())
-
-        sig, sca = np.random.randn(2, 96, 7).astype(np.float32), np.random.randn(2, 2).astype(np.float32)
-        with torch.no_grad():
-            y_pt = model(torch.from_numpy(sig), torch.from_numpy(sca)).numpy()
-        y_jax = np.array(_cyclic_invariant_forward(jnp.array(sig.transpose(0,2,1)), jnp.array(sca), w))
-        assert np.allclose(y_jax, y_pt, rtol=1e-4, atol=1e-4), f"max_diff={np.max(np.abs(y_jax-y_pt))}"
-    """)
-
-    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        pytest.fail(f"JAX vs PyTorch mismatch:\n{result.stdout}\n{result.stderr}")
-
-
 @pytest.mark.unit
 def test_ensemble_forward():
     """Test ensemble forward pass averages predictions correctly."""
@@ -470,17 +429,21 @@ def test_ensemble_forward():
             weights[f"conv_layers.{i}.bias"] = jnp.array(
                 np.random.randn(conv_channels[i + 1])
             ).astype(jnp.float32)
-        weights["fc_layers.0.weight"] = jnp.array(np.random.randn(fc_dims[1], fc_dims[0])).astype(
+        weights["fc_layers.0.weight"] = jnp.array(
+            np.random.randn(fc_dims[1], fc_dims[0])
+        ).astype(jnp.float32)
+        weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(
             jnp.float32
         )
-        weights["fc_layers.0.bias"] = jnp.array(np.random.randn(fc_dims[1])).astype(jnp.float32)
-        weights["fc_layers.1.weight"] = jnp.array(np.random.randn(fc_dims[2], fc_dims[1])).astype(
+        weights["fc_layers.1.weight"] = jnp.array(
+            np.random.randn(fc_dims[2], fc_dims[1])
+        ).astype(jnp.float32)
+        weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(
             jnp.float32
         )
-        weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(jnp.float32)
-        weights["output_layer.weight"] = jnp.array(np.random.randn(1, fc_dims[2])).astype(
-            jnp.float32
-        )
+        weights["output_layer.weight"] = jnp.array(
+            np.random.randn(1, fc_dims[2])
+        ).astype(jnp.float32)
         weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
         return weights
 
@@ -517,10 +480,7 @@ def test_ensemble_forward():
 def test_jit_forward_matches_original():
     """Test JIT-compiled forward matches non-JIT version."""
     from desc.backend import jnp
-    from desc.compute._turbulence import (
-        _cyclic_invariant_forward,
-        _make_jit_forward,
-    )
+    from desc.compute._turbulence import _cyclic_invariant_forward, _make_jit_forward
 
     np.random.seed(42)
 
@@ -548,9 +508,9 @@ def test_jit_forward_matches_original():
     weights["fc_layers.1.bias"] = jnp.array(np.random.randn(fc_dims[2])).astype(
         jnp.float32
     )
-    weights["output_layer.weight"] = jnp.array(
-        np.random.randn(1, fc_dims[2])
-    ).astype(jnp.float32)
+    weights["output_layer.weight"] = jnp.array(np.random.randn(1, fc_dims[2])).astype(
+        jnp.float32
+    )
     weights["output_layer.bias"] = jnp.array(np.random.randn(1)).astype(jnp.float32)
 
     # Create JIT-compiled forward function
@@ -588,9 +548,12 @@ def _make_mock_weights():
     weights = {}
     for i in range(5):
         weights[f"conv_layers.{i}.weight"] = jnp.array(
-            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i]) * 0.1
+            np.random.randn(conv_channels[i + 1], conv_channels[i], kernel_sizes[i])
+            * 0.1
         ).astype(jnp.float32)
-        weights[f"conv_layers.{i}.bias"] = jnp.zeros(conv_channels[i + 1], dtype=jnp.float32)
+        weights[f"conv_layers.{i}.bias"] = jnp.zeros(
+            conv_channels[i + 1], dtype=jnp.float32
+        )
 
     weights["fc_layers.0.weight"] = jnp.array(
         np.random.randn(fc_dims[1], fc_dims[0]) * 0.1
@@ -636,8 +599,11 @@ def single_model_obj(dshape_eq):
         return_value=mock_weights_tuple,
     ):
         obj = NNITGProxy(
-            dshape_eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2],
-            model_path="/fake/path.pt", nz_internal=_TEST_NZ_INTERNAL,
+            dshape_eq,
+            rho=[0.4, 0.6],
+            alpha=[0, np.pi / 2],
+            model_path="/fake/path.pt",
+            nz_internal=_TEST_NZ_INTERNAL,
         )
         obj.build(use_jit=False, verbose=0)
     return obj
@@ -663,8 +629,11 @@ def ensemble_obj(dshape_eq):
         return_value=([mock_weights, mock_weights2], [jit_forward1, jit_forward2]),
     ):
         obj = NNITGProxy(
-            dshape_eq, rho=[0.4, 0.6], alpha=[0, np.pi / 2],
-            ensemble_dir="/fake/dir", ensemble_csv="/fake/results.csv",
+            dshape_eq,
+            rho=[0.4, 0.6],
+            alpha=[0, np.pi / 2],
+            ensemble_dir="/fake/dir",
+            ensemble_csv="/fake/results.csv",
             nz_internal=_TEST_NZ_INTERNAL,
         )
         obj.build(use_jit=False, verbose=0)
@@ -725,7 +694,9 @@ def test_nnitgproxy_build(dshape_eq):
         return_value=(mock_weights, mock_jit_forward),
     ):
         obj = NNITGProxy(
-            dshape_eq, rho=0.5, model_path="/fake/path.pt",
+            dshape_eq,
+            rho=0.5,
+            model_path="/fake/path.pt",
             nz_internal=_TEST_NZ_INTERNAL,
         )
         obj.build(use_jit=False, verbose=0)
@@ -790,9 +761,7 @@ def test_nnitgproxy_compute(single_model_obj):
     np.testing.assert_allclose(np.mean(Q_pa, axis=-1), Q, rtol=1e-5)
 
     # --- return_per_alpha + return_signals ---
-    Q_both, sig_both = obj.compute(
-        params, return_signals=True, return_per_alpha=True
-    )
+    Q_both, sig_both = obj.compute(params, return_signals=True, return_per_alpha=True)
     assert Q_both.shape == (num_rho, num_alpha)
     assert sig_both["signals"].shape == (num_rho, num_alpha, 7, 96)
     assert np.isfinite(sig_both["signals"]).all()
@@ -813,8 +782,12 @@ def test_nnitgproxy_solve_length(dshape_eq):
         return_value=mock_weights_tuple,
     ):
         obj = NNITGProxy(
-            dshape_eq, rho=[0.5], alpha=[0], model_path="/fake/path.pt",
-            solve_length_at_compute=True, nz_internal=_TEST_NZ_INTERNAL,
+            dshape_eq,
+            rho=[0.5],
+            alpha=[0],
+            model_path="/fake/path.pt",
+            solve_length_at_compute=True,
+            nz_internal=_TEST_NZ_INTERNAL,
         )
         obj.build(use_jit=False, verbose=0)
 

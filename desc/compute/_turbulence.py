@@ -7,7 +7,6 @@ for arclength computation, which matches the GX training data conventions.
 """
 
 import jax
-
 from scipy.constants import mu_0
 
 from desc.backend import jnp
@@ -127,9 +126,9 @@ def _gx_gds2(params, transforms, profiles, data, **kwargs):
     data=["gx_B_reference", "grad(alpha)", "grad(psi)"],
 )
 def _gx_gds21_over_shat(params, transforms, profiles, data, **kwargs):
-    # gx_geometry: gds21/shat = sigma_Bxy * grad_alpha_dot_grad_psi / B_reference
-    # B_reference is UNSIGNED (2*|psi_edge|/a^2), matching gx_geometry desc.py:94.
-    # Note: the z-reversal for negative iota is corrected in NNITGProxy, not here.
+    # From gx_geometry: sigma_Bxy * grad_alpha_dot_grad_psi / B_reference,
+    # where B_reference is UNSIGNED (2*|psi_edge|/a^2).
+    # The z-reversal for negative iota is corrected in NNITGProxy, not here.
     B_ref = data["gx_B_reference"]
     grad_alpha_dot_grad_psi = dot(data["grad(alpha)"], data["grad(psi)"])
     data["gx_gds21_over_shat"] = _SIGMA_BXY * grad_alpha_dot_grad_psi / B_ref
@@ -153,8 +152,8 @@ def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
     L_ref = data["gx_L_reference"]
     B_ref = data["gx_B_reference"]
     s = data["rho"] ** 2
-    data["gx_gds22_over_shat_squared"] = (
-        data["|grad(psi)|^2"] / (L_ref**2 * B_ref**2 * s)
+    data["gx_gds22_over_shat_squared"] = data["|grad(psi)|^2"] / (
+        L_ref**2 * B_ref**2 * s
     )
     return data
 
@@ -175,7 +174,15 @@ def _gx_gds22_over_shat_squared(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["gx_L_reference", "gx_B_reference", "rho", "|B|", "grad(|B|)", "B", "grad(alpha)"],
+    data=[
+        "gx_L_reference",
+        "gx_B_reference",
+        "rho",
+        "|B|",
+        "grad(|B|)",
+        "B",
+        "grad(alpha)",
+    ],
 )
 def _gx_gbdrift(params, transforms, profiles, data, **kwargs):
     psi_sign = jnp.sign(params["Psi"])
@@ -244,10 +251,10 @@ def _gx_cvdrift(params, transforms, profiles, data, **kwargs):
     data=["rho", "|B|", "grad(|B|)", "B", "grad(psi)"],
 )
 def _gx_gbdrift0_over_shat(params, transforms, profiles, data, **kwargs):
-    # gx_geometry: gbdrift0/shat = 2 * toroidal_flux_sign * B_cross_gradB_dot_gradpsi
-    #              / (|B|^3 * sqrt_s)
-    # toroidal_flux_sign = sign(Psi), matching gx_geometry gx_grid.py:130
-    # Note: the z-reversal for negative iota is corrected in NNITGProxy, not here.
+    # From gx_geometry: 2 * toroidal_flux_sign * B_cross_gradB_dot_gradpsi
+    # divided by (|B|^3 * sqrt_s).
+    # toroidal_flux_sign follows sign(Psi), matching gx_grid.py:130.
+    # The z-reversal for negative iota is corrected in NNITGProxy, not here.
     psi_sign = jnp.sign(params["Psi"])
     sqrt_s = data["rho"]
     B_cross_grad_B = cross(data["B"], data["grad(|B|)"])
@@ -545,7 +552,9 @@ def solve_poloidal_turns_for_length(length_fn, target_length, x0_guess=1.0):
     --------
     >>> def length_fn(poloidal_turns):
     ...     # Compute gradpar for this many poloidal turns
-    ...     theta_pest = np.linspace(-np.pi * poloidal_turns, np.pi * poloidal_turns, 1001)
+    ...     theta_pest = np.linspace(
+    ...         -np.pi * poloidal_turns, np.pi * poloidal_turns, 1001
+    ...     )
     ...     gradpar = compute_gradpar_for_field_line(eq, rho, alpha, theta_pest)
     ...     return np.abs(np.trapezoid(1.0 / gradpar, theta_pest))
     >>> poloidal_turns = solve_poloidal_turns_for_length(length_fn, target_length=75.4)
@@ -772,7 +781,9 @@ def _has_batch_norm(weights):
     - 'conv_layers.0.bn.weight' (older integrated format)
     - 'conv_batch_norms.0.weight' (current separate format)
     """
-    return "conv_layers.0.bn.weight" in weights or "conv_batch_norms.0.weight" in weights
+    return (
+        "conv_layers.0.bn.weight" in weights or "conv_batch_norms.0.weight" in weights
+    )
 
 
 def _apply_conv_bn(x, weights, layer_idx, use_bn):
@@ -926,9 +937,11 @@ def _make_jit_forward(weights):
     jit_forward : callable
         JIT-compiled function with signature (signals, scalars) -> log_Q
     """
+
     @jax.jit
     def jit_forward(signals, scalars):
         return _cyclic_invariant_forward(signals, scalars, weights)
+
     return jit_forward
 
 

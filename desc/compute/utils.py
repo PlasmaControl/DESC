@@ -596,9 +596,9 @@ def get_transforms(
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform
             # assume grid is a meshgrid but only care about a single surface
-            if grid.num_rho > 1:
-                theta = grid.nodes[grid.unique_theta_idx, 1]
-                zeta = grid.nodes[grid.unique_zeta_idx, 2]
+            if grid.num_x0 > 1:
+                theta = grid.nodes[grid.unique_x1_idx, 1]
+                zeta = grid.nodes[grid.unique_x2_idx, 2]
                 grid_B = LinearGridFlux(
                     theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym
                 )

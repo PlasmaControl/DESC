@@ -77,7 +77,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
     Use flux surfaces specified by points:
-    nodes should either be an AbstractGrid or an ndarray, shape(k,3) giving the
+    nodes should either be an AbstractGridFlux or an ndarray, shape(k,3) giving the
     locations in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
     array-like, shape(k,) giving the corresponding real space coordinates
 
@@ -355,7 +355,7 @@ def _initial_guess_points(nodes, x, x_basis):
 
     Parameters
     ----------
-    nodes : AbstractGrid or ndarray, shape(k,3)
+    nodes : AbstractGridFlux or ndarray, shape(k,3)
         Locations in flux coordinates where real space coordinates are given.
     x : ndarray, shape(k,)
         R, Z or lambda values at specified nodes.

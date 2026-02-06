@@ -558,7 +558,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     ----------
     eq : Equilibrium
         Equilibrium to use
-    grid  :  AbstractGrid, optional
+    grid : AbstractGridFlux, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         Defaults to QuadratureGridFlux with eq's current grid resolutions.
     R_lmn, Z_lmn, L_lmn : ndarray, optional

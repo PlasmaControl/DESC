@@ -551,7 +551,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
         Use flux surfaces specified by points:
-        nodes should either be an AbstractGrid or an ndarray, shape(k,3) giving the
+        nodes should either be an AbstractGridFlux or an ndarray, shape(k,3) giving the
         locations in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
         array-like, shape(k,) giving the corresponding real space coordinates
 
@@ -1427,7 +1427,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        grid : AbstractGrid, optional
+        grid : AbstractGridFlux, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             Defaults to QuadratureGridFlux with eq's current grid resolutions.
         R_lmn, Z_lmn, L_lmn : ndarray, optional

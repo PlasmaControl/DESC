@@ -11,11 +11,7 @@ from functools import partial
 
 import numpy as np
 from interpax import interp1d
-
-try:
-    from jax_finufft import nufft2, options
-except ImportError:
-    pass
+from jax_finufft import nufft2, options
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
@@ -965,8 +961,3 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
     return jnp.concatenate(
         [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
     )
-
-
-from desc._checks import check_jax_finufft  # noqa: E402
-
-check_jax_finufft()

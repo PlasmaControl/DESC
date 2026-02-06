@@ -89,11 +89,12 @@ On Your Local Machine
                 # run jupyter
                 uv run --with jupyter jupyter lab
 
-    .. tab-item:: CPU+GPU (partial support)
+    .. tab-item:: CPU+GPU (without FINUFFT)
 
         For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
-        These instructions install GPU support for a subset of the features in DESC.
+        These instructions do not install GPU support for `jax-finufft` which is used in `Bounce2D` computations
+        such as `GammaC` and `EffectiveRipple` objectives. Set `nufft_eps=0` in these objectives if necessary.
 
         .. code-block:: sh
 
@@ -192,7 +193,8 @@ On Most Linux Computing Clusters
 
             These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 24, 2025
             for both CPU and GPU runs.
-            They do not install FINUFFT with GPU support.
+            These instructions do not install GPU support for `jax-finufft` which is used in `Bounce2D` computations
+            such as `GammaC` and `EffectiveRipple` objectives. Set `nufft_eps=0` in these objectives if necessary.
 
             .. code-block:: sh
 

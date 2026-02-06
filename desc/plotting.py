@@ -106,7 +106,10 @@ rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
 
 try:
-    dpi = tkinter.Tk().winfo_fpixels("1i")
+    tkroot = tkinter.Tk()
+    tkroot.withdraw()
+    dpi = tkroot.winfo_fpixels("1i")
+    tkroot.destroy()
 except tkinter._tkinter.TclError:
     dpi = 72
 rcParams["figure.dpi"] = dpi

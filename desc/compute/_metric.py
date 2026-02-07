@@ -2088,3 +2088,95 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
         * dot(data["b"], cross(data["grad(|B|)"], data["e^rho"]))
     )
     return data
+
+
+@register_compute_fun(
+    name="gbdrift_theta",
+    label="(\\hat{\\mathbf{b}} \\times \\nabla |B|) \\cdot \\nabla \\theta / |B|",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Poloidal component of the gradB drift coefficient.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "grad(|B|)", "e^theta"],
+)
+def _gbdrift_theta(params, transforms, profiles, data, **kwargs):
+    data["gbdrift_theta"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["e^theta"]))
+        / data["|B|"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift_phi",
+    label="(\\hat{\\mathbf{b}} \\times \\nabla |B|) \\cdot \\nabla \\phi / |B|",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Toroidal component of the gradB drift coefficient.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "grad(|B|)", "grad(phi)"],
+)
+def _gbdrift_phi(params, transforms, profiles, data, **kwargs):
+    data["gbdrift_phi"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(phi)"]))
+        / data["|B|"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift_theta",
+    label="\\hat{\\mathbf{b}} \\times \\left(\\frac{\\nabla |B|}{|B|^2}"
+    " + \\frac{\\mu_0 \\nabla p}{|B|^3}\\right) \\cdot \\nabla\\theta",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Poloidal component of the curvature drift coefficient.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "|B|^2", "|B|", "b", "e^rho", "e^theta", "grad(|B|)"],
+)
+def _cvdrift_theta(params, transforms, profiles, data, **kwargs):
+    # cvdrift_theta = (b × ∇|B|) · ∇θ / |B|² + μ₀ p' b · (∇ρ × ∇θ) / |B|³
+    data["cvdrift_theta"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["e^theta"]))
+        / data["|B|^2"]
+        + mu_0 * data["p_r"] / (data["|B|^2"] * data["|B|"])
+        * dot(data["b"], cross(data["e^rho"], data["e^theta"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift_phi",
+    label="\\hat{\\mathbf{b}} \\times \\left(\\frac{\\nabla |B|}{|B|^2}"
+    " + \\frac{\\mu_0 \\nabla p}{|B|^3}\\right) \\cdot \\nabla\\phi",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Toroidal component of the curvature drift coefficient.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "|B|^2", "|B|", "b", "e^rho", "grad(phi)", "grad(|B|)"],
+)
+def _cvdrift_phi(params, transforms, profiles, data, **kwargs):
+    # cvdrift_phi = (b × ∇|B|) · ∇φ / |B|² + μ₀ p' b · (∇ρ × ∇φ) / |B|³
+    data["cvdrift_phi"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(phi)"]))
+        / data["|B|^2"]
+        + mu_0 * data["p_r"] / (data["|B|^2"] * data["|B|"])
+        * dot(data["b"], cross(data["e^rho"], data["grad(phi)"]))
+    )
+    return data

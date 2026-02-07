@@ -491,7 +491,7 @@ class TrappedResonance(_Objective):
         jac_chunk_size=None,
         pitch_invs=None,
         N=0, # QA is default, not with nfp
-        QS_flag=True,
+        M=1, # 
         m_max = 10,
         n_max = 5,
         res_range_min = -4,
@@ -524,10 +524,7 @@ class TrappedResonance(_Objective):
         }
         # if pitch_invs is not None:
         #     num_pitch = len(pitch_invs)
-        if QS_flag: # QA or QH
-            M=1
-        else: # QI~QP
-            M=0
+
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -536,7 +533,7 @@ class TrappedResonance(_Objective):
             "KE_frac": KE_frac,
             "pitch_invs": pitch_invs,
             "N": N,
-            "QS_flag": QS_flag,
+            "M": M,
             "m_max": m_max,
             "n_max": n_max,
             "res_range_min": res_range_min,
@@ -549,7 +546,6 @@ class TrappedResonance(_Objective):
             "DEBUG": DEBUG,
             "verbose": verbose,
             "wd_blur": wd_blur,
-            'M': M,
             'pitch_batch_size': pitch_batch_size,
             'surf_batch_size': surf_batch_size,
             'num_transit': num_transit,
@@ -623,21 +619,17 @@ class TrappedResonance(_Objective):
 
         res_arr_set = 0
 
-        if INCLUDE_ZERO_RES:
-            res_arr[0] = 0
-            n_arr[0] = 1
-            res_arr_set+=1
-
-        for m in range(1,m_max+1):
+        for m in range(0,m_max+1):
             for n in range(1,n_max+1):
                 condition = np.logical_and(m/n >= res_range_min, m/n <= res_range_max)
                 if condition:
                     res_arr[res_arr_set] = m/n
-                    res_arr[res_arr_set+1] = -m/n
                     n_arr[res_arr_set] = n
-                    n_arr[res_arr_set+1] = n
-                    res_arr_set+=2
-        
+                    res_arr_set+=1
+                    if m != 0:
+                        res_arr[res_arr_set] = -m/n
+                        n_arr[res_arr_set] = n
+                        res_arr_set+=1
 
         self._hyperparameters['q_arr'] = n_arr
         self._hyperparameters['res_arr'] = res_arr

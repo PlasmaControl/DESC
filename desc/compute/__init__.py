@@ -35,6 +35,7 @@ from . import (
     _equil,
     _fast_ion,
     _field,
+    _fluxsurfacecurve,
     _geometry,
     _metric,
     _neoclassical,
@@ -43,7 +44,6 @@ from . import (
     _profiles,
     _stability,
     _surface,
-    _umbiliccurve,
 )
 from .data_index import all_kwargs, allowed_kwargs, data_index
 from .utils import (

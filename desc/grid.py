@@ -27,7 +27,6 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        "_NFP_umbilic_factor",
         "_sym",
         "_nodes",
         "_spacing",
@@ -60,6 +59,7 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
+        "_N_scaling",
         "_node_pattern",
         "_sym",
     ]
@@ -76,6 +76,7 @@ class _Grid(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        self._N_scaling = int(self.__dict__.setdefault("_N_scaling", 1))
         if hasattr(self, "_inverse_theta_idx"):
             self._inverse_poloidal_idx = self._inverse_theta_idx
             del self._inverse_theta_idx
@@ -178,7 +179,7 @@ class _Grid(IOAble, ABC):
         nodes = put(
             nodes,
             Index[:, 2],
-            nodes[:, 2] % (2 * np.pi / self.NFP * self.NFP_umbilic_factor),
+            nodes[:, 2] % (2 * np.pi / self.NFP * self.N_scaling),
         )
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
@@ -239,9 +240,9 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
-    def NFP_umbilic_factor(self):
-        """float: Umbilic factor for (toroidal) field periods."""
-        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+    def N_scaling(self):
+        """int: Scaling factor multiplying toroidal period."""
+        return self.__dict__.setdefault("_N_scaling", 1)
 
     @property
     def sym(self):
@@ -521,14 +522,14 @@ class _Grid(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, NFP_umbilic_factor = {},\
+            + " (L={}, M={}, N={}, NFP={}, N_scaling = {},\
                sym={}, node_pattern={}, coordinates={})"
         ).format(
             self.L,
             self.M,
             self.N,
             self.NFP,
-            self.NFP_umbilic_factor,
+            self.N_scaling,
             self.sym,
             self.node_pattern,
             self.coordinates,
@@ -843,7 +844,6 @@ class Grid(_Grid):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP_umbilic_factor = 1
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "custom"
@@ -856,6 +856,8 @@ class Grid(_Grid):
                 else (np.inf, np.inf, np.inf)
             ),
         )
+        # N_scaling only implemented for LinearGrid
+        self._N_scaling = 1
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
@@ -1072,11 +1074,10 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
-    NFP_umbilic_factor : int
-        Integer>=1.
-        This is needed for the umbilic torus design.
         Change this only if your nodes are placed within one field period
         or should be interpreted as spanning one field period.
+    N_scaling : int
+        Positive integer multiplying the toroidal period.
     sym : bool
         ``True`` for poloidal up/down symmetry, ``False`` otherwise.
         Default is ``False``.
@@ -1116,7 +1117,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=int(1),
+        N_scaling=int(1),
         sym=False,
         axis=True,
         endpoint=False,
@@ -1131,9 +1132,7 @@ class LinearGrid(_Grid):
         self._M = check_nonnegint(M, "M")
         self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._N_scaling = check_posint(N_scaling, "N_scaling", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
         # these are just default values that may get overwritten in _create_nodes
@@ -1150,7 +1149,7 @@ class LinearGrid(_Grid):
         self._period = (
             np.inf,
             2 * np.pi,
-            2 * np.pi / self._NFP * self._NFP_umbilic_factor,
+            2 * np.pi / self._NFP * self._N_scaling,
         )
 
         self._nodes, self._spacing = self._create_nodes(
@@ -1158,7 +1157,7 @@ class LinearGrid(_Grid):
             M=M,
             N=N,
             NFP=NFP,
-            NFP_umbilic_factor=NFP_umbilic_factor,
+            N_scaling=N_scaling,
             axis=axis,
             endpoint=endpoint,
             rho=rho,
@@ -1184,7 +1183,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=int(1),
+        N_scaling=int(1),
         axis=True,
         endpoint=False,
         rho=1.0,
@@ -1203,11 +1202,10 @@ class LinearGrid(_Grid):
             Toroidal grid resolution.
         NFP : int
             Number of field periods (Default = 1).
-        NFP_umbilic_factor : float
-            Rational number of the form 1/integer with integer>=1.
-            This is needed for the umbilic torus design.
             Only change this if your nodes are placed within one field period
             or should be interpreted as spanning one field period.
+        N_scaling : int
+            Positive integer multiplying the toroidal period.
         axis : bool
             True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool
@@ -1233,13 +1231,11 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
+        self._N_scaling = check_posint(N_scaling, "N_scaling", False)
         self._period = (
             np.inf,
             2 * np.pi,
-            2 * np.pi / self._NFP * self._NFP_umbilic_factor,
+            2 * np.pi / self._NFP * self._N_scaling,
         )
         # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
@@ -1412,7 +1408,7 @@ class LinearGrid(_Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None, NFP_umbilic_factor=None):
+    def change_resolution(self, L, M, N, NFP=None, N_scaling=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -1425,28 +1421,27 @@ class LinearGrid(_Grid):
             new toroidal grid resolution (N toroidal nodes)
         NFP : int
             Number of field periods.
-        NFP_umbilic_factor : float
-            Rational number of the form 1/integer.
-            This is needed for the umbilic torus design.
+        N_scaling : int
+            Positive integer multiplying the toroidal period.
 
         """
         if NFP is None:
             NFP = self.NFP
-        if NFP_umbilic_factor is None:
-            NFP_umbilic_factor = self.NFP_umbilic_factor
+        if N_scaling is None:
+            N_scaling = self.N_scaling
         if (
             L != self.L
             or M != self.M
             or N != self.N
             or NFP != self.NFP
-            or NFP_umbilic_factor != self.NFP_umbilic_factor
+            or N_scaling != self.N_scaling
         ):
             self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
                 NFP=NFP,
-                NFP_umbilic_factor=NFP_umbilic_factor,
+                N_scaling=N_scaling,
                 axis=self.axis.size > 0,
                 endpoint=self.endpoint,
             )

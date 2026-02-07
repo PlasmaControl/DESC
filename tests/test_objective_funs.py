@@ -28,7 +28,12 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZToroidalSurface,
+    FourierUmbilicCurve,
+    FourierXYZCurve,
+)
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
 from desc.io import load
@@ -1927,6 +1932,25 @@ class TestObjectiveFunction:
         # before comparing
         np.testing.assert_allclose(
             np.sort(np.concatenate([f1, f2])), np.sort(f3), atol=1e-14
+        )
+
+    @pytest.mark.unit
+    def test_umbilic_high_curvature(self):
+        """Test umbilic high curvature."""
+        # Default equilibrium with minor radius a=1
+        eq = Equilibrium(L=2, M=2, N=2, NFP=2)
+        curve = FourierUmbilicCurve(a_n=[-2, 0, 2], NFP=2, n_umbilic=3, m_umbilic=2)
+        num_nodes = 10
+        curve_grid = LinearGrid(zeta=num_nodes, NFP=2, N_scaling=3)
+        obj = UmbilicHighCurvature(eq, curve, curve_grid=curve_grid)
+        obj.build()
+        lowest_curvature = obj.compute()
+
+        assert len(lowest_curvature) == num_nodes
+
+        # lowest principal curvature is -1/a = -1
+        np.testing.assert_allclose(
+            lowest_curvature, -1 * np.ones_like(lowest_curvature), atol=1e-14
         )
 
     @pytest.mark.unit
@@ -3934,6 +3958,16 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(field))
         assert not np.any(np.isnan(g)), "surface current regularization"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_umbilic_high_curv(self):
+        """Umbilic High Curvature."""
+        eq = Equilibrium(L=2, M=2, N=2)
+        curve = FourierUmbilicCurve()
+        obj = ObjectiveFunction(UmbilicHighCurvature(eq, curve), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "umbilic high curvature"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

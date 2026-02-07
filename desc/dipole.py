@@ -45,6 +45,8 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
+from desc.utils import errorif, reflection_matrix, rotation_matrix
+
 @partial(jit, static_argnames=["chunk_size"])
 def magnetic_dipole_field(
     eval_pts, mag_points, phi, theta, m, *, chunk_size=None
@@ -123,7 +125,7 @@ if __name__ == "__main__":
 class _Dipole(_MagneticField, Optimizable, ABC):
     """Implements ideal dipole that can be used in place of _dipole in a MixeddipoleSet"""
     
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_x"] + ["_y"] + ["_z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_x"] + ["_y"] + ["_z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name", "_shift", "_rotmat"] + ["_name"]
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_name"]
 
     def __init__(self, x=0.0, y=0.0, z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0, name=""):
@@ -141,6 +143,33 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+
+    @optimizable_parameter
+    @property
+    def shift(self):
+        """Displacement of curve in X, Y, Z."""
+        return self.__dict__.setdefault("_shift", jnp.array([0, 0, 0], dtype=float))
+
+    @shift.setter
+    def shift(self, new):
+        if len(new) == 3:
+            self._shift = jnp.asarray(new)
+        else:
+            raise ValueError("shift should be a 3 element vector, got {}".format(new))
+
+    @optimizable_parameter
+    @property
+    def rotmat(self):
+        """Rotation matrix of curve in X, Y, Z."""
+        return self.__dict__.setdefault("_rotmat", jnp.eye(3, dtype=float).flatten())
+
+    @rotmat.setter
+    def rotmat(self, new):
+        if len(new) == 9:
+            self._rotmat = jnp.asarray(new)
+        else:
+            self._rotmat = jnp.asarray(new.flatten())
+
 
     @optimizable_parameter
     @property
@@ -344,6 +373,22 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         return self._compute_A_or_B(
             coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
         )
+    
+    def translate(self, displacement=[0, 0, 0]):
+        """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
+        self.shift = self.shift + jnp.asarray(displacement)
+
+    def rotate(self, axis=[0, 0, 1], angle=0):
+        """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
+        R = rotation_matrix(axis=axis, angle=angle)
+        self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
+        self.shift = self.shift @ R.T
+
+    def flip(self, normal=[0, 0, 1]):
+        """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
+        F = reflection_matrix(normal)
+        self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
+        self.shift = self.shift @ F.T
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -734,7 +779,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         return cls(*dipoles, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, dipoles, NFP=1, sym=False, check_intersection=True):
+    def from_symmetry(cls, dipoles, NFP=1, sym=False):
         if not isinstance(dipoles, DipoleSet):
             dipoles = DipoleSet(dipoles)
         dipoleset = []
@@ -758,7 +803,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             rotated_dipoles.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             dipoleset += rotated_dipoles
 
-        return cls(*dipoleset, check_intersection=check_intersection)
+        return cls(*dipoleset)
     
 
 
@@ -804,3 +849,15 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             + str(hex(id(self)))
             + " ((name={}, with {} submembers), x={}, y={}, z={}, phi={}, theta={}, m0={}, rho={})".format(self.name, len(self), self.x, self.y, self.z, self.phi, self.theta, self.m0, self.rho)
         )
+    
+def export_dipoles(dipole_set, f):
+    d = dipole_set.dipoles
+
+    outfile = open(f, 'w')
+
+    print("x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)", file=outfile)
+    
+    for i in range(len(d)):
+        print(f"{d[i].x}, {d[i].y}, {d[i].z}, {d[i].rho}, {d[i].phi}, {d[i].theta}\n", file=outfile)
+
+    outfile.close()

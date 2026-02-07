@@ -630,10 +630,7 @@ class TrappedResonance(_Objective):
 
         for m in range(1,m_max+1):
             for n in range(1,n_max+1):
-                condition = np.logical_and(
-                    ~np.isin(m/n, res_arr),
-                    np.logical_and(m/n >= res_range_min, m/n <= res_range_max)
-                    )
+                condition = np.logical_and(m/n >= res_range_min, m/n <= res_range_max)
                 if condition:
                     res_arr[res_arr_set] = m/n
                     res_arr[res_arr_set+1] = -m/n

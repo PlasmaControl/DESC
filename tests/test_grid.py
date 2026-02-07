@@ -847,9 +847,13 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_N_scaling(self):
-        """Test that toroidal scaling parameter works correctly."""
-        # TODO
-        pass
+        """Test that toroidal scaling parameter works correctly for LinearGrid."""
+        grid = LinearGrid(zeta=5, N_scaling=5, NFP=2, endpoint=True)
+        zeta_coords = grid.nodes[:, 2]
+        zeta_reference = np.array(
+            [0.0, 5 / 4 * np.pi, 2 * 5 / 4 * np.pi, 3 * 5 / 4 * np.pi, 5 * np.pi]
+        )
+        np.testing.assert_allclose(zeta_coords, zeta_reference, atol=1e-8)
 
 
 @pytest.mark.unit

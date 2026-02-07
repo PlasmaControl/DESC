@@ -31,7 +31,6 @@ class _Basis(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        "_N_scaling",
         "_modes",
         "_sym",
         "_spectral_indexing",
@@ -44,7 +43,6 @@ class _Basis(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        "_N_scaling",
         "_sym",
         "_spectral_indexing",
     ]
@@ -80,6 +78,7 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        self._N_scaling = int(self.__dict__.setdefault("_N_scaling", 1))
         self._modes = self._modes.astype(int)
         (
             self._unique_L_idx,
@@ -231,11 +230,6 @@ class _Basis(IOAble, ABC):
     def NFP(self):
         """int: Number of field periods."""
         return self.__dict__.setdefault("_NFP", 1)
-
-    @property
-    def N_scaling(self):
-        """int: Factor multiplying toroidal period."""
-        return self.__dict__.setdefault("_N_scaling", 1)
 
     @property
     def sym(self):
@@ -489,6 +483,7 @@ class FourierSeries(_Basis):
 
     """
 
+    _static_attrs = _Basis._static_attrs + ["N_scaling"]
     _fft_poloidal = True
     _fft_toroidal = True
 
@@ -505,6 +500,11 @@ class FourierSeries(_Basis):
         self._modes = self._get_modes(N=self.N)
 
         super().__init__()
+
+    @property
+    def N_scaling(self):
+        """int: Factor multiplying toroidal period."""
+        return self.__dict__.setdefault("_N_scaling", 1)
 
     def _get_modes(self, N):
         """Get mode numbers for Fourier series.
@@ -943,7 +943,6 @@ class ZernikePolynomial(_Basis):
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, 1, derivatives[1])
 
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
         radial = radial[routidx][:, lmoutidx]
         poloidal = poloidal[toutidx][:, moutidx]
 
@@ -1360,9 +1359,6 @@ class FourierZernikeBasis(_Basis):
             N_scaling=1,
             dt=derivatives[2],
         )
-
-        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
 
         radial = radial[routidx][:, lmoutidx]
         poloidal = poloidal[toutidx][:, moutidx]

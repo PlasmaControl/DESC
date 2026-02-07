@@ -1381,7 +1381,7 @@ class UmbilicHighCurvature(_Objective):
     plasma boundary surface.
 
     Using the grid defined by the umbilic curve object,
-    this class returns the minimum gaussian curvature k2 along that curve
+    this class returns the minimum principal curvature k2 along that curve
     which is used to ensure a large negative curvature and umbilic-ness.
 
     Parameters
@@ -1457,7 +1457,7 @@ class UmbilicHighCurvature(_Objective):
         )
         self._curve_grid = curve_grid
 
-        things = [curve, eq]
+        things = [eq, curve]
         super().__init__(
             things=things,
             target=target,
@@ -1481,7 +1481,7 @@ class UmbilicHighCurvature(_Objective):
             Level of output.
 
         """
-        curve = self.things[0]
+        curve = self._curve
         eq = self._eq
 
         if self._curve_grid is None:
@@ -1529,15 +1529,15 @@ class UmbilicHighCurvature(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params_1=None, params_2=None, constants=None):
-        """Compute minimum Gaussian curvature.
+        """Compute minimum principal curvature.
 
         Parameters
         ----------
         params_1 : dict
-            Dictionary of curve degrees of freedom, e.g. curve.params_dict.
-        params_2 : dict
             Dictionary of equilibrium or surface degrees of freedom,
             e.g. Equilibrium.params_dict.
+        params_2 : dict
+            Dictionary of curve degrees of freedom, e.g. curve.params_dict.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
             Defaults to self.constants.
@@ -1545,16 +1545,16 @@ class UmbilicHighCurvature(_Objective):
         Returns
         -------
         k : ndarray
-            Minimum Gaussian curvature at each point (m^-1).
+            Minimum principal curvature at each point (m^-1).
 
         """
         constants = setdefault(constants, self.constants)
-        if params_1 is None:
-            curve_params = get_params(self._curve_data_keys, obj=self.things[0])
+        if params_2 is None:
+            curve_params = get_params(self._curve_data_keys, obj=self._curve)
         else:
-            curve_params = params_1
+            curve_params = params_2
 
-        equil_params = setdefault(params_2, self.things[1].params_dict)
+        equil_params = setdefault(params_1, self._eq.params_dict)
 
         curve_data = compute_fun(
             self._curve,
@@ -1562,6 +1562,9 @@ class UmbilicHighCurvature(_Objective):
             params=curve_params,
             transforms=constants["curve_transforms"],
             profiles={},
+            n_umbilic=self._curve.n_umbilic,
+            m_umbilic=self._curve.m_umbilic,
+            NFP=self._curve.NFP,
         )
         curve_phi = curve_data["phi"]
         curve_theta = curve_data["theta"]
@@ -1592,6 +1595,9 @@ class UmbilicHighCurvature(_Objective):
             params=equil_params,
             profiles=equil_profiles,
             transforms=equil_transforms,
+            n_umbilic=self._curve.n_umbilic,
+            m_umbilic=self._curve.m_umbilic,
+            NFP=self._curve.NFP,
         )
         return data["curvature_k2_rho"]
 

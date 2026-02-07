@@ -7,6 +7,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierUmbilicCurve,
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
@@ -1278,26 +1279,26 @@ class TestFourierUmbilicCurve:
     @pytest.mark.unit
     def test_parameterization(self):
         """Verify the parameterization of curves in DESC coordinates."""
-        # TODO
-        # Define simple umbilic curve with n_umbilic=3,m_umbilic=2,
-        # a_n= 0, nfp = 5.
+        curve = FourierUmbilicCurve(NFP=5, n_umbilic=3, m_umbilic=2)
+        grid = LinearGrid(zeta=4, N_scaling=3, endpoint=True)
+        reference = np.array([0.0, 2 / 3 * np.pi, 4 / 3 * np.pi, 2 * np.pi])
 
-        # Assert it has slope 2/3*5=10/3 in the sense
-        # that after zeta = 2pi, phi has changed 10/3*2pi
-
-        # Create now a curve with general a_n. It should close
-        # after delta theta = p 2pi = 10/3 2 pi k
-        # -> want smallest k such that 10/3 k is an integer.
-        # -> k=3. So compute curve theta for zeta=[0,2pi,4pi,6pi],
-        # verify theta-theta[0]=0 is nonzero for 2pi, 4pi but is zero
-        # for 6pi.
-        pass
+        theta = curve.compute("theta", grid=grid)["theta"]
+        UC = curve.compute("UC", grid=grid)["UC"]
+        np.testing.assert_allclose(theta % (2 * np.pi), reference, atol=1e-12)
+        np.testing.assert_allclose(UC, np.zeros_like(reference), atol=1e-12)
 
     @pytest.mark.unit
     def test_from_values(self):
         """Verify FourierUmbilicCurve can be created from input values."""
-        # TODO
-        # take a curve corresponding to n_umbilic=3, m_umbilic=2, etc.
-        # evaluate the theta and phi grid, pass it in to constructor and
-        # assert various things about the modes, check modes are correct.
-        pass
+        a_n = [0, -2, 1, 2, 0]
+        curveUC = FourierUmbilicCurve(a_n=a_n, n_umbilic=3, m_umbilic=2, NFP=2)
+        grid = LinearGrid(zeta=20, N_scaling=3, NFP=2, endpoint=False)
+        data = curveUC.compute("theta", grid=grid)
+        theta = data["theta"]
+        phi = data["phi"]
+        vals = np.stack([theta, phi], axis=1)
+
+        curveUC_reconstructed = FourierUmbilicCurve.from_values(vals, 2, 2, 3, 2)
+        a_n_reconstructed = curveUC_reconstructed._a_n
+        np.testing.assert_allclose(a_n_reconstructed, a_n, atol=1e-12)

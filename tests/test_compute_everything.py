@@ -135,8 +135,8 @@ def test_compute_everything():
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
         # umbilic curve
-        "desc.geometry.umbiliccurve.FourierUmbilicCurve": FourierUmbilicCurve(
-            a_n=[10, 1, 0.2], modes_UC=[0, 1, 2], NFP=1, n_umbilic=3, m_umbilic=2
+        "desc.geometry.fluxsurfacecurve.FourierUmbilicCurve": FourierUmbilicCurve(
+            a_n=[10, 1, 0.2], modes_UC=[0, 1, 2], NFP=2, n_umbilic=3, m_umbilic=2
         ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
@@ -215,6 +215,7 @@ def test_compute_everything():
     )
     curvegrid1 = LinearGrid(N=10)
     curvegrid2 = LinearGrid(N=10, NFP=2)
+    curvegrid3 = LinearGrid(N=10, NFP=2, N_scaling=3)
     fieldgrid = LinearGrid(
         L=2,
         M=4,
@@ -230,6 +231,7 @@ def test_compute_everything():
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+        "desc.geometry.fluxsurfacecurve.FourierUmbilicCurve": {"grid": curvegrid3},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 

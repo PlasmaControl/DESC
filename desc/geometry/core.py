@@ -118,19 +118,19 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            n_umbilic = (
-                self.n_umbilic
-                if (hasattr(self, "n_umbilic") and self.n_umbilic is not None)
+            N_scaling = (
+                self.N_scaling
+                if (hasattr(self, "N_scaling") and self.N_scaling is not None)
                 else 1
             )
             grid = LinearGrid(
                 N=2 * self.N * getattr(self, "NFP", 1) + 5,
-                n_umbilic=int(n_umbilic),
+                N_scaling=int(N_scaling),
             )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            n_umbilic = self.n_umbilic if hasattr(self, "n_umbilic") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, n_umbilic=n_umbilic, endpoint=False)
+            N_scaling = self.N_scaling if hasattr(self, "N_scaling") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, N_scaling=N_scaling, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:
@@ -726,6 +726,7 @@ class FluxSurfaceCurve(IOAble, Optimizable, ABC):
             grid = LinearGrid(N=grid, NFP=NFP, N_scaling=N_scaling, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
+            N_scaling = self.N_scaling if hasattr(self, "N_scaling") else 1
         else:
             raise TypeError(
                 "must pass in a Grid object or an integer for argument grid!"
@@ -758,7 +759,9 @@ class FluxSurfaceCurve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            grid0d = LinearGrid(
+                N=2 * self.N * getattr(self, "NFP", 1) + 5, N_scaling=N_scaling
+            )
             data0d = compute_fun(
                 self,
                 dep0d,

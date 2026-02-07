@@ -1,5 +1,21 @@
 from .data_index import register_compute_fun
 
+kwargs_FourierUmbilicCurve = {
+    "n_umbilic": """int:
+        Prefactor of the form 1/n_umbilic modifying NFP.
+        Curve closes after n_umbilic/gcd(n_umbilic, NFP) transits.
+        Default is n_umbilic = 1.
+        """,
+    "m_umbilic": """int:
+        Parameter arising from umbilic torus parameterization, determining
+        the average slope of the curve in the (theta,zeta) plane.
+        Should satisfy gcd(n_umbilic, m_umbilic)=1.
+        Default is m_umbilic = 1.
+        """,
+    "NFP": """int:
+        Number of field periods.""",
+}
+
 
 @register_compute_fun(
     name="UC",
@@ -12,7 +28,7 @@ from .data_index import register_compute_fun
     params=["a_n"],
     transforms={"UC": [[0, 0, 0]], "grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="phi",
     data=[],
     parameterization="desc.geometry.fluxsurfacecurve.FourierUmbilicCurve",
 )
@@ -48,17 +64,18 @@ def _phi(params, transforms, profiles, data, **kwargs):
     units_long="Radians",
     description="Values of poloidal angle theta along curve",
     dim=1,
-    params=["n_umbilic", "m_umbilic", "NFP"],
+    params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="phi",
     data=["UC", "phi"],
     parameterization="desc.geometry.fluxsurfacecurve.FourierUmbilicCurve",
+    **kwargs_FourierUmbilicCurve
 )
 def _theta(params, transforms, profiles, data, **kwargs):
     data["theta"] = (
         1
-        / params["n_umbilic"]
-        * (params["m_umbilic"] * params["NFP"] * data["phi"] + data["UC"])
+        / kwargs.get("n_umbilic")
+        * (kwargs.get("m_umbilic") * kwargs.get("NFP") * data["phi"] + data["UC"])
     )
     return data

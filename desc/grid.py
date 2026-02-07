@@ -27,7 +27,6 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
-        "_N_scaling",
         "_sym",
         "_nodes",
         "_spacing",
@@ -60,6 +59,7 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
+        "_N_scaling",
         "_node_pattern",
         "_sym",
     ]
@@ -76,6 +76,7 @@ class _Grid(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        self._N_scaling = int(self.__dict__.setdefault("_N_scaling", 1))
         if hasattr(self, "_inverse_theta_idx"):
             self._inverse_poloidal_idx = self._inverse_theta_idx
             del self._inverse_theta_idx
@@ -843,7 +844,6 @@ class Grid(_Grid):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._N_scaling = 1
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "custom"
@@ -856,6 +856,8 @@ class Grid(_Grid):
                 else (np.inf, np.inf, np.inf)
             ),
         )
+        # N_scaling only implemented for LinearGrid
+        self._N_scaling = 1
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)

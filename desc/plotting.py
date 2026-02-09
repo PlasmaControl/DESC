@@ -1982,6 +1982,17 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     }
     r_grid = _get_grid(eq, **grid_kwargs)
     rnr, rnt, rnz = r_grid.num_x0, r_grid.num_x1, r_grid.num_x2
+    r_grid = CustomGridFlux(
+        map_coordinates(
+            eq,
+            r_grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=r_grid.nodes,
+        ),
+        sort=False,
+    )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
         "NFP": 1,
@@ -1989,7 +2000,6 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         "zeta": phi,
     }
     if plot_theta:
-        assert isinstance(eq, Equilibrium)
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(eq, **grid_kwargs)
@@ -2359,6 +2369,18 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(eq, **grid_kwargs)
     nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
+    if isinstance(eq, Equilibrium):  # TODO: handle case of FourierRZToroidalSurface
+        grid = CustomGridFlux(
+            map_coordinates(
+                eq,
+                grid.nodes,
+                ["rho", "theta", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=grid.nodes,
+            ),
+            sort=False,
+        )
 
     if colors is None:
         colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)

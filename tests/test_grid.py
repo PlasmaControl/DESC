@@ -11,6 +11,7 @@ from desc.grid import (
     CustomGridFlux,
     LinearGridCurve,
     LinearGridFlux,
+    LinearGridToroidalSurface,
     QuadratureGridFlux,
     dec_to_cf,
     find_least_rational_surfaces,
@@ -856,6 +857,27 @@ class TestGrid:
         # flux coordinate system (ρ,θ,ζ): ∫ dρ dθ dζ = 4π²
         grid_flux = LinearGridFlux(L=8, M=8, N=8)
         np.testing.assert_allclose(np.sum(grid_flux.weights), (2 * np.pi) ** 2)
+
+    @pytest.mark.unit
+    def test_different_coords_same_nodes(self):
+        """Test that LinearGridX have the same nodes for different coordinates."""
+        # 1D grids
+        grid_curv = LinearGridCurve(N=8, NFP=2)
+        grid_surf = LinearGridToroidalSurface(N=8, NFP=2)
+        grid_flux = LinearGridFlux(rho=[0.0], N=8, NFP=2)
+        np.testing.assert_allclose(grid_curv.nodes, grid_surf.nodes)
+        np.testing.assert_allclose(grid_surf.nodes, grid_flux.nodes)
+        np.testing.assert_allclose(grid_curv.spacing[:, 2], grid_surf.spacing[:, 2])
+        np.testing.assert_allclose(grid_surf.spacing[:, 1:], grid_flux.spacing[:, 1:])
+        np.testing.assert_allclose(grid_curv.weights, grid_surf.weights / (2 * np.pi))
+        np.testing.assert_allclose(grid_surf.weights, grid_flux.weights)
+
+        # 2D grids
+        grid_surf = LinearGridToroidalSurface(M=5, N=6, NFP=3, sym=True)
+        grid_flux = LinearGridFlux(rho=[0.0], M=5, N=6, NFP=3, sym=True)
+        np.testing.assert_allclose(grid_surf.nodes, grid_flux.nodes)
+        np.testing.assert_allclose(grid_surf.spacing[:, 1:], grid_flux.spacing[:, 1:])
+        np.testing.assert_allclose(grid_surf.weights, grid_flux.weights)
 
 
 @pytest.mark.unit

@@ -207,7 +207,7 @@ class LinearGridCurve(AbstractGridCurve):
             self._fft_x2 = True  # trivially true
 
         _ = np.zeros(1)
-        d_ = np.ones_like(_)
+        d_ = np.zeros_like(_)
 
         self._endpoint = (
             (ss.size > 1)

@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import execute_on_cpu, jax, jnp, qr
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -181,6 +181,19 @@ def lsqtr(  # noqa: C901
     # block is needed for jaxify util which uses jax functions inside
     # jax.pure_callback and gets stuck due to async dispatch
     J = jac(x, *args).block_until_ready()
+    if J.device == jax.devices("cpu")[0]:
+        f = jnp.asarray(f, device=jax.devices("cpu")[0])
+        tr_cho = execute_on_cpu(trust_region_step_exact_cho)
+        tr_qr = execute_on_cpu(trust_region_step_exact_qr)
+        tr_svd = execute_on_cpu(trust_region_step_exact_svd)
+        select_step_device = execute_on_cpu(select_step)
+        compute_jac_scale_device = execute_on_cpu(compute_jac_scale)
+    else:
+        tr_cho = trust_region_step_exact_cho
+        tr_qr = trust_region_step_exact_qr
+        tr_svd = trust_region_step_exact_svd
+        select_step_device = select_step
+        compute_jac_scale_device = compute_jac_scale
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -191,7 +204,7 @@ def lsqtr(  # noqa: C901
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
-        scale, scale_inv = compute_jac_scale(J)
+        scale, scale_inv = compute_jac_scale_device(J)
     else:
         x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
@@ -322,20 +335,18 @@ def lsqtr(  # noqa: C901
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             if tr_method == "svd":
-                step_h, hits_boundary, alpha = trust_region_step_exact_svd(
+                step_h, hits_boundary, alpha = tr_svd(
                     f_a, U, s, Vt.T, trust_radius, alpha
                 )
             elif tr_method == "cho":
-                step_h, hits_boundary, alpha = trust_region_step_exact_cho(
-                    g_h, B_h, trust_radius, alpha
-                )
+                step_h, hits_boundary, alpha = tr_cho(g_h, B_h, trust_radius, alpha)
             elif tr_method == "qr":
-                step_h, hits_boundary, alpha = trust_region_step_exact_qr(
+                step_h, hits_boundary, alpha = tr_qr(
                     p_newton, f_a, J_a, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 
-            step, step_h, predicted_reduction = select_step(
+            step, step_h, predicted_reduction = select_step_device(
                 x,
                 J_h,
                 diag_h,
@@ -405,11 +416,13 @@ def lsqtr(  # noqa: C901
             f = f_new
             cost = cost_new
             J = jac(x, *args)
+            if J.device == jax.devices("cpu")[0]:
+                f = jnp.asarray(f, device=jax.devices("cpu")[0])
             njev += 1
             g = jnp.dot(J.T, f)
 
             if jac_scale:
-                scale, scale_inv = compute_jac_scale(J, scale_inv)
+                scale, scale_inv = compute_jac_scale_device(J, scale_inv)
 
             v, dv = cl_scaling_vector(x, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)

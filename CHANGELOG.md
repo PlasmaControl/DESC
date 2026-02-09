@@ -48,6 +48,9 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+- Adds support for optimization targeting individual coils in a coilset.
+  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+  - Able to set weights to zero, excluding certain coils from the objective.
 - Adds initial support for multi-device optimization with MPI. This allows to compute derivatives and costs on multiple devices (GPUs/CPUs), and to split memory usage during these operations across devices. See the [documentation](https://desc-docs.readthedocs.io/en/stable/notebooks/tutorials/multi_device.html) for details. Couple important notes:
     - MPI is not a default dependency of DESC, so, to use MPI functionality, the users should verify their MPI installation themselves.
     - Using MPI is recommended only for the cases where you get out-of-memory error. If your problem fits to single GPU memory, it's unlikely that MPI will give speed improvement.

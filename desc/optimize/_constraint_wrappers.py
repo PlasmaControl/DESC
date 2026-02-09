@@ -1075,15 +1075,27 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
-        g = self._objective.compute_scaled_error(xg, constants[0])
-        g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
-        return tangents @ g_vjp
+        if not (self._constraint._is_mpi or self._objective._is_mpi):
+            jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
+            tangents = batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(v)
+            g = self._objective.compute_scaled_error(xg, constants[0])
+            g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
+            return tangents @ g_vjp
+        elif self._constraint._is_mpi:
+            # TODO: implement parallel constraint for ProximalProjection
+            raise NotImplementedError(
+                "Parallel constraint for ProximalProjection not implemented yet. "
+                "Please use only one Equilibrium constraint."
+            )
+        else:
+            # TODO: apply vjp for multidevice similar to #2030
+            f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+            J = self.jac_scaled_error(x, constants)
+            return f.T @ J
 
     def hess(self, x, constants=None):
         """Compute Hessian of self.compute_scalar.

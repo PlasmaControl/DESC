@@ -476,7 +476,7 @@ class TrappedResonance(_Objective):
         loss_function=None,
         deriv_mode="auto",
         rho=np.linspace(0.1, 0.9, 3),
-        alpha=np.linspace(0,2*np.pi,10),
+        alpha=np.linspace(0,2*np.pi,10,endpoint=False),
         KE_frac=np.array([1]), # currently only supporting one KE_frac
         *,
         num_transit=5,
@@ -538,14 +538,8 @@ class TrappedResonance(_Objective):
             "n_max": n_max,
             "res_range_min": res_range_min,
             "res_range_max": res_range_max,
-            "INCLUDE_ZERO_RES": INCLUDE_ZERO_RES,
-            "bt_filter_flag": bt_filter_flag,
-            "rt_filter_flag": rt_filter_flag,
-            "STAB_SACRIFICE": STAB_SACRIFICE,
-            "LOSS_FRAC_WEIGHT": LOSS_FRAC_WEIGHT,
             "DEBUG": DEBUG,
             "verbose": verbose,
-            "wd_blur": wd_blur,
             'pitch_batch_size': pitch_batch_size,
             'surf_batch_size': surf_batch_size,
             'num_transit': num_transit,
@@ -556,8 +550,6 @@ class TrappedResonance(_Objective):
         self._params2 = { # other non-static params       
             "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
             "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
-            # "Bcrit_res": (pitch_invs[-1]-pitch_invs[0])/(len(pitch_invs)-1),
-            # "Psi": Psi,
         }
 
 
@@ -610,7 +602,6 @@ class TrappedResonance(_Objective):
         # Setup rational array
         m_max = self._hyperparameters["m_max"]
         n_max = self._hyperparameters["n_max"]
-        INCLUDE_ZERO_RES = self._hyperparameters["INCLUDE_ZERO_RES"]
         res_range_min = self._hyperparameters["res_range_min"]
         res_range_max = self._hyperparameters["res_range_max"]
 
@@ -637,17 +628,6 @@ class TrappedResonance(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
-        # # We try to normalize things to order(1) by dividing things by some - not used by gammaC
-        # # characteristic scale for a given quantity.
-        # # See ``desc.objectives.compute_scaling_factors`` for examples.
-        # if self._normalize:
-            # scales = compute_scaling_factors(eq)
-        #     # since the objective has units of T^4/m^2, the normalization here is
-        #     # based on a characteristic field strength and minor radius.
-        #     self._normalization = (
-        #         scales["B"] ** 4 / scales["a"] ** 2
-        #     )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -679,6 +659,7 @@ class TrappedResonance(_Objective):
             params,
             constants["transforms_1dr"],
             constants["profiles"],
+            
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
         grid = eq._get_rtz_grid(

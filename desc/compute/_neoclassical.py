@@ -11,8 +11,6 @@ from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..utils import safediv
 from .data_index import register_compute_fun
 
-from desc.objectives.utils import softmin, softmax
-
 from ..integrals.quad_utils import chebgauss2
 from ..integrals._bounce_utils import get_pitch_inv_quad
 from quadax import simpson
@@ -481,17 +479,19 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
 def _s_drift_integrand(data, B, pitch):
     return safediv(
-        data["cvdrift0"] * (2 - pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        2 * data["cvdrift0"] * (2 - pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 def _theta_drift_integrand(data, B, pitch):
     return safediv(
-        data["gbdrift_theta"] * pitch + 2 * (1 - pitch * B) * data["cvdrift_theta"], jnp.sqrt(jnp.abs(1 - pitch * B))
+        2 * (data["gbdrift (periodic)"] * pitch * B + 2 * (1 - pitch * B) * data["cvdrift (periodic)"]), jnp.sqrt(jnp.abs(1 - pitch * B))
+        # 2 * (data["gbdrift_theta"] * pitch + 2 * (1 - pitch * B) * data["cvdrift_theta"]), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 def _phi_drift_integrand(data, B, pitch):
     return safediv(
-        data["gbdrift_phi"] * pitch + 2 * (1 - pitch * B) * data["cvdrift_phi"], jnp.sqrt(jnp.abs(1 - pitch * B))
+        2 * (data["gbdrift (periodic)"] * pitch * B + 2 * (1 - pitch * B) * data["cvdrift (periodic)"]), jnp.sqrt(jnp.abs(1 - pitch * B))
+        # 2 * (data["gbdrift_phi"] * pitch + 2 * (1 - pitch * B) * data["cvdrift_phi"]), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 _bounce1D_doc = {
@@ -517,8 +517,9 @@ _bounce1D_doc = {
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length",
-          "gbdrift_theta", "gbdrift_phi", "cvdrift_theta", "cvdrift_phi"]
+    data=["iota", "min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length",
+          "gbdrift_theta", "gbdrift_phi", "cvdrift_theta", "cvdrift_phi",
+          "gbdrift (periodic)", "cvdrift (periodic)"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     public=False,
@@ -530,10 +531,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Import kwargs
     num_pitch = kwargs.get("num_pitch",None)
     num_well = kwargs.get("num_well", None)
-    grid_og = transforms["grid"] # rtz grid
     grid = transforms["grid"].source_grid # use initial raz-specified grid
     M = kwargs.get("M",1) # default is QA, M=1
-    N = kwargs.get("N",0) # default is QA, N=0
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
     pitch_invs = kwargs.get("pitch_invs",None)
@@ -551,10 +550,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     surf_batch_size = kwargs.get("surf_batch_size", 1)
 
     # Flags
-    bt_filter_flag = kwargs.get("bt_filter_flag",False)
-    rt_filter_flag = kwargs.get("rt_filter_flag",True)
-    STAB_SACRIFICE = kwargs.get("STAB_SACRIFICE",True)
-    LOSS_FRAC_WEIGHT = kwargs.get("LOSS_FRAC_WEIGHT",True)
     DEBUG = kwargs.get("DEBUG",False)
 
     # Setup energies
@@ -564,20 +559,22 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     KE = KE_frac * 5.6076*10**(-13) # J, 3.5 MeV if KE_frac=1
     v2 = 2*KE/m_alpha # m/s
 
+    iotas = grid.compress(data['iota'])
+
     # Start with evaluation of bounce integrals (rho,alpha,Bcrit,well)
     # Select drift integrands based on M:
-    #   M == 0: use eta = nfp * phi (toroidal) components
-    #   M != 0: use eta = theta (poloidal) components
+    #   M != 0: use eta = nfp * phi (toroidal) components
+    #   M  = 0: use eta = theta (poloidal) components
     # The combined integrand computes: λ*gbdrift_η + 2(1−λB)*cvdrift_η
     # The "psi" (radial) drift is evaluated separately via cvdrift0.
     if M == 0:
-        _eta_integrand_integrand = _phi_drift_integrand
-        _gb_key = "gbdrift_phi"
-        _cv_key = "cvdrift_phi"
-    else:
         _eta_integrand_integrand = _theta_drift_integrand
         _gb_key = "gbdrift_theta"
         _cv_key = "cvdrift_theta"
+    else:
+        _eta_integrand_integrand = _phi_drift_integrand
+        _gb_key = "gbdrift_phi"
+        _cv_key = "cvdrift_phi"
 
     def drifts(data):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
@@ -586,7 +583,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             [_v_tau, _eta_integrand_integrand, _s_drift_integrand],
             data["pitch_inv"],
             data,
-            [_gb_key, _cv_key, "cvdrift0"],
+            [_gb_key, _cv_key, "cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)"],
             num_well=num_well,
         )
         # eta drift: bounce-averaged v_d · ∇η (η = θ or φ)
@@ -596,12 +593,14 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
         return _eta_drift, _s_drift, points, v_tau, data
 
-    eta_drift_out, s_drift_out, points, vtau_out, data = ( # *_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in at some other time
+    eta_drift_out, s_drift_out, points, vtau_out, _data = ( # *_drift_out := (rho,alpha,Bcrit,wells). Energy will be added in at some other time
         _compute(
             drifts,
             {_gb_key: data[_gb_key],
              _cv_key: data[_cv_key],
-             "cvdrift0": data["cvdrift0"]},
+             "cvdrift0": data["cvdrift0"],
+             "gbdrift (periodic)": data["gbdrift (periodic)"],
+             "cvdrift (periodic)": data["cvdrift (periodic)"]},
             data,
             grid,
             num_pitch,
@@ -613,15 +612,25 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     # Bounce-averaged drifts
     eta_drift = eta_drift_out * KE / (Z * e)
-    if M == 0:
+    if M != 0:
         eta_drift *= nfp # eta = nfp * zeta
-    s_drift = s_drift_out * KE / (Z * e)
-    tau_bounce = 2 * vtau_out / jnp.sqrt(v2)
-    omega_bounce = 2 * jnp.pi / tau_bounce
-    # Normalized frequency 
-    Omega = eta_drift / omega_bounce 
+        
+    ado_shape = eta_drift.shape
+    iotas_omega = jnp.broadcast_to(iotas[...,None,None,None],(iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]))
+    def tb_QS(nfp,N,iotas_omega):
+        return safediv(nfp , ((N*nfp)-iotas_omega))
+    def fb_QS(nfp,N,iotas_omega):
+        return jnp.ones(iotas_omega.shape)
+    QS_factor = jax.lax.cond(M==0,tb_QS,fb_QS,nfp,1,iotas_omega)
+    eta_drift *= QS_factor
 
-    pitch_invs = data['pitch_inv']
+    s_drift = s_drift_out * KE / (Z * e)
+    tau_bounce = vtau_out / jnp.sqrt(v2)
+    omega_bounce = 2 * jnp.pi / tau_bounce
+    # Normalized frequency
+    Omega = eta_drift / omega_bounce
+
+    pitch_invs = _data['pitch_inv']
     
     # Setup mean and standard deviation functions
     def jnpmean_nz(x,axis=0,fill=0): # if all values in x along axis = 0, this outputs zero. This is okay for f_b, well=0 points where no bounce occurs will be taken care of by psi_drift_out
@@ -699,7 +708,10 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             # 'f_tr2_out':f_tr2_out,
             # 'res_arr': res_arr,
             'Omega': Omega,
-            'pitch_inv': data['pitch_inv'],
+            'omega_bounce': omega_bounce,
+            'pitch_inv': _data['pitch_inv'],
+            'Omega_avg': Omega_avg,
+            'eta_drift': eta_drift,
             # 'p_res': data['Bcrit_res'],
             # 'Deltarho_4': Deltarho_4,
             # 'Omega_prime': omega_prime,

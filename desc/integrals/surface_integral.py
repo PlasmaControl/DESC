@@ -6,7 +6,7 @@ https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html.
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGridFlux, LinearGridFlux
-from desc.utils import errorif, warnif
+from desc.utils import errorif, safediv, warnif
 
 # TODO (#1389): Make the surface integral stuff objects with a callable method instead
 #       of returning functions. Would make simpler, allow users to actually see the
@@ -145,7 +145,8 @@ def line_integrals(
     axis = {"x0": 0, "x1": 1, "x2": 2}
     column_id = axis[fix_label]
     mask = grid.nodes[:, column_id] == fix_surface[1]
-    q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
+    mask_qT = mask * jnp.atleast_1d(q).T
+    q_prime = safediv(mask_qT, grid.spacing[:, column_id], fill=mask_qT).T
     (surface_label,) = axis.keys() - {line_label, fix_label}
     return surface_integrals(grid, q_prime, surface_label, expand_out, tol)
 
@@ -226,7 +227,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label
     )
-    spacing = jnp.prod(spacing, axis=1)
+    spacing = jnp.prod(jnp.where(spacing == 0, 1, spacing), axis=1)  # nonzero product
 
     if has_idx:
         # The ith row of masks is True only at the indices which correspond to the

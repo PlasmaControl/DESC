@@ -25,7 +25,7 @@ from desc.grid import (
 )
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif, reflection_matrix, rotation_matrix
+from desc.utils import errorif, reflection_matrix, rotation_matrix, warnif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -129,11 +129,11 @@ class Curve(IOAble, Optimizable, ABC):
             grid = LinearGridCurve(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
             grid = LinearGridCurve(N=grid)
-        errorif(
+        warnif(
             not isinstance(grid, AbstractGridCurve),
-            TypeError,
-            "Must pass in an AbstractGridCurve object for argument grid, "
-            + f"but got type {type(grid)}",
+            DeprecationWarning,
+            msg=f"Type {type(grid)} for argument grid is deprecated, "
+            + "an AbstractGridCurve will be required in the future.",
         )
 
         if params is None:
@@ -530,22 +530,24 @@ class Surface(IOAble, Optimizable, ABC):
                 grid = LinearGridToroidalSurface(
                     M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
-            if not isinstance(grid, AbstractGridToroidalSurface):
-                raise TypeError(
-                    "Must pass in an AbstractGridToroidalSurface object for argument "
-                    + f"grid, but got type {type(grid)}.",
-                )
+            warnif(
+                not isinstance(grid, AbstractGridToroidalSurface),
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
+            )
         elif hasattr(self, "zeta"):  # ZernikeRZToroidalSection
             if grid is None:
                 grid = QuadratureGridFlux(
                     L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1
                 )
                 grid._nodes[:, 2] = self.zeta
-            if not isinstance(grid, AbstractGridFlux):
-                raise TypeError(
-                    "Must pass in an AbstractGridFlux object for argument grid, "
-                    + f"but got type {type(grid)}.",
-                )
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                TypeError,
+                msg="Must pass in an AbstractGridFlux object for argument grid, "
+                + f"but got type {type(grid)}.",
+            )
         else:
             raise NotImplementedError(f"Unknown surface of type {type(self)}.")
 

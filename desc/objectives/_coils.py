@@ -2760,11 +2760,11 @@ class SurfaceCurrentRegularization(_Objective):
             )
         else:
             source_grid = self._source_grid
-        errorif(
+        warnif(
             not isinstance(source_grid, AbstractGridToroidalSurface),
-            ValueError,
-            msg="Grid must be of type AbstractGridToroidalSurface, "
-            + f"but got type {type(source_grid)}.",
+            DeprecationWarning,
+            msg=f"Type {type(source_grid)} for argument source_grid is deprecated, "
+            + "an AbstractGridToroidalSurface will be required in the future.",
         )
 
         # source_grid.num_nodes for the regularization cost

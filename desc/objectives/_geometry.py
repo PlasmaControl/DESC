@@ -117,11 +117,11 @@ class AspectRatio(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
+            warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                ValueError,
-                msg="Grid must be of type AbstractGridToroidalSurface, "
-                + f"but got type {type(grid)}.",
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
             )
 
         self._dim_f = 1
@@ -268,11 +268,11 @@ class Elongation(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
+            warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                ValueError,
-                msg="Grid must be of type AbstractGridToroidalSurface, "
-                + f"but got type {type(grid)}.",
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
             )
 
         self._dim_f = grid.num_zeta
@@ -416,11 +416,11 @@ class Volume(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
+            warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                ValueError,
-                msg="Grid must be of type AbstractGridToroidalSurface, "
-                + f"but got type {type(grid)}.",
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
             )
 
         self._dim_f = 1
@@ -641,11 +641,11 @@ class PlasmaVesselDistance(_Objective):
             plasma_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
-        errorif(
+        warnif(
             not isinstance(surface_grid, AbstractGridToroidalSurface),
-            ValueError,
-            msg="Grid must be of type AbstractGridToroidalSurface, "
-            + f"but got type {type(surface_grid)}.",
+            DeprecationWarning,
+            msg=f"Type {type(surface_grid)} for argument surface_grid is deprecated, "
+            + "an AbstractGridToroidalSurface will be required in the future.",
         )
         errorif(
             not isinstance(plasma_grid, AbstractGridFlux),

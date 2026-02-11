@@ -2754,6 +2754,59 @@ def plot_comparison(
 
     return fig, ax
 
+import pyvista as pv
+def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
+    if not hasattr(dipoles, "__len__"):
+        dipoles = [dipoles]
+    if plotter is None:
+        plotter = pv.Plotter(window_size=1000)
+        plotter.set_background("white")
+    for i, dipole in enumerate(dipoles):
+        x = float(dipole.x)
+        y = float(dipole.y)
+        z = float(dipole.z)
+        M = float(dipole.M)
+        m = np.array(dipole.m_xyz)
+        sphere = pv.Sphere(radius=0.005, center=(x, y, z), theta_resolution=15, phi_resolution=12)
+        plotter.add_mesh(
+            sphere,
+            #show_edges=show_edges,
+            label=dipole.name or f"Dipole[{i}]"
+        )
+        
+        # start = np.array([x, y, z])
+        # direction = m / 20
+        
+        # line_points = np.array([start, start + direction])
+        # line = pv.Line(line_points[0], line_points[1])
+        # plotter.add_mesh(
+        #     line,
+        #     line_width=2,
+        #     label=f"Arrow[{i}]"
+        # )
+        
+        # cone_start = start + direction
+        # cone_direction = m / np.linalg.norm(m)
+        # arrow = pv.Arrow(
+        #     start=cone_start,
+        #     direction=cone_direction,
+        #     scale=0.01,
+        #     tip_length=0.5,
+        #     tip_radius=0.2,
+        #     shaft_radius=0.05
+        # )
+        # plotter.add_mesh(
+        #     arrow
+        # )
+    
+    plotter.add_axes(
+        xlabel='X (m)',
+        ylabel='Y (m)',
+        zlabel='Z (m)',
+        color='black'
+    )
+    return plotter
+
 
 def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.

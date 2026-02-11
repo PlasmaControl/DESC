@@ -376,17 +376,48 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
+        self._x += jnp.asarray(displacement)[0]
+        self._y += jnp.asarray(displacement)[1]
+        self._z += jnp.asarray(displacement)[2]
         self.shift = self.shift + jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
         R = rotation_matrix(axis=axis, angle=angle)
+        
+        pos = jnp.array([self._x, self._y, self._z])
+        new_pos = R @ pos
+        self._x = new_pos[0]
+        self._y = new_pos[1]
+        self._z = new_pos[2]
+        
+        m_vec = self.m_xyz
+        new_m = R @ m_vec
+        
+        m_magnitude = jnp.linalg.norm(new_m)
+        self._theta = jnp.arccos(new_m[2] / m_magnitude)
+        self._phi = jnp.arctan2(new_m[1], new_m[0])
+        
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 
     def flip(self, normal=[0, 0, 1]):
         """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
         F = reflection_matrix(normal)
+        
+        pos = jnp.array([self._x, self._y, self._z])
+        new_pos = F @ pos
+        self._x = new_pos[0]
+        self._y = new_pos[1]
+        self._z = new_pos[2]
+        
+        m_vec = self.m_xyz
+        new_m = F @ m_vec
+        
+        m_magnitude = jnp.linalg.norm(new_m)
+        self._theta = jnp.arccos(new_m[2] / m_magnitude)
+        self._phi = jnp.arctan2(new_m[1], new_m[0])
+        
         self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ F.T
 
@@ -858,6 +889,6 @@ def export_dipoles(dipole_set, f):
     print("x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)", file=outfile)
     
     for i in range(len(d)):
-        print(f"{d[i].x}, {d[i].y}, {d[i].z}, {d[i].rho}, {d[i].phi}, {d[i].theta}\n", file=outfile)
+        print(f"{d[i].x}, {d[i].y}, {d[i].z}, {d[i].rho}, {d[i].phi}, {d[i].theta}", file=outfile)
 
     outfile.close()

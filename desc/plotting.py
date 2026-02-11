@@ -1982,17 +1982,15 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     }
     r_grid = _get_grid(eq, **grid_kwargs)
     rnr, rnt, rnz = r_grid.num_x0, r_grid.num_x1, r_grid.num_x2
-    r_grid = CustomGridFlux(
-        map_coordinates(
-            eq,
-            r_grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=r_grid.nodes,
-        ),
-        sort=False,
+    coords = map_coordinates(
+        eq,
+        r_grid.nodes,
+        ["rho", "theta", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        guess=r_grid.nodes,
     )
+    r_grid = CustomGridFlux(coords, sort=False)
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
         "NFP": 1,
@@ -2004,20 +2002,18 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(eq, **grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
-        v_grid = CustomGridFlux(
-            map_coordinates(
-                eq,
-                t_grid.nodes,
-                # TODO (#568): once generalized toroidal angle is used, change
-                # inbasis to ["rho", "theta_PEST", "phi"],
-                inbasis=["rho", "theta_PEST", "zeta"],
-                outbasis=["rho", "theta", "zeta"],
-                period=(np.inf, 2 * np.pi, 2 * np.pi),
-                guess=t_grid.nodes,
-                maxiter=30,
-            ),
-            sort=False,
+        coords = map_coordinates(
+            eq,
+            t_grid.nodes,
+            # TODO (#568): once generalized toroidal angle is used, change
+            # inbasis to ["rho", "theta_PEST", "phi"],
+            inbasis=["rho", "theta_PEST", "zeta"],
+            outbasis=["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=t_grid.nodes,
+            maxiter=30,
         )
+        v_grid = CustomGridFlux(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
@@ -2370,17 +2366,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid = _get_grid(eq, **grid_kwargs)
     nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
     if isinstance(eq, Equilibrium):  # TODO: handle case of FourierRZToroidalSurface
-        grid = CustomGridFlux(
-            map_coordinates(
-                eq,
-                grid.nodes,
-                ["rho", "theta", "phi"],
-                ["rho", "theta", "zeta"],
-                period=(np.inf, 2 * np.pi, 2 * np.pi),
-                guess=grid.nodes,
-            ),
-            sort=False,
+        coords = map_coordinates(
+            eq,
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         )
+        grid = CustomGridFlux(coords, sort=False)
 
     if colors is None:
         colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
@@ -2554,17 +2548,16 @@ def plot_boundaries(
         grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(eqs[i], **grid_kwargs)
         nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
-        grid = CustomGridFlux(
-            map_coordinates(
+        if isinstance(eqs[i], Equilibrium):  # TODO: FourierRZToroidalSurface
+            coords = map_coordinates(
                 eqs[i],
                 grid.nodes,
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
                 guess=grid.nodes,
-            ),
-            sort=False,
-        )
+            )
+            grid = CustomGridFlux(coords, sort=False)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             coords = eqs[i].compute(["R", "Z"], grid=grid)

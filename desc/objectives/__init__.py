@@ -2,6 +2,7 @@
 
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
+    Bxdl,
     CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,

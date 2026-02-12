@@ -15,6 +15,7 @@ from desc.compute.utils import (
     get_transforms,
 )
 from desc.grid import (
+    AbstractGrid,
     AbstractGridCurve,
     AbstractGridFlux,
     AbstractGridToroidalSurface,
@@ -129,6 +130,11 @@ class Curve(IOAble, Optimizable, ABC):
             grid = LinearGridCurve(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
             grid = LinearGridCurve(N=grid)
+        errorif(
+            not isinstance(grid, AbstractGrid),
+            TypeError,
+            msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
+        )
         warnif(
             not isinstance(grid, AbstractGridCurve),
             DeprecationWarning,
@@ -530,6 +536,11 @@ class Surface(IOAble, Optimizable, ABC):
                 grid = LinearGridToroidalSurface(
                     M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
+            errorif(
+                not isinstance(grid, AbstractGrid),
+                TypeError,
+                msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
+            )
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
                 DeprecationWarning,
@@ -542,6 +553,11 @@ class Surface(IOAble, Optimizable, ABC):
                     L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1
                 )
                 grid._nodes[:, 2] = self.zeta
+            errorif(
+                not isinstance(grid, AbstractGrid),
+                TypeError,
+                msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
+            )
             errorif(
                 not isinstance(grid, AbstractGridFlux),
                 TypeError,

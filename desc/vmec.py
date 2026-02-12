@@ -391,19 +391,24 @@ class VMECIO:
 
         input_extension = file.createVariable("input_extension", "S1", ("dim_00100",))
         input_extension[:] = stringtochar(
-            np.array([" " * 100], "S" + str(file.dimensions["dim_00100"].size))
+            np.array([" " * 100], "S" + str(file.dimensions["dim_00100"].size)),
+            encoding="ascii",
         )  # VMEC input filename: input.[input_extension]
 
         # TODO(#1378): instead of hard-coding for fixed-boundary,
         # also allow for free-boundary?
         mgrid_mode = file.createVariable("mgrid_mode", "S1", ("dim_00001",))
         mgrid_mode[:] = stringtochar(
-            np.array([""], "S" + str(file.dimensions["dim_00001"].size))
+            np.array([""], "S" + str(file.dimensions["dim_00001"].size)),
+            encoding="ascii",
         )
 
         mgrid_file = file.createVariable("mgrid_file", "S1", ("dim_00200",))
         mgrid_file[:] = stringtochar(
-            np.array(["none" + " " * 196], "S" + str(file.dimensions["dim_00200"].size))
+            np.array(
+                ["none" + " " * 196], "S" + str(file.dimensions["dim_00200"].size)
+            ),
+            encoding="ascii",
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
@@ -493,7 +498,8 @@ class VMECIO:
         power_series = stringtochar(
             np.array(
                 ["power_series" + " " * 8], "S" + str(file.dimensions["dim_00020"].size)
-            )
+            ),
+            encoding="ascii",
         )
 
         pmass_type = file.createVariable("pmass_type", "S1", ("dim_00020",))

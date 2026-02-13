@@ -95,7 +95,7 @@ else:
 print("equilibrium solved")
 
 # Evaluate stability using Newcomb's procedure
-evaluate_stability(eq)
+# evaluate_stability(eq)
 
 # Evaluate stability using Rahul's method
 # resolution for low-res solve
@@ -160,7 +160,7 @@ grid = Grid(rtz_nodes)
 
 print("computing eigenmode at low res")
 tic = time.time()
-data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=True, axisym=True)
+data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=True)
 toc = time.time()
 print(f"matrix full took {toc-tic} s.")
 
@@ -315,8 +315,8 @@ data = eq.compute(
     "finite-n lambda matfree",
     grid=grid,
     diffmat=diffmat,
-    incompressible=True,
-   # gamma=100,
+    incompressible=False,
+    gamma=100,
     v_guess=v_guess,
     axisym=True
 )

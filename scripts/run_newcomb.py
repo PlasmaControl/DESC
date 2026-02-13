@@ -100,7 +100,7 @@ evaluate_stability(eq)
 # Evaluate stability using Rahul's method
 # resolution for low-res solve
 n_rho = 26
-n_theta = 32
+n_theta = 26
 n_zeta = 1#9
 
 # This will probably OOM with the matrix-full method
@@ -160,7 +160,7 @@ grid = Grid(rtz_nodes)
 
 print("computing eigenmode at low res")
 tic = time.time()
-data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100, axisym=True)
+data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=True, axisym=True)
 toc = time.time()
 print(f"matrix full took {toc-tic} s.")
 
@@ -315,8 +315,8 @@ data = eq.compute(
     "finite-n lambda matfree",
     grid=grid,
     diffmat=diffmat,
-    incompressible=False,
-    gamma=100,
+    incompressible=True,
+   # gamma=100,
     v_guess=v_guess,
     axisym=True
 )

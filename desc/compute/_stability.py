@@ -1305,6 +1305,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         A3 = A2[jnp.ix_(keep, keep)] + A2u[jnp.ix_(keep, keep)]
         A3 = (A3 + _cT(A3)) / 2
 
+    print("Has NaN:", np.any(np.isnan(A3)))
+    print("Has Inf:", np.any(np.isinf(A3)))
+    print("Condition number:", np.linalg.cond(A3))
     w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
 
     data["finite-n lambda"] = w

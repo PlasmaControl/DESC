@@ -1308,7 +1308,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     print("Has NaN:", np.any(np.isnan(A3)))
     print("Has Inf:", np.any(np.isinf(A3)))
     print("Condition number:", np.linalg.cond(A3))
-    w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    #w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    w, v = jnp.linalg.eigh(A3)
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v

@@ -11,6 +11,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_leaves,
     tree_map,
     tree_unflatten,
     use_jax,
@@ -93,6 +94,31 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_target_coil = """
+    target : float, list, optional
+        Target values for the coil objective.
+        If a float, target is applied to all coils.
+        If a list, must have the same structure as coil.
+"""
+doc_weight_coil = """
+    weight : float, list, optional
+        Weight values for the coil objective.
+        If a float, weight is applied to all coils.
+        If a list, must have the same structure as coil.
+        Set weights to zero to exclude coils from the objective.
+"""
+doc_bounds_coil = """
+    bounds : tuple of {float, list}, optional
+        Lower and upper bounds on the objective. Overrides ``target``.
+        Bounds given as floats are applied to all coils.
+        Bounds given as lists must have the same structure as coil.
+"""
+doc_loss_function_coil = """
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individual coil.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -139,8 +165,8 @@ def collect_docs(
     loss_detail : str, optional
         Additional information about the ``loss`` function.
     coil : bool, optional
-        Whether the objective is a coil objective. If ``True``, adds extra docs
-        to ``target`` and ``loss_function``.
+        Whether the objective is a coil objective. If ``True``, updates docs
+        of ``target``, ``weight``, ``bounds``, and ``loss_function``.
 
     Returns
     -------
@@ -149,43 +175,48 @@ def collect_docs(
 
     """
     doc_params = ""
-    for key in docs.keys():
+
+    # Copy to allow for objective-specific updates to docs
+    docs_obj = docs.copy()
+    if coil:
+        docs_obj["target"] = doc_target_coil
+        docs_obj["bounds"] = doc_bounds_coil
+        docs_obj["weight"] = doc_weight_coil
+        docs_obj["loss_function"] = doc_loss_function_coil
+
+    for key in docs_obj.keys():
         if overwrite is not None and key in overwrite.keys():
             doc_params += overwrite[key].rstrip()
         else:
             if key == "target":
                 target = ""
-                if coil:
-                    target += (
-                        "If array, it has to be flattened according to the "
-                        + "number of inputs."
-                    )
                 if target_default != "":
-                    target = target + " Defaults to " + target_default
-                doc_params += docs[key].rstrip() + target
+                    target += " Defaults to " + target_default
+                doc_params += docs_obj[key].rstrip() + target
             elif key == "bounds" and bounds_default != "":
                 doc_params = (
-                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                    doc_params
+                    + docs_obj[key].rstrip()
+                    + " Defaults to "
+                    + bounds_default
                 )
             elif key == "loss_function":
                 loss = ""
-                if coil:
-                    loss = " Operates over all coils, not each individual coil."
                 if loss_detail is not None:
                     loss += loss_detail
-                doc_params += docs[key].rstrip() + loss
+                doc_params += docs_obj[key].rstrip() + loss
             elif key == "normalize":
                 norm = ""
                 if normalize_detail is not None:
                     norm += normalize_detail
-                doc_params += docs[key].rstrip() + norm
+                doc_params += docs_obj[key].rstrip() + norm
             elif key == "normalize_target":
                 norm_target = ""
                 if normalize_target_detail is not None:
                     norm_target = normalize_target_detail
-                doc_params += docs[key].rstrip() + norm_target
+                doc_params += docs_obj[key].rstrip() + norm_target
             else:
-                doc_params += docs[key].rstrip()
+                doc_params += docs_obj[key].rstrip()
 
     return doc_params
 
@@ -1122,7 +1153,7 @@ class _Objective(IOAble, ABC):
     ):
         if self._scalar:
             assert self._coordinates == ""
-        assert np.all(np.asarray(weight) > 0)
+        assert np.all(np.asarray(tree_leaves(weight)) >= 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)

@@ -14,12 +14,14 @@ New Features
         - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
     - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
 - Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
-- Adds utility functions ``desc.external.export_surface_to_paraview``, ``desc.external.export_volume_to_paraview`` and ``desc.external.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- Adds utility functions ``desc.external.paraview.export_surface_to_paraview``, ``desc.external.paraview.export_volume_to_paraview`` and ``desc.external.paraview.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
 - The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
 - Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
 alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
+- Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 
 Bug Fixes
 
@@ -46,6 +48,10 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+- Adds support for optimization targeting individual coils in a coilset.
+  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+  - Able to set weights to zero, excluding certain coils from the objective.
+
 
 
 Bug Fixes

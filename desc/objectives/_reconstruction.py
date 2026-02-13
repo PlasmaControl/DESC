@@ -3,26 +3,39 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, dot, errorif
+from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 
 
-class PointBMeasurement(_Objective):
-    """Target B at a point in real space, outside the plasma.
+class MeasurementError(_Objective):
+    """Objective for signals from a set of diagnostics.
 
-    This objective will calculate the magnetic field at a point,
-    intended for use to compare to experimental measurements for reconstruction.
+    This objective will calculate the magnetic field at the points needed for
+    the set of diagnostics, then pass that field to each sub-objective
+    for it to compute the diagnostic signal. This objective will then
+    return a concatenated array of each of the diagnostic signals.
 
-    The equilibrium and possibly a MagneticField are allowed to vary, but the
-    measurement location in real space is held fixed.
+    This class exists to maximize the possible vectorization when computing
+    the field from the external coils and the plasma current at the necessary
+    evaluation points.
 
-    The measurement point should be at a point outside the plasma, otherwise
-    the plasma contribution will be incorrectly calculated.
+    The class may also accept a symmetric, pos-def matrix for its weight,
+    which will be assumed to be the inverse covariance matrix of the
+    measurement error noise. If so, then a generalized least squares
+    loss function will be used, (error.T @ W @ error) rather than the
+    usual assumption of uncorrelated errors, (W_ii * error.T @ error)
+
+    NOTE: any grids that control discretization at the diagnostic-level, such
+    as the discretization of a flux loop for calculating the flux loop signal,
+    should be assigned to that diagnostic, and will not be passed to this objective.
+    This grid is determined when initializing the diagnostic object, or can be
+    changed by accessing that diagnostic's attributes after initialization.
+
 
     Parameters
     ----------
@@ -31,19 +44,9 @@ class PointBMeasurement(_Objective):
         be calculated, if not vacuum.
     field : MagneticField
         External field produced by coils or other sources outside the plasma.
-    measurement_coords : (n,3) ndarray
-        Array of n points at which the magnetic field B is measured.
-    target : {float, ndarray}
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f which is the
-        number of measurement points if ``direction`` is passed in, or
-        3 times the number of measurement points if ``direction`` is not passed in.
-        If ``direction`` is not passed in, target is assumed to be the
-        flattened array of the field vector at the measurement points i.e.
-        ``B_array.flatten()``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+    diagnostics: DiagnosticSet
+        DiagnosticSet containing the diagnostics to compute synthetic signals,
+        for example DiagnosticSet(PointBMeasurements, RogowskiCoilFourierXYZ).
     field_grid : Grid, optional
         Grid containing the nodes to evaluate field source.
         Defaults to the default for the
@@ -52,112 +55,101 @@ class PointBMeasurement(_Objective):
         LinearGrid to use for the (non-singular) integral over the virtual casing
         principle current to calculate the flux loop contribution from the
         plasma currents. Must have endpoint=False and sym=False and be linearly
-        spaced in theta and zeta, with nodes only at rho=1.0
-    basis : {"rpz","xyz"}
-        the basis used for ``measurement_coords``, ``directions`` and ``target``,
-        assumed to be "rpz" by default. if "xyz", will convert the input arrays
-        into "rpz".
+        spaced in theta and zeta, with nodes only at rho=1.0. Defaults to
+        LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP if eq.N > 0 else 64)
     field_fixed : bool, optional
         whether or not to fix the external field's DOFs during optimization.
         False by default. Set to True if the field is not changing during the
         optimization.
     vacuum : bool, optional
-        whether the Equilibrium is vacuum, in which case plasma contribution to B won't
-        be calculated.
-    directions : array (n,3), optional
-        the directions of the measured B field for each of the n sensors, i.e. if a
-        sensor is measuring the poloidal field and is located at (R,phi,Z) = (1,0,0),
-        its ``direction`` might be [0,0,+/- 1]. If not passed, will default to instead
-        comparing the entire magnetic field vector at the points passed in.
+        whether the Equilibrium is vacuum, in which case the plasma contribution to B
+        won't be calculated.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split plasma current surface integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs()
 
     _coordinates = "rtz"
-    _units = "(T)"
-    _print_value_fmt = "Point B Measurement Error: "
+    _units = "(~)"
+    # TODO: units will be determined by sub objectives, I guess need to
+    # define a custom print for this that goes
+    # thru each sub objective and calls _compute or something
+    _print_value_fmt = "Diagnostic Error: "
     _print_error = True
     _static_attrs = _Objective._static_attrs + [
-        "_use_directions",
         "_sheet_current",
         "_vacuum",
         "_eq_vc_data_keys",
         "_field_fixed",
+        "_diag_fixed",
         "_sheet_data_keys",
         "_compute_A_or_B_from_CurrentPotentialField",
-        "_B_plasma_chunk_size",
+        "_diagnostics",
     ]
 
     def __init__(
         self,
         eq,
         field,
-        measurement_coords,
-        target,
+        diagnostics,
         *,
         field_grid=None,
         vc_source_grid=None,
         field_fixed=False,
+        diag_fixed=True,
         vacuum=False,
-        directions=None,
-        basis="rpz",
         bounds=None,
+        target=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        name="Magnetic-Point-Measurement-Error",
+        name="Diagnostic-Error",
         jac_chunk_size=None,
-        B_plasma_chunk_size=None,
     ):
+        from desc.diagnostics import DiagnosticSet  # local to avoid circular import
+
+        # TODO: how best to handle the target and bounds? easiest is to
+        # allow diagnostics to accept target and bounds and gather them up
+        # here, but sort of makes them into objectives if we do that...
+        # maybe some sort of utility for a DiagnosticSet which would accept
+        # a list or dict corresponding to its submembers and return the
+        # target in the correct order for the objective? or use
+        # pytree stuff for this, but that is still not so easy. Probably
+        # pytree is best bet though
         self._field = field
         self._field_grid = field_grid
         self._vc_source_grid = vc_source_grid
-        self._B_plasma_chunk_size = B_plasma_chunk_size
-        measurement_coords = np.atleast_2d(measurement_coords)
-        self._use_directions = False
-        if directions is not None:
-            self._use_directions = True
-            directions = np.atleast_2d(directions)
-            assert (
-                directions.shape == measurement_coords.shape
-            ), "Must pass in same number of direction vectors as measurements"
-            # make the direction vectors unit norm
-            directions = directions / jnp.linalg.norm(directions, axis=1)[:, None]
-        errorif(
-            basis not in ["xyz", "rpz"],
-            ValueError,
-            f"basis must be either rpz or xyz, instead got {basis}",
-        )
+        if not isinstance(diagnostics, DiagnosticSet):
+            diagnostics = DiagnosticSet(diagnostics)
+        assert isinstance(diagnostics, DiagnosticSet)
 
-        if basis == "rpz":
-            pass
-        elif basis == "xyz":
-            if self._use_directions:
-                # convert directions to rpz
-                directions = xyz2rpz_vec(
-                    directions, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
-                )
-                # no need to change target as is already a scalar
-            else:
-                # convert target B field vectors to rpz
-                target = target.reshape(measurement_coords.shape)
-                target = xyz2rpz_vec(
-                    target, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
-                )
-                target = target.flatten()
-
-            measurement_coords = xyz2rpz(measurement_coords)
-        self._measurement_coords = measurement_coords
-        self._directions = directions
+        self._diagnostics = diagnostics
         self._vacuum = vacuum
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         things = [eq]
         self._field_fixed = field_fixed
         if not field_fixed:
             things.append(field)
+        # TODO: probably want target bounds etc to
+        # be pytree logic like in Coils stuff... annoying
+        # but necessary
+        errorif(
+            diag_fixed is False,
+            NotImplementedError,
+            "Currently diag_fixed must be True, optimizing"
+            " diagnostics not yet supported",
+        )
+        self._diag_fixed = diag_fixed
         super().__init__(
             things=things,
             target=target,
@@ -190,15 +182,21 @@ class PointBMeasurement(_Objective):
             _compute_A_or_B_from_CurrentPotentialField
         )
         eq = self.things[0]
+        # must "build" our diagnostic set to make sure
+        # it gets populated with the necessary data
+        self._diagnostics.build(verbose=0)
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
+            self._normalization = self._diagnostics.compute_normalization(scales)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
+
         timer.start("Precomputing transforms")
+        for diag in self._diagnostics:
+            diag.build(verbose=0)
         self._eq_vc_data_keys = ["K_vc", "R", "phi", "Z"]
 
         if self._vc_source_grid is None:
@@ -219,30 +217,20 @@ class PointBMeasurement(_Objective):
             self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
 
-        # dim_f is number of B components we  have,
-        # which is coords.size, if no directions are given,
-        # else it is equal to how many points we are evaluating the
-        # B measurement at (coords.shape[0])
-        self._dim_f = (
-            self._measurement_coords.size
-            if not self._use_directions
-            else self._measurement_coords.shape[0]
-        )
+        # TODO: change when diag_fixed=False
+        self._all_eval_x_rpz = self._diagnostics._all_eval_x_rpz
+
+        # dim_f is number of signals we have across all diags
+        self._dim_f = self._diagnostics._dim_f
 
         # pre-calc field contrib to B if field are fixed
+        # TODO: can only do if diags are fixed too, must change when diag_fixed=False
         if self._field_fixed:
             self._B_from_field = self._field.compute_magnetic_field(
-                self._measurement_coords,
+                self._all_eval_x_rpz,
                 basis="rpz",
                 source_grid=self._field_grid,
             )
-            # dot with directions if directions provided
-            self._B_from_field = (
-                self._B_from_field
-                if not self._use_directions
-                else dot(self._B_from_field, self._directions)
-            )
-
         self._constants = {
             "quad_weights": 1.0,
         }
@@ -259,17 +247,20 @@ class PointBMeasurement(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params=None, field_params=None, constants=None):
-        """Compute point B measurements in "rpz" basis.
+    def compute(self, eq_params, params_2=None, params_3=None, constants=None):
+        """Compute B at each diagnostic, then compute each diagnostic signal.
 
         Parameters
         ----------
         equil_params : dict
             Dictionary of eq degrees of freedom,
             eg Equilibrium.params_dict
-        field_params : dict
+        params_2 : dict
             Dictionary of field degrees of freedom,
             eg FourierCurrentPotentialField.params_dict or CoilSet.params_dict
+        params_3 : dict
+            Dictionary of diagnostic degrees of freedom,
+            eg PointBMeasurements.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -277,15 +268,18 @@ class PointBMeasurement(_Objective):
         Returns
         -------
         f : array
-            B from plasma and external field at given measurement coordinates,
-            These are always returned in rpz basis, and if ``directions`` is None, this
-            is equal to ``B.flatten()`` where ``B`` is an ``(n,3)`` array corresponding
-            to the magnetic field at the given measurement coordinates.
+            concatenated array of each diagnostic's signal.
 
         """
         if constants is None:
             constants = self.constants
+        if self._diag_fixed:
+            diag_params = self._diagnostics.params_dict
+            field_params = params_2
+        if self._field_fixed:
+            field_params = self._field.params_dict
 
+        # compute needed preliminary plasma surface data
         plasma_surf_data = compute_fun(
             self.things[0],
             self._eq_vc_data_keys,
@@ -314,37 +308,35 @@ class PointBMeasurement(_Objective):
             plasma_surf_data["K_vc"] += sheet_source_data["K"]
         plasma_surf_data["K"] = plasma_surf_data["K_vc"]
 
-        ## calc B at measurement points
+        ## calc B at points required by diagnostics
         # field contribution
-        if not self._field_fixed:
+        if self._field_fixed:
+            Bcoil = self._B_from_field
+        else:
             Bcoil = self._field.compute_magnetic_field(
-                self._measurement_coords,
+                self._all_eval_x_rpz,
                 basis="rpz",
                 source_grid=self._field_grid,
                 params=field_params,
             )
-        else:
-            Bcoil = jnp.zeros_like(self._measurement_coords)
-
-        # get plasma contribution
+        #  plasma contribution
         if not self._vacuum:
             Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                 self._field,  # this is unused, just pass a dummy variable in
-                self._measurement_coords,
+                self._all_eval_x_rpz,
                 source_grid=self._vc_source_grid,
                 compute_A_or_B="B",
                 data=plasma_surf_data,
-                chunk_size=self._B_plasma_chunk_size,
             )
         else:
-            Bplasma = jnp.zeros_like(self._measurement_coords)
+            Bplasma = jnp.zeros_like(self._all_eval_x_rpz)
         B = Bplasma + Bcoil
-        if self._use_directions:
-            B = dot(B, self._directions)
 
-        if self._field_fixed:
-            # add fixed field contribution at end, after we've already
-            # dotted Bplasma, as it is already dotted with the directions,
-            # if passed in.
-            B += self._B_from_field
-        return B.flatten()
+        # compute diagnostic signals using the _compute method of the DiagnosticSet,
+        # accepts the total B at the diagnostic eval pts as input as well as any
+        # auxiliary data needed, which may depend on the eq or field params.
+        diag_datas = self._diagnostics._compute_data(
+            eq_params, field_params, diag_params, constants
+        )
+        signals = self._diagnostics._compute(B, data=diag_datas)
+        return signals

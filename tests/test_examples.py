@@ -11,7 +11,7 @@ from qic import Qic
 from qsc import Qsc
 from scipy.constants import mu_0
 
-from desc.backend import jnp, tree_leaves
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -22,6 +22,7 @@ from desc.coils import (
     _Coil,
 )
 from desc.continuation import solve_continuation_automatic
+from desc.diagnostics import DiagnosticSet, PointBMeasurements2
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
@@ -62,11 +63,11 @@ from desc.objectives import (
     GenericObjective,
     LinearObjectiveFromUser,
     MeanCurvature,
+    MeasurementError,
     ObjectiveFunction,
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
-    PointBMeasurement,
     PrincipalCurvature,
     QuadraticFlux,
     QuasisymmetryBoozer,
@@ -2307,6 +2308,54 @@ def test_coil_arclength_optimization():
     assert np.var(np.linalg.norm(xs1, axis=1)) < np.var(np.linalg.norm(xs2, axis=1))
 
 
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_coil_individual_targets_optimization(DummyMixedCoilSet):
+    """Test coil arclength optimization where length targets vary between coils."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    target = [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0]
+    weight = [1, [0, 1, 1], 0, 0]
+    mask = tree_leaves(weight)
+    coil_list = [1, 3, 1, 1]
+    obj = CoilLength(coilset, target=target, weight=weight)
+    obj_fun = ObjectiveFunction(obj)
+    obj_fun.build()
+    num_coils = obj._num_coils
+    grad = obj_fun.grad(obj_fun.x())
+
+    # Collects the gradient of the objective with respect to the coils marked "False"
+    dim_x = [a.dim_x for a in obj_fun.things[0].coils]
+    dim_x = tree_map(lambda a, b: [int(a / b)] * b, dim_x, coil_list)
+    dim_x, _ = tree_flatten(dim_x)
+    cum_dim_x = [0] + list(np.cumsum(dim_x))
+    unoptimized_grad = [
+        _
+        for i in range(num_coils)
+        for _ in grad[cum_dim_x[i] : cum_dim_x[i + 1]]
+        if not mask[i]
+    ]
+
+    optimizer = Optimizer("lsq-exact")
+
+    (optimized_coilset,), _ = optimizer.optimize(
+        coilset,
+        objective=obj_fun,
+        maxiter=5,
+        verbose=3,
+        ftol=1e-4,
+        copy=False,
+    )
+    length_fin = obj.compute(None)
+
+    # Differences between lengths of *optimized* coils and their targets
+    length_error = np.array(
+        [np.abs(length_fin[i] - obj._target[i]) for i in range(len(obj._target))]
+    )
+
+    np.testing.assert_allclose(length_error, 0.0, atol=1e-4)
+    np.testing.assert_allclose(unoptimized_grad, 0.0, atol=1e-4)
+
+
 @pytest.mark.regression
 def test_ballooning_stability_opt():
     """Perform ballooning stability optimization with DESC."""
@@ -2724,42 +2773,46 @@ def test_continuation_L_res():
 @pytest.mark.unit
 @pytest.mark.optimize
 @pytest.mark.slow
-def test_PointBMeasurement_fixed_bdry():
-    """Tests PointBMeasurement reconstruction with fixed bdry."""
+def test_PointBMeasurements2_fixed_bdry():
+    """Tests PointBMeasurements2 reconstruction with fixed bdry."""
     eq = get("precise_QA")
     meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
 
     # solve with finite pressure, use that as target B
     p0 = 2e4
-    eq.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
-    eq.solve(verbose=3)
+    eq_target = eq.copy()
+    eq_target.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
+    eq_target.solve(verbose=3)
 
     meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
     dummy_coil = ToroidalMagneticField(0, 0)
-    obj = PointBMeasurement(
-        eq,
-        dummy_coil,
+    diag = PointBMeasurements2(
         measurement_coords=meas_loc_rpz,
-        target=0,
         basis="rpz",
-        field_fixed=True,
     )
+    meas_loc_rpz2 = [
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.3],
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.15],
+    ]
+    diag2 = PointBMeasurements2(
+        measurement_coords=meas_loc_rpz2,
+        basis="rpz",
+    )
+
+    diagnostics = DiagnosticSet([diag, diag2])
+    obj = MeasurementError(eq_target, dummy_coil, diagnostics, field_fixed=True)
     obj.build()
-    target_fin_beta = obj.compute(*obj.xs(eq))
+    target_fin_beta = obj.compute(*obj.xs(eq_target))
+
     # scale eq pressure back down to a lower value
-    eq.pressure = ScaledProfile(0.5, eq.pressure)
-    eq.solve()
+    eq.pressure = ScaledProfile(0.0, eq_target.pressure)
 
     # optimize for matching the Bplasma external measurement,
     # only allowing pressure scale to vary
+
     obj = ObjectiveFunction(
-        PointBMeasurement(
-            eq,
-            dummy_coil,
-            measurement_coords=meas_loc_rpz,
-            target=target_fin_beta,
-            basis="rpz",
-            field_fixed=True,
+        MeasurementError(
+            eq, dummy_coil, diagnostics, field_fixed=True, target=target_fin_beta
         )
     )
 

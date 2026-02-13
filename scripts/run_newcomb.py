@@ -157,7 +157,7 @@ print("coordinates mapped")
 
 print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
-
+"""
 print("computing eigenmode at low res")
 tic = time.time()
 data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=True)
@@ -190,7 +190,7 @@ xi_sup_zeta = np.concatenate((xi_sup_zeta0, xi_sup_zeta0[:, :, 0:1]), axis=2)
 xi_sup_zeta = np.concatenate((xi_sup_zeta, xi_sup_zeta[:, 0:1, :]), axis=1)
 
 psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
-
+"""
 #rtz_nodes
 #plt.plot(rho, xi_sup_rho[:, :, 0] * psi_r[:, :, 0], "-or")
 ##plt.plot(rho, xi_sup_rho[:, :, 0] , '-or');
@@ -199,6 +199,8 @@ psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
 ##plt.plot(theta, xi_sup_rho[:, :, 0].T, '-og');
 #plt.show()
 # SAVE low-res grids & eigenfunction components (to upscale later)
+
+"""
 rho_low = rho
 theta_low = np.concatenate((theta, np.array([2*np.pi])))
 zeta_low = np.concatenate((zeta, np.array([2*np.pi/eq.NFP])))
@@ -207,7 +209,7 @@ xi_rho_low = np.asarray(xi_sup_rho)       # (n_rho, n_theta, n_zeta)
 xi_theta_low = np.asarray(xi_sup_theta)   # (n_rho, n_theta, n_zeta)
 xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 
-
+"""
 #######################################################
 ###----Interpolate and upscale the eigenfunction----###
 #######################################################
@@ -268,7 +270,7 @@ rtz_nodes = map_coordinates(
 # These nodes are in DESC coordinates
 grid = Grid(rtz_nodes)
 
-
+"""
 # -------------------------
 # UPSCALE: 3D interpolation on (rho,theta,zeta),
 # periodic extension in theta/zeta, NO FFT.
@@ -337,4 +339,5 @@ print(data["finite-n lambda matfree"].min())
 np.save(save_path + f"xi_rho_{save_tag}.npy", xi_sup_rho_final)
 np.save(save_path + f"xi_theta_{save_tag}.npy", xi_sup_theta_final)
 np.save(save_path + f"xi_zeta_{save_tag}.npy", xi_sup_zeta_final)
-np.save(save_path + f"lambda_{save_tag}.npy", data["finite-n lambda matfree"])
+np.save(save_path + f"lambda_{save_tag}.npy", data["finite-n lambda matfree"])"""
+np.save(save_name + f"rtz_nodes_{save_tag}.npy", rtz_nodes)

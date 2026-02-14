@@ -444,7 +444,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         current potential.
     M_Phi, N_Phi: int or None
         Maximum poloidal and toroidal mode numbers for the single valued part of the
-        current potential.
+        current potential. Default values for current potentials used in stage-two
+        optimization (like for use in `solve_regularized_surface_current`) are
+        M_Phi=N_Phi=10 on the low-end, up to 20-30 range on the higher resolution end.
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
@@ -1250,17 +1252,23 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
         LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
-        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
+        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP), though if the
+        equilibrium boundary is very close to the winding surface, higher
+        resolution may be necessary.
     eval_grid : Grid, optional
         Grid upon which to evaluate the normal field on the plasma surface, and
         at which the normal field is minimized.
         Defaults to
-        `LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`
+        `LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)` , though if the
+        equilibrium boundary is very close to the winding surface, higher
+        resolution may be necessary.
     vc_source_grid : LinearGrid
         LinearGrid to use for the singular integral for the virtual casing
         principle to calculate the component of the normal field from the
         plasma currents. Must have endpoint=False and sym=False and be linearly
-        spaced in theta and zeta, with nodes only at rho=1.0
+        spaced in theta and zeta, with nodes only at rho=1.0.
+        Defaults to ``LinearGrid( rho=np.array([1.0]), M=eq.M_grid,  N=eq.N_grid,
+            NFP=eq.NFP if eq.N > 0 else 64, sym=False)``
     external_field: _MagneticField,
         DESC `_MagneticField` object giving the magnetic field
         provided by any coils/fields external to the winding surface.

@@ -89,25 +89,48 @@ class Equilibrium(IOAble, Optimizable):
     NFP : int (optional)
         number of field periods Default ``surface.NFP`` or 1
     L : int (optional)
-        Radial resolution. Default 2*M for ``spectral_indexing=='fringe'``, else M
+        Radial resolution. For vacuum equilibria, L~M is usually sufficient. For high
+        beta, L>M is usually required, especially for equilibria with large Shafranov
+        shift. Default L=M for ``spectral_indexing=='ansi'``,  L=2*M for
+        ``spectral_indexing=='fringe'``. Compute time scales roughly ~L^3,
+        while memory usage scales ~L^2.
     M : int (optional)
-        Poloidal resolution. Default surface.M or 1
+        Poloidal resolution. Should be at least as high as ``surface.M`` to correctly
+        capture the boundary geometry. For most equilibria, low resolution is M~6,
+        moderate M~8, high M~12. Very high accuracy may require M~16-20. Default
+        M=surface.M or M=1 if the default surface is used. Compute time scales
+        roughly ~M^3, while memory usage scales ~M^2.
     N : int (optional)
-        Toroidal resolution. Default surface.N or 0
+        Toroidal resolution. Should be at least as high as ``surface.N`` to correctly
+        capture the boundary geometry. For axisymmetric equilibria (tokamaks) this can
+        be 0. Simple classical stellarators (heliotron, torsatron) can have N~1-3,
+        while most optimized stellarators require at least N~6-8. Very high accuracy
+        or capturing discrete coil ripple can require N~16-20. Default N=surface.N or
+        N=0 if the default surface is used. Compute time scales roughly ~N^3, while
+        memory usage scales ~N^2.
     L_grid : int (optional)
-        resolution of real space nodes in radial direction
+        Resolution of real space nodes in radial direction. Should be at least as high
+        as L. Default is 2*L which is usually sufficient. At high L, this could be
+        reduced to 1.5*L.
     M_grid : int (optional)
-        resolution of real space nodes in poloidal direction
+        Resolution of real space nodes in poloidal direction. Should be at least as high
+        as M. Default is 2*M which is usually sufficient. At high M, this could be
+        reduced to 1.5*M.
     N_grid : int (optional)
-        resolution of real space nodes in toroidal direction
+        Resolution of real space nodes in toroidal direction. Should be at least as high
+        as N. Default is 2*N which is usually sufficient. At high N, this could be
+        reduced to 1.5*N.
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
-        Rotational transform profile or array of mode numbers and spectral coefficients
+        Rotational transform profile or array of mode numbers and spectral coefficients.
+        Either iota or current may be specified but not both. Default is a current
+        profile.
     current : Profile or ndarray shape(k,2) (optional)
         Toroidal current profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero toroidal current
+        Default is a PowerSeriesProfile with zero toroidal current.
+        Either iota or current may be specified but not both.
     electron_temperature : Profile or ndarray shape(k,2) (optional)
         Electron temperature (eV) profile or array of mode numbers and spectral
         coefficients. Must be supplied with corresponding density.
@@ -121,22 +144,25 @@ class Equilibrium(IOAble, Optimizable):
         Default is to assume electrons and ions have the same temperature.
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
-        coefficients. Default is 1
+        coefficients. Default is 1.
     anisotropy : Profile or ndarray
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
+        Default is an axisymmetric FourierRZToroidalSurface with circular cross section,
+        major radius 10 and minor radius 1.
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
         of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
-    spectral_indexing : str (optional)
-        Type of Zernike indexing scheme to use. Default ``'ansi'``
+    spectral_indexing : {"ansi", "fringe"} (optional)
+        Type of Zernike indexing scheme to use. Default ``'ansi'`` which is more
+        efficient for vacuum equilibria and most stellarators. ``'fringe'`` may be
+        more efficient for high beta equilibria with large Shafranov shift.
     check_orientation : bool
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
@@ -579,18 +605,37 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        L : int
-            Maximum radial Zernike mode number.
-        M : int
-            Maximum poloidal Fourier mode number.
-        N : int
-            Maximum toroidal Fourier mode number.
-        L_grid : int
-            Radial real space grid resolution.
-        M_grid : int
-            Poloidal real space grid resolution.
-        N_grid : int
-            Toroidal real space grid resolution.
+        L : int (optional)
+            Radial resolution. For vacuum equilibria, L~M is usually sufficient. For
+            high beta, L>M is usually required, especially for equilibria with large
+            Shafranov shift. Compute time scales roughly ~L^3, while memory usage
+            scales ~L^2. Default ``None`` which leaves L unchanged.
+        M : int (optional)
+            Poloidal resolution. Should be at least as high as ``surface.M`` to
+            correctly capture the boundary geometry. For most equilibria, low
+            resolution is M~6, moderate M~8, high M~12. Very high accuracy may require
+            M~16-20. Compute time scales roughly ~M^3, while memory usage scales ~M^2.
+            Default ``None`` which leaves M unchanged.
+        N : int (optional)
+            Toroidal resolution. Should be at least as high as ``surface.N`` to
+            correctly capture the boundary geometry. For axisymmetric equilibria
+            (tokamaks) this can be 0. Simple classical stellarators (heliotron,
+            torsatron) can have N~1-3, while most optimized stellarators require at
+            least N~6-8. Very high accuracy or capturing discrete coil ripple can
+            require N~16-20. Compute time scales roughly ~N^3, while memory usage
+            scales ~N^2. Default ``None`` which leaves N unchanged.
+        L_grid : int (optional)
+            Resolution of real space nodes in radial direction. Recommend L_grid=2*L
+            though at high L, this could be reduced to 1.5*L. Default ``None`` which
+            leaves L_grid unchanged.
+        M_grid : int (optional)
+            Resolution of real space nodes in poloidal direction. Recommend M_grid=2*M
+            though at high M, this could be reduced to 1.5*M. Default ``None`` which
+            leaves M_grid unchanged.
+        N_grid : int (optional)
+            Resolution of real space nodes in toroidal direction. Recommend N_grid=2*N
+            though at high N, this could be reduced to 1.5*N. Default ``None`` which
+            leaves N_grid unchanged.
         NFP : int
             Number of field periods.
         sym : bool

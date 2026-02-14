@@ -6,7 +6,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "/" # Location of package manifests
     schedule:
-      interval: "weekly"
+      interval: "daily"
     labels: ["dependencies", "skip_changelog", "run_benchmarks"]
     groups:
       # group similar dependencies together into fewer PRs

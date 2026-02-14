@@ -818,14 +818,16 @@ def test_NAE_QSC_solve_near_axis_asym():
 @pytest.mark.solve
 @pytest.mark.slow
 def test_NAE_QIC_solve():
-    """Test O(rho) NAE QIC constraints solve."""
+    """Test O(rho^2) NAE QIC constraints solve."""
+    # specifically, the NAE solution is symmetric to O(rho) but
+    # asymmetric at O(rho^2), so this tests that edge case
     # get Qic example
-    qic = Qic.from_paper("QI NFP2 r2", nphi=199, order="r1")
+    qic = Qic.from_paper("QI NFP2 r2", nphi=199, order="r2")
     qic.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 9
-    eq = Equilibrium.from_near_axis(qic, r=r, L=7, M=7, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qic, r=r, L=7, M=8, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n

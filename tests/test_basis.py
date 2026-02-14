@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
+    DoubleChebyshevFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -138,12 +139,26 @@ class TestBasis:
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
+        # Chebyshev values
         correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
         values = chebyshev(r[:, np.newaxis], l, dr=0)
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+        # Chebyshev derivatives
+        correct_derivs = np.array([np.zeros_like(r), np.full_like(r, 2), 16 * r - 8]).T
+        derivs = chebyshev(r[:, np.newaxis], l, dr=1)
+        np.testing.assert_allclose(derivs, correct_derivs, atol=1e-8)
+
+        # Second-order Chebyshev derivatives
+        correct_derivs_2 = np.array(
+            [np.zeros_like(r), np.zeros_like(r), np.full_like(r, 16)]
+        ).T
+        derivs_2 = chebyshev(r[:, np.newaxis], l, dr=2)
+        np.testing.assert_allclose(derivs_2, correct_derivs_2, atol=1e-8)
+
+        # Third-order Chebyshev derivatives
         with pytest.raises(NotImplementedError):
-            chebyshev(r[:, np.newaxis], l, dr=1)
+            chebyshev(r[:, np.newaxis], l, dr=3)
 
     @pytest.mark.unit
     def test_zernike_radial(self):  # noqa: C901
@@ -297,6 +312,10 @@ class TestBasis:
         cdf.change_resolution(L=3, M=2, N=1)
         assert cdf.num_modes == 60
 
+        dcf = DoubleChebyshevFourierBasis(L=2, M=0, N=2)
+        dcf.change_resolution(L=3, M=2, N=1)
+        assert dcf.num_modes == 40
+
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)
         assert fz.num_modes == 30
@@ -400,6 +419,15 @@ class TestBasis:
         with pytest.raises(ValueError):
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
+        with pytest.raises(ValueError):
+            _ = DoubleChebyshevFourierBasis(L=3.0, M=1, N=1)
+        with pytest.raises(ValueError):
+            _ = DoubleChebyshevFourierBasis(L=3, M=1.0, N=1)
+        with pytest.raises(ValueError):
+            _ = DoubleChebyshevFourierBasis(L=3, M=1, N=1.0)
+        with pytest.raises(ValueError):
+            _ = DoubleChebyshevFourierBasis(L=3, M=1, N=1, NFP=1.0)
+
     @pytest.mark.unit
     def test_basis_hash(self):
         """Test that all basis classes can be hashable."""
@@ -416,6 +444,12 @@ class TestBasis:
             [
                 ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
                 ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+            ]
+        )
+        all_bases.append(
+            [
+                DoubleChebyshevFourierBasis(L=3, M=3, N=3),
+                DoubleChebyshevFourierBasis(L=3, M=3, N=3),
             ]
         )
         all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])

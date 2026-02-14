@@ -436,8 +436,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
+    num_transit = kwargs.get("num_transit", 20)
     num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)

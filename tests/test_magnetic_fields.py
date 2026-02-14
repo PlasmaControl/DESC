@@ -1549,7 +1549,7 @@ class TestMagneticFields:
         with pytest.raises(ValueError, match="Expected Fourier"):
             solve_regularized_surface_current(ToroidalMagneticField(1, 1), eq)
         with pytest.raises(AssertionError, match="Expected MagneticField"):
-            solve_regularized_surface_current(field, eq, external_field=eq)
+            solve_regularized_surface_current(field, eq, external_field=np.ones(1))
         field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
         grid = LinearGrid(M=1, N=1)
         # nested with pytest.warns, if a warning is not detected it is

@@ -5,18 +5,25 @@ import warnings
 
 import numpy as np
 import pytest
+import scipy
 from qic import Qic
+from scipy.constants import mu_0
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.coils import FourierRZCoil
 from desc.compute.utils import get_transforms
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import InputReader, load
+from desc.magnetic_fields import PlasmaField, SumMagneticField
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
+from desc.utils import dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 from .utils import area_difference, compute_coords
 
@@ -474,3 +481,181 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
             optimizer="lsq-exact",
             maxiter=0,
         )
+
+
+@pytest.mark.unit
+def test_eq_compute_magnetic_field():
+    """Test plasma current magnetic field and vector potential."""
+    # Input parameters
+    I = 1e7  # Toroidal plasma current
+    R = 2  # Major radius
+    z = 10  # Z location of evaluation point
+
+    # Create a very high aspect ratio tokamak
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=0,
+        surface=FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R,
+            aspect_ratio=2000,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=2,
+            sym=True,
+        ),
+        NFP=2,
+        current=PowerSeriesProfile([0, 0, I]),
+        pressure=PowerSeriesProfile([1.8e4, 0, -3.6e4, 0, 1.8e4]),
+        Psi=1.0,
+    )
+
+    # Biot-Savart method won't work without the equilibrium being solved
+    eq = solve_continuation_automatic(eq)[-1]
+
+    # Evaluate the magnetic field in a point on the z-axis
+    grid_xyz = np.atleast_2d([0, 0, z])
+    grid_rpz = xyz2rpz(grid_xyz)
+
+    # Analytically determine the true magnetic field
+    Bz_true = mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2)
+    B_true_xyz = np.atleast_2d([0, 0, Bz_true])
+    B_true_rpz_xy = xyz2rpz_vec(B_true_xyz, x=grid_xyz[:, 0], y=grid_xyz[:, 1])
+    B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz[:, 1])
+
+    # Compute the magnetic field using both methods
+    for method in ["biot-savart", "virtual casing"]:
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="rpz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            B_true_xyz,
+            eq.compute_magnetic_field(grid_rpz, method=method, basis="xyz"),
+            rtol=1e-4,
+            atol=1e-10,
+        )
+
+    # Test SumMagneticField correctly passes method through
+    source_grid = (QuadratureGrid(64, 64, 64, eq.NFP), None)
+    coil = FourierRZCoil(current=I, R_n=[R], Z_n=[0])
+    field = SumMagneticField(eq, coil)
+    with pytest.raises(AssertionError, match="source_grid must be on a flux surface"):
+        field.compute_magnetic_field(
+            grid_rpz,
+            method="virtual casing",
+            source_grid=source_grid,
+        )
+    B_double_rpz = field.compute_magnetic_field(
+        grid_rpz,
+        method="biot-savart",
+        source_grid=source_grid,
+    )
+    np.testing.assert_allclose(
+        2 * B_true_rpz_phi,
+        B_double_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+
+    # Test eq compute magnetic vector potential
+    # analytic eqn for "A_phi" (phi is in dl direction for loop)
+    def _A_analytic(r):
+        # elliptic integral arguments must be k^2, not k,
+        # error in original paper and apparently in Jackson EM book too.
+        theta = np.pi / 2
+        arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
+        term_1_num = I * R * scipy.constants.mu_0 / np.pi
+        term_1_den = np.sqrt(arg)
+        k_sqd = 4 * r * R * np.sin(theta) / arg
+        term_2_num = (2 - k_sqd) * scipy.special.ellipk(
+            k_sqd
+        ) - 2 * scipy.special.ellipe(k_sqd)
+        term_2_den = k_sqd
+        return term_1_num * term_2_num / term_1_den / term_2_den
+
+    N = 100
+    curve_grid = LinearGrid(zeta=N)
+    rs = np.array([0.1, 0.3, 3, 4])
+
+    for r in rs:
+        # A_phi is constant around the loop (no phi dependence)
+        A_true_phi = _A_analytic(r) * np.ones(N)
+        correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
+
+        # Flux loop to integrate A over
+        curve = FourierXYZCurve(X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0])
+
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
+        curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+        grid_rpz = curve_data_rpz["x"]
+        grid_xyz = rpz2xyz(grid_rpz)
+
+        A_xyz = eq.compute_magnetic_vector_potential(grid_xyz, basis="xyz")
+        A_rpz = eq.compute_magnetic_vector_potential(grid_rpz, basis="rpz")
+
+        flux_rpz = np.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_xyz = np.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, atol=1e-6, rtol=1e-5)
+        np.testing.assert_allclose(correct_flux, flux_rpz, atol=1e-6, rtol=1e-5)
+
+    # Test PlasmaField (note that R can never be 0 because of the cylindrical curl)
+    R_bounds = [1e-8, 3e-8]
+    Z_bounds = [z - 0.05, z + 0.05]
+    field = PlasmaField(eq, A_res=3, R_bounds=R_bounds, Z_bounds=Z_bounds)
+
+    B_xyz = field.compute_magnetic_field([2e-8, 0, z], basis="xyz")
+    B_rpz = field.compute_magnetic_field([2e-8, 0, z], basis="rpz")
+    np.testing.assert_allclose(
+        B_true_rpz_phi,
+        B_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        B_true_rpz_xy,
+        B_rpz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        B_true_xyz,
+        B_xyz,
+        rtol=1e-4,
+        atol=1e-10,
+    )
+
+    B_rpz = field.compute_magnetic_grid(R=[1e-8, 2e-8, 4], phi=0, Z=z)
+    np.testing.assert_allclose(
+        B_true_rpz_xy,
+        B_rpz[1].reshape(-1, 3),
+        rtol=1e-4,
+        atol=1e-10,
+    )
+
+    np.testing.assert_allclose(
+        np.zeros((1, 3)),  # Vector potential is 0 on the Z-axis
+        field.compute_magnetic_vector_potential([2e-8, 0, z], basis="xyz"),
+        rtol=1e-4,
+        atol=1e-7,
+    )
+    np.testing.assert_equal(R_bounds, field.R_bounds)
+    np.testing.assert_equal(Z_bounds, field.Z_bounds)

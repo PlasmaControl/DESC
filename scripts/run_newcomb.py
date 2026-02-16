@@ -32,12 +32,12 @@ from newcomb import *
 
 # Input parameters
 a = 1  # Minor radius
-aspect_ratio = 10  # Aspect ratio of the tokamak
+aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 
 # Input profiles
-fixed_iota = False
+fixed_iota = True
 if fixed_iota:
     iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
     iota_profile = PowerSeriesProfile(iota_coeffs)

@@ -37,7 +37,7 @@ R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 
 # Input profiles
-fixed_iota = True
+fixed_iota = False
 if fixed_iota:
     iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
     iota_profile = PowerSeriesProfile(iota_coeffs)
@@ -54,7 +54,7 @@ p_profile = PowerSeriesProfile(p_coeffs)
 # Save directory and filename
 save_path = "./high_aspect_ratio_tokamak/"
 profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-save_tag = f"axisym_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+save_tag = f"axisym_ar_{aspect_ratio}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 save_name = f"equilibrium_{save_tag}.h5"
 os.makedirs(save_path, exist_ok=True)
 

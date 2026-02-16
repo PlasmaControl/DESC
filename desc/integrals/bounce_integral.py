@@ -52,6 +52,7 @@ from desc.integrals._interp_utils import (
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
+    chebgauss1,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
@@ -440,10 +441,7 @@ class Bounce2D(Bounce):
             quad = (
                 kwargs["quad"]
                 if "quad" in kwargs
-                else get_quadrature(
-                    leggauss(kwargs.get("num_quad", 32)),
-                    (automorphism_sin, grad_automorphism_sin),
-                )
+                else chebgauss1(kwargs.get("num_quad", 32))
             )
             num_pitch = kwargs.get("num_pitch", 65)
             nufft_eps = kwargs.get("nufft_eps", 1e-7)

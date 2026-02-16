@@ -2765,7 +2765,6 @@ def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
         x = float(dipole.x)
         y = float(dipole.y)
         z = float(dipole.z)
-        M = float(dipole.M)
         m = np.array(dipole.m_xyz)
         sphere = pv.Sphere(radius=0.005, center=(x, y, z), theta_resolution=15, phi_resolution=12)
         plotter.add_mesh(
@@ -2774,30 +2773,30 @@ def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
             label=dipole.name or f"Dipole[{i}]"
         )
         
-        # start = np.array([x, y, z])
-        # direction = m / 20
+        start = np.array([x, y, z])
+        direction = m / 40
         
-        # line_points = np.array([start, start + direction])
-        # line = pv.Line(line_points[0], line_points[1])
-        # plotter.add_mesh(
-        #     line,
-        #     line_width=2,
-        #     label=f"Arrow[{i}]"
-        # )
+        line_points = np.array([start, start + direction])
+        line = pv.Line(line_points[0], line_points[1])
+        plotter.add_mesh(
+            line,
+            line_width=2,
+            label=f"Arrow[{i}]"
+        )
         
-        # cone_start = start + direction
-        # cone_direction = m / np.linalg.norm(m)
-        # arrow = pv.Arrow(
-        #     start=cone_start,
-        #     direction=cone_direction,
-        #     scale=0.01,
-        #     tip_length=0.5,
-        #     tip_radius=0.2,
-        #     shaft_radius=0.05
-        # )
-        # plotter.add_mesh(
-        #     arrow
-        # )
+        cone_start = start + direction
+        cone_direction = m / np.linalg.norm(m)
+        arrow = pv.Arrow(
+            start=cone_start,
+            direction=cone_direction,
+            scale=0.01,
+            tip_length=0.5,
+            tip_radius=0.2,
+            shaft_radius=0.05
+        )
+        plotter.add_mesh(
+            arrow
+        )
     
     plotter.add_axes(
         xlabel='X (m)',

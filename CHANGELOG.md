@@ -36,7 +36,7 @@ Performance Improvements
 
 Deprecations
 
-- ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer['sgd']` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer['optax-sgd']` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
+- ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer('sgd')` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer('optax-sgd')` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
 
 
 v0.16.0

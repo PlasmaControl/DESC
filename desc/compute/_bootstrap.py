@@ -103,10 +103,12 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
 
     - rho: effective minor radius.
     - ne: electron density, in meters^{-3}.
+    - ni: ion density, in meters^{-3}.
     - Te: electron temperature, in eV.
     - Ti: ion temperature, in eV.
     - Zeff: effective atomic charge.
     - ne_r: derivative of electron density with respect to rho.
+    - ni_r: derivative of ion density with respect to rho.
     - Te_r: derivative of electron temperature with respect to rho.
     - Ti_r: derivative of ion temperature with respect to rho.
 
@@ -137,14 +139,13 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     # Set profiles:
     rho = profile_data["rho"]
     ne = profile_data["ne"]
+    ni = profile_data["ni"]
     Te = profile_data["Te"]
     Ti = profile_data["Ti"]
     # Since Zeff appears in the Redl formula via sqrt(Zeff - 1), when
     # Zeff = 1 the gradient can sometimes evaluate to NaN. This
     # problem is avoided by adding a tiny number here:
     Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
-    ni = ne / Zeff
-    pe = ne * Te
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
@@ -261,7 +262,8 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     dTeds_term = (
         -G
         * elementary_charge
-        * pe
+        * ne
+        * Te
         * (L31 + L32)
         * (d_Te_d_s / Te)
         / (psi_edge * (iota - helicity_N))
@@ -329,6 +331,8 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "effective r/R0",
         "ne",
         "ne_r",
+        "ni",
+        "ni_r",
         "Te",
         "Te_r",
         "Ti",
@@ -368,6 +372,8 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         "rho": grid.compress(data["rho"]),
         "ne": grid.compress(data["ne"]),
         "ne_r": grid.compress(data["ne_r"]),
+        "ni": grid.compress(data["ni"]),
+        "ni_r": grid.compress(data["ni_r"]),
         "Te": grid.compress(data["Te"]),
         "Te_r": grid.compress(data["Te_r"]),
         "Ti": grid.compress(data["Ti"]),

@@ -292,8 +292,8 @@ class MagneticWell(_Objective):
         errorif(
             grid.axis.size,
             ValueError,
-            "MagneticWell objective grid is currently cannot contain axis, "
-            "as its on-axis AD derivative can be NaN if reverse mode is used."
+            "MagneticWell objective grid is cannot contain axis, "
+            "as its on-axis limit is always zero."
             " Instead, pass axis=False when making the grid, which will "
             " automatically place a grid point close but not at rho=0.",
         )

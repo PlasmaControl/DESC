@@ -43,6 +43,11 @@ def _compare_against_master(
                 mean = 1.0
             else:
                 mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
+                if not np.isfinite(mean):
+                    # since eq grid has nodes on axis, some quantities are infinite
+                    # so just use 1.0 as a scale for the tolerance
+                    print(f"mean(|master data|) of {name} for {p} is not finite.")
+                    mean = 1.0
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],

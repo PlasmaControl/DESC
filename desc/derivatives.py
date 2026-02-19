@@ -2,12 +2,15 @@
 
 from abc import ABC, abstractmethod
 
-import jax
 import numpy as np
 
-from desc.backend import jnp
-from desc.batching import jacfwd_chunked, jacrev_chunked
+from desc.backend import jnp, use_jax
 from desc.utils import ensure_tuple
+
+if use_jax:
+    import jax
+
+    from desc.batching import jacfwd_chunked, jacrev_chunked
 
 
 class _Derivative(ABC):

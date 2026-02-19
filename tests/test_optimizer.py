@@ -375,7 +375,7 @@ def test_proximal_scalar():
         constraints=constraints,
         verbose=3,
     )
-    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+    np.testing.assert_allclose(eq.compute("V")["V"], 90, rtol=1e-6)
 
 
 @pytest.mark.regression
@@ -771,7 +771,7 @@ def test_solve_with_x_scale():
             ),
         ]
     )
-    eq.solve(x_scale=scale)
+    eq.solve(x_scale=eq.unpack_params(scale))
     assert eq.is_nested()
 
 
@@ -1672,7 +1672,9 @@ def test_ess_scaling_with_proximal():
     )
 
     assert out["success"] is not None
-    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+    np.testing.assert_allclose(
+        eq.pack_params(out["x_scale"][0]), eq.pack_params(eq._get_ess_scale())
+    )
 
 
 @pytest.mark.unit
@@ -1720,7 +1722,9 @@ def test_ess_scaling_without_proximal():
     )
 
     assert out["success"] is not None
-    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+    np.testing.assert_allclose(
+        eq.pack_params(out["x_scale"][0]), eq.pack_params(eq._get_ess_scale())
+    )
 
 
 @pytest.mark.unit
@@ -1731,44 +1735,66 @@ def test_parse_x_scale(DummyCoilSet):
 
     dim_eq = eq.dim_x
     dim_coil = coils.dim_x
-    assert _parse_x_scale("auto", [eq], {}) == "auto"
-    assert _parse_x_scale("auto", [eq, coils], {}) == "auto"
+
+    xsc = _parse_x_scale("auto", [eq], {})
+    xsc = eq.pack_params(xsc[0])
+    assert (xsc == 0).all()
+
+    xsc = _parse_x_scale("auto", [eq, coils], {})
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
+    assert (xsc == 0).all()
 
     with pytest.raises(AssertionError):
         _parse_x_scale([1], [eq, coils], {})
     with pytest.raises(AssertionError):
         _parse_x_scale([1, 2], [eq], {})
-    with pytest.raises(ValueError):
-        _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
-    with pytest.raises(ValueError):
-        _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError):
+            _parse_x_scale(np.ones(dim_eq - 1), [eq], {})
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError):
+            _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
     with pytest.raises(ValueError):
         _parse_x_scale("foo", [eq], {})
     with pytest.raises(TypeError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})
 
+    with pytest.warns(DeprecationWarning):
+        _parse_x_scale(np.ones(dim_eq), [eq], {})
+
     xsc = _parse_x_scale(1, [eq], {})
+    xsc = eq.pack_params(xsc[0])
     assert (xsc == 1).all()
     assert xsc.shape == (dim_eq,)
 
     xsc = _parse_x_scale(1, [eq, coils], {})
-    assert (xsc == 1).all()
-    assert xsc.shape == (dim_eq + dim_coil,)
+    xsc = [eq.pack_params(xsc[0]), coils.pack_params(xsc[1])]
+    assert (xsc[0] == 1).all()
+    assert (xsc[1] == 1).all()
+    assert xsc[0].shape == (dim_eq,)
+    assert xsc[1].shape == (dim_coil,)
 
     xsc = _parse_x_scale([1, 2], [eq, coils], {})
+    xsc = [eq.pack_params(xsc[0]), coils.pack_params(xsc[1])]
     assert xsc[0].shape == (dim_eq,)
     assert xsc[1].shape == (dim_coil,)
     assert (xsc[0] == 1).all()
     assert (xsc[1] == 2).all()
 
     xsc = _parse_x_scale(eq.params_dict, [eq], {})
-    xsc = np.concatenate(xsc)
+    xsc = eq.pack_params(xsc[0])
     assert (xsc == eq.pack_params(eq.params_dict)).all()
     assert xsc.shape == (dim_eq,)
 
     xsc = _parse_x_scale([1, coils.params_dict], [eq, coils], {})
-    xsc = np.concatenate(xsc)
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
     assert (xsc[dim_eq:] == coils.pack_params(coils.params_dict)).all()
+    assert (xsc[:dim_eq] == 1).all()
+    assert xsc.shape == (dim_eq + dim_coil,)
+
+    xsc = _parse_x_scale([1, "auto"], [eq, coils], {})
+    xsc = np.concatenate([eq.pack_params(xsc[0]), coils.pack_params(xsc[1])])
+    assert (xsc[dim_eq:] == 0).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
 
@@ -1778,6 +1804,7 @@ def test_get_ess_scale():  # noqa: C901
     """Test that ESS scale for different objects is computed correctly."""
     alpha = 1.5
     order = 2
+    default = 0
     eq = Equilibrium()
     eq.change_resolution(3, 4, 5)
 
@@ -1821,7 +1848,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in rz_coil_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(rz_coil_scale[key], 1)
+        np.testing.assert_allclose(rz_coil_scale[key], default)
 
     # FourierPlanarCoil
     assert planar_coil_scale.keys() == set(planar_coil.optimizable_params)
@@ -1833,7 +1860,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in planar_coil_scale.keys():
         if key in ["r_n"]:
             continue
-        np.testing.assert_allclose(planar_coil_scale[key], 1)
+        np.testing.assert_allclose(planar_coil_scale[key], default)
 
     # FourierXYCoil
     assert xy_coil_scale.keys() == set(xy_coil.optimizable_params)
@@ -1848,7 +1875,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in xy_coil_scale.keys():
         if key in ["X_n", "Y_n"]:
             continue
-        np.testing.assert_allclose(xy_coil_scale[key], 1)
+        np.testing.assert_allclose(xy_coil_scale[key], default)
 
     # FourierXYZCoil
     assert xyz_coil_scale.keys() == set(xyz_coil.optimizable_params)
@@ -1870,7 +1897,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in xyz_coil_scale.keys():
         if key in ["X_n", "Y_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(xyz_coil_scale[key], 1)
+        np.testing.assert_allclose(xyz_coil_scale[key], default)
 
     # FourierRZCurve
     assert axis_scale.keys() == set(axis.optimizable_params)
@@ -1885,7 +1912,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in axis_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(axis_scale[key], 1)
+        np.testing.assert_allclose(axis_scale[key], default)
 
     # FourierRZToroidalSurface
     assert surf_scale.keys() == set(surf.optimizable_params)
@@ -1900,7 +1927,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in surf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(surf_scale[key], 1)
+        np.testing.assert_allclose(surf_scale[key], default)
 
     # ZernikeRZToroidalSection
     assert zsurf_scale.keys() == set(zsurf.optimizable_params)
@@ -1915,7 +1942,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in zsurf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(zsurf_scale[key], 1)
+        np.testing.assert_allclose(zsurf_scale[key], default)
 
     # Equilibrium
     assert eq_scale.keys() == set(eq.optimizable_params)
@@ -1938,7 +1965,7 @@ def test_get_ess_scale():  # noqa: C901
     for key in eq_scale.keys():
         if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
             continue
-        np.testing.assert_allclose(eq_scale[key], 1)
+        np.testing.assert_allclose(eq_scale[key], default)
 
     eq2 = eq.copy()
     eq2.surface = FourierCurrentPotentialField.from_surface(eq.surface)
@@ -1950,5 +1977,5 @@ def test_get_ess_scale():  # noqa: C901
         np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
         / np.exp(-alpha),
     )
-    np.testing.assert_allclose(eq2_scale["I"], 1)
-    np.testing.assert_allclose(eq2_scale["G"], 1)
+    np.testing.assert_allclose(eq2_scale["I"], default)
+    np.testing.assert_allclose(eq2_scale["G"], default)

@@ -1,6 +1,7 @@
 """Test integration algorithms."""
 
 from functools import partial
+from itertools import product
 
 import numpy as np
 import pytest
@@ -19,6 +20,7 @@ from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
@@ -43,6 +45,10 @@ from desc.integrals._bounce_utils import (
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
+    _best_params,
+    _best_ratio,
+    _get_polar_quadrature,
+    _vanilla_params,
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -54,16 +60,19 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_quadrature_nodes,
+    _G,
+    _grad_G,
+    _kernel_BS_plus_grad_S,
     _kernel_nr_over_r3,
-    _local_params,
-    _vanilla_params,
-    best_params,
-    best_ratio,
 )
 from desc.integrals.surface_integral import _get_grid_surface
+from desc.magnetic_fields import (
+    FreeSurfaceOuterField,
+    SourceFreeField,
+    ToroidalMagneticField,
+)
 from desc.transform import Transform
-from desc.utils import dot, errorif, safediv
+from desc.utils import dot, errorif, rpz2xyz, safediv
 
 
 class TestSurfaceIntegral:
@@ -586,26 +595,42 @@ class TestSurfaceIntegral:
 
 
 class TestSingularities:
-    """Tests for high order singular integration.
+    """Tests for high order singular integration."""
 
-    Hyperparams from Dhairya for greens ID test:
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "interpolator, settings",
+        product(
+            [FFTInterpolator, DFTInterpolator],
+            [
+                (_c_2d, *_c_2d_nyquist_freq(), 1),
+                (lambda x, y: np.cos(6 * x) ** 2 + np.sin(90 * y) + 1, 12, 3, 30),
+            ],
+        ),
+    )
+    def test_biest_interpolators(self, interpolator, settings):
+        """Test that FFT and DFT interpolation gives same result for standard grids."""
+        f, M, N, NFP = settings
+        s_grid = LinearGrid(M=M, N=N, NFP=NFP)
+        h_t = 2 * np.pi / s_grid.num_theta
+        h_z = 2 * np.pi / s_grid.num_zeta / s_grid.NFP
 
-     M  q  Nu Nv   N=Nu*Nv    error
-    13 10  15 13       195 0.246547
-    13 10  30 13       390 0.0313301
-    13 12  45 13       585 0.0022925
-    13 12  60 13       780 0.00024359
-    13 12  75 13       975 1.97686e-05
-    19 16  90 19      1710 1.2541e-05
-    19 16 105 19      1995 2.91152e-06
-    19 18 120 19      2280 7.03463e-07
-    19 18 135 19      2565 1.60672e-07
-    25 20 150 25      3750 7.59613e-09
-    31 22 210 31      6510 1.04357e-09
-    37 24 240 37      8880 1.80728e-11
-    43 28 300 43     12900 2.14129e-12
+        st = 3
+        sz = 5
+        q = 4
+        r, w, _, _ = _get_polar_quadrature(q)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
 
-    """
+        e_grid = LinearGrid(
+            theta=s_grid.num_theta // 2 + 1, zeta=s_grid.num_zeta // 2 + 1, NFP=NFP
+        )
+        interp = interpolator(e_grid, s_grid, st, sz, q)
+        theta = e_grid.nodes[:, 1]
+        zeta = e_grid.nodes[:, 2]
+        _f = f(s_grid.nodes[:, 1], s_grid.nodes[:, 2])
+        for i in range(dt.size):
+            np.testing.assert_allclose(interp(_f, i), f(theta + dt[i], zeta + dz[i]))
 
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
@@ -622,6 +647,22 @@ class TestSingularities:
 
         So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
 
+        Hyperparams from Dhairya for greens ID test:
+
+         M  q  Nu Nv   N=Nu*Nv    error
+        13 10  15 13       195 0.246547
+        13 10  30 13       390 0.0313301
+        13 12  45 13       585 0.0022925
+        13 12  60 13       780 0.00024359
+        13 12  75 13       975 1.97686e-05
+        19 16  90 19      1710 1.2541e-05
+        19 16 105 19      1995 2.91152e-06
+        19 18 120 19      2280 7.03463e-07
+        19 18 135 19      2565 1.60672e-07
+        25 20 150 25      3750 7.59613e-09
+        31 22 210 31      6510 1.04357e-09
+        37 24 240 37      8880 1.80728e-11
+        43 28 300 43     12900 2.14129e-12
         """
         eq = Equilibrium()
         Nu = [13, 13, 13, 19, 19, 25, 37]
@@ -637,7 +678,7 @@ class TestSingularities:
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
             err = singular_integral(
-                data, data, "nr_over_r3", interpolator, chunk_size=50
+                data, data, interpolator, kernel="nr_over_r3", chunk_size=50
             )
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
@@ -646,10 +687,12 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        st, sz, q = best_params(grid, best_ratio(data))
+        st, sz, q = _best_params(grid, _best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
-        err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
+        err = singular_integral(
+            data, data, interpolator, kernel="nr_over_r3", chunk_size=50
+        )
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
@@ -675,8 +718,7 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            mean, local = best_ratio(data, return_local=True)
-            st, sz, q = _local_params(grid, (mean, local.mean()))  # TODO (#1609)
+            st, sz, q = _best_params(grid, _best_ratio(data))
             atol = 0.0056
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
@@ -692,28 +734,519 @@ class TestSingularities:
         """Test vanilla params that do not account for aspect ratio."""
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
+
+class TestLaplace:
+    """Test multiply connected Laplace solvers."""
+
+    class _Z_hat_field:
+        """Field to test the Dirichlet solver."""
+
+        def __init__(self, Y=0):
+            pass
+
+        def compute_magnetic_field(self, coords, source_grid, chunk_size):
+            """Returns ∇Z."""
+            num_coords = coords.shape[0]
+            zeros = jnp.zeros(num_coords)
+            B = jnp.column_stack([zeros, zeros, jnp.ones(num_coords)])
+            return B
+
     @pytest.mark.unit
-    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
-    def test_biest_interpolators(self, interpolator):
-        """Test that FFT and DFT interpolation gives same result for standard grids."""
-        grid = LinearGrid(0, *_c_2d_nyquist_freq())
-        h_t = 2 * np.pi / grid.num_theta
-        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+    @pytest.mark.parametrize(
+        "surface, M, N, maxiter, chunk_size, just_err",
+        [(None, 16, 16, -1, 500, False), (None, 16, 16, 40, 500, False)],
+    )
+    def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
+        """Test multiply connected interior Dirichlet Laplace solver."""
+        if surface is None:
+            surface = FourierRZToroidalSurface(
+                R_lmn=[10, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
+        field = FreeSurfaceOuterField(
+            surface,
+            grid.M - 1,
+            grid.N - 1,
+            M_coil=surface.M,
+            N_coil=surface.N,
+            B_coil=TestLaplace._Z_hat_field(),
+        )
+        assert field.M != grid.M and field.N != grid.N
+        data, _ = field.compute(
+            ["Phi error", "num iter"] if just_err else "γ potential",
+            grid,
+            maxiter=maxiter,
+            full_output=True,
+            chunk_size=chunk_size,
+        )
+        if maxiter > 0:
+            print()
+            print(data["num iter"])
+            print(data["Phi error"])
+            if just_err:
+                return data["num iter"], data["Phi error"]
+        np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
+        np.testing.assert_allclose(data["Phi_coil (periodic)"], data["Z"])
+        np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
 
-        st = 3
-        sz = 5
-        q = 4
-        r, w, _, _ = _get_quadrature_nodes(q)
-        dt = st / 2 * h_t * r * np.sin(w)
-        dz = sz / 2 * h_z * r * np.cos(w)
+    @pytest.mark.skip
+    def test_convergence_run_fixed_point(
+        self,
+        surface=get("W7-X").surface,
+        M=30,
+        N=30,
+        maxiter=np.array([5, 10, 20, 30, 40]),
+        chunk_size=1000,
+        name="convergence-fp_W7-X",
+    ):
+        """Stores errors for potential in name.pkl for plotting analysis."""
+        import pickle
 
-        interp = interpolator(grid, grid, st, sz, q)
-        theta = grid.nodes[:, 1]
-        zeta = grid.nodes[:, 2]
-        f = _c_2d(theta, zeta)
-        for i in range(dt.size):
-            truth = _c_2d(theta + dt[i], zeta + dz[i])
-            np.testing.assert_allclose(interp(f, i), truth)
+        num_iter = []
+        Phi_err = []
+        print()
+        for i in maxiter:
+            n, e = self.test_interior_Dirichlet(
+                surface, M, N, i, chunk_size, just_err=True
+            )
+            num_iter.append(n)
+            Phi_err.append(e)
+            print(f"Resolution num iter={n} is done with error={e}.")
+        data = {"num iter": np.asarray(num_iter), "Phi error": np.asarray(Phi_err)}
+
+        with open(f"{name}.pkl", "wb") as file:
+            pickle.dump(data, file)
+
+    @pytest.mark.skip
+    def test_convergence_plot_fixed_point(self, name="convergence-fp_W7-X"):
+        """Imports name.pkl and saves plot in name.pdf.
+
+        The remainder of name after first underscore will be
+        appendend to plot title.
+        """
+        import pickle
+
+        with open(f"{name}.pkl", "rb") as file:
+            data = pickle.load(file)
+
+        plt.rcParams.update(
+            {
+                "axes.labelsize": 10,
+                "axes.titlesize": 12,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+                "legend.fontsize": 10,
+                "lines.linewidth": 1,
+                "lines.markersize": 4,
+                "figure.figsize": (6, 4),
+                "figure.dpi": 300,
+                "axes.grid": True,
+                "grid.linestyle": "--",
+                "grid.alpha": 0.6,
+            }
+        )
+        fig, ax = plt.subplots()
+        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=r"$\xi=2/3$")
+        ax.axhline(1e-7, color="black", label="Stop tolerance")
+        ax.set_xlabel(r"Number of fixed point iterations in inversion for $\Phi$")
+        ax.set_ylabel("Absolute error")
+        ax.set_title(
+            r"$\Phi$ error vs. fixed point iterations " + name.split("_", 1)[1]
+        )
+        ax.legend(loc="upper right", frameon=True)
+        fig.tight_layout()
+        plt.savefig(f"{name}.pdf")
+
+    @pytest.mark.unit
+    def test_interior_Neumann(
+        self,
+        surface=None,
+        M=50,
+        N=50,
+        chunk_size=1000,
+        just_err=False,
+        _midpoint_quad=False,
+        _D_quad=False,
+    ):
+        """Test Laplacian solver in interior."""
+        if surface is None:
+            surface = FourierRZToroidalSurface(
+                R_lmn=[10, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
+        data = surface.compute("n_rho", grid=grid)
+        data["B0*n"] = -data["n_rho"][:, 2]
+
+        RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
+        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
+
+        # Φ = Z so these resolutions must give exact reconstruction.
+        field = SourceFreeField(
+            surface, surface.M, surface.N, surface.NFP, "sin" if surface.sym else False
+        )
+        data, RpZ_data = field.compute(
+            ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
+            grid,
+            data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
+            problem="interior Neumann",
+            on_boundary=True,
+            chunk_size=chunk_size,
+            _midpoint_quad=_midpoint_quad,
+            _D_quad=_D_quad,
+        )
+        err = np.ptp(data["Z"] - data["Phi"])
+        if just_err:
+            return err
+        np.testing.assert_allclose(err, 0, atol=2e-5)
+        np.testing.assert_allclose(
+            dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
+            -RpZ_data["B0*n"],
+            atol=5e-6,
+        )
+
+    @pytest.mark.skip
+    def test_convergence_run(
+        self,
+        surface=get("W7-X").surface,
+        rs=np.array([12, 20, 30, 40]),
+        name="convergence_W7-X",
+        chunk_size=500,
+    ):
+        """Stores errors for potential in name.pkl for plotting analysis.
+
+        Parameters
+        ----------
+        rs : ndarray
+            Grid resolutions (rs=M=N) to compute potential.
+
+        """
+        import pickle
+
+        bools = np.array([True, False])
+        settings = np.array(np.meshgrid(bools, bools)).T.reshape(-1, 2)
+
+        data = {"resolution": rs, "Phi error": {}}
+
+        for mid_quad, D_quad in settings:
+            err = []
+            print()
+            for r in rs:
+                err.append(
+                    self.test_interior_Neumann(
+                        surface, r, r, chunk_size, True, mid_quad, D_quad
+                    )
+                )
+                print(f"Resolution {r} is done.")
+            data["Phi error"][(mid_quad, D_quad)] = np.array(err)
+
+        with open(f"{name}.pkl", "wb") as file:
+            pickle.dump(data, file)
+
+    @pytest.mark.skip
+    def test_convergence_plot(self, name="convergence_W7-X"):
+        """Imports name.pkl and saves plot in name.pdf.
+
+        The remainder of name after first underscore will be
+        appendend to plot title.
+        """
+        import pickle
+
+        with open(f"{name}.pkl", "rb") as file:
+            data = pickle.load(file)
+
+        plt.rcParams.update(
+            {
+                "axes.labelsize": 9,
+                "axes.titlesize": 12,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+                "legend.fontsize": 7,
+                "lines.linewidth": 1,
+                "lines.markersize": 4,
+                "figure.figsize": (6, 4),
+                "figure.dpi": 300,
+                "axes.grid": True,
+                "grid.linestyle": "--",
+                "grid.alpha": 0.6,
+            }
+        )
+        fig, ax = plt.subplots()
+
+        errs = data["Phi error"]
+        for key, val in errs.items():
+            ax.semilogy(
+                2 * data["resolution"] + 1,
+                val,
+                marker="o",
+                linestyle="-",
+                label=f"midpoint rule={key[0]}, has singularity={key[1]}",
+            )
+
+        ax.set_xlabel(
+            r"Resolution $n$ per field period ($n=2M+1$, $M=N$). "
+            r"Quadrature cost is $O(n^4 \log(n))$"
+        )
+        ax.set_ylabel(r"Absolute error")
+        ax.set_title(
+            r"Error in $\Phi$ vs. grid resolution for " + name.split("_", 1)[1]
+        )
+        ax.legend(loc="upper right", frameon=True)
+        fig.tight_layout()
+        plt.savefig(f"{name}.pdf")
+
+    @pytest.mark.unit
+    def test_exterior_Neumann(self, maxiter=30, chunk_size=1000):
+        """Test Laplacian solver in exterior."""
+        # Fourier spectrum of G(x) becomes very wide at large R0 (e.g. 10 is large).
+        R0 = 2
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        x0 = rpz2xyz(np.array([R0, 0, 0]))
+
+        assert surface.NFP == 1
+        grid = LinearGrid(M=30, N=30)
+        data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
+
+        field = SourceFreeField(surface, grid.M, grid.N)
+        data, RpZ_data = field.compute(
+            ["∇φ", "Phi", "x", "n_rho"],
+            grid,
+            data=data,
+            problem="exterior Neumann",
+            on_boundary=True,
+            maxiter=maxiter,
+            full_output=True,
+            chunk_size=chunk_size,
+            basis="xyz",
+        )
+        assert data is RpZ_data
+        print("num iterations:", data["num iter"])
+        print("Phi error     :", data["Phi error"])
+
+        np.testing.assert_allclose(
+            np.ptp(_G(data["x"] - x0) - data["Phi"]),
+            0,
+            atol=1e-6,
+        )
+
+        np.testing.assert_allclose(
+            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
+            0,
+            atol=1e-6,
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    def test_dommaschk_vacuum(self, chunk_size=50):
+        """Test vacuum field for Dommaschk potential."""
+        C_r = {
+            (0, -2): 0.000056,
+            (0, -1): -0.000921,
+            (0, 0): 0.997922,
+            (0, 1): -0.000921,
+            (0, 2): 0.000056,
+            (1, -2): -0.000067,
+            (1, -1): -0.034645,
+            (1, 0): 0.093260,
+            (1, 1): 0.000880,
+            (1, 2): 0.000178,
+            (2, -2): 0.000373,
+            (2, -1): 0.000575,
+            (2, 0): 0.002916,
+            (2, 1): -0.000231,
+            (2, 2): 0.000082,
+            (3, -2): 0.000462,
+            (3, -1): -0.001509,
+            (3, 0): 0.001748,
+            (3, 1): -0.000239,
+            (3, 2): 0.000052,
+        }
+        C_z = {
+            (0, -2): 0.000076,
+            (0, -1): 0.000923,
+            (0, 0): 0.000000,
+            (0, 1): -0.000923,
+            (0, 2): -0.000076,
+            (1, -2): 0.000069,
+            (1, -1): 0.035178,
+            (1, 0): 0.099830,
+            (1, 1): 0.000860,
+            (1, 2): -0.000179,
+            (2, -2): -0.000374,
+            (2, -1): 0.000257,
+            (2, 0): 0.003096,
+            (2, 1): 0.003021,
+            (2, 2): 0.000007,
+            (3, -2): -0.000518,
+            (3, -1): 0.002233,
+            (3, 0): 0.001828,
+            (3, 1): 0.000257,
+            (3, 2): 0.000035,
+        }
+        eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
+
+        grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
+        data = eq.compute(["G"], grid=grid)
+        Y_sheet_plus_coil = grid.compress(data["G"])[-1]
+        B0 = ToroidalMagneticField(Y_sheet_plus_coil, 1)
+        field = SourceFreeField(eq.surface, M=8, N=8, B0=B0)
+
+        RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
+        RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
+            data=data,
+            RpZ_data=RpZ_data,
+            RpZ_grid=RpZ_grid,
+            problem="interior Neumann",
+            on_boundary=True,
+            maxiter=0,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        np.testing.assert_allclose(dot(RpZ_data["B"], RpZ_data["n_rho"]), 0, atol=5e-4)
+
+        # test off surface evaluation
+        data = {
+            key: val
+            for key, val in data.items()
+            # dependencies of ∇φ
+            if key in _kernel_BS_plus_grad_S.keys
+        }
+        data, RpZ_data = field.compute(
+            "B",
+            grid,
+            data=data,
+            RpZ_grid=LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP),
+            on_boundary=False,
+            chunk_size=chunk_size,
+        )
+        assert np.isfinite(RpZ_data["B"]).all()
+
+    @staticmethod
+    def _merkel_surf(C_r, C_z):
+        """Convert merkel coefficients to DESC coefficients."""
+        m_b = max(
+            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
+        )
+        n_b = max(
+            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
+        )
+        R_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        Z_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        for m in range(0, m_b + 1):
+            for n in range(-n_b, n_b + 1):
+                if (m, n) in C_r:
+                    R_lmn[(m, abs(n))] += C_r[(m, n)]
+                    if n < 0:
+                        R_lmn[(-m, n)] += C_r[(m, n)]
+                    elif n > 0:
+                        R_lmn[(-m, -n)] -= C_r[(m, n)]
+                if (m, n) in C_z:
+                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
+                    if n < 0:
+                        Z_lmn[(m, n)] -= C_z[(m, n)]
+                    elif n > 0:
+                        Z_lmn[(m, -n)] += C_z[(m, n)]
+
+        grid = LinearGrid(rho=1, M=5, N=5)
+        R_bench = TestLaplace._manual_transform(
+            np.array(list(R_lmn.values())),
+            np.array([mn[0] for mn in R_lmn.keys()]),
+            np.array([mn[1] for mn in R_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        R_merk = TestLaplace._merkel_transform(
+            np.array(list(C_r.values())),
+            np.array([mn[0] for mn in C_r.keys()]),
+            np.array([mn[1] for mn in C_r.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_bench = TestLaplace._manual_transform(
+            np.array(list(Z_lmn.values())),
+            np.array([mn[0] for mn in Z_lmn.keys()]),
+            np.array([mn[1] for mn in Z_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_merk = TestLaplace._merkel_transform(
+            np.array(list(C_z.values())),
+            np.array([mn[0] for mn in C_z.keys()]),
+            np.array([mn[1] for mn in C_z.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+            fun=np.sin,
+        )
+        np.testing.assert_allclose(R_bench, R_merk)
+        np.testing.assert_allclose(Z_bench, Z_merk)
+        with pytest.warns(UserWarning, match="Left handed"):
+            surf = FourierRZToroidalSurface(
+                R_lmn=list(R_lmn.values()),
+                Z_lmn=list(Z_lmn.values()),
+                modes_R=list(R_lmn.keys()),
+                modes_Z=list(Z_lmn.keys()),
+            )
+        surf_data = surf.compute(["R", "Z"], grid=grid)
+        np.testing.assert_allclose(surf_data["R"], R_merk)
+        np.testing.assert_allclose(surf_data["Z"], Z_merk)
+        return surf
+
+    @staticmethod
+    def _manual_transform(coef, m, n, theta, zeta):
+        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
+        op_four = np.where(
+            ((m < 0) & (n < 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta)
+            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            n[:, np.newaxis] * zeta * np.nan,
+        )
+        op_three = np.where(
+            ((m < 0) & (n >= 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_four,
+        )
+        op_two = np.where(
+            ((m >= 0) & (n < 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            op_three,
+        )
+        op_one = np.where(
+            ((m >= 0) & (n >= 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_two,
+        )
+        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
+
+    @staticmethod
+    def _merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
+        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
+        return np.sum(
+            coef[:, np.newaxis]
+            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
+            axis=0,
+        )
 
 
 class TestBouncePoints:

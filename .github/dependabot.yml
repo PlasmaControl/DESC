@@ -4,12 +4,12 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
+  # This workflow should use the python version specified in
+  # .python-version file.
     directory: "/" # Location of package manifests
     schedule:
-      interval: "weekly"
+      interval: "daily"
     labels: ["dependencies", "skip_changelog", "run_benchmarks"]
-    reviewers:
-      - "PlasmaControl/desc-dev"
     groups:
       # group similar dependencies together into fewer PRs
       docs:

@@ -713,6 +713,29 @@ class TestObjectiveFunction:
         test(get("HELIOTRON"))
 
     @pytest.mark.unit
+    def test_target_sum_iota(self):
+        """Test calculation of iota profile sum."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            sum_iota = jnp.sum(
+                eq.compute("iota", grid=grid)["iota"][grid.unique_rho_idx]
+            )
+            obj = RotationalTransform(
+                target=sum_iota, weight=1, eq=eq, loss_function="sum", grid=grid
+            )
+            obj.build()
+            sum_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            sum_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            sum_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(sum_iota, sum_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(sum_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(sum_iota_scaled, sum_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
     def test_plasma_vessel_distance(self):
         """Test calculation of min distance from plasma to vessel."""
         R0 = 10.0
@@ -3158,6 +3181,7 @@ class TestComputeScalarResolution:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3644,6 +3668,7 @@ class TestObjectiveNaNGrad:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -4168,3 +4193,76 @@ def test_nae_coefficients_asym():
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_input(DummyMixedCoilSet):
+    """Tests broadcasting for inputs to _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
+
+    obj = CoilLength(coilset, bounds=bounds, weight=weight)
+    obj.build()
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, target=target)
+    obj.build()
+    np.testing.assert_allclose(obj._target, target_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, bounds=(1, 2), weight=1)
+    obj.build()
+    assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
+    assert np.size(obj._weight) == 1
+
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
+    obj.build()
+
+
+@pytest.mark.unit
+def test_coil_objective_indices(DummyMixedCoilSet):
+    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
+
+    weight = [0, [1, 0, 0], 1, 1]
+    objA = CoilLength(coilsetA, weight=weight, normalize=False)
+    objB = CoilLength(coilsetB, normalize=False)
+    objA.build()
+    objB.build()
+    compA = objA.compute_scaled_error(None)
+    compB = objB.compute_scaled_error(None)
+    np.testing.assert_allclose(compA, compB, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    obj = CoilLength(coilset)
+
+    weight = [1.0, 1.0, 0.0, 0.0]
+    weight_expanded = [1.0, 1.0, 1.0, 1.0]
+    obj.weight = weight
+    obj.build()
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0]
+
+    obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    obj.bounds = None
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)

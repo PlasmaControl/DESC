@@ -313,6 +313,7 @@ Particles
     desc.particles.ManualParticleInitializerFlux
     desc.particles.ManualParticleInitializerLab
     desc.particles.SurfaceParticleInitializer
+    desc.particles.SlowingDownGuidingCenterTrajectory
     desc.particles.VacuumGuidingCenterTrajectory
     desc.particles.trace_particles
 

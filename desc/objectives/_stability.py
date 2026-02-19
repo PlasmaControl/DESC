@@ -292,7 +292,7 @@ class MagneticWell(_Objective):
         errorif(
             grid.axis.size,
             ValueError,
-            "MagneticWell objective grid is cannot contain axis, "
+            "MagneticWell objective grid cannot contain an axis point, "
             "as its on-axis limit is always zero."
             " Instead, pass axis=False when making the grid, which will "
             " automatically place a grid point close but not at rho=0.",

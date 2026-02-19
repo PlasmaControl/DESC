@@ -61,9 +61,6 @@ from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import LinearConstraintProjection
 from desc.profiles import PowerSeriesProfile
 
-# TODO (#1348): check for all bdryR things if work when False is passed in
-# bc empty array indexed will lead to an error
-
 
 @pytest.mark.unit
 def test_LambdaGauge_sym(DummyStellarator):

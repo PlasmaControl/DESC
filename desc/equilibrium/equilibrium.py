@@ -119,9 +119,12 @@ class Equilibrium(IOAble, Optimizable):
     ion_temperature : Profile or ndarray shape(k,2) (optional)
         Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
         Default is to assume electrons and ions have the same temperature.
+    ion_density : Profile or ndarray shape(k,2) (optional)
+        Electron density (m^-3) profile or array of mode numbers and spectral
+        coefficients. If not supplied, ion density will be computed as ni = ne / Zeff.
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
-        coefficients. Default is 1
+        coefficients. Default is 1.
     anisotropy : Profile or ndarray
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
@@ -171,6 +174,7 @@ class Equilibrium(IOAble, Optimizable):
         "_electron_temperature",
         "_electron_density",
         "_ion_temperature",
+        "_ion_density",
         "_atomic_number",
         "_anisotropy",
         "_spectral_indexing",
@@ -214,6 +218,7 @@ class Equilibrium(IOAble, Optimizable):
         electron_temperature=None,
         electron_density=None,
         ion_temperature=None,
+        ion_density=None,
         atomic_number=None,
         anisotropy=None,
         surface=None,
@@ -333,6 +338,7 @@ class Equilibrium(IOAble, Optimizable):
         self._electron_temperature = None
         self._electron_density = None
         self._ion_temperature = None
+        self._ion_density = None
         self._atomic_number = None
 
         if current is None and iota is None:
@@ -368,6 +374,8 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.electron_density = parse_profile(electron_density, "electron density")
         self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        if ion_density is not None:
+            self.ion_density = parse_profile(ion_density, "ion density")
         self.atomic_number = parse_profile(atomic_number, "atomic number")
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")
@@ -383,6 +391,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_temperature",
             "electron_density",
             "ion_temperature",
+            "ion_density",
             "atomic_number",
             "anisotropy",
         ]:
@@ -468,6 +477,7 @@ class Equilibrium(IOAble, Optimizable):
             "Te_l",
             "ne_l",
             "Ti_l",
+            "ni_l",
             "Zeff_l",
             "a_lmn",
             "Ra_n",
@@ -633,6 +643,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_temperature",
             "electron_density",
             "ion_temperature",
+            "ion_density",
             "atomic_number",
             "anisotropy",
         ]:
@@ -908,6 +919,14 @@ class Equilibrium(IOAble, Optimizable):
                 UserWarning,
                 "Redl formula is undefined where kinetic profiles vanish, "
                 "but given electron density vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
+                self.ion_density is not None
+                and np.any(np.isclose(self.ion_density(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion density vanishes at at least one provided"
                 "rho grid point.",
             )
             warnif(
@@ -1849,6 +1868,33 @@ class Equilibrium(IOAble, Optimizable):
             "Attempt to set ion temperature on an equilibrium with fixed pressure",
         )
         self.ion_temperature.params = Ti_l
+
+    @property
+    def ion_density(self):
+        """Profile: Ion density (m^-3) profile."""
+        return self._ion_density
+
+    @ion_density.setter
+    def ion_density(self, new):
+        self._ion_density = parse_profile(new, "ion density")
+        self._ion_density = ensure_consistent_profile_eq_resolution(
+            self._ion_density, self, name="ion density"
+        )
+
+    @optimizable_parameter
+    @property
+    def ni_l(self):
+        """ndarray: Coefficients of ion density profile."""
+        return np.empty(0) if self.ion_density is None else self.ion_density.params
+
+    @ni_l.setter
+    def ni_l(self, ni_l):
+        errorif(
+            self.ion_density is None,
+            ValueError,
+            "Attempt to set ion density on an equilibrium with fixed pressure",
+        )
+        self.ion_density.params = ni_l
 
     @property
     def atomic_number(self):

@@ -569,9 +569,6 @@ class TestObjectiveFunction:
         grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
         with pytest.warns(ResolutionWarning, match="toroidal"):
             MagneticWell(eq=eq, grid=grid_bad_tor_res).build()
-        grid_bad_axis = LinearGrid(rho=0.0, M=eq.M_grid, N=eq.N_grid)
-        with pytest.raises(ValueError, match="on-axis"):
-            MagneticWell(eq=eq, grid=grid_bad_axis).build()
 
     @pytest.mark.unit
     def test_boundary_error_biestsc(self):

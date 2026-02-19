@@ -209,8 +209,9 @@ class MagneticWell(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, axis=False)``.
-        Note thatit should have poloidal and toroidal resolution, as flux surface
-        averages are required.
+        Note that it should have poloidal and toroidal resolution, as flux surface
+        averages are required, and on-axis magnetic well is always zero, so
+        it is not necessary to include a point on-axis.
 
     """
 
@@ -288,14 +289,6 @@ class MagneticWell(_Objective):
             ResolutionWarning,
             "MagneticWell objective grid requires toroidal "
             "resolution for surface averages",
-        )
-        errorif(
-            grid.axis.size,
-            ValueError,
-            "MagneticWell objective grid cannot contain an axis point, "
-            "as its on-axis limit is always zero."
-            " Instead, pass axis=False when making the grid, which will "
-            " automatically place a grid point close but not at rho=0.",
         )
 
         self._target, self._bounds = _parse_callable_target_bounds(

@@ -8,7 +8,7 @@ import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.input_reader import InputReader
 from desc.io import load
 from desc.transform import Transform
@@ -274,7 +274,7 @@ def test_vmec_load_profiles(TmpDir):
     assert eq_iota.current is None
     assert eq_current.iota is None
 
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         M=eq_iota.M_grid,
         N=eq_iota.N_grid,
         NFP=eq_iota.NFP,
@@ -580,7 +580,7 @@ def test_vmec_save_2(VMEC_save):
     vmec, desc = VMEC_save
 
     # straight field-line grid to compare quantities in full volume
-    grid = LinearGrid(L=15, M=6, N=0, NFP=desc.variables["nfp"][:])
+    grid = LinearGridFlux(L=15, M=6, N=0, NFP=desc.variables["nfp"][:])
     theta_vmec = VMECIO.compute_theta_coords(
         vmec.variables["lmns"][:],
         vmec.variables["xm"][:],
@@ -692,7 +692,7 @@ def test_vmec_save_2(VMEC_save):
     np.testing.assert_allclose(bsubv_vmec, bsubv_desc, rtol=1e-3)
 
     # straight field-line grid to compare quantities on boundary
-    grid = LinearGrid(M=6, N=0, NFP=desc.variables["nfp"][:], rho=np.array([1.0]))
+    grid = LinearGridFlux(M=6, N=0, NFP=desc.variables["nfp"][:], rho=np.array([1.0]))
     theta_vmec = VMECIO.compute_theta_coords(
         vmec.variables["lmns"][:],
         vmec.variables["xm"][:],
@@ -1086,7 +1086,7 @@ def test_vmec_save_asym(VMEC_save_asym):
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
-    vol_grid = LinearGrid(
+    vol_grid = LinearGridFlux(
         rho=r_full[10::10],
         M=15,
         N=15,
@@ -1094,7 +1094,7 @@ def test_vmec_save_asym(VMEC_save_asym):
         axis=False,
         sym=False,
     )
-    vol_half_grid = LinearGrid(
+    vol_half_grid = LinearGridFlux(
         rho=r_half[10::10],
         M=15,
         N=15,
@@ -1102,7 +1102,7 @@ def test_vmec_save_asym(VMEC_save_asym):
         axis=False,
         sym=False,
     )
-    bdry_grid = LinearGrid(rho=1.0, M=15, N=15, NFP=eq.NFP, axis=False, sym=False)
+    bdry_grid = LinearGridFlux(rho=1.0, M=15, N=15, NFP=eq.NFP, axis=False, sym=False)
 
     def test(
         nc_str,
@@ -1322,7 +1322,7 @@ def test_make_boozmn_output_DESC(TmpDir):
 
     for surf_index in range(surfs - 1):
         rho = np.sqrt(s_half[surf_index])
-        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=rho, M=M, N=N, NFP=eq.NFP)
         data = eq.compute(
             ["theta_B", "zeta_B", "psi_r"] + quant_names,
             grid=grid,
@@ -1332,7 +1332,7 @@ def test_make_boozmn_output_DESC(TmpDir):
         # make the grid in Boozer angles corresponding
         # to the DESC theta,zeta angles that our quantities
         # are computed on
-        grid_boozer = Grid(
+        grid_boozer = CustomGridFlux(
             np.vstack(
                 (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
             ).T,
@@ -1454,7 +1454,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
     for surf_index in range(surfs - 1):
         print("surface index", surf_index)
         rho = np.sqrt(s_half[surf_index])
-        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=rho, M=M, N=N, NFP=eq.NFP)
         data = eq.compute(
             ["theta_B", "zeta_B", "psi_r"] + quant_names,
             grid=grid,
@@ -1464,7 +1464,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
         # make the grid in Boozer angles corresponding
         # to the DESC theta,zeta angles that our quantities
         # are computed on
-        grid_boozer = Grid(
+        grid_boozer = CustomGridFlux(
             np.vstack(
                 (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
             ).T,

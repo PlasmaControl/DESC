@@ -20,7 +20,7 @@ from desc.coils import (
 )
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGridCurve, LinearGridFlux, LinearGridToroidalSurface
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     ToroidalMagneticField,
@@ -248,12 +248,13 @@ def DummyCoilSet(tmpdir_factory):
 
     # CoilSet with symmetry
     num_coils = 3  # number of unique coils per half field period
-    grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    grid_flux = LinearGridFlux(zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    grid_curve = LinearGridCurve(s=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-        data_normal = eq.compute("e^zeta", grid=grid)
+        data_center = eq.axis.compute("x", grid=grid_curve, basis="xyz")
+        data_normal = eq.compute("e^zeta", grid=grid_flux)
     centers = data_center["x"]
-    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid_curve.nodes[:, 2])
     coils = []
     for k in range(1, 2 * num_coils + 1, 2):
         coil = FourierPlanarCoil(
@@ -353,7 +354,7 @@ def regcoil_helical_coils_scan():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGridToroidalSurface(M=32, N=16, NFP=eq.NFP),
     )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
@@ -361,8 +362,8 @@ def regcoil_helical_coils_scan():
     fields, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=20, N=20, NFP=eq.NFP, sym=True),
+        source_grid=LinearGridToroidalSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
         current_helicity=(1 * eq.NFP, -1),
         vacuum=True,
@@ -381,7 +382,7 @@ def regcoil_modular_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGridToroidalSurface(M=32, N=16, NFP=eq.NFP),
     )
     M_Phi = 10
     N_Phi = 10
@@ -397,8 +398,8 @@ def regcoil_modular_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,
@@ -417,7 +418,7 @@ def regcoil_windowpane_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGridToroidalSurface(M=32, N=16, NFP=eq.NFP),
     )
     M_Phi = 10
     N_Phi = 10
@@ -435,8 +436,8 @@ def regcoil_windowpane_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,
@@ -457,7 +458,7 @@ def regcoil_PF_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGridToroidalSurface(M=32, N=16, NFP=eq.NFP),
     )
     M_Phi = 10
     N_Phi = 10
@@ -475,8 +476,8 @@ def regcoil_PF_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,

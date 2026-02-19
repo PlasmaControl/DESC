@@ -6,7 +6,7 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -21,10 +21,10 @@ class QuasisymmetryBoozer(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Must be a LinearGrid with sym=False.
-        Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
+        Must be a LinearGridFlux with sym=False.
+        Defaults to ``LinearGridFlux(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
     M_booz : int, optional
@@ -98,10 +98,15 @@ class QuasisymmetryBoozer(_Objective):
         N_booz = self.N_booz or 2 * eq.N
 
         if self._grid is None:
-            grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+            grid = LinearGridFlux(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
         warnif(
             grid.num_theta < 2 * eq.M,
@@ -217,9 +222,9 @@ class QuasisymmetryTwoTerm(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
 
@@ -282,10 +287,15 @@ class QuasisymmetryTwoTerm(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
@@ -382,9 +392,9 @@ class QuasisymmetryTripleProduct(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
 
     """
 
@@ -439,9 +449,15 @@ class QuasisymmetryTripleProduct(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
@@ -512,11 +528,11 @@ class Omnigenity(_Objective):
         Equilibrium to be optimized to satisfy the Objective.
     field : OmnigenousField
         Omnigenous magnetic field to be optimized to satisfy the Objective.
-    eq_grid : Grid, optional
+    eq_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
         Must be without stellarator symmetry.
-    field_grid : Grid, optional
+    field_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
         ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
@@ -646,13 +662,13 @@ class Omnigenity(_Objective):
         elif self._eq_grid is None and self._field_grid is None:
             rho = 1.0
         if self._eq_grid is None:
-            eq_grid = LinearGrid(
+            eq_grid = LinearGridFlux(
                 rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
             )
         else:
             eq_grid = self._eq_grid
         if self._field_grid is None:
-            field_grid = LinearGrid(
+            field_grid = LinearGridFlux(
                 rho=rho, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
             )
         else:
@@ -867,9 +883,9 @@ class Isodynamicity(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
 
     """
 
@@ -924,9 +940,15 @@ class Isodynamicity(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]

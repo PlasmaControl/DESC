@@ -5,7 +5,13 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import (
+    AbstractGridFlux,
+    AbstractGridToroidalSurface,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+    QuadratureGridFlux,
+)
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -29,10 +35,10 @@ class AspectRatio(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -90,27 +96,33 @@ class AspectRatio(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
+                grid = QuadratureGridFlux(
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGrid(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
-                    sym=False,
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
                 )
-        else:
-            grid = self._grid
+            else:
+                grid = self._grid
+            warnif(
+                not isinstance(grid, AbstractGridToroidalSurface),
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
+            )
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
@@ -174,10 +186,11 @@ class Elongation(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N)`` for
+        ``FourierRZToroidalSurface``.
 
     """
 
@@ -234,27 +247,33 @@ class Elongation(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
+                grid = QuadratureGridFlux(
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGrid(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
-                    sym=False,
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
                 )
-        else:
-            grid = self._grid
+            else:
+                grid = self._grid
+            warnif(
+                not isinstance(grid, AbstractGridToroidalSurface),
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
+            )
 
         self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
@@ -317,10 +336,10 @@ class Volume(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -376,26 +395,33 @@ class Volume(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
-            if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
+
+        if hasattr(eq, "L_grid"):  # Equilibrium
+            if self._grid is None:
+                grid = QuadratureGridFlux(
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
                 )
             else:
-                # if not an Equilibrium, is a Surface,
-                # has no radial resolution so just need
-                # the surface points
-                grid = LinearGrid(
-                    rho=1.0,
-                    M=eq.M * 2,
-                    N=eq.N * 2,
-                    NFP=eq.NFP,
+                grid = self._grid
+            errorif(
+                not isinstance(grid, AbstractGridFlux),
+                ValueError,
+                msg="Grid must be of type AbstractGridFlux, "
+                + f"but got type {type(grid)}.",
+            )
+        else:  # FourierRZToroidalSurface
+            if self._grid is None:
+                grid = LinearGridToroidalSurface(
+                    M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP, sym=False
                 )
-        else:
-            grid = self._grid
+            else:
+                grid = self._grid
+            warnif(
+                not isinstance(grid, AbstractGridToroidalSurface),
+                DeprecationWarning,
+                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                + "an AbstractGridToroidalSurface will be required in the future.",
+            )
 
         self._dim_f = 1
         self._data_keys = ["V"]
@@ -477,12 +503,12 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    surface_grid : Grid, optional
+    surface_grid : AbstractGridToroidalSurface, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    plasma_grid : Grid, optional
+        Defaults to ``LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid)``.
+    plasma_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
     use_signed_distance: bool, optional
@@ -606,17 +632,26 @@ class PlasmaVesselDistance(_Objective):
             eq = self.things[0]
             surface = self.things[1]
         if self._surface_grid is None:
-            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGridToroidalSurface(
+                M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
-            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            plasma_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
         warnif(
-            not np.allclose(surface_grid.nodes[:, 0], 1),
-            UserWarning,
-            "Surface grid includes off-surface pts, should be rho=1.",
+            not isinstance(surface_grid, AbstractGridToroidalSurface),
+            DeprecationWarning,
+            msg=f"Type {type(surface_grid)} for argument surface_grid is deprecated, "
+            + "an AbstractGridToroidalSurface will be required in the future.",
+        )
+        errorif(
+            not isinstance(plasma_grid, AbstractGridFlux),
+            ValueError,
+            msg="Grid must be of type AbstractGridFlux, "
+            + f"but got type {type(plasma_grid)}.",
         )
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -670,10 +705,7 @@ class PlasmaVesselDistance(_Objective):
             has_axis=plasma_grid.axis.size,
         )
         surface_transforms = get_transforms(
-            self._surface_data_keys,
-            obj=surface,
-            grid=surface_grid,
-            has_axis=surface_grid.axis.size,
+            self._surface_data_keys, obj=surface, grid=surface_grid
         )
 
         # compute returns points on the grid of the surface
@@ -841,10 +873,10 @@ class MeanCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -900,7 +932,7 @@ class MeanCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(  # getattr statements in case a surface is passed in
+            grid = LinearGridFlux(  # getattr statements in case a surface is passed in
                 M=getattr(eq, "M_grid", eq.M * 2),
                 N=getattr(eq, "N_grid", eq.N * 2),
                 NFP=eq.NFP,
@@ -908,6 +940,12 @@ class MeanCurvature(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
@@ -981,10 +1019,10 @@ class PrincipalCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
 
     """
 
@@ -1040,7 +1078,7 @@ class PrincipalCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(  # getattr statements in case a surface is passed in
+            grid = LinearGridFlux(  # getattr statements in case a surface is passed in
                 M=getattr(eq, "M_grid", eq.M * 2),
                 N=getattr(eq, "N_grid", eq.N * 2),
                 NFP=eq.NFP,
@@ -1048,6 +1086,12 @@ class PrincipalCurvature(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
@@ -1117,9 +1161,9 @@ class BScaleLength(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
 
     """
 
@@ -1175,9 +1219,15 @@ class BScaleLength(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
@@ -1249,7 +1299,7 @@ class GoodCoordinates(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     sigma : float
         Relative weight between the Jacobian and radial terms.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
 
     """
@@ -1308,9 +1358,15 @@ class GoodCoordinates(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = ["sqrt(g)", "g_rr", "rho"]
@@ -1386,10 +1442,10 @@ class MirrorRatio(_Objective):
     ----------
     eq : Equilibrium or OmnigenousField
         Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGridFlux(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
 
     """
 
@@ -1449,20 +1505,26 @@ class MirrorRatio(_Objective):
         from desc.magnetic_fields import OmnigenousField
 
         if self._grid is None and isinstance(eq, Equilibrium):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
             )
         elif self._grid is None and isinstance(eq, OmnigenousField):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 theta=2 * eq.M_B,
                 N=2 * eq.N_x,
                 NFP=eq.NFP,
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["mirror ratio"]

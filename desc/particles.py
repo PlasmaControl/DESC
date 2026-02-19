@@ -21,7 +21,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridToroidalSurface
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
 from desc.utils import cross, dot, errorif, safediv, setdefault
@@ -185,7 +185,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 "Integration in lab coordinates requires a MagneticField. If using an "
                 "Equilibrium, we recommend setting frame='flux' and converting the "
                 "output to lab coordinates only at the end by the helper function "
-                "Equilibrium.compute('x', grid=Grid(coords, jitable=True))."
+                "Equilibrium.compute('x', grid=CustomGridFlux(coords, jitable=True))."
             )
 
             return self._compute_lab_coordinates(
@@ -212,7 +212,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         # compute functions are not correct for very small rho
         rho = jnp.where(rho < 1e-6, 1e-6, rho)
         iota = kwargs.get("iota", None)
-        grid = Grid(
+        grid = CustomGridFlux(
             jnp.array([rho, theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
             jitable=True,
@@ -372,7 +372,7 @@ class AbstractParticleInitializer(IOAble, ABC):
 
 def _compute_modB(x, field, params, **kwargs):
     if isinstance(field, Equilibrium):
-        grid = Grid(
+        grid = CustomGridFlux(
             x,
             spacing=jnp.zeros_like(x),
             sort=False,
@@ -500,7 +500,7 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             elif isinstance(field, _MagneticField):
                 eq = kwargs.pop("eq", None)
                 if isinstance(eq, Equilibrium):
-                    grid = Grid(
+                    grid = CustomGridFlux(
                         x,
                         spacing=jnp.zeros_like(x),
                         sort=False,
@@ -675,8 +675,8 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     xi_min, xi_max : float
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
-    grid : Grid
-        Grid used to discretize curve. Default is ``LinearGrid(N=curve.N)``
+    grid : AbstractGridCurve
+        Grid used to discretize curve. Defaults to ``LinearGridCurve(N=curve.N)``.
     seed : int
         Seed for rng.
     is_curve_magnetic_axis : bool
@@ -715,7 +715,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.seed = seed
         self.is_curve_magnetic_axis = is_curve_magnetic_axis
         if self.grid is None:
-            self.grid = LinearGrid(N=self.curve.N)
+            self.grid = LinearGridCurve(N=self.curve.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -835,8 +835,9 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
     xi_min, xi_max : float
         Minimum and maximum values for randomly sampled normalized parallel velocity.
         xi = vpar/v.
-    grid : Grid
-        Grid used to discretize curve. Default is `LinearGrid(M=surface.M, N=surface.N)`
+    grid : AbstractGridToroidalSurface
+        Grid used to discretize surface. Defaults to
+        ``LinearGridToroidalSurface(M=surface.M, N=surface.N)``.
     seed : int
         Seed for rng.
     is_surface_from_eq : bool
@@ -874,7 +875,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         self.seed = seed
         self.is_surface_from_eq = is_surface_from_eq
         if self.grid is None:
-            self.grid = LinearGrid(M=self.surface.M, N=self.surface.N)
+            self.grid = LinearGridToroidalSurface(M=self.surface.M, N=self.surface.N)
 
     def init_particles(self, model, field, **kwargs):
         """Initialize particles for a given trajectory model.
@@ -1043,7 +1044,7 @@ def trace_particles(
         Additional keyword arguments to pass to the field computation,
             - iota : Profile
                 Iota profile of the Equilibrium, if not already assigned.
-            - source_grid: Grid
+            - source_grid: AbstractGrid
                 Source grid to use for field computation during Biot-Savart.
     throw : bool, optional
         Whether to throw an error if the integration fails. If False, will return NaN

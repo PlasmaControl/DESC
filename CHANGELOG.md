@@ -1,6 +1,10 @@
 Changelog
 =========
 
+Breaking Changes
+
+- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now require a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now require a compute grid of type ``AbstractGridToroidalSurface``.
+
 New Features
 
 - Adds particle tracing capabilities in ``desc.particles`` module.

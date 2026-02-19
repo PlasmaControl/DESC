@@ -21,10 +21,17 @@ from desc.batching import vmap_chunked
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
+from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import map_coordinates
-from desc.grid import Grid, LinearGrid
+from desc.geometry import Curve, FourierRZToroidalSurface
+from desc.grid import (
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.integrals import surface_averages_map
-from desc.magnetic_fields import field_line_integrate
+from desc.magnetic_fields import OmnigenousField, field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
@@ -276,35 +283,58 @@ def _update_3d_layout(
     return fig
 
 
-def _get_grid(**kwargs):
+def _get_grid(thing, **kwargs):
     """Get grid for plotting.
 
     Parameters
     ----------
+    thing : Optimizable
+        Thing that is being plotted.
     kwargs
-         Any arguments taken by LinearGrid.
+        Any arguments taken by LinearGridCurve or LinearGridFlux.
 
     Returns
     -------
-    grid : LinearGrid
-         Grid of coordinates to evaluate at.
+    grid : AbstractGrid
+        Grid of coordinates to evaluate at.
 
     """
-    grid_args = {
-        "NFP": 1,
-        "sym": False,
-        "axis": True,
-        "endpoint": True,
-    }
+    grid_args = {"NFP": 1, "sym": False, "axis": True, "endpoint": True}
     grid_args.update(kwargs)
+
     if ("L" not in grid_args) and ("rho" not in grid_args):
         grid_args["rho"] = np.array([1.0])
+
     if ("M" not in grid_args) and ("theta" not in grid_args):
         grid_args["theta"] = np.array([0.0])
-    if ("N" not in grid_args) and ("zeta" not in grid_args):
-        grid_args["zeta"] = np.array([0.0])
 
-    grid = LinearGrid(**grid_args)
+    x2_coord = "s" if isinstance(thing, Curve) else "zeta"
+    if ("N" not in grid_args) and (x2_coord not in grid_args):
+        grid_args[x2_coord] = np.array([0.0])
+
+    if isinstance(thing, Curve):
+        sig = inspect.signature(LinearGridCurve.__init__)
+        cls_args = list(sig.parameters.keys())
+        for key in list(grid_args.keys()):
+            if key not in cls_args:
+                del grid_args[key]
+        grid = LinearGridCurve(**grid_args)
+    elif isinstance(thing, FourierRZToroidalSurface):
+        sig = inspect.signature(LinearGridToroidalSurface.__init__)
+        cls_args = list(sig.parameters.keys())
+        for key in list(grid_args.keys()):
+            if key not in cls_args:
+                del grid_args[key]
+        grid = LinearGridToroidalSurface(**grid_args)
+    elif isinstance(thing, Equilibrium) or isinstance(thing, OmnigenousField):
+        sig = inspect.signature(LinearGridFlux.__init__)
+        cls_args = list(sig.parameters.keys())
+        for key in list(grid_args.keys()):
+            if key not in cls_args:
+                del grid_args[key]
+        grid = LinearGridFlux(**grid_args)
+    else:
+        raise NotImplementedError(f"Got unknown thing of type {type(thing)}.")
 
     return grid
 
@@ -314,7 +344,7 @@ def _get_plot_axes(grid):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Grid of coordinates to evaluate at.
 
     Returns
@@ -324,11 +354,11 @@ def _get_plot_axes(grid):
 
     """
     plot_axes = [0, 1, 2]
-    if grid.num_rho == 1:
+    if grid.num_x0 == 1:
         plot_axes.remove(0)
-    if grid.num_theta == 1:
+    if grid.num_x1 == 1:
         plot_axes.remove(1)
-    if grid.num_zeta == 1:
+    if grid.num_x2 == 1:
         plot_axes.remove(2)
 
     return tuple(plot_axes)
@@ -350,7 +380,7 @@ def _compute(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid
+    grid : AbstractGrid
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
@@ -398,7 +428,7 @@ def _compute(
     label = r"$" + label + "~(" + data_index[parameterization][name]["units"] + ")$"
 
     if reshape:
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        data = data.reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
 
     return data, label
 
@@ -410,24 +440,20 @@ def _compute_Bn(
     errorif(
         field is None,
         ValueError,
-        "If B*n is entered as the variable to plot, a magnetic field"
-        " must be provided.",
-    )
-    errorif(
-        not np.all(np.isclose(plot_grid.nodes[:, 0], 1)),
-        ValueError,
-        "If B*n is entered as the variable to plot, "
-        "the grid nodes must be at rho=1.",
+        "If B*n is entered as the variable to plot, a magnetic field must be provided.",
     )
 
     theta_endpoint = zeta_endpoint = False
 
-    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+    if plot_grid.fft_x1 and plot_grid.fft_x2:
         source_grid = eval_grid = plot_grid
     # often plot_grid is still linearly spaced but includes endpoints. In that case
     # make a temp grid that just leaves out the endpoint so we can FFT
     elif (
-        isinstance(plot_grid, LinearGrid)
+        (
+            isinstance(plot_grid, LinearGridFlux)
+            or isinstance(plot_grid, LinearGridToroidalSurface)
+        )
         and not plot_grid.sym
         and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
         and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
@@ -438,39 +464,48 @@ def _compute_Bn(
         if plot_grid._toroidal_endpoint:
             zeta_endpoint = True
             zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
-        vc_grid = LinearGrid(
+        vc_grid = LinearGridFlux(
             theta=theta,
             zeta=zeta,
             NFP=plot_grid.NFP,
             endpoint=False,
         )
         # override attr since we know fft is ok even with custom nodes
-        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        vc_grid._fft_x1 = vc_grid._fft_x2 = True
         source_grid = eval_grid = vc_grid
     else:
         eval_grid = plot_grid
-        source_grid = LinearGrid(
+        source_grid = LinearGridFlux(
             M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
         )
+    # compute_Bnormal requires a LinearGridToroidalSurface
+    surf_eval_grid = LinearGridToroidalSurface(
+        theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
+        NFP=eval_grid.NFP,
+        sym=eval_grid.sym,
+        endpoint=eval_grid.endpoint,
+    )
+    np.testing.assert_allclose(surf_eval_grid.nodes[:, 1:], eval_grid.nodes[:, 1:])
+    np.testing.assert_allclose(surf_eval_grid.weights, eval_grid.weights)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-
         data, _ = field.compute_Bnormal(
             eq,
-            eval_grid=eval_grid,
+            eval_grid=surf_eval_grid,
             source_grid=field_grid,
             vc_source_grid=source_grid,
             chunk_size=chunk_size,
             B_plasma_chunk_size=B_plasma_chunk_size,
         )
-    data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
+    data = data.reshape((eval_grid.num_x1, eval_grid.num_x2), order="F")
     if theta_endpoint:
         data = np.vstack((data, data[0, :]))
     if zeta_endpoint:
         data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
     data = data.reshape(
-        (plot_grid.num_theta, plot_grid.num_rho, plot_grid.num_zeta), order="F"
+        (plot_grid.num_x1, plot_grid.num_x0, plot_grid.num_x2), order="F"
     )
 
     label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
@@ -602,7 +637,7 @@ def plot_1d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -701,7 +736,7 @@ def plot_1d(  # noqa : C901
     NFP = getattr(eq, "NFP", 1)
     if grid is None:
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
     plot_axes = _get_plot_axes(grid)
 
     data, ylabel = _compute(
@@ -730,7 +765,7 @@ def plot_1d(  # noqa : C901
         errorif(
             surface_label is None or axis is None,
             NotImplementedError,
-            msg="Grid must be 1D",
+            msg="grid must be 1D",
         )
         data = grid.compress(data, surface_label=surface_label)
         nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
@@ -804,7 +839,7 @@ def plot_2d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -837,7 +872,7 @@ def plot_2d(  # noqa : C901
           values of the data.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+        * ``field_grid``: AbstractGrid, a grid to pass to the field as a  source grid
           from which to calculate Bn, by default None.
         * ``filled`` : bool, whether to fill contours or not i.e. whether to use
           `contourf` or `contour`
@@ -885,9 +920,9 @@ def plot_2d(  # noqa : C901
     parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
-        grid = _get_grid(**grid_kwargs)
+        grid = _get_grid(eq, **grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
+    errorif(len(plot_axes) != 2, msg="grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(
@@ -960,12 +995,12 @@ def plot_2d(  # noqa : C901
 
     xx = (
         grid.nodes[:, plot_axes[1]]
-        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        .reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
         .squeeze()
     )
     yy = (
         grid.nodes[:, plot_axes[0]]
-        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        .reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
         .squeeze()
     )
     if not filled:
@@ -1080,7 +1115,7 @@ def plot_3d(  # noqa : C901
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -1117,9 +1152,8 @@ def plot_3d(  # noqa : C901
           True by default.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
-        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+        * ``field_grid``: AbstractGrid, a grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
-
 
     Returns
     -------
@@ -1138,8 +1172,8 @@ def plot_3d(  # noqa : C901
     .. code-block:: python
 
         from desc.plotting import plot_3d
-        from desc.grid import LinearGrid
-        grid = LinearGrid(
+        from desc.grid import LinearGridFlux
+        grid = LinearGridFlux(
                 rho=0.5,
                 theta=np.linspace(0, 2 * np.pi, 100),
                 zeta=np.linspace(0, 2 * np.pi, 100),
@@ -1156,11 +1190,10 @@ def plot_3d(  # noqa : C901
 
     if grid is None:
         grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
-        grid = _get_grid(**grid_kwargs)
-    assert isinstance(grid, LinearGrid), "grid must be LinearGrid for 3d plotting"
+        grid = _get_grid(eq, **grid_kwargs)
     assert only1(
-        grid.num_rho == 1, grid.num_theta == 1, grid.num_zeta == 1
-    ), "Grid must be 2D"
+        grid.num_x0 == 1, grid.num_x1 == 1, grid.num_x2 == 1
+    ), "grid must be 2D"
     figsize = kwargs.pop("figsize", (10, 10))
     alpha = kwargs.pop("alpha", 1.0)
     cmap = kwargs.pop("cmap", "RdBu_r")
@@ -1199,24 +1232,25 @@ def plot_3d(  # noqa : C901
         len(kwargs) != 0,
         msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
     )
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["X", "Y", "Z"], grid=grid)
-    X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-    Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    X = coords["X"].reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
+    Y = coords["Y"].reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
+    Z = coords["Z"].reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
 
-    if grid.num_rho == 1:
-        n1, n2 = grid.num_theta, grid.num_zeta
+    if grid.num_x0 == 1:
+        n1, n2 = grid.num_x1, grid.num_x2
         if not grid.nodes[-1][2] == 2 * np.pi:
             p1, p2 = False, False
         else:
             p1, p2 = False, True
-    elif grid.num_theta == 1:
-        n1, n2 = grid.num_rho, grid.num_zeta
+    elif grid.num_x1 == 1:
+        n1, n2 = grid.num_x0, grid.num_x2
         p1, p2 = False, True
-    elif grid.num_zeta == 1:
-        n1, n2 = grid.num_theta, grid.num_rho
+    elif grid.num_x2 == 1:
+        n1, n2 = grid.num_x1, grid.num_x0
         p1, p2 = True, False
     ijk = _trimesh_idx(n1, n2, p1, p2)
 
@@ -1340,9 +1374,9 @@ def plot_fsa(  # noqa: C901
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-    grid : _Grid
-        Grid to compute name on. If provided, the parameters
-        ``rho``, ``M``, and ``N`` are ignored.
+    grid : AbstractGrid
+        Grid to compute name on. If provided, the parameters ``rho``, ``M``, and ``N``
+        are ignored.
     compute_kwargs : dict, optional
         Additional keyword arguments to pass to ``eq.compute``.
     **kwargs : dict, optional
@@ -1412,7 +1446,7 @@ def plot_fsa(  # noqa: C901
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
         # sym=False to ensure the FSA is correct
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
+        grid = LinearGridFlux(M=M, N=N, NFP=eq.NFP, sym=False, rho=rho)
     else:
         rho = grid.compress(grid.nodes[:, 0])
 
@@ -1582,7 +1616,7 @@ def plot_section(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
@@ -1675,8 +1709,8 @@ def plot_section(
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": phi,
         }
-        grid = _get_grid(**grid_kwargs)
-        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        grid = _get_grid(eq, **grid_kwargs)
+        nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
         coords = map_coordinates(
             eq,
             grid.nodes,
@@ -1685,11 +1719,11 @@ def plot_section(
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         )
-        grid = Grid(coords, sort=False)
+        grid = CustomGridFlux(coords, sort=False)
     else:
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
-        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
         coords = map_coordinates(
             eq,
             grid.nodes,
@@ -1698,7 +1732,7 @@ def plot_section(
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         )
-        grid = Grid(coords, sort=False)
+        grid = CustomGridFlux(coords, sort=False)
 
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
@@ -1946,19 +1980,17 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
-    r_grid = _get_grid(**grid_kwargs)
-    rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
-    r_grid = Grid(
-        map_coordinates(
-            eq,
-            r_grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=r_grid.nodes,
-        ),
-        sort=False,
+    r_grid = _get_grid(eq, **grid_kwargs)
+    rnr, rnt, rnz = r_grid.num_x0, r_grid.num_x1, r_grid.num_x2
+    coords = map_coordinates(
+        eq,
+        r_grid.nodes,
+        ["rho", "theta", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        guess=r_grid.nodes,
     )
+    r_grid = CustomGridFlux(coords, sort=False)
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
         "NFP": 1,
@@ -1968,22 +2000,20 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
-        t_grid = _get_grid(**grid_kwargs)
+        t_grid = _get_grid(eq, **grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
-        v_grid = Grid(
-            map_coordinates(
-                eq,
-                t_grid.nodes,
-                # TODO (#568): once generalized toroidal angle is used, change
-                # inbasis to ["rho", "theta_PEST", "phi"],
-                inbasis=["rho", "theta_PEST", "zeta"],
-                outbasis=["rho", "theta", "zeta"],
-                period=(np.inf, 2 * np.pi, 2 * np.pi),
-                guess=t_grid.nodes,
-                maxiter=30,
-            ),
-            sort=False,
+        coords = map_coordinates(
+            eq,
+            t_grid.nodes,
+            # TODO (#568): once generalized toroidal angle is used, change
+            # inbasis to ["rho", "theta_PEST", "phi"],
+            inbasis=["rho", "theta_PEST", "zeta"],
+            outbasis=["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=t_grid.nodes,
+            maxiter=30,
         )
+        v_grid = CustomGridFlux(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
@@ -2091,7 +2121,7 @@ def poincare_plot(
     NFP : int, optional
         Number of field periods. By default attempts to infer from ``field``, otherwise
         uses NFP=1.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Grid used to discretize ``field``.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -2132,7 +2162,7 @@ def poincare_plot(
     .. code-block:: python
 
         from desc.plotting import poincare_plot
-        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        grid_trace = LinearGridFlux(rho=np.linspace(0.4, 0.9, 7))
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
         fig, ax = desc.plotting.poincare_plot(
@@ -2144,7 +2174,7 @@ def poincare_plot(
             size=0.5,
             ntransit=100
         )
-        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        grid_trace2 = LinearGridFlux(rho=np.linspace(0.52, 0.55, 4))
         r0 = eq.compute("R", grid=grid_trace2)["R"]
         z0 = eq.compute("Z", grid=grid_trace2)["Z"]
         fig, ax = desc.plotting.poincare_plot(
@@ -2333,19 +2363,18 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
-    grid = _get_grid(**grid_kwargs)
-    nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-    grid = Grid(
-        map_coordinates(
+    grid = _get_grid(eq, **grid_kwargs)
+    nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
+    if isinstance(eq, Equilibrium):  # TODO: handle case of FourierRZToroidalSurface
+        coords = map_coordinates(
             eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
-        ),
-        sort=False,
-    )
+        )
+        grid = CustomGridFlux(coords, sort=False)
 
     if colors is None:
         colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
@@ -2517,19 +2546,18 @@ def plot_boundaries(
         rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
 
         grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
-        grid = _get_grid(**grid_kwargs)
-        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        grid = Grid(
-            map_coordinates(
+        grid = _get_grid(eqs[i], **grid_kwargs)
+        nr, nt, nz = grid.num_x0, grid.num_x1, grid.num_x2
+        if isinstance(eqs[i], Equilibrium):  # TODO: FourierRZToroidalSurface
+            coords = map_coordinates(
                 eqs[i],
                 grid.nodes,
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
                 guess=grid.nodes,
-            ),
-            sort=False,
-        )
+            )
+            grid = CustomGridFlux(coords, sort=False)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             coords = eqs[i].compute(["R", "Z"], grid=grid)
@@ -2765,7 +2793,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     ----------
     coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot.
-    grid : Grid, optional
+    grid : AbstractGridCurve, optional
         Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
@@ -2843,7 +2871,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if not isinstance(color, (list, tuple)):
         color = [color]
     if grid is None:
-        grid = LinearGrid(N=400, endpoint=True)
+        grid = LinearGridCurve(N=400, endpoint=True)
 
     def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
@@ -3033,7 +3061,11 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B",
+        obj=eq,
+        grid=CustomGridFlux(np.array([])),
+        M_booz=M_booz,
+        N_booz=N_booz,
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -3042,7 +3074,7 @@ def plot_boozer_modes(  # noqa: C901
     else:
         matrix, modes = ptolemy_linear_transform(basis.modes)
 
-    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    grid = LinearGridFlux(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     transforms = get_transforms(
         "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
     )
@@ -3147,9 +3179,9 @@ def plot_boozer_surface(
     ----------
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
-    grid_compute : Grid, optional
+    grid_compute : AbstractGridFlux, optional
         Grid to use for computing boozer spectrum
-    grid_plot : Grid, optional
+    grid_plot : AbstractGridFlux, optional
         Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
@@ -3219,7 +3251,7 @@ def plot_boozer_surface(
             "NFP": thing.NFP,
             "endpoint": False,
         }
-        grid_compute = _get_grid(**grid_kwargs)
+        grid_compute = _get_grid(thing, **grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
             "rho": rho,
@@ -3228,7 +3260,7 @@ def plot_boozer_surface(
             "NFP": thing.NFP,
             "endpoint": eq_switch,
         }
-        grid_plot = _get_grid(**grid_kwargs)
+        grid_plot = _get_grid(thing, **grid_kwargs)
 
     # compute
     if eq_switch:  # Equilibrium
@@ -3438,7 +3470,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
 
     plot_data = {"rho": rho}
 
-    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    grid = LinearGridFlux(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
     if fB:
         names += ["|B|_mn_B"]
@@ -3546,7 +3578,7 @@ def plot_grid(grid, return_data=False, **kwargs):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Grid to plot.
     return_data : bool
         If True, return the data plotted as well as fig,ax
@@ -3577,8 +3609,8 @@ def plot_grid(grid, return_data=False, **kwargs):
     .. code-block:: python
 
         from desc.plotting import plot_grid
-        from desc.grid import ConcentricGrid
-        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        from desc.grid import ConcentricGridFlux
+        grid = ConcentricGridFlux(L=20, M=10, N=1, node_pattern="jacobi")
         fig, ax = plot_grid(grid)
 
     """
@@ -3619,19 +3651,20 @@ def plot_grid(grid, return_data=False, **kwargs):
         ]
     )
     ax.set_yticklabels([])
-    if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
+    if grid.__class__.__name__ in [
+        "CustomGridFlux",
+        "LinearGridFlux",
+        "QuadratureGridFlux",
+    ]:
+        ax.set_title(
+            "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
+            pad=20,
+            fontsize=title_fontsize,
+        )
+    if grid.__class__.__name__ in ["ConcentricGridFlux"]:
         ax.set_title(
             "{}, $L={}$, $M={}, pattern: {}$".format(
                 grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
-            ),
-            pad=20,
-        )
-    if grid.__class__.__name__ in ["ConcentricGrid"]:
-        ax.set_title(
-            "{}, $M={}$, pattern: {}".format(
-                grid.__class__.__name__,
-                grid.M,
-                grid.node_pattern,
             ),
             pad=20,
             fontsize=title_fontsize,
@@ -3712,7 +3745,7 @@ def plot_basis(  # noqa : C901
 
     # 1D BASIS
     if basis.__class__.__name__ == "PowerSeries":
-        grid = LinearGrid(rho=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3739,7 +3772,7 @@ def plot_basis(  # noqa : C901
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
-        grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGridFlux(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3770,7 +3803,7 @@ def plot_basis(  # noqa : C901
         return fig, ax
 
     elif basis.__class__.__name__ == "ChebyshevPolynomial":
-        grid = LinearGrid(rho=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -3801,9 +3834,9 @@ def plot_basis(  # noqa : C901
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
-        grid = LinearGrid(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
-        t = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta))
-        z = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta))
+        grid = LinearGridFlux(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
+        t = grid.nodes[:, 1].reshape((grid.num_x1, grid.num_x2))
+        z = grid.nodes[:, 2].reshape((grid.num_x1, grid.num_x2))
         fig = plt.figure(
             figsize=kwargs.get("figsize", (nmax * 4 + 1, mmax * 4 + 1)),
         )
@@ -3844,13 +3877,13 @@ def plot_basis(  # noqa : C901
             im = ax[mmax + m, nmax + n].contourf(
                 z,
                 t,
-                fi.reshape((grid.num_theta, grid.num_zeta)),
+                fi.reshape((grid.num_x1, grid.num_x2)),
                 levels=100,
                 vmin=-1,
                 vmax=1,
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
-            plot_data["amplitude"].append(fi.reshape((grid.num_theta, grid.num_zeta)))
+            plot_data["amplitude"].append(fi.reshape((grid.num_x1, grid.num_x2)))
 
             if m == mmax:
                 ax[mmax + m, nmax + n].set_xlabel(
@@ -3885,7 +3918,7 @@ def plot_basis(  # noqa : C901
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, theta=100, endpoint=True)
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
@@ -3905,7 +3938,7 @@ def plot_basis(  # noqa : C901
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
-            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
+            Z = Zs[:, i].reshape((grid.num_x0, grid.num_x1))
             ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 1], projection="polar")
             ax[l][m].axis("off")
             im = ax[l][m].contourf(
@@ -3940,7 +3973,7 @@ def plot_basis(  # noqa : C901
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        grid = LinearGridFlux(rho=100, theta=100, endpoint=True)
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
@@ -3962,7 +3995,7 @@ def plot_basis(  # noqa : C901
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
-            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
+            Z = Zs[:, i].reshape((grid.num_x0, grid.num_x1))
             ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
             ax[l][m].set_title("$l={}, m={}$".format(l, m))
             ax[l][m].axis("off")
@@ -4077,7 +4110,7 @@ def plot_field_lines(
 
         field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
         eq = desc.examples.get("precise_QA")
-        grid_trace = desc.grid.LinearGrid(rho=[1])
+        grid_trace = desc.grid.LinearGridFlux(rho=[1])
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
@@ -4346,7 +4379,7 @@ def plot_particle_trajectories(  # noqa: C901
     )
 
     def to_lab(coords):
-        grid = Grid(coords, jitable=True)
+        grid = CustomGridFlux(coords, jitable=True)
         return field.compute("x", grid=grid)["x"]
 
     # tracing an equilibrium gives rpz in flux coordinates
@@ -4748,7 +4781,7 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,

@@ -13,7 +13,7 @@ import numpy as np
 
 from desc.compat import rescale
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.objectives import (
     BootstrapRedlConsistency,
     FixAtomicNumber,
@@ -57,7 +57,7 @@ eq, _ = eq.solve(verbose=3, copy=True)
 eq = rescale(eq, L=("a", a), B=("<B>", B), scale_pressure=False, copy=True, verbose=1)
 
 # optimize for self-consistent bootstrap current
-grid = LinearGrid(
+grid = LinearGridFlux(
     rho=np.linspace(1 / eq.L_grid, 1, eq.L_grid) - 1 / (2 * eq.L_grid),
     M=eq.M_grid,
     N=eq.N_grid,

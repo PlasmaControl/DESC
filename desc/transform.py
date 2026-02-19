@@ -6,7 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put
-from desc.grid import Grid
+from desc.grid import CustomGridCurve, CustomGridFlux, CustomGridToroidalSurface
 from desc.io import IOAble
 from desc.utils import combination_permutation, warnif
 
@@ -16,7 +16,7 @@ class Transform(IOAble):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGrid
         Collocation grid of real space coordinates
     basis : Basis
         Spectral basis of modes
@@ -31,8 +31,8 @@ class Transform(IOAble):
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
     method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``, ``'jitable'``}
-        * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
-          equally spaced toroidal nodes, and the same node pattern on each zeta plane.
+        * ``'fft'`` uses fast fourier transforms in the x2 direction, and so must have
+          equally spaced x2 nodes, and the same node pattern on each x2 plane.
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
         * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
@@ -70,10 +70,6 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        warnif(
-            self.grid.coordinates != "rtz",
-            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
-        )
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
@@ -81,7 +77,11 @@ class Transform(IOAble):
             method != "jitable"
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
-            and grid.node_pattern != "custom"
+            and not (
+                isinstance(grid, CustomGridCurve)
+                or isinstance(grid, CustomGridFlux)
+                or isinstance(grid, CustomGridToroidalSurface)
+            )
             and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
@@ -115,7 +115,7 @@ class Transform(IOAble):
         derivatives : ndarray
             combinations of derivatives needed
             Each row is one set, columns represent the order of derivatives
-            for [rho, theta, zeta]
+            for [x0, x1, x2]
 
         """
         if isinstance(derivs, int) and derivs >= 0:
@@ -182,11 +182,11 @@ class Transform(IOAble):
             self._method = "direct1"
             return
 
-        if not grid.fft_toroidal:
+        if not grid.fft_x2:
             warnings.warn(
                 colored(
-                    "fft method requires compatible grid, got {}".format(grid)
-                    + "falling back to direct2 method",
+                    f"fft method requires compatible grid, got {grid}."
+                    + "Falling back to direct2 method.",
                     "yellow",
                 )
             )
@@ -195,21 +195,19 @@ class Transform(IOAble):
         if not basis.fft_toroidal:
             warnings.warn(
                 colored(
-                    "fft method requires compatible basis, got {}".format(basis)
-                    + "falling back to direct2 method",
+                    f"fft method requires compatible basis, got {basis}."
+                    + "Falling back to direct2 method.",
                     "yellow",
                 )
             )
             self.method = "direct2"
             return
-        if grid.num_zeta < 2 * basis.N + 1:
+        if grid.num_x2 < 2 * basis.N + 1:
             warnings.warn(
                 colored(
-                    "fft method can not undersample in zeta, "
-                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
-                        basis.N, grid.num_zeta
-                    )
-                    + "falling back to direct2 method",
+                    "fft method can not undersample in x2, got "
+                    + f"num_x2_modes={basis.N}, num_x2_nodes={grid.num_x2}."
+                    + "Falling back to direct2 method.",
                     "yellow",
                 )
             )
@@ -219,8 +217,8 @@ class Transform(IOAble):
             warnings.warn(
                 colored(
                     "fft method requires grid and basis to have the same NFP, got "
-                    + f"grid.NFP={grid.NFP}, basis.NFP={basis.NFP}, "
-                    + "falling back to direct2 method",
+                    + f"grid.NFP={grid.NFP}, basis.NFP={basis.NFP}."
+                    + "Falling back to direct2 method.",
                     "yellow",
                 )
             )
@@ -231,7 +229,7 @@ class Transform(IOAble):
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
-        self.pad_dim = self.grid.num_zeta - self.num_n_modes
+        self.pad_dim = self.grid.num_x2 - self.num_n_modes
         self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
@@ -242,12 +240,14 @@ class Transform(IOAble):
         self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
-                grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],
-                np.zeros((grid.num_nodes // self.grid.num_zeta, 1)),
+                grid.nodes[:, :2][: grid.num_nodes // self.grid.num_x2],
+                np.zeros((grid.num_nodes // self.grid.num_x2, 1)),
             ]
         )
         # temp grid only used for building transforms, don't need any indexing etc
-        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
+        self.fft_grid = CustomGridFlux(
+            fft_nodes, sort=False, jitable=True, axis_shift=0
+        )
 
     def _check_inputs_direct2(self, grid, basis):
         """Check that inputs are formatted correctly for direct2 method."""
@@ -256,9 +256,13 @@ class Transform(IOAble):
             self._method = "direct1"
             return
 
-        from desc.grid import LinearGrid
+        from desc.grid import LinearGridCurve, LinearGridFlux
 
-        if not (grid.fft_toroidal or isinstance(grid, LinearGrid)):
+        if not (
+            grid.fft_x2
+            or isinstance(grid, LinearGridFlux)
+            or isinstance(grid, LinearGridCurve)
+        ):
             warnings.warn(
                 colored(
                     "direct2 method requires compatible grid, got {}".format(grid)
@@ -282,7 +286,7 @@ class Transform(IOAble):
         self._method = "direct2"
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.n_modes = basis.modes[basis.unique_N_idx, 2]
-        self.zeta_nodes = grid.nodes[grid.unique_zeta_idx, 2]
+        self.x2_nodes = grid.nodes[grid.unique_x2_idx, 2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = self.n_modes.size  # number of toroidal modes
 
@@ -295,15 +299,19 @@ class Transform(IOAble):
         self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
-                grid.nodes[:, :2][: grid.num_nodes // grid.num_zeta],
-                np.zeros((grid.num_nodes // grid.num_zeta, 1)),
+                grid.nodes[:, :2][: grid.num_nodes // grid.num_x2],
+                np.zeros((grid.num_nodes // grid.num_x2, 1)),
             ]
         )
-        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
-        dft_nodes = np.hstack(
-            [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
+        self.fft_grid = CustomGridFlux(
+            fft_nodes, sort=False, jitable=True, axis_shift=0
         )
-        self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
+        dft_nodes = np.hstack(
+            [np.zeros((self.x2_nodes.size, 2)), self.x2_nodes[:, np.newaxis]]
+        )
+        self.dft_grid = CustomGridFlux(
+            dft_nodes, sort=False, jitable=True, axis_shift=0
+        )
 
     def build(self):
         """Build the transform matrices for each derivative order."""
@@ -448,12 +456,12 @@ class Transform(IOAble):
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation
-            c_cplx = (self.grid.num_zeta / 2) * (
+            c_cplx = (self.grid.num_x2 / 2) * (
                 c_diff[:, self.basis.N + 1 :] - 1j * c_diff[:, self.basis.N - 1 :: -1]
             )
             c_pad = jnp.hstack(
                 (
-                    self.grid.num_zeta * c_diff[:, self.basis.N, jnp.newaxis],
+                    self.grid.num_x2 * c_diff[:, self.basis.N, jnp.newaxis],
                     c_cplx,
                     jnp.zeros((c_cplx.shape[0], self.pad_dim)),
                     jnp.fliplr(jnp.conj(c_cplx)),
@@ -488,16 +496,16 @@ class Transform(IOAble):
         elif self.method == "direct2":
             Ainv = self.matrices["pinvA"]
             Binv = self.matrices["pinvB"]
-            yy = jnp.matmul(Ainv, x.reshape((-1, self.grid.num_zeta), order="F"))
+            yy = jnp.matmul(Ainv, x.reshape((-1, self.grid.num_x2), order="F"))
             c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
         elif self.method == "fft":
             Ainv = self.matrices["pinvA"]
             c_fft = jnp.matmul(Ainv, x.reshape((Ainv.shape[1], -1), order="F"))
             c_cplx = jnp.fft.fft(c_fft)
             c_unpad = c_cplx[:, 1 : (c_cplx.shape[1] - self.pad_dim - 1) // 2 + 1]
-            c0 = c_cplx[:, :1].real / self.grid.num_zeta
-            c2 = c_unpad.real / (self.grid.num_zeta / 2)
-            c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_zeta / 2)
+            c0 = c_cplx[:, :1].real / self.grid.num_x2
+            c2 = c_unpad.real / (self.grid.num_x2 / 2)
+            c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_x2 / 2)
             c_diff = jnp.hstack([c1, c0, c2])
             c = c_diff.flatten()[self.fft_index]
         return c
@@ -539,7 +547,7 @@ class Transform(IOAble):
         elif self.method == "direct2":
             A = self.matrices["fft"][0][0]
             B = self.matrices["direct2"][0]
-            yy = jnp.matmul(A.T, y.reshape((-1, self.grid.num_zeta), order="F"))
+            yy = jnp.matmul(A.T, y.reshape((-1, self.grid.num_x2), order="F"))
             return jnp.matmul(yy, B).flatten()[self.fft_index]
 
         elif self.method == "fft":
@@ -561,7 +569,7 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGrid
             Collocation grid of real space coordinates
         basis : Basis
             Spectral basis of modes
@@ -639,7 +647,7 @@ class Transform(IOAble):
         derivatives : ndarray
             combinations of derivatives needed
             Each row is one set, columns represent the order of derivatives
-            for [rho, theta, zeta]
+            for [x0, x1, x2]
         """
         return self._derivatives
 

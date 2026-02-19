@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from shapely.geometry import Polygon
 
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.vmec import VMECIO
 
 
@@ -24,19 +24,19 @@ def compute_coords(equil, Nr=10, Nt=8, Nz=None):
     rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+    r_grid = LinearGridFlux(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
     # straight field-line angles to plot
     tr = np.linspace(0, 1, num_rho)
     tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
     tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+    t_grid = LinearGridFlux(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates
 
     # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(
+    v_grid = CustomGridFlux(
         equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
     )
     r_coords = equil.compute(["R", "Z"], grid=r_grid)

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from desc.backend import flatnonzero, jax, jnp, tree_leaves, tree_structure
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.utils import (
     broadcast_tree,
     isalmostequal,
@@ -20,13 +20,13 @@ from desc.utils import (
 @pytest.mark.unit
 def test_isalmostequal():
     """Test that isalmostequal function works on constants, 1D and larger arrays."""
-    grid_small = LinearGrid(rho=1, M=1, N=10)
+    grid_small = LinearGridFlux(rho=1, M=1, N=10)
     zeta_cts = grid_small.num_zeta
     assert isalmostequal(
         grid_small.nodes[:, :2].T.reshape((2, zeta_cts, -1), order="F")
     )
 
-    grid_large = LinearGrid(rho=1, M=1, N=100)
+    grid_large = LinearGridFlux(rho=1, M=1, N=100)
     zeta_cts = grid_large.num_zeta
     assert isalmostequal(
         grid_large.nodes[:, :2].T.reshape((2, zeta_cts, -1), order="F")
@@ -48,11 +48,11 @@ def test_isalmostequal():
 @pytest.mark.unit
 def test_islinspaced():
     """Test that islinspaced function works on large arrays."""
-    grid_small = LinearGrid(rho=1, M=1, N=10)
+    grid_small = LinearGridFlux(rho=1, M=1, N=10)
     zeta_vals = grid_small.nodes[grid_small.unique_zeta_idx, 2]
     assert islinspaced(zeta_vals)
 
-    grid_large = LinearGrid(rho=1, M=1, N=100)
+    grid_large = LinearGridFlux(rho=1, M=1, N=100)
     zeta_vals = grid_large.nodes[grid_large.unique_zeta_idx, 2]
     assert islinspaced(zeta_vals)
 

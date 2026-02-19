@@ -441,19 +441,27 @@ def _vander_dct_cfl(x, Y):
 
 # New resonance objective from John Anthony Labbate
 class TrappedResonance(_Objective):
-    """
+    """Trapped energetic particle resonance penalty.
 
-    Description
-    ----------
-    Creates bump function about a specified number of lowest order resonances (m/n) for trapped energetic particle motion
-    Vicinity to these rational values is penalized
+    Creates bump function about a specified number of lowest order resonances
+    (m/n) for trapped energetic particle motion. Vicinity to these rational
+    values is penalized.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Meshgrid (e.g. ``LinearGrid``) whose rho nodes define the flux
+        surfaces to evaluate on.  If provided, rho is extracted via
+        ``grid.compress(grid.nodes[:, 0])``, matching the pattern used by
+        ``EffectiveRipple``.  Takes precedence over the ``rho`` parameter.
+    rho : ndarray, optional
+        Unique flux surface labels.  Ignored when ``grid`` is given.
+        Default is ``np.linspace(0.1, 0.9, 3)``.
+    alpha : ndarray, optional
+        Field line labels. Default is
+        ``np.linspace(0, 2*np.pi, 10, endpoint=False)``.
 
     """
 
@@ -475,9 +483,9 @@ class TrappedResonance(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=np.linspace(0.1, 0.9, 3),
-        alpha=np.linspace(0,2*np.pi,10,endpoint=False),
-        KE_frac=np.array([1]), # currently only supporting one KE_frac
+        rho=None,
+        alpha=None,
+        KE_frac=np.array([1]),
         *,
         num_transit=5,
         knots_per_transit=100,
@@ -490,40 +498,35 @@ class TrappedResonance(_Objective):
         name="TrappedResonance",
         jac_chunk_size=None,
         pitch_invs=None,
-        N=0, # QA is default, not with nfp
-        M=1, # 
-        m_max = 10,
-        n_max = 5,
-        res_range_min = -4,
-        res_range_max = 4,
-        INCLUDE_ZERO_RES = True,
-        bt_filter_flag = False,
-        rt_filter_flag = True,
-        STAB_SACRIFICE = True,
-        LOSS_FRAC_WEIGHT = True,
-        DEBUG = False,
-        verbose = False,
-        wd_blur = 1.25, # DeltaOmega
-        pitch_batch_size = 1,
-        surf_batch_size = 1
+        N=0,
+        M=1,
+        m_max=10,
+        n_max=10,
+        res_range_min=-4,
+        res_range_max=4,
+        INCLUDE_ZERO_RES=True,
+        bt_filter_flag=False,
+        rt_filter_flag=True,
+        STAB_SACRIFICE=True,
+        LOSS_FRAC_WEIGHT=True,
+        DEBUG=False,
+        verbose=False,
+        wd_blur=1.25,
+        pitch_batch_size=1,
+        surf_batch_size=1,
+        f_q_conservative=False,
     ):
-        # assign attributes and store inputs. No expensive calculations
-                # we don't have to do much here, mostly just call ``super().__init__()``
         if target is None and bounds is None:
-            target = 1e-8 # default target value
+            target = 1e-8
         self._grid = grid
-        rho, alpha = np.atleast_1d(rho, alpha)
-        self._dim_f = rho.size
+        self._rho = np.atleast_1d(rho) if rho is not None else None
+        self._alpha = np.atleast_1d(alpha) if alpha is not None else None
         self._constants = {
             "quad_weights": 1,
-            "rho": rho,
-            "alpha": alpha,
             "zeta": np.linspace(
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            )
+            ),
         }
-        # if pitch_invs is not None:
-        #     num_pitch = len(pitch_invs)
 
         self._hyperparameters = {
             "num_quad": num_quad,
@@ -540,28 +543,24 @@ class TrappedResonance(_Objective):
             "res_range_max": res_range_max,
             "DEBUG": DEBUG,
             "verbose": verbose,
-            'pitch_batch_size': pitch_batch_size,
-            'surf_batch_size': surf_batch_size,
-            'num_transit': num_transit,
-            'pitch_method': pitch_method
+            "pitch_batch_size": pitch_batch_size,
+            "surf_batch_size": surf_batch_size,
+            "num_transit": num_transit,
+            "pitch_method": pitch_method,
+            "f_q_conservative": f_q_conservative,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "f_tr2"
-        self._params2 = { # other non-static params       
-            "alpha_res": (alpha[-1]-alpha[0])/(len(alpha)-1),
-            "rho_res": (rho[-1]-rho[0])/(len(rho)-1),
-        }
 
-
-        super().__init__( 
-            things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium
+        super().__init__(
+            things=[eq],
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
-            jac_chunk_size=jac_chunk_size
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -576,15 +575,47 @@ class TrappedResonance(_Objective):
 
         """
         eq = self.things[0]
+
+        # Resolve rho and alpha: grid takes precedence, then explicit arrays,
+        # then defaults.  This mirrors how EffectiveRipple extracts rho from
+        # its grid while still allowing direct specification.
+        if self._grid is not None:
+            assert self._grid.is_meshgrid, (
+                "Provided grid must be a meshgrid (e.g. LinearGrid)."
+            )
+            rho = self._grid.compress(self._grid.nodes[:, 0])
+            if self._rho is not None:
+                warnings.warn(
+                    "Both `grid` and `rho` were provided. "
+                    "Using rho values from `grid`."
+                )
+        elif self._rho is not None:
+            rho = self._rho
+        else:
+            rho = np.linspace(0.1, 0.9, 3)
+
+        if self._alpha is not None:
+            alpha = self._alpha
+        else:
+            alpha = np.linspace(0, 2 * np.pi, 10, endpoint=False)
+
+        self._constants["rho"] = rho
+        self._constants["alpha"] = alpha
+        self._dim_f = rho.size
+
         self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparameters.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
+        self._params2 = {
+            "alpha_res": (alpha[-1] - alpha[0]) / (len(alpha) - 1),
+            "rho_res": (rho[-1] - rho[0]) / (len(rho) - 1),
+        }
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+            self._target, self._bounds, rho
         )
 
         timer = Timer()

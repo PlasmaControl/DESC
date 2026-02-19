@@ -552,6 +552,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     # Flags
     DEBUG = kwargs.get("DEBUG",False)
+    f_q_conservative = kwargs.get("f_q_conservative", False)
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -611,15 +612,121 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         return safediv(jnp.sum(x,axis=axis) , count, fill=fill)
 
     # Perform averaging over alpha 
-    omega_bounce_avg = jnpmean_nz(omega_bounce,axis=1)
-    eta_drift_avg = jnpmean_nz(eta_drift,axis=1)
+    omega_bounce_avg = jnpmean_nz(omega_bounce,axis=1,fill=11.0)
+    eta_drift_avg = jnpmean_nz(eta_drift,axis=1,fill=11.0)
 
     # Normalized frequency
     Omega = eta_drift_avg / omega_bounce_avg
 
     pitch_invs = _data['pitch_inv']
 
-    # f = s_drift / omega_bounce  
+    # Resonance weights w_i(p/q) per Eq. (12).
+    # Omega := (rho, Bcrit, well), res_arr := (res,)
+    # Output w := (rho, Bcrit, well, res)
+    n_rho = Omega.shape[0]
+    valid = Omega != 11.0  # := (rho, Bcrit, well)
+
+    Omega_broad = Omega[..., None]  # := (rho, Bcrit, well, 1)
+    res_broad = res_arr[None, None, None, :]  # := (1, 1, 1, res)
+
+    # Omega at neighboring rho surfaces, padded with NaN at boundaries so
+    # that the boundary surfaces can only use the interior neighbor.
+    Omega_prev = jnp.concatenate(
+        [jnp.full_like(Omega[:1], jnp.nan), Omega[:-1]], axis=0
+    )[..., None]  # := (rho, Bcrit, well, 1)
+    Omega_next = jnp.concatenate(
+        [Omega[1:], jnp.full_like(Omega[:1], jnp.nan)], axis=0
+    )[..., None]  # := (rho, Bcrit, well, 1)
+
+    # Case 1: resonance lies between surface i and i+1
+    between_next = (
+        ((Omega_next >= res_broad) & (res_broad >= Omega_broad))
+        | ((Omega_next <= res_broad) & (res_broad <= Omega_broad))
+    )
+    w_next = safediv(Omega_next - res_broad, Omega_next - Omega_broad)
+
+    # Case 2: resonance lies between surface i and i-1
+    between_prev = (
+        ((Omega_prev >= res_broad) & (res_broad >= Omega_broad))
+        | ((Omega_prev <= res_broad) & (res_broad <= Omega_broad))
+    )
+    w_prev = safediv(Omega_prev - res_broad, Omega_prev - Omega_broad)
+
+    res_weight = jnp.where(between_next, w_next, jnp.where(between_prev, w_prev, 0.0))
+    res_weight = jnp.where(valid[..., None], res_weight, 0.0)  # zero out invalid surfaces
+
+    # integrand = <v_m . grad(psi)>_b * tau_b := (rho, alpha, Bcrit, well)
+    ft_integrand = s_drift * tau_bounce
+
+    # eta = nfp * alpha / (N*nfp - iota*M) at each (rho, alpha) grid point
+    N_alpha = ado_shape[1]
+    alpha_vals = jnp.arange(N_alpha) * alpha_res  # := (alpha,)
+    ft_denom = N * nfp - iotas * M  # := (rho,)
+    eta_vals = safediv(
+        nfp * alpha_vals[None, :], ft_denom[:, None]
+    )  # := (rho, alpha)
+    Delta_eta = safediv(nfp * alpha_res, ft_denom)  # := (rho,)
+
+    if f_q_conservative:
+        # Conservative estimate: |f_l|^2 = (1/4pi) int_0^{2pi} d_eta (g)^2
+        # Discrete: |f_l|^2 = (Delta_eta / (4*pi)) * sum_j (g_j)^2
+        # This is independent of the Fourier harmonic q.
+        f_q_abs_sq = (Delta_eta[:, None, None] / (4 * jnp.pi)) * jnp.sum(
+            ft_integrand**2, axis=1
+        )  # := (rho, Bcrit, well)
+        f_q_abs = jnp.sqrt(f_q_abs_sq)  # := (rho, Bcrit, well)
+        n_res = res_arr.shape[0]
+        f_q_abs = jnp.broadcast_to(
+            f_q_abs[..., None], (*f_q_abs.shape, n_res)
+        )  # := (rho, Bcrit, well, res)
+        f_q_c = None
+        f_q_s = None
+    else:
+        # Fourier coefficients f_q^c, f_q^s per Eq. (22).
+        # Fourier phases: q_arr (res,) x eta_vals (rho, alpha) -> (rho, alpha, res)
+        phase = q_arr[None, None, :] * eta_vals[:, :, None]  # := (rho, alpha, res)
+        cos_phase = jnp.cos(phase)
+        sin_phase = jnp.sin(phase)
+
+        # Sum over alpha (axis=1) -> (rho, Bcrit, well, res)
+        f_q_c = jnp.sum(
+            ft_integrand[..., None] * cos_phase[:, :, None, None, :], axis=1
+        )  # := (rho, Bcrit, well, res)
+        f_q_s = jnp.sum(
+            ft_integrand[..., None] * sin_phase[:, :, None, None, :], axis=1
+        )  # := (rho, Bcrit, well, res)
+
+        # Multiply by Delta_eta / pi
+        ft_prefactor = Delta_eta[:, None, None, None] / jnp.pi  # := (rho, 1, 1, 1)
+        f_q_c = ft_prefactor * f_q_c
+        f_q_s = ft_prefactor * f_q_s
+
+        # |f_q| = (1/2) sqrt(f_q_c^2 + f_q_s^2)
+        f_q_abs = 0.5 * jnp.sqrt(f_q_c**2 + f_q_s**2)  # := (rho, Bcrit, well, res)
+
+    # Island width Delta_s per Eq. (X).
+
+    # Omega'(s) = (dOmega/drho) / (2*rho), with s = rho^2
+    # Omega := (rho, Bcrit, well), valid marks surfaces with real bounce data
+    rhos = grid.compress(grid.nodes[:, 0])  # := (rho,)
+    dOmega_drho = jnp.gradient(Omega, rho_res, axis=0)  # := (rho, Bcrit, well)
+    dOmega_drho = jnp.where(valid, dOmega_drho, 0.0)
+    Omega_prime_s = safediv(
+        dOmega_drho, 2 * rhos[:, None, None]
+    )  # := (rho, Bcrit, well)
+
+    # Interpolate |f_q| and Omega' to resonance locations using res_weight.
+    # res_weight := (rho, Bcrit, well, res) — nonzero at 1-2 surfaces per resonance
+    f_q_at_res = jnp.sum(res_weight * f_q_abs, axis=0)  # := (Bcrit, well, res)
+    Omega_prime_at_res = jnp.sum(
+        res_weight * Omega_prime_s[..., None], axis=0
+    )  # := (Bcrit, well, res)
+
+    # Delta_s = 4 * sqrt( |f_q| / (pi * q * |Omega'(s_0)|) )
+    q_iw = q_arr[None, None, :]  # := (1, 1, res)
+    Delta_s = 4 * jnp.sqrt(
+        safediv(f_q_at_res, jnp.pi * q_iw * jnp.abs(Omega_prime_at_res))
+    )  # := (Bcrit, well, res)
 
     """
     # Setting wd (wd=DeltaOmega)
@@ -680,12 +787,21 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
     """
     if DEBUG:
-        data["f_tr2"] = { # for plotting/debugging
+        data["f_tr2"] = {
             'Omega': Omega,
             'omega_bounce': omega_bounce_avg,
             'eta_drift': eta_drift_avg,
-            'pitch_inv': _data['pitch_inv']
-            }
+            'pitch_inv': _data['pitch_inv'],
+            'res_weight': res_weight,
+            'res_arr': res_arr,
+            'q_arr': q_arr,
+            'f_q_c': f_q_c,
+            'f_q_s': f_q_s,
+            'f_q_abs': f_q_abs,
+            'Omega_prime_s': Omega_prime_s,
+            'Delta_s': Delta_s,
+            'f_q_conservative': f_q_conservative,
+        }
     else:
         data["f_tr2"] = Omega # full output
         

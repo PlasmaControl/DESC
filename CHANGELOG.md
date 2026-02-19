@@ -22,6 +22,7 @@ alternative to fourier continuation methods.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
+- Adds ``ITGProxy`` and ``NNITGProxy`` objective classes for ITG turbulence optimization based on Landreman et al. 2025, with GX geometric feature compute functions and flux tube geometry utilities.
 
 Bug Fixes
 

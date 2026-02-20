@@ -539,12 +539,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     pitch_invs = kwargs.get("pitch_invs",None)
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
-    Bcrit_res = kwargs.get("Bcrit_res",None)
-    wd_blur = kwargs.get("wd_blur",1.25)
     res_arr = kwargs.get("res_arr",None)
     q_arr = kwargs.get("q_arr",None)
     pitch_method = kwargs.get("pitch_method",1)
-    psi_a = data["Psi"][-1] # Total toroidal flux
 
     # Bounce integral parameters
     quad = kwargs.get("quad",None)
@@ -623,7 +620,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Resonance weights w_i(p/q) per Eq. (12).
     # Omega := (rho, Bcrit, well), res_arr := (res,)
     # Output w := (rho, Bcrit, well, res)
-    n_rho = Omega.shape[0]
     valid = Omega != 11.0  # := (rho, Bcrit, well)
 
     Omega_broad = Omega[..., None]  # := (rho, Bcrit, well, 1)
@@ -789,8 +785,10 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     if DEBUG:
         data["f_tr2"] = {
             'Omega': Omega,
-            'omega_bounce': omega_bounce_avg,
-            'eta_drift': eta_drift_avg,
+            'omega_bounce_avg': omega_bounce_avg,
+            'eta_drift_avg': eta_drift_avg,
+            'omega_bounce': omega_bounce,
+            'eta_drift': eta_drift,
             'pitch_inv': _data['pitch_inv'],
             'res_weight': res_weight,
             'res_arr': res_arr,

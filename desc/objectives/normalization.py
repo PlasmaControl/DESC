@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
+from desc.equilibrium.equilibrium import _kinetic_profile_names
 from desc.geometry import Curve
 from desc.utils import warnif
 
@@ -46,21 +47,18 @@ def compute_scaling_factors(thing):
         scales["F"] = B_pressure / scales["a"]
         scales["f"] = scales["F"] * scales["V"]
 
-        has_kinetic = False
-        if (
-            thing.electron_density is not None
-            and thing.electron_temperature is not None
-            and thing.atomic_number is not None
-            and thing.ion_temperature is not None
-        ):
-            has_kinetic = True
-            # if kinetic profiles exist, populate those entries as well
+        has_kinetic = any(
+            [getattr(thing, name, None) is not None for name in _kinetic_profile_names]
+        )
+        if thing.electron_density is not None and thing.atomic_number is not None:
             scales["n"] = float(
                 ((thing.atomic_number(0) + 1) / 2 * thing.electron_density(0))[0]
             )
+        if thing.electron_temperature is not None and thing.ion_temperature is not None:
             scales["T"] = np.mean(
                 [thing.electron_temperature(0), thing.ion_temperature(0)]
             )
+        if "n" in scales.keys() and "T" in scales.keys():
             p0 = elementary_charge * 2 * scales["n"] * scales["T"]
         if thing.pressure is not None:
             p0 = float(thing.pressure(0)[0])

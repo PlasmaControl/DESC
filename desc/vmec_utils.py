@@ -695,7 +695,7 @@ def make_boozmn_output(  # noqa: C901
         np.array(
             [" " * (100 - len(version_str))],
             "S" + str(file.dimensions["dim_00100"].size),
-        ),
+        )
     )
 
     nfp = file.createVariable("nfp_b", np.int32)

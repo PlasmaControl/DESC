@@ -3,7 +3,6 @@
 import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
-from desc.equilibrium.equilibrium import _kinetic_profile_names
 from desc.geometry import Curve
 from desc.utils import warnif
 
@@ -48,7 +47,15 @@ def compute_scaling_factors(thing):
         scales["f"] = scales["F"] * scales["V"]
 
         has_kinetic = any(
-            [getattr(thing, name, None) is not None for name in _kinetic_profile_names]
+            [
+                getattr(thing, name, None) is not None
+                for name in [
+                    "_electron_temperature",
+                    "_electron_density",
+                    "_ion_temperature",
+                    "_atomic_number",
+                ]
+            ]
         )
         if thing.electron_density is not None and thing.atomic_number is not None:
             scales["n"] = float(

@@ -630,9 +630,9 @@ class TrappedResonance(_Objective):
         res_range_min = self._hyperparameters["res_range_min"]
         res_range_max = self._hyperparameters["res_range_max"]
 
-        res_arr = np.full(2*m_max*n_max + 1, jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
-        n_arr = np.full(2*m_max*n_max + 1, 1)
-
+        res_arr = np.full((2*n_max+1)*(m_max+1), jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
+        n_arr = np.full((2*n_max+1)*(m_max+1), 1)
+        m_arr = np.full((2*n_max+1)*(m_max+1), 1)
         res_arr_set = 0
 
         for m in range(0,m_max+1):
@@ -641,15 +641,17 @@ class TrappedResonance(_Objective):
                 if condition:
                     res_arr[res_arr_set] = m/n
                     n_arr[res_arr_set] = n
+                    m_arr[res_arr_set] = m
                     res_arr_set+=1
                     if m != 0:
                         res_arr[res_arr_set] = -m/n
                         n_arr[res_arr_set] = n
+                        m_arr[res_arr_set] = m
                         res_arr_set+=1
 
         self._hyperparameters['q_arr'] = n_arr
         self._hyperparameters['res_arr'] = res_arr
-
+        self._hyperparameters['p_arr'] = m_arr
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")

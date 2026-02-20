@@ -540,6 +540,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     res_arr = kwargs.get("res_arr",None)
+    p_arr = kwargs.get("p_arr",None)
     q_arr = kwargs.get("q_arr",None)
     pitch_method = kwargs.get("pitch_method",1)
 
@@ -782,6 +783,13 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Sum over wells
     f_tr2_out = jnp.sum(f_tr2_out,axis=0) # scalar
     """
+    
+    # Compute s_res: weighted-average s = rho^2 location of each resonance
+    s_vals = rhos**2  # := (rho,)
+    w_prof = jnp.sum(res_weight, axis=(1, 2))  # := (rho, res)
+    w_sum = jnp.sum(w_prof, axis=0)  # := (res,)
+    s_res = safediv(jnp.sum(w_prof * s_vals[:, None], axis=0), w_sum)  # := (res,)
+
     if DEBUG:
         data["f_tr2"] = {
             'Omega': Omega,
@@ -792,6 +800,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             'pitch_inv': _data['pitch_inv'],
             'res_weight': res_weight,
             'res_arr': res_arr,
+            'p_arr': p_arr,
             'q_arr': q_arr,
             'f_q_c': f_q_c,
             'f_q_s': f_q_s,
@@ -799,6 +808,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             'Omega_prime_s': Omega_prime_s,
             'Delta_s': Delta_s,
             'f_q_conservative': f_q_conservative,
+            's_res': s_res,
         }
     else:
         data["f_tr2"] = Omega # full output

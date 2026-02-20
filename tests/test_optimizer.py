@@ -256,17 +256,18 @@ class TestSGD:
         """Test minimizing convex test function using sgd with momentum."""
         x0 = np.ones(2)
 
-        out = sgd(
-            scalar_fun,
-            x0,
-            scalar_grad,
-            method="sgd",
-            verbose=3,
-            ftol=0,
-            xtol=0,
-            gtol=1e-12,
-            maxiter=2000,
-        )
+        with pytest.warns(DeprecationWarning, match="'sgd' method is deprecated"):
+            out = sgd(
+                scalar_fun,
+                x0,
+                scalar_grad,
+                method="sgd",
+                verbose=3,
+                ftol=0,
+                xtol=0,
+                gtol=1e-12,
+                maxiter=2000,
+            )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
     @pytest.mark.unit
@@ -724,14 +725,25 @@ class TestAllOptimizers:
         if not self.eobj.built:
             self.eobj.build()
 
-        self.eqe.solve(
-            objective=self.eobj,
-            constraints=self.econ,
-            optimizer=opt,
-            copy=True,
-            verbose=3,
-            maxiter=5,
-        )
+        if opt == "sgd":
+            with pytest.warns(DeprecationWarning, match="'sgd' method is deprecated"):
+                self.eqe.solve(
+                    objective=self.eobj,
+                    constraints=self.econ,
+                    optimizer=opt,
+                    copy=True,
+                    verbose=3,
+                    maxiter=5,
+                )
+        else:
+            self.eqe.solve(
+                objective=self.eobj,
+                constraints=self.econ,
+                optimizer=opt,
+                copy=True,
+                verbose=3,
+                maxiter=5,
+            )
 
     @pytest.mark.unit
     @pytest.mark.parametrize("opt", lsq_methods)

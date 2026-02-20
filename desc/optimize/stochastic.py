@@ -1,7 +1,5 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import warnings
-
 import optax
 from scipy.optimize import OptimizeResult
 
@@ -153,15 +151,12 @@ def sgd(  # noqa: C901
     )
     deprecated_sgd = False
     if method == "sgd":
-        # warn the user but do not fail the pytest
-        with warnings.catch_warnings():
-            warnings.filterwarnings("default", "'sgd' method is deprecated")
-            warnif(
-                True,
-                DeprecationWarning,
-                "'sgd' method is deprecated and will be removed in a future "
-                "release in favor of 'optax-sgd'",
-            )
+        warnif(
+            True,
+            DeprecationWarning,
+            "'sgd' method is deprecated and will be removed in a future "
+            "release in favor of 'optax-sgd'",
+        )
         method = "optax-sgd"
         deprecated_sgd = True
     if isinstance(x_scale, str):

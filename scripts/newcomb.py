@@ -25,6 +25,20 @@ def B_theta_pinch(data, r):
     """
     Compute B_theta in screw pinch approximation from
     stellarator variables.
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary containing necessary data keys for computing B_theta.
+        (B, e^vartheta)
+    r : float or jnp.ndarray
+        Minor radius at which to compute B_theta.
+
+    Returns
+    -------
+    B_theta : float or jnp.ndarray
+        B_theta computed in the screw pinch approximation
+        (as in Friedberg chapter 11).
     """
     return dot(data["B"], data["e^vartheta"]) * r
 
@@ -33,6 +47,20 @@ def B_z_pinch(data, R0):
     """
     Compute B_z in screw pinch approximation from
     stellarator variables.
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary containing necessary data keys for computing B_z.
+        (B, grad(phi))
+    R0 : float
+        Equivalent major radius of the equilibrium.
+
+    Returns
+    -------
+    B_z : float or jnp.ndarray
+        B_z computed in the screw pinch approximation
+        (as in Friedberg chapter 11).
     """
     return dot(data["B"], data["grad(phi)"]) * R0
 
@@ -82,8 +110,26 @@ def _odefun(rho, u, args):
     """
     ODE function for the minimizing perturbation xi.
     d/dr [xi, f * xi_r] = [ xi_r, g * xi ]
-
     u = [xi, f * xi_r]
+    
+    Parameters
+    ----------
+    rho : float
+        Normalized minor radius.
+    u : jnp.ndarray
+        Array containing [xi, f * xi_r].
+    args : tuple
+        Tuple containing (eq, m, k, a, R0) where:
+        eq: DESC Equilibrium object
+        m: poloidal mode number
+        k: toroidal wavenumber
+        a: minor radius
+        R0: major radius
+
+    Returns
+    -------
+    du_drho : jnp.ndarray
+        Array containing [d(xi)/drho, d(f * xi_r)/drho].
     """
     eq, m, k, a, R0 = args
     params = eq.params_dict
@@ -117,7 +163,7 @@ def _odefun(rho, u, args):
     dFdr = m / r * (B_theta_r - B_theta / r) + k * B_z_r
     dfdr = (Fs / k0_sq) * (F + 2 * r * dFdr + (2 * m**2 * F) / (r**2 * k0_sq))
     """
-    #
+    
     return jnp.stack([u[1] / f[0], g[0] * u[0]]) * (1 / a)
 
 
@@ -125,16 +171,24 @@ def F(rho, data, m, k, a, R0):
     """
     Compute F function from Friedberg pg. 463.
     Used in the ODE for the minimizing perturbation xi.
-    Inputs:
+    
+    Parameters
+    ----------
     rho: normalized minor radius
-    data: dictionary containing necessary
+    data: dictionary containing necessary quantities for computing F
         (B^theta, B^zeta, p_r)
-    Returns:
+    m: poloidal mode number
+    k: toroidal wavenumber
+    a: minor radius
+    R0: major radius
+    
+    Returns
+    -------
     F: function F evaluated at rho
+
     """
     # Map DESC variables to Screw Pinch variables
-    # B_z ~ B^zeta * R0, B_theta ~ B^theta * r
-    r = rho * a  # rhos * a
+    r = rho * a  # minor radius
     B_z = B_z_pinch(data, R0)
     B_theta = B_theta_pinch(data, r)
 
@@ -149,11 +203,19 @@ def fg(rho, data, m, k, a, R0):
     """
     Compute f and g functions from Friedberg pg. 463.
     Used in the ODE for the minimizing perturbation xi.
-    Inputs:
+
+    Parameters
+    ----------
     rho: normalized minor radius
-    data: dictionary containing necessary
+    data: dictionary containing necessary inputs for computing f and g
         (B^theta, B^zeta, p_r)
-    Returns:
+    m: poloidal mode number
+    k: toroidal wavenumber
+    a: minor radius
+    R0: major radius
+
+    Returns
+    ---------
     f, g: functions f and g evaluated at rho
     """
     r = rho * a  # minor radius
@@ -189,13 +251,20 @@ def compute_minimizing_perturbation(
 ):
     """
     Compute the minimizing perturbation xi for mode (m, n)
-    Inputs:
+    
+    Parameters
+    ----------
     eq: DESC Equilibrium object
     m: poloidal mode number
     n: toroidal mode number
+    from_axis: bool, if True start integration from axis, else from resonant surface
+    r_s: location of resonant surface in rho (only used if from_axis=False)
     rhos: normalized minor radius grid points
+    rtol: relative tolerance for ODE solver
+    atol: absolute tolerance for ODE solver
 
-    Returns:
+    Returns
+    ---------
     xi: minimizing perturbation evaluated at rhos
     f dxi/dr values at rhos
     """
@@ -246,6 +315,7 @@ def compute_minimizing_perturbation(
         return False  # y[0] < atol # xi starts positive, stop when it goes negative
 
     event = Event(event_fn)
+
     # Solver parameters
     saveat = SaveAt(ts=rhos)
     solution = diffeqsolve(
@@ -269,8 +339,11 @@ def compute_minimizing_perturbation(
 # --- STEP 3: Handle resonant surfaces ---
 def find_resonant_surfaces(eq, m, n, n_points=1000):
     """
-    Find resonant surfaces using q profile directly.
-    Inputs:
+    Find resonant surfaces where k * B_z + m * B_theta / r = 0, which correspond 
+    to rational q surfaces in a perfect screw pinch.
+
+    Parameters
+    -----------
     eq: DESC Equilibrium object
     m: poloidal mode number
     n: toroidal mode number
@@ -302,7 +375,7 @@ def find_resonant_surfaces(eq, m, n, n_points=1000):
     # Check Fs for sign changes
     resonant_rhos = []
     for i in change_indices:
-        # Use more precise root finding
+        # Define a jitable function to compute Fs at a given rho for root finding
         def Fs_func(rho):
             grid = Grid(
                 jnp.array([[rho, 0.0, 0.0]]),
@@ -311,8 +384,7 @@ def find_resonant_surfaces(eq, m, n, n_points=1000):
             )
             transforms = get_transforms(data_keys, eq, grid, jitable=True)
             profiles = {
-                # "current": eq.current,
-                "iota": eq.iota,  # iota right now is totally wrong so anything related to B_theta is wrong
+                "iota": eq.iota,
                 "electron_density": eq.electron_density,
                 "pressure": eq.pressure,
                 "atomic_number": eq.atomic_number,
@@ -328,7 +400,7 @@ def find_resonant_surfaces(eq, m, n, n_points=1000):
             )
             Fs, _ = F(rho, data, m, -n / R0, a, R0)
             return float(Fs[0])
-
+        # Use brentq to find the root of Fs between rho_array[i] and rho_array[i+1]
         rho_root = brentq(
             Fs_func, float(rho_array[i]), float(rho_array[i + 1]), xtol=1e-13
         )
@@ -338,6 +410,26 @@ def find_resonant_surfaces(eq, m, n, n_points=1000):
 
 
 def find_xi(eq, m, n, nrho=5000, nlog=100):
+    """
+    Find the minimizing perturbation xi for mode (m, n) across the entire plasma radius,
+    accounting for resonant surfaces. The plasma radius is divided into segments between resonant surfaces,
+    and xi is computed separately on each segment. Near resonant surfaces, a finer grid is used to capture
+    the power-law behavior of xi.
+
+    Parameters
+    -----------
+    eq: DESC Equilibrium object 
+    m: poloidal mode number
+    n: toroidal mode number
+    nrho: number of points to evaluate xi on each segment away from resonant surfaces
+    nlog: number of logarithmically spaced points to evaluate xi near resonant surfaces (on each side)
+
+    Returns
+    -----------
+    all_rhos: array of all rho values where xi was evaluated
+    xi_segments: 2D array of xi values corresponding to all_rhos
+    resonant_rhos: array of resonant surface locations (in rho)
+    """
 
     # Find segments to integrate over
     resonant_rhos = find_resonant_surfaces(eq, m=m, n=n, n_points=1000)
@@ -376,9 +468,13 @@ def evaluate_stability(eq):
     """
     Evaluate MHD stability of a DESC equilibrium using Suydam's criterion
     and the minimizing perturbation method.
-    Inputs:
+    
+    Parameters
+    -----------
     eq: DESC Equilibrium object
-    Returns:
+    
+    Returns
+    -----------
     is_stable: bool
         True if the equilibrium is stable, False otherwise.
     """

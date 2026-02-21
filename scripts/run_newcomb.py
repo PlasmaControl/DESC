@@ -35,6 +35,7 @@ a = 1  # Minor radius
 aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
+NFP = aspect_ratio  # Number of field periods
 
 # Input profiles
 fixed_iota = True
@@ -59,54 +60,48 @@ save_name = f"equilibrium_{save_tag}.h5"
 os.makedirs(save_path, exist_ok=True)
 
 print("solving equilibrium")
-override = True
-if os.path.exists(save_path + save_name) and not override:
-    eq = load(save_path + save_name)
-else:
-    # Create a very high aspect ratio tokamak
-    eq = Equilibrium(
-        L=12,
-        M=12,
-        N=0,
-        surface=FourierRZToroidalSurface.from_shape_parameters(
-            major_radius=R,
-            aspect_ratio=aspect_ratio,
-            elongation=1,
-            triangularity=0,
-            squareness=0,
-            eccentricity=0,
-            torsion=0,
-            twist=0,
-            NFP=1,
-            sym=True,
-        ),
-        NFP=1,
-        iota = iota_profile,
-        current=I_profile,
-        pressure=p_profile,
-        Psi=1,
-    )
+# Create a very high aspect ratio tokamak
+eq = Equilibrium(
+    L=12,
+    M=12,
+    N=0,
+    surface=FourierRZToroidalSurface.from_shape_parameters(
+        major_radius=R,
+        aspect_ratio=aspect_ratio,
+        elongation=1,
+        triangularity=0,
+        squareness=0,
+        eccentricity=0,
+        torsion=0,
+        twist=0,
+        NFP=NFP,
+        sym=True,
+    ),
+    NFP=NFP,
+    iota = iota_profile,
+    current=I_profile,
+    pressure=p_profile,
+    Psi=1,
+)
 
-    # Solve equilbrium
-    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
-    eq.iota = eq.get_profile("iota")
-    eq.save(save_path + save_name)
+# Solve equilbrium
+eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
+eq.iota = eq.get_profile("iota")
+eq.save(save_path + save_name)
 
 print("equilibrium solved")
 
 # Evaluate stability using Newcomb's procedure
-# evaluate_stability(eq)
+evaluate_stability(eq)
 
 # Evaluate stability using Rahul's method
+# The rest of the script is basically unchanged from what Rahul sent me
 # resolution for low-res solve
 n_rho = 26
 n_theta = 26
 n_zeta = 1#9
 
 # This will probably OOM with the matrix-full method
-#n_rho = 48
-#n_theta = 32
-#n_zeta = 10
 print("making input grid and diffmats")
 x, w = leggauss_lob(n_rho)
 
@@ -334,8 +329,10 @@ xi_sup_zeta_final = np.reshape(v[2*n_total:], (n_rho, n_theta, n_zeta))
 toc = time.time()
 print(f"matrix free took {toc-tic} s.")
 
+# Print the minimum eigenvalue to check for stability
 print(data["finite-n lambda matfree"].min())
 
+# Save the high-res eigenfunction components and grid
 np.save(save_path + f"xi_rho_{save_tag}.npy", xi_sup_rho_final)
 np.save(save_path + f"xi_theta_{save_tag}.npy", xi_sup_theta_final)
 np.save(save_path + f"xi_zeta_{save_tag}.npy", xi_sup_zeta_final)

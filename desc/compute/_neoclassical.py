@@ -537,7 +537,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     nfp = kwargs.get("nfp",None)
     KE_frac = kwargs.get("KE_frac",None)
     pitch_invs = kwargs.get("pitch_invs",None)
-    alpha_res = kwargs.get("alpha_res",None)
     rho_res = kwargs.get("rho_res",None)
     res_arr = kwargs.get("res_arr",None)
     p_arr = kwargs.get("p_arr",None)
@@ -609,7 +608,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         count = jnp.sum(mask,axis) # how many wells that are not 0
         return safediv(jnp.sum(x,axis=axis) , count, fill=fill)
 
-    # Perform averaging over alpha 
+    # Perform averaging over eta
     omega_bounce_avg = jnpmean_nz(omega_bounce,axis=1,fill=11.0)
     eta_drift_avg = jnpmean_nz(eta_drift,axis=1,fill=11.0)
 
@@ -652,23 +651,18 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     res_weight = jnp.where(between_next, w_next, jnp.where(between_prev, w_prev, 0.0))
     res_weight = jnp.where(valid[..., None], res_weight, 0.0)  # zero out invalid surfaces
 
-    # integrand = <v_m . grad(psi)>_b * tau_b := (rho, alpha, Bcrit, well)
+    # integrand = <v_m . grad(psi)>_b * tau_b := (rho, eta, Bcrit, well)
     ft_integrand = s_drift * tau_bounce
 
-    # eta = nfp * alpha / (N*nfp - iota*M) at each (rho, alpha) grid point
-    N_alpha = ado_shape[1]
-    alpha_vals = jnp.arange(N_alpha) * alpha_res  # := (alpha,)
-    ft_denom = N * nfp - iotas * M  # := (rho,)
-    eta_vals = safediv(
-        nfp * alpha_vals[None, :], ft_denom[:, None]
-    )  # := (rho, alpha)
-    Delta_eta = safediv(nfp * alpha_res, ft_denom)  # := (rho,)
+    # eta ranges uniformly over [0, 2*pi); alpha = eta * (N*nfp - iota*M) / nfp
+    eta_vals = kwargs.get("eta_vals", None)
+    Delta_eta = eta_vals[1] - eta_vals[0] if eta_vals.shape[0] > 1 else 2 * jnp.pi
 
     if f_q_conservative:
         # Conservative estimate: |f_l|^2 = (1/4pi) int_0^{2pi} d_eta (g)^2
         # Discrete: |f_l|^2 = (Delta_eta / (4*pi)) * sum_j (g_j)^2
         # This is independent of the Fourier harmonic q.
-        f_q_abs_sq = (Delta_eta[:, None, None] / (4 * jnp.pi)) * jnp.sum(
+        f_q_abs_sq = (Delta_eta / (4 * jnp.pi)) * jnp.sum(
             ft_integrand**2, axis=1
         )  # := (rho, Bcrit, well)
         f_q_abs = jnp.sqrt(f_q_abs_sq)  # := (rho, Bcrit, well)
@@ -680,21 +674,21 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         f_q_s = None
     else:
         # Fourier coefficients f_q^c, f_q^s per Eq. (22).
-        # Fourier phases: q_arr (res,) x eta_vals (rho, alpha) -> (rho, alpha, res)
-        phase = q_arr[None, None, :] * eta_vals[:, :, None]  # := (rho, alpha, res)
+        # Fourier phases: q_arr (res,) x eta_vals (alpha,) -> (alpha, res)
+        phase = q_arr[None, :] * eta_vals[:, None]  # := (alpha, res)
         cos_phase = jnp.cos(phase)
         sin_phase = jnp.sin(phase)
 
-        # Sum over alpha (axis=1) -> (rho, Bcrit, well, res)
+        # Sum over alpha/eta (axis=1) -> (rho, Bcrit, well, res)
         f_q_c = jnp.sum(
-            ft_integrand[..., None] * cos_phase[:, :, None, None, :], axis=1
+            ft_integrand[..., None] * cos_phase[None, :, None, None, :], axis=1
         )  # := (rho, Bcrit, well, res)
         f_q_s = jnp.sum(
-            ft_integrand[..., None] * sin_phase[:, :, None, None, :], axis=1
+            ft_integrand[..., None] * sin_phase[None, :, None, None, :], axis=1
         )  # := (rho, Bcrit, well, res)
 
         # Multiply by Delta_eta / pi
-        ft_prefactor = Delta_eta[:, None, None, None] / jnp.pi  # := (rho, 1, 1, 1)
+        ft_prefactor = Delta_eta / jnp.pi
         f_q_c = ft_prefactor * f_q_c
         f_q_s = ft_prefactor * f_q_s
 

@@ -27,6 +27,7 @@ Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
 - ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
+- Fixes possible bug in computing normalizations when both kinetic and pressure profiles are assigned. Also adds warnings whenever an pressure is added to a kinetic-constrained equilibrium and vice-versa to alert user to ambiguous equilibrium setups.
 
 Performance Improvements
 

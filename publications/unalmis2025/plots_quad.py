@@ -21,6 +21,10 @@ from desc.integrals.quad_utils import (  # automorphism_arcsin,; grad_automorphi
     tanh_sinh,
     uniform,
 )
+from desc.utils import safediv
+
+apprx_err = 0
+noise_level = 0
 
 n = np.arange(7, 202, 2)
 n[-1] = 200
@@ -294,7 +298,7 @@ class EllipticIntegral:
             n=n,
             quad_funs=quad_funs,
             names=names,
-            interval=(z1, z2),
+            interval=(z1 + apprx_err, z2 - apprx_err),
             filename=filename,
             include_legend=include_legend,
         )
@@ -305,15 +309,17 @@ class BumpyWell:
 
     def bump(x, h):
         """Well with bump of height h in [0, 1 - epsilon small] in middle"""
+        if noise_level > 0:
+            x = x + noise_level * np.random.randn(*np.atleast_1d(x).shape)
         return h * (1 - x**2) ** 2 + x**2 + 1
 
     def plot(weak, B, fun_latex, filename, h):
         """Compare quadratures in W-shaped wells."""
 
         def fun(x):
-            w = np.sqrt(2 - B(x))
+            w = np.sqrt(np.abs(2 - B(x)))
             if weak:
-                return 1 / w
+                return safediv(1, w)
             return w
 
         quad_funs, names = get_quadratures_to_test(weak)
@@ -352,7 +358,7 @@ class BumpyWell:
             n=n,
             quad_funs=quad_funs,
             names=names,
-            interval=(-1, 1),
+            interval=(-1 + apprx_err, 1 - apprx_err),
             filename=filename,
             include_mach_eps="0p999" not in filename,
             simpson_lw=3.5 if ("0p999" in filename) else None,

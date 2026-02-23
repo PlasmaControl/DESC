@@ -2,14 +2,13 @@
 
 from abc import ABC, abstractmethod
 
-import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux, LinearGridToroidalSurface
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -113,7 +112,7 @@ def _vanilla_params(grid):
 
     Parameters
     ----------
-    grid : LinearGrid
+    grid : LinearGridFlux
         Grid that can fft2.
 
     Returns
@@ -145,7 +144,7 @@ def best_params(grid, ratio):
 
     Parameters
     ----------
-    grid : LinearGrid
+    grid : LinearGridFlux
         Grid that can fft2.
     ratio : float
         Mean best ratio.
@@ -193,7 +192,7 @@ def _local_params(grid, ratio):
 
     Parameters
     ----------
-    grid : LinearGrid
+    grid : LinearGridFlux
         Grid that can fft2.
     ratio : tuple
         Mean best ratio and local ratio
@@ -289,13 +288,13 @@ def _get_quadrature_nodes(q):
 
 
 class _BIESTInterpolator(IOAble, ABC):
-    """Base class for interpolators from cartesian to polar domain.
+    """Base class for interpolators from Cartesian to polar domain.
 
     Used for singular integral calculations.
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
@@ -432,7 +431,7 @@ class FFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
@@ -514,7 +513,7 @@ class DFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, source_grid : Grid
+    eval_grid, source_grid : AbstractGridFlux
         Evaluation and source points for the integral transform.
         ``source_grid`` must be a tensor-product grid in (ρ, θ, ζ) with
         uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
@@ -1052,9 +1051,9 @@ def compute_B_plasma(
     ----------
     eq : Equilibrium
         Equilibrium that is the source of the plasma current.
-    eval_grid : Grid
+    eval_grid : AbstractGridFlux
         Evaluation points for the magnetic field.
-    source_grid : Grid, optional
+    source_grid : AbstractGridFlux, optional
         Source points for integral.
     normal_only : bool
         If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧
@@ -1076,12 +1075,8 @@ def compute_B_plasma(
 
     """
     if source_grid is None:
-        source_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
+        source_grid = LinearGridFlux(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP if eq.N > 0 else 64, sym=False
         )
 
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
@@ -1098,7 +1093,14 @@ def compute_B_plasma(
         )
         interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     if hasattr(eq.surface, "Phi_mn"):
-        source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+        surf_source_grid = LinearGridToroidalSurface(
+            theta=source_grid.nodes[source_grid.unique_x1_idx, 1],
+            zeta=source_grid.nodes[source_grid.unique_x2_idx, 2],
+            NFP=source_grid.NFP,
+            sym=source_grid.sym,
+            endpoint=source_grid.endpoint,
+        )
+        source_data["K_vc"] += eq.surface.compute("K", grid=surf_source_grid)["K"]
     Bplasma = virtual_casing_biot_savart(
         eval_data, source_data, interpolator, chunk_size
     )

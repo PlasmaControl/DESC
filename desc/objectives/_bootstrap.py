@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
@@ -31,11 +31,11 @@ class BootstrapRedlConsistency(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Requires poloidal and
         toroidal resolution as the objective must compute flux surface averages.
         Defaults to
-        ``grid = LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP,``
+        ``grid = LinearGridFlux(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP,``
         ``sym=eq.sym,rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),)``
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
@@ -106,7 +106,7 @@ class BootstrapRedlConsistency(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
@@ -116,6 +116,11 @@ class BootstrapRedlConsistency(_Objective):
         else:
             grid = self._grid
 
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,

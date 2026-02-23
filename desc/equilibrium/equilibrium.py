@@ -27,7 +27,12 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import (
+    AbstractGridFlux,
+    CustomGridFlux,
+    LinearGridFlux,
+    QuadratureGridFlux,
+)
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
@@ -506,10 +511,10 @@ class Equilibrium(IOAble, Optimizable):
                 Optionally a Curve object may also be supplied for the magnetic axis.
               - Another Equilibrium, whose flux surfaces will be used.
               - File path to a VMEC or DESC equilibrium, which will be loaded and used.
-              - Grid and 2-3 ndarrays, specifying the flux surface locations (R, Z, and
-                optionally lambda) at fixed flux coordinates. All arrays should have the
-                same length. Optionally, an ndarray of shape(k,3) may be passed instead
-                of a grid.
+              - Grid and 2-3 ndarrays, specifying the flux surface locations
+                (R, Z, and optionally lambda) at fixed flux coordinates. All arrays
+                should have the same length. Optionally, an ndarray of shape(k,3) may be
+                passed instead of a grid.
         ensure_nested : bool
             If True, and the default initial guess does not produce nested surfaces,
             run a small optimization problem to attempt to refine initial guess to
@@ -546,8 +551,8 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
         Use flux surfaces specified by points:
-        nodes should either be a Grid or an ndarray, shape(k,3) giving the locations
-        in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
+        nodes should either be an AbstractGridFlux or an ndarray, shape(k,3) giving the
+        locations in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
         array-like, shape(k,) giving the corresponding real space coordinates
 
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
@@ -765,7 +770,7 @@ class Equilibrium(IOAble, Optimizable):
             Name of the quantity to compute.
             If list is given, then two names are expected: the quantity to spline
             and its radial derivative.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
         kind : {"power_series", "spline", "fourier_zernike"}
@@ -779,7 +784,7 @@ class Equilibrium(IOAble, Optimizable):
         """
         assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            grid = QuadratureGridFlux(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
         knots = grid.compress(grid.nodes[:, 0])
         if isinstance(name, str):
@@ -848,7 +853,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
@@ -878,12 +883,12 @@ class Equilibrium(IOAble, Optimizable):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            grid = QuadratureGridFlux(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         errorif(
-            not isinstance(grid, _Grid),
+            not isinstance(grid, AbstractGridFlux),
             TypeError,
-            msg="must pass in a Grid object for argument grid!"
-            f" instead got type {type(grid)}",
+            msg="Must pass in an AbstractGridFlux object for argument grid, "
+            + f"but instead got type {type(grid)}.",
         )
         # a check for Redl to prevent computing on-axis or
         # at a rho=1.0 point where profiles vanish
@@ -940,7 +945,7 @@ class Equilibrium(IOAble, Optimizable):
                 outbasis=("rho", "theta", "zeta"),
                 period=grid.period,
             )
-            grid = Grid(
+            grid = CustomGridFlux(
                 nodes=rtz_nodes,
                 coordinates="rtz",
                 source_grid=grid,
@@ -1027,10 +1032,10 @@ class Equilibrium(IOAble, Optimizable):
         calc1dz = bool(dep1dz)
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
-            if isinstance(grid, QuadratureGrid):
+            if isinstance(grid, QuadratureGridFlux):
                 calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
                 calc1dz = False
-            if isinstance(grid, LinearGrid):
+            if isinstance(grid, LinearGridFlux):
                 calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
                 calc1dz = False
         else:
@@ -1087,7 +1092,7 @@ class Equilibrium(IOAble, Optimizable):
         # with a resolution requirement or the user precomputes it.
 
         if calc0d and override_grid:
-            grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            grid0d = QuadratureGridFlux(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(
                 self,
@@ -1119,7 +1124,7 @@ class Equilibrium(IOAble, Optimizable):
         else:
             data0d_seed = {}
         if calc1dr and override_grid:
-            grid1dr = LinearGrid(
+            grid1dr = LinearGridFlux(
                 rho=grid.compress(grid.nodes[:, 0], surface_label="rho"),
                 M=self.M_grid,
                 N=self.N_grid,
@@ -1169,7 +1174,7 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data1dr)
 
         if calc1dz and override_grid:
-            grid1dz = LinearGrid(
+            grid1dz = LinearGridFlux(
                 zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
                 M=self.M_grid,
@@ -1344,7 +1349,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        desc_grid : Grid
+        desc_grid : CustomGridFlux
             DESC coordinate grid for the given coordinates.
 
         """
@@ -1406,7 +1411,7 @@ class Equilibrium(IOAble, Optimizable):
         if jnp.ndim(rho) < 2:
             zero = jnp.zeros_like(rho)
             rho = jnp.column_stack([rho, zero, zero])
-        return iota_profile.compute(Grid(rho, jitable=True))
+        return iota_profile.compute(CustomGridFlux(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1422,9 +1427,9 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        grid  :  Grid, optional
+        grid : AbstractGridFlux, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
-            (Default to QuadratureGrid with eq's current grid resolutions)
+            Defaults to QuadratureGridFlux with eq's current grid resolutions.
         R_lmn, Z_lmn, L_lmn : ndarray, optional
             spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
@@ -2111,7 +2116,7 @@ class Equilibrium(IOAble, Optimizable):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
+        grid = LinearGridFlux(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,

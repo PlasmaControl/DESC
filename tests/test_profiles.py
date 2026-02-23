@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.io import InputReader
 from desc.objectives import (
     ForceBalance,
@@ -399,7 +399,7 @@ class TestProfiles:
         zp = pp.to_fourierzernike()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
         tp = TwoPowerProfile(params=np.array([0.5, 2, 1.5]))
-        grid = LinearGrid(L=9)
+        grid = LinearGridFlux(L=9)
 
         with pytest.raises(ValueError):
             zp.params = 4
@@ -537,7 +537,7 @@ class TestProfiles:
             N_grid=0,
             sym=True,
         )
-        grid = LinearGrid(L=20)
+        grid = LinearGridFlux(L=20)
         data1 = eq1.compute(["p", "p_r"], grid=grid)
         data2 = eq2.compute(["p", "p_r"], grid=grid)
 

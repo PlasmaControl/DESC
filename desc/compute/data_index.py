@@ -300,7 +300,7 @@ deprecated_names = {
 def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
     """Is name constant throughout plasma volume and needs full volume to compute?."""
     # Should compute on a grid that samples entire plasma volume.
-    # In particular, a QuadratureGrid for accurate radial integration.
+    # In particular, a QuadratureGridFlux for accurate radial integration.
     return (
         data_index[p][name]["coordinates"] == ""
         and data_index[p][name]["resolution_requirement"] != ""

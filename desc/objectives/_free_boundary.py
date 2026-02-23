@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import AbstractGridFlux, LinearGridFlux
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
@@ -44,10 +44,10 @@ class VacuumBoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils or other sources outside the plasma.
-    eval_grid : Grid, optional
+    eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
-    field_grid : Grid, optional
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``
+    field_grid : AbstractGrid, optional
         Grid used to discretize field. Defaults to the default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
@@ -135,7 +135,7 @@ class VacuumBoundaryError(_Objective):
 
         eq = self.things[0]
         if self._eval_grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
@@ -144,6 +144,14 @@ class VacuumBoundaryError(_Objective):
         data = eq.compute(["p", "current"])
         pres = np.max(np.abs(data["p"]))
         curr = np.max(np.abs(data["current"]))
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(grid)
+            ),
+        )
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -401,12 +409,12 @@ class BoundaryError(_Objective):
         If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
     q : int
         Order of integration on the local singular grid.
-    source_grid, eval_grid : Grid, optional
+    source_grid, eval_grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
-    field_grid : Grid, optional
+        Defaults to ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for both.
+    field_grid : AbstractGrid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
@@ -535,7 +543,7 @@ class BoundaryError(_Objective):
         if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
-            source_grid = LinearGrid(
+            source_grid = LinearGridFlux(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -552,6 +560,20 @@ class BoundaryError(_Objective):
 
         self._use_same_grid = eval_grid.equiv(source_grid)
 
+        errorif(
+            not isinstance(source_grid, AbstractGridFlux),
+            ValueError,
+            msg="source_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(source_grid)
+            ),
+        )
+        errorif(
+            not isinstance(eval_grid, AbstractGridFlux),
+            ValueError,
+            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
+                type(eval_grid)
+            ),
+        )
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -924,7 +946,7 @@ class BoundaryErrorNESTOR(_Objective):
         maximum poloidal and toroidal mode numbers to use for NESTOR scalar potential.
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
-    field_grid : Grid, optional
+    field_grid : AbstractGrid, optional
         Grid used to discretize field.
 
     """
@@ -1007,7 +1029,7 @@ class BoundaryErrorNESTOR(_Objective):
             self._nzeta,
             self._field_grid,
         )
-        grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
 
         timer = Timer()

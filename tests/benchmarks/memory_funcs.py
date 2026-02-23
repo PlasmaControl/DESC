@@ -22,7 +22,7 @@ if sys.argv[2] in ["GPU", "gpu"]:
 
 import desc.examples
 from desc.backend import jax
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     BoundaryError,
@@ -65,7 +65,9 @@ def test_proximal_jac_w7x_with_eq_update():
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("W7-X")
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    grid = LinearGridFlux(
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10)
+    )
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(

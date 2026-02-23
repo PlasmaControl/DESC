@@ -24,7 +24,7 @@ from desc.basis import (
     zernike_radial_poly,
 )
 from desc.derivatives import Derivative
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 
 
 class TestBasis:
@@ -73,7 +73,7 @@ class TestBasis:
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]
         coeffs = zernike_radial_coeffs(l, m, exact=True)
-        grid = LinearGrid(L=20)
+        grid = LinearGridFlux(L=20)
         r = grid.nodes[:, 0]
         mpmath.mp.dps = 100
         exactf = np.array(
@@ -231,7 +231,7 @@ class TestBasis:
     @pytest.mark.unit
     def test_power_series(self):
         """Test PowerSeries evaluation."""
-        grid = LinearGrid(rho=11)
+        grid = LinearGridFlux(rho=11)
         r = grid.nodes[:, 0]  # rho coordinates
 
         correct_vals = np.array([np.ones_like(r), r, r**2]).T
@@ -247,7 +247,7 @@ class TestBasis:
     @pytest.mark.unit
     def test_double_fourier(self):
         """Test DoubleFourierSeries evaluation."""
-        grid = LinearGrid(M=2, N=2)
+        grid = LinearGridFlux(M=2, N=2)
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 

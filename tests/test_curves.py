@@ -11,7 +11,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridCurve, LinearGridCurve
 from desc.io import InputReader
 
 
@@ -150,7 +150,7 @@ class TestFourierRZCurve:
     def test_to_FourierXYZCurve(self):
         """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
@@ -171,7 +171,7 @@ class TestFourierRZCurve:
             atol=1e-12,
         )
         # same thing but pass in a closed grid
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGridCurve(N=20, endpoint=True)
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
@@ -193,7 +193,7 @@ class TestFourierRZCurve:
         )
 
         # same thing but with arclength angle
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(
@@ -203,7 +203,7 @@ class TestFourierRZCurve:
         )
 
         # pass in non-monotonic s
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         s = grid.nodes[:, 2]
         s[-2] = s[-1]
         with pytest.raises(ValueError):
@@ -215,7 +215,7 @@ class TestFourierRZCurve:
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         xyz = rz.to_SplineXYZ(grid=500, knots="arclength")
 
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
@@ -267,7 +267,7 @@ class TestFourierRZCurve:
     def test_to_FourierRZCurve(self):
         """Test conversion to FourierRZCurve."""
         xyz = FourierXYZCurve(modes=[-1, 1], X_n=[0, 10], Y_n=[10, 0], Z_n=[0, 0])
-        grid = LinearGrid(N=10, endpoint=False)
+        grid = LinearGridCurve(N=10, endpoint=False)
         # convert back and check now
         rzz = xyz.to_FourierRZ(N=2, grid=grid)
         np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
@@ -292,7 +292,7 @@ class TestFourierRZCurve:
         )
 
         # same thing but pass in a closed grid
-        grid = LinearGrid(N=10, endpoint=True)
+        grid = LinearGridCurve(N=10, endpoint=True)
         rzz = xyz.to_FourierRZ(N=2, grid=grid)
         np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
         np.testing.assert_allclose(rzz.Z_n, 0)
@@ -314,17 +314,8 @@ class TestFourierRZCurve:
             atol=1e-12,
         )
         # pass in non-monotonic phi
-        phi_non_monotonic = np.array([0, 3, 2, 4, 1])
-        grid = Grid(
-            np.vstack(
-                [
-                    np.zeros_like(phi_non_monotonic),
-                    np.zeros_like(phi_non_monotonic),
-                    phi_non_monotonic,
-                ]
-            ).T,
-            sort=False,
-        )
+        s = np.array([0, 3, 2, 4, 1])
+        grid = CustomGridCurve(np.array([np.zeros_like(s), np.zeros_like(s), s]).T)
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
@@ -467,7 +458,7 @@ class TestFourierXYZCurve:
             c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
 
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         coords1 = c.compute("x", grid=grid, basis="xyz")["x"]
         coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
 
@@ -713,7 +704,7 @@ class TestFourierPlanarCurve:
         c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
         c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
 
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGridCurve(N=20, endpoint=True)
 
         coords_spline = c.compute("x", grid=grid)["x"]
         coords_planar = c_planar.compute("x", grid=grid)["x"]
@@ -934,7 +925,7 @@ class TestFourierXYCurve:
         c_planar = c.to_FourierXY(N=N, grid=npts, basis="xyz")
         c_backwards_planar = c_backwards.to_FourierXY(N=N, grid=npts, basis="xyz")
 
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGridCurve(N=20, endpoint=True)
 
         coords_spline = c.compute("x", grid=grid)["x"]
         coords_planar = c_planar.compute("x", grid=grid)["x"]
@@ -958,7 +949,7 @@ class TestFourierXYCurve:
         """Test converting FourierRZCurve to FourierXYCurve."""
         # test different options for passing in s
         rz = FourierRZCurve(R_n=[0, 10, 0], Z_n=[-1, 0, 0])
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
@@ -981,7 +972,7 @@ class TestFourierXYCurve:
             atol=1e-12,
         )
         # same thing but pass in a closed grid
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGridCurve(N=20, endpoint=True)
         xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
@@ -1004,7 +995,7 @@ class TestFourierXYCurve:
         )
 
         # same thing but with arclength angle
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         xyz = rz.to_FourierXY(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(
@@ -1014,7 +1005,7 @@ class TestFourierXYCurve:
         )
 
         # pass in non-monotonic s
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         s = grid.nodes[:, 2]
         s[-2] = s[-1]
         with pytest.raises(ValueError):
@@ -1124,7 +1115,7 @@ class TestSplineXYZCurve:
             c.X = R * np.cos(phi)
             c.Y = R * np.sin(phi)
             c.Z = np.ones_like(phi)
-            grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, npts, endpoint=False))
+            grid = LinearGridCurve(s=np.linspace(0, 2 * np.pi, npts, endpoint=False))
             np.testing.assert_allclose(
                 c.compute("length", grid=grid)["length"],
                 R * 2 * np.pi,
@@ -1145,7 +1136,7 @@ class TestSplineXYZCurve:
         R = 3
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=False)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        x, y, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="xyz")[
+        x, y, z = c.compute("x", grid=CustomGridCurve(np.zeros((1, 3))), basis="xyz")[
             "x"
         ].T
         np.testing.assert_allclose(x, R)
@@ -1154,7 +1145,7 @@ class TestSplineXYZCurve:
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        r, p, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="rpz")[
+        r, p, z = c.compute("x", grid=CustomGridCurve(np.zeros((1, 3))), basis="rpz")[
             "x"
         ].T
         np.testing.assert_allclose(r, np.sqrt(1**2 + (R - 1) ** 2))
@@ -1210,7 +1201,7 @@ class TestSplineXYZCurve:
         np.testing.assert_allclose(
             c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
-        grid = LinearGrid(N=20, endpoint=False)
+        grid = LinearGridCurve(N=20, endpoint=False)
         coords1 = c.compute("x", grid=grid)["x"]
         coords2 = c2.compute("x", grid=grid)["x"]
 

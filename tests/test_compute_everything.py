@@ -24,7 +24,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid
+from desc.grid import LinearGridCurve, LinearGridFlux
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
@@ -132,7 +132,7 @@ def test_compute_everything():
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZ(grid=LinearGrid(N=50)),
+        ).to_SplineXYZ(grid=LinearGridCurve(N=50)),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -195,7 +195,7 @@ def test_compute_everything():
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size
-    eqgrid = LinearGrid(
+    eqgrid = LinearGridFlux(
         L=9,
         M=5,
         N=5,
@@ -203,9 +203,9 @@ def test_compute_everything():
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
         axis=True,
     )
-    curvegrid1 = LinearGrid(N=10)
-    curvegrid2 = LinearGrid(N=10, NFP=2)
-    fieldgrid = LinearGrid(
+    curvegrid1 = LinearGridCurve(N=10)
+    curvegrid2 = LinearGridCurve(N=10, NFP=2)
+    fieldgrid = LinearGridFlux(
         L=2,
         M=4,
         N=5,

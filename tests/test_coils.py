@@ -24,7 +24,7 @@ from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridCurve, LinearGridCurve, LinearGridFlux
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
@@ -37,7 +37,7 @@ class TestCoil:
     @pytest.mark.unit
     def test_biot_savart_all_coils(self):
         """Test biot-savart implementation against analytic formula."""
-        coil_grid = LinearGrid(zeta=100, endpoint=False)
+        coil_grid = LinearGridCurve(s=100, endpoint=False)
 
         R = 2
         y = 1
@@ -188,7 +188,7 @@ class TestCoil:
     @pytest.mark.unit
     def test_biot_savart_vector_potential_all_coils(self):
         """Test biot-savart vec potential implementation against analytic formula."""
-        coil_grid = LinearGrid(zeta=100, endpoint=False)
+        coil_grid = LinearGridCurve(s=100, endpoint=False)
 
         R = 2
         y = 1
@@ -253,7 +253,7 @@ class TestCoil:
         # "A Magnetic Diagnostic Code for 3D Fusion Equilibria", Lazerson 2013
         # find flux for concentric loops of varying radii to a circular coil
 
-        coil_grid = LinearGrid(zeta=1000, endpoint=False)
+        coil_grid = LinearGridCurve(s=1000, endpoint=False)
 
         R = 1
         I = 1e7
@@ -276,7 +276,7 @@ class TestCoil:
         # we only evaluate it at theta=np.pi/2 (b/c it is in spherical coords)
         rs = np.linspace(0.1, 3, 10, endpoint=True)
         N = 200
-        curve_grid = LinearGrid(zeta=N)
+        curve_grid = LinearGridCurve(s=N)
 
         def test(
             coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
@@ -462,17 +462,20 @@ class TestCoil:
         coil5 = coil1.to_FourierXY(N=10, basis="rpz")
         coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
 
-        grid = LinearGrid(zeta=s)
+        grid = LinearGridCurve(s=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
         x4 = coil4.compute("x", grid=grid, basis="xyz")["x"]
         x5 = coil5.compute("x", grid=grid, basis="xyz")["x"]
-        zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
+        angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x1[:, 1] - coil5.center[1],
             x1[:, 0] - coil5.center[0],
-        )  # use Grid instead of LinearGrid to prevent node sorting
-        grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        s = np.atleast_1d(np.asarray(angle))
+        grid_planar = CustomGridCurve(
+            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
+        )
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
@@ -557,7 +560,7 @@ class TestCoilSet:
         coil = FourierPlanarCoil()
         coil.current = I
         coils = CoilSet.linspaced_angular(coil, n=N)
-        grid = LinearGrid(N=32, endpoint=False)
+        grid = LinearGridCurve(N=32, endpoint=False)
         transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
@@ -585,7 +588,7 @@ class TestCoilSet:
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
         coils = MixedCoilSet.from_symmetry(coils, NFP=4)
-        grid = LinearGrid(N=32, endpoint=False)
+        grid = LinearGridCurve(N=32, endpoint=False)
         transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
@@ -611,7 +614,7 @@ class TestCoilSet:
         for i, c in enumerate(coils[1:]):
             c.rotate(angle=2 * np.pi / N * (i + 1))
         coils = MixedCoilSet.from_symmetry(coils, NFP=4)
-        grid = LinearGrid(N=32, endpoint=False)
+        grid = LinearGridCurve(N=32, endpoint=False)
         transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid
@@ -807,7 +810,7 @@ class TestCoilSet:
     @pytest.mark.unit
     def test_convert_type(self):
         """Test converting coilsets between different representations."""
-        grid = LinearGrid(N=20)
+        grid = LinearGridCurve(N=20)
         coil = FourierRZCoil(1e6, [0, 10, 1], [0, 0, 0])
 
         # MixedCoilSet
@@ -828,12 +831,16 @@ class TestCoilSet:
         x1 = coils1.compute("x", grid=grid, basis="xyz")
         x2 = coils2.compute("x", grid=grid, basis="xyz")
         x3 = coils3.compute("x", grid=grid, basis="xyz")
-        zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
+        angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x0[0]["x"][:, 1] - coils3[0].center[1],
             x0[0]["x"][:, 0] - coils3[0].center[0],
-        )  # use Grid instead of LinearGrid to prevent node sorting
-        grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        s = np.atleast_1d(np.asarray(angle))
+        grid_planar = CustomGridCurve(
+            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
+        )
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
+
         np.testing.assert_allclose(
             [xi["x"] for xi in x0], [xi["x"] for xi in x1], atol=1e-12
         )
@@ -875,12 +882,16 @@ class TestCoilSet:
         x6 = coils6.compute("x", grid=grid, basis="xyz")
         x7 = coils7.compute("x", grid=grid, basis="xyz")
         x8 = coils8.compute("x", grid=grid, basis="xyz")
-        zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
+        angle = np.arctan2(  # angle = polar angle for planar coil for same points
             x5[0]["x"][:, 1] - coils8[0].center[1],
             x5[0]["x"][:, 0] - coils8[0].center[0],
-        )  # use Grid instead of LinearGrid to prevent node sorting
-        grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
+        )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
+        s = np.atleast_1d(np.asarray(angle))
+        grid_planar = CustomGridCurve(
+            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
+        )
         x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
+
         np.testing.assert_allclose(
             [xi["x"] for xi in x5], [xi["x"] for xi in x6], atol=1e-12
         )
@@ -915,7 +926,7 @@ def test_symmetry_position(DummyCoilSet):
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
     coilset_mixed = MixedCoilSet(*coilset_asym)
-    grid = LinearGrid(N=30)
+    grid = LinearGridCurve(N=30)
 
     # check that positions of CoilSets are the same with xyz basis
     x_sym = coilset_sym._compute_position(basis="xyz", grid=grid)
@@ -947,7 +958,7 @@ def test_symmetry_magnetic_field(DummyCoilSet):
     )
 
     # test that both coil sets compute the same field on the plasma surface
-    grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
+    grid = LinearGridFlux(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
         data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
 
@@ -978,19 +989,19 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
 
     path = tmpdir.join("coils.MAKEGRID_format_desc")
     coilset.save_in_makegrid_format(
-        str(path), grid=LinearGrid(zeta=coilset[0].knots, theta=0, endpoint=True)
+        str(path), grid=LinearGridCurve(s=coilset[0].knots, endpoint=True)
     )
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
-    grid = LinearGrid(N=200, endpoint=False)
+    grid = LinearGridCurve(N=200, endpoint=False)
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
         # make sure knots are exactly the same
         np.testing.assert_allclose(c1.knots, c2.knots, err_msg=f"Coil {i}")
 
-        grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -1007,7 +1018,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check magnetic field from both, check that matches
-    grid = LinearGrid(N=200, endpoint=False)
+    grid = LinearGridCurve(N=200, endpoint=False)
     B1 = coilset.compute_magnetic_field(
         np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
     )
@@ -1043,7 +1054,7 @@ def test_load_and_save_makegrid_coils_diff_length_of_knots(tmpdir_factory):
     coilset2 = MixedCoilSet.from_makegrid_coilfile(str(path))
     assert isinstance(coilset2, MixedCoilSet)
 
-    grid = LinearGrid(N=50, endpoint=False)
+    grid = LinearGridCurve(N=50, endpoint=False)
 
     # check values, ensure they are close
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
@@ -1065,7 +1076,7 @@ def test_load_and_save_makegrid_coils_diff_length_of_knots(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, rtol=1e-3, err_msg=f"Coil {i}")
 
     # check magnetic field from both, check that matches
-    grid = LinearGrid(N=200, endpoint=False)
+    grid = LinearGridCurve(N=200, endpoint=False)
     B1 = coilset.compute_magnetic_field(
         np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
     )
@@ -1095,7 +1106,7 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
     path = tmpdir.join("coils.MAKEGRID_format_groups_desc")
 
     coilset.save_in_makegrid_format(
-        str(path), grid=LinearGrid(zeta=coilset[0][0].knots, theta=0, endpoint=True)
+        str(path), grid=LinearGridCurve(s=coilset[0][0].knots, endpoint=True)
     )
     coilset2 = MixedCoilSet.from_makegrid_coilfile(str(path), ignore_groups=False)
     # also compare to flattened
@@ -1108,7 +1119,7 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
         assert groupname in coils.name
         assert str(i + 1) in coils.name  # make sure the correct number is in the name
 
-    grid = LinearGrid(zeta=coilset[0][0].knots, endpoint=False)
+    grid = LinearGridCurve(s=coilset[0][0].knots, endpoint=False)
 
     # check values at saved points, ensure they match
     for i, (cs1, cs2) in enumerate(zip(coilset, coilset2)):
@@ -1158,7 +1169,7 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
             )
 
     # check magnetic field from both, check that matches
-    grid = LinearGrid(N=200, endpoint=False)
+    grid = LinearGridCurve(N=200, endpoint=False)
     B1 = coilset.compute_magnetic_field(
         np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
     )
@@ -1185,14 +1196,14 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
     coil.current = 1
     coilset = CoilSet.linspaced_angular(coil, n=N, angle=2 * np.pi)
 
-    grid = LinearGrid(N=200, endpoint=False)
+    grid = LinearGridCurve(N=200, endpoint=False)
     coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
-        grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -1209,7 +1220,7 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=51, endpoint=False)
+    grid = LinearGridCurve(N=51, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
@@ -1271,7 +1282,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
-        grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
+        grid = LinearGridCurve(s=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -1288,7 +1299,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=101, endpoint=False)
+    grid = LinearGridCurve(N=101, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
@@ -1347,7 +1358,7 @@ def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
     )
     coilset = MixedCoilSet(coilset_NFP, coilset_sym)
 
-    grid = LinearGrid(N=25, endpoint=False)
+    grid = LinearGridCurve(N=25, endpoint=False)
     coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
@@ -1448,7 +1459,7 @@ def test_repr():
 def test_linking_number():
     """Test calculation of linking number."""
     coil = FourierPlanarCoil(center=[10, 1, 0])
-    grid = LinearGrid(N=25)
+    grid = LinearGridCurve(N=25)
     # regular modular coilset from symmetry, so that there are 10 coils, half going
     # one way and half going the other way
     coilset = CoilSet(coil, NFP=5, sym=True)
@@ -1494,7 +1505,7 @@ def test_initialize_saddle():
     y = coilset._compute_position()
     assert len(y) == 6  # 3 coils/fp * 2 fp
     np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
-    x = coilset[1]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    x = coilset[1]._compute_position(grid=LinearGridCurve(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 3 coils, one coil should be right in the middle at pi/2, eg parallel to
     # x axis
@@ -1507,7 +1518,7 @@ def test_initialize_saddle():
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
     np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
-    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    x = coilset[0]._compute_position(grid=LinearGridCurve(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
     np.testing.assert_allclose(x[:, 1], 12)  # R ~ 10+2
@@ -1522,7 +1533,7 @@ def test_initialize_saddle():
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
     np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
-    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    x = coilset[0]._compute_position(grid=LinearGridCurve(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
     np.testing.assert_allclose(x[:, 2], offset)  # Z ~ 3
@@ -1536,7 +1547,7 @@ def test_initialize_saddle():
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
     np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
-    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    x = coilset[0]._compute_position(grid=LinearGridCurve(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
     np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
@@ -1561,7 +1572,7 @@ def test_initialize_helical():
     a = eq.compute("a")["a"]
     data = eq.compute(
         ["R", "phi", "Z"],
-        grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+        grid=LinearGridFlux(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
     )
     rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
     rpz = copy_rpz_periods(rpz, eq.NFP)
@@ -1586,7 +1597,7 @@ def test_planar_coil_from_values_orientation():
     coil_planar2 = coil_XYZ.to_FourierXY(N=1)
 
     coords = [[1, 1, 1]]
-    grid = LinearGrid(N=40)
+    grid = LinearGridCurve(N=40)
     B_XYZ = coil_XYZ.compute_magnetic_field(coords, source_grid=grid)
     B_planar1 = coil_planar1.compute_magnetic_field(coords, source_grid=grid)
     B_planar2 = coil_planar2.compute_magnetic_field(coords, source_grid=grid)
@@ -1605,7 +1616,7 @@ def test_planar_coil_opposing_normals_fields():
     def test(coil1):
         coil2 = coil1.copy()
         coil2.normal = -coil1.normal
-        grid = LinearGrid(N=20)
+        grid = LinearGridCurve(N=20)
         field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
         field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
         # because the normals are opposite directions, the "positive" current direction

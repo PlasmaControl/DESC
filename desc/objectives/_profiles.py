@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
@@ -37,9 +37,9 @@ class Pressure(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid)``.
+        Defaults to ``LinearGridFlux(L=eq.L_grid)``.
 
     """
 
@@ -92,7 +92,7 @@ class Pressure(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
@@ -166,9 +166,9 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
 
@@ -227,7 +227,7 @@ class RotationalTransform(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -314,9 +314,9 @@ class Shear(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
 
@@ -375,7 +375,7 @@ class Shear(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -458,9 +458,9 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
 
@@ -515,7 +515,7 @@ class ToroidalCurrent(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,

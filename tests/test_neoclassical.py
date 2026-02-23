@@ -8,7 +8,7 @@ import pytest
 from tests.test_plotting import tol_1d
 
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.integrals import Bounce2D
 from desc.utils import setdefault
 from desc.vmec import VMECIO
@@ -27,7 +27,7 @@ def test_effective_ripple_2D(nufft_eps):
     """
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
         "effective ripple 3/2",
@@ -63,7 +63,7 @@ def test_effective_ripple_1D():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         "old effective ripple", grid=grid, num_well=num_well, surf_batch_size=2
     )
@@ -91,11 +91,13 @@ def test_fieldline_average():
     rho = np.array([1])
     alpha = np.array([0])
     eq = get("DSHAPE")
-    iota_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota_grid = LinearGridFlux(
+        rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
@@ -110,7 +112,7 @@ def test_fieldline_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute(
         ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )

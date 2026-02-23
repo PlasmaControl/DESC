@@ -19,7 +19,7 @@ from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import LinearGrid
+from desc.grid import LinearGridCurve, LinearGridFlux, LinearGridToroidalSurface
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -353,7 +353,10 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field(
                 [10.0, 0, 0],
-                source_grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)],
+                source_grid=[
+                    None,
+                    LinearGridToroidalSurface(M=30, N=30, NFP=surface.NFP),
+                ],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
@@ -411,11 +414,11 @@ class TestMagneticFields:
         correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
 
         curve = FourierXYZCurve()  # curve to integrate A over
-        curve_grid = LinearGrid(zeta=20)
+        curve_grid = LinearGridCurve(s=20)
         curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
-        surface_grid = LinearGrid(M=60, N=60, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=60, N=60, NFP=10)
 
         A_xyz = field.compute_magnetic_vector_potential(
             curve_data["x"], basis="xyz", source_grid=surface_grid
@@ -483,7 +486,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        surface_grid = LinearGrid(M=120, N=120, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=120, N=120, NFP=10)
 
         phi_mn = np.zeros((basis.num_modes,))
 
@@ -606,7 +609,7 @@ class TestMagneticFields:
             NFP=surface.NFP,
         )
         coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
-            N=2, grid=LinearGrid(N=8), check_intersection=False
+            N=2, grid=LinearGridCurve(N=8), check_intersection=False
         )
 
         np.testing.assert_allclose(
@@ -655,14 +658,16 @@ class TestMagneticFields:
         coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
-            coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            coils.compute_magnetic_field(
+                [20.0, 0, 0], source_grid=LinearGridCurve(N=700)
+            ),
             correct_field(20.0, 0, 0),
             atol=2e-8,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
             coils.compute_magnetic_field(
-                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+                [20.0, np.pi / 4, 0], source_grid=LinearGridCurve(N=700)
             ),
             correct_field(20.0, np.pi / 4, 0),
             atol=2e-8,
@@ -683,14 +688,16 @@ class TestMagneticFields:
         coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
-            -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            -coils.compute_magnetic_field(
+                [20.0, 0, 0], source_grid=LinearGridCurve(N=700)
+            ),
             correct_field(20.0, 0, 0),
             atol=2e-8,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
             -coils.compute_magnetic_field(
-                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+                [20.0, np.pi / 4, 0], source_grid=LinearGridCurve(N=700)
             ),
             correct_field(20.0, np.pi / 4, 0),
             atol=2e-8,
@@ -722,7 +729,7 @@ class TestMagneticFields:
         correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
 
         curve = FourierXYZCurve()  # curve to integrate A over
-        curve_grid = LinearGrid(zeta=20)
+        curve_grid = LinearGridCurve(s=20)
         curve_data = curve.compute(["x", "x_s"], grid=curve_grid)
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
@@ -741,7 +748,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        surface_grid = LinearGrid(M=60, N=60, NFP=10)
+        surface_grid = LinearGridToroidalSurface(M=60, N=60, NFP=10)
 
         phi_mn = np.zeros((basis.num_modes,))
 
@@ -1072,10 +1079,12 @@ class TestMagneticFields:
         p = np.linspace(0, 2 * np.pi / 5, 40)
         # add source_grid here just for code coverage
         field2 = SplineMagneticField.from_field(
-            field1, R, p, Z, source_grid=LinearGrid(N=1)
+            field1, R, p, Z, source_grid=LinearGridCurve(N=1)
         )
         # test the logic when compute_vector_potential returns a ValueError
-        _ = SplineMagneticField.from_field(field2, R, p, Z, source_grid=LinearGrid(N=1))
+        _ = SplineMagneticField.from_field(
+            field2, R, p, Z, source_grid=LinearGridCurve(N=1)
+        )
         # test NFP warning
         with pytest.warns(UserWarning):
             # user warning because NFP != field.NFP
@@ -1101,8 +1110,8 @@ class TestMagneticFields:
             nZ=field3._Z.size,
             nphi=field3._phi.size,
             # just to test the source_grid function, the
-            # field is independent of source_Grid
-            source_grid=LinearGrid(N=0),
+            # field is independent of source_grid
+            source_grid=LinearGridCurve(N=0),
         )
         # no need for extcur b/c is saved in "raw" format, no need to scale again
         field4 = SplineMagneticField.from_mgrid(path)
@@ -1389,7 +1398,7 @@ class TestMagneticFields:
         path = tmpdir.join("BNORM_desc.txt")
         tfield = ToroidalMagneticField(2, 1)
         eq = get("DSHAPE")
-        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        grid = LinearGridToroidalSurface(M=20, N=20, NFP=eq.NFP)
         x = eq.surface.compute("x", grid=grid, basis="rpz")["x"]
         Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
             eq.surface, eval_grid=grid, source_grid=grid, basis="rpz"
@@ -1425,7 +1434,7 @@ class TestMagneticFields:
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)
         eq = get("HELIOTRON")
-        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        grid = LinearGridToroidalSurface(M=20, N=20, NFP=eq.NFP)
         x = eq.surface.compute("x", grid=grid, basis="xyz")["x"]
         Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
             eq.surface, eval_grid=grid, basis="xyz"
@@ -1517,9 +1526,9 @@ class TestMagneticFields:
             helicity=(0, NFP),
             B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
         )
-        grid_axis = LinearGrid(rho=[0.0], M=50)
-        grid_half = LinearGrid(rho=[0.5], M=50)
-        grid_lcfs = LinearGrid(rho=[1.0], M=50)
+        grid_axis = LinearGridFlux(rho=[0.0], M=50)
+        grid_half = LinearGridFlux(rho=[0.5], M=50)
+        grid_lcfs = LinearGridFlux(rho=[1.0], M=50)
         B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
         B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
         B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
@@ -1551,20 +1560,20 @@ class TestMagneticFields:
         with pytest.raises(AssertionError, match="Expected MagneticField"):
             solve_regularized_surface_current(field, eq, external_field=eq)
         field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
-        grid = LinearGrid(M=1, N=1)
-        # nested with pytest.warns, if a warning is not detected it is
-        # re-emitted and goes through the higher level context,
-        #  this lets us test 3 different warnings with one fxn
-        # call here
+        grid_flux = LinearGridFlux(M=1, N=1)
+        grid_surf = LinearGridToroidalSurface(M=1, N=1)
+        # nested with pytest.warns, if a warning is not detected it is re-emitted and
+        # goes through the higher level context, this lets us test 3 different warnings
+        # with one function call here
         with pytest.warns(UserWarning, match="Detected"):
             with pytest.warns(UserWarning, match="Pressure"):
                 with pytest.warns(UserWarning, match="Current"):
                     solve_regularized_surface_current(
                         field,
                         eq,
-                        eval_grid=grid,
-                        source_grid=grid,
-                        vc_source_grid=grid,
+                        eval_grid=grid_flux,
+                        source_grid=grid_surf,
+                        vc_source_grid=grid_flux,
                         verbose=0,
                         vacuum=True,
                     )

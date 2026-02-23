@@ -16,7 +16,7 @@ except ImportError:
 from desc.coils import CoilSet, _Coil
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import LinearGridCurve, LinearGridFlux
 
 
 def export_surface_to_paraview(
@@ -46,9 +46,8 @@ def export_surface_to_paraview(
     Returns
     -------
     mesh : pyvista.StructuredGrid
-        Created structured grid object. With this object one can compute more
-        quantities on `LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
-        and add it to the mesh by `mesh['name'] = value`. Once the mesh is changed,
+        Created structured grid object. With this object one can compute more quantities
+        and add them to the mesh by `mesh['name'] = value`. Once the mesh is changed,
         the user has to save it again `mesh.save(filename)`.
     """
     if not isinstance(obj, (Equilibrium, FourierRZToroidalSurface)):
@@ -58,7 +57,7 @@ def export_surface_to_paraview(
         )
 
     Np, Nt = res
-    grid = LinearGrid(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)
+    grid = LinearGridFlux(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Unequal number of field")
@@ -125,7 +124,7 @@ def export_coils_to_paraview(coils, filename, res=100, keys=[]):
             return [coilset]
 
     coils_list = flatten_coils(coils)
-    grid = LinearGrid(zeta=res, endpoint=True)
+    grid = LinearGridCurve(s=res, endpoint=True)
 
     for i, coil in enumerate(coils_list):
         data = coil.compute(["x"] + keys, grid=grid, basis="xyz")
@@ -181,7 +180,7 @@ def export_volume_to_paraview(
     -------
     mesh : pyvista.StructuredGrid
         Created structured grid object. With this object one can compute more
-        quantities on `LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
+        quantities on `LinearGridFlux(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
         and add it to the mesh by `mesh['name'] = value`. Once the mesh
         is changed, the user has to save it again `mesh.save(filename)`.
     """
@@ -191,7 +190,7 @@ def export_volume_to_paraview(
             f"but {type(eq)} is given."
         )
     Nr, Np, Nt = res
-    grid = LinearGrid(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)
+    grid = LinearGridFlux(rho=Nr, theta=Np, zeta=Nt, NFP=1, endpoint=True)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Unequal number of field")

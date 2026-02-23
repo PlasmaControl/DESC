@@ -10,7 +10,7 @@ import desc.examples
 from desc.backend import jax
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGridFlux, LinearGridFlux
 from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     BoundaryError,
@@ -41,7 +41,7 @@ def test_build_transform_fft_lowres(benchmark):
         L = 5
         M = 5
         N = 5
-        grid = ConcentricGrid(L=L, M=M, N=N)
+        grid = ConcentricGridFlux(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -60,7 +60,7 @@ def test_build_transform_fft_midres(benchmark):
         L = 15
         M = 15
         N = 15
-        grid = ConcentricGrid(L=L, M=M, N=N)
+        grid = ConcentricGridFlux(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -79,7 +79,7 @@ def test_build_transform_fft_highres(benchmark):
         L = 25
         M = 25
         N = 25
-        grid = ConcentricGrid(L=L, M=M, N=N)
+        grid = ConcentricGridFlux(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -330,7 +330,9 @@ def test_perturb_2(benchmark):
 def test_proximal_jac_atf(benchmark):
     """Benchmark computing jacobian of constrained proximal projection."""
     eq = desc.examples.get("ATF")
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    grid = LinearGridFlux(
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10)
+    )
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(
@@ -355,7 +357,9 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
     eq = desc.examples.get("ATF")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(12, 12, 4, 24, 24, 8)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    grid = LinearGridFlux(
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10)
+    )
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(

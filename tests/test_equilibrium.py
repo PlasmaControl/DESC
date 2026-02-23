@@ -13,7 +13,7 @@ from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import _map_clebsch_coordinates
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
@@ -32,7 +32,7 @@ def test_map_PEST_coordinates():
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("lambda", grid=Grid(nodes, sort=False))
+    coords = eq.compute("lambda", grid=CustomGridFlux(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -67,7 +67,7 @@ def test_map_coordinates():
     theta = np.linspace(0, np.pi, 20, endpoint=False)
     zeta = np.linspace(0, np.pi, 20, endpoint=False)
 
-    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    grid = CustomGridFlux(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
     in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
@@ -91,16 +91,16 @@ def test_map_clebsch_coordinates():
     rho = np.linspace(0.5, 1, 2)
     alpha = np.linspace(0, 2 * np.pi, 3)
     zeta = np.array([2 * np.pi, 2 * np.pi - 0.1, np.e, 0.24, 0.2])
-    iota = eq.compute("iota", grid=LinearGrid(rho=rho))["iota"]
+    iota = eq.compute("iota", grid=LinearGridFlux(rho=rho))["iota"]
 
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     out = eq.map_coordinates(
         grid.nodes, inbasis=("rho", "alpha", "zeta"), iota=grid.expand(iota)
     )
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "Unequal number of field periods")
         lmbda = get_transforms(
-            "lambda", eq, LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+            "lambda", eq, LinearGridFlux(rho=rho, M=eq.L_basis.M, zeta=zeta)
         )["L"]
     assert lmbda.basis.NFP == eq.NFP
     np.testing.assert_allclose(
@@ -124,7 +124,7 @@ def test_map_coordinates_derivative():
     theta = np.linspace(0, np.pi, 20, endpoint=False)
     zeta = np.linspace(0, np.pi, 20, endpoint=False)
 
-    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    grid = CustomGridFlux(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
     in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
 
@@ -155,7 +155,7 @@ def test_map_coordinates_derivative():
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("lambda", grid=Grid(nodes, sort=False))
+    coords = eq.compute("lambda", grid=CustomGridFlux(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -304,7 +304,7 @@ def test_equilibrium_from_near_axis():
 
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     data = eq.compute("|B|", grid=grid)
 
     # get the sin/cos modes
@@ -416,7 +416,7 @@ def test_change_NFP():
 
 @pytest.mark.unit
 def test_error_when_ndarray_or_integer_passed():
-    """Test that errors raise correctly when a non-Grid object is passed."""
+    """Test that errors raise correctly when a non-AbstractGrid object is passed."""
     eq = get("DSHAPE")
     with pytest.raises(TypeError):
         eq.compute("R", grid=1)

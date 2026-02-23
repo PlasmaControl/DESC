@@ -3,8 +3,8 @@
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.grid import AbstractGridFlux, ConcentricGridFlux, QuadratureGridFlux
+from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -33,9 +33,9 @@ class ForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -91,7 +91,7 @@ class ForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -101,6 +101,12 @@ class ForceBalance(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = [
@@ -188,9 +194,9 @@ class ForceBalanceAnisotropic(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, ndarray, optional
+    grid : AbstractGridFlux, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -246,7 +252,7 @@ class ForceBalanceAnisotropic(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -256,6 +262,12 @@ class ForceBalanceAnisotropic(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["F_anisotropic", "sqrt(g)"]
@@ -325,9 +337,9 @@ class RadialForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -383,7 +395,7 @@ class RadialForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -393,6 +405,12 @@ class RadialForceBalance(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
@@ -462,9 +480,9 @@ class HelicalForceBalance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -520,7 +538,7 @@ class HelicalForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -530,6 +548,12 @@ class HelicalForceBalance(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
@@ -595,9 +619,9 @@ class Energy(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
 
@@ -659,7 +683,7 @@ class Energy(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -667,6 +691,12 @@ class Energy(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 1
         self._data_keys = ["W"]
@@ -743,9 +773,9 @@ class CurrentDensity(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
 
     """
 
@@ -801,7 +831,7 @@ class CurrentDensity(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -811,6 +841,12 @@ class CurrentDensity(_Objective):
             )
         else:
             grid = self._grid
+
+        errorif(
+            not isinstance(grid, AbstractGridFlux),
+            ValueError,
+            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
+        )
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]

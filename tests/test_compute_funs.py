@@ -8,7 +8,7 @@ from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux, LinearGridToroidalSurface
 from desc.io import load
 from desc.utils import cross, dot, rpz2xyz_vec
 
@@ -65,7 +65,7 @@ def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
-    grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
+    grid = LinearGridFlux(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
     lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume)
@@ -87,7 +87,7 @@ def test_enclosed_volumes():
     np.testing.assert_allclose(4 * R0 * np.pi**2, surf.compute(["V"])["V"])
     eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
     rho = np.linspace(0, 1, 64)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)", "V_rrr(r)"], grid=grid)
     np.testing.assert_allclose(
         4 * data["R0"] * (np.pi * rho) ** 2, grid.compress(data["V(r)"])
@@ -110,7 +110,7 @@ def test_enclosed_areas():
     )
     eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
     rho = np.linspace(0, 1, 64)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["A(r)"], grid=grid)
     # area = π a b = 2 π ρ²
     np.testing.assert_allclose(2 * np.pi * rho**2, grid.compress(data["A(r)"]))
@@ -121,7 +121,7 @@ def test_surface_areas():
     """Test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()  # torus
     rho = np.linspace(0, 1, 64)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "S(r)", "S_r(r)", "S_rr(r)"], grid=grid)
     np.testing.assert_allclose(
         4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"])
@@ -135,9 +135,9 @@ def test_surface_areas_2():
     """Alternate test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()
 
-    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
-    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
-    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
+    grid_r = LinearGridFlux(rho=1, theta=10, zeta=10)
+    grid_t = LinearGridFlux(rho=10, theta=1, zeta=10)
+    grid_z = LinearGridFlux(rho=10, theta=10, zeta=1)
 
     data_r = eq.compute("|e_theta x e_zeta|", grid=grid_r)
     data_t = eq.compute("|e_zeta x e_rho|", grid=grid_t)
@@ -180,10 +180,11 @@ def test_elongation():
         modes_Z=[[-1, 0], [0, -1]],
     )
     assert surf3.sym
-    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    grid = LinearGridToroidalSurface(M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
     data1 = surf1.compute(["a_major/a_minor"], grid=grid)
     data2 = surf2.compute(["a_major/a_minor"], grid=grid)
     data3 = surf3.compute(["a_major/a_minor"], grid=grid)
+    print(data1)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
     np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
@@ -200,7 +201,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     rtol = 1e-3
     atol = 1e-3
     num_rho = 180
-    grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
+    grid = LinearGridFlux(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute(
         [
@@ -337,7 +338,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     rtol = 1e-3
     atol = 1e-3
     num_theta = 180
-    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
+    grid = LinearGridFlux(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute(
         [
@@ -474,7 +475,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     rtol = 1e-3
     atol = 1e-3
     num_zeta = 180
-    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
+    grid = LinearGridFlux(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute(
         [
@@ -612,7 +613,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     atol = 1e-2
     num_rho = 180
     num_theta = 180
-    grid = LinearGrid(NFP=eq.NFP, rho=num_rho, theta=num_theta)
+    grid = LinearGridFlux(NFP=eq.NFP, rho=num_rho, theta=num_theta)
     drho = grid.nodes[:, 0].reshape((num_rho, num_theta))[1, 0]
     dtheta = grid.nodes[:, 1].reshape((num_rho, num_theta))[0, 1]
     data = eq.compute(
@@ -733,7 +734,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     atol = 1e-2
     num_theta = 180
     num_zeta = 180
-    grid = LinearGrid(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
+    grid = LinearGridFlux(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
     dtheta = grid.nodes[:, 1].reshape((num_zeta, num_theta))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((num_zeta, num_theta))[1, 0]
     data = eq.compute(
@@ -854,7 +855,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     atol = 1e-2
     num_rho = 180
     num_zeta = 180
-    grid = LinearGrid(NFP=eq.NFP, rho=num_rho, zeta=num_zeta)
+    grid = LinearGridFlux(NFP=eq.NFP, rho=num_rho, zeta=num_zeta)
     drho = grid.nodes[:, 0].reshape((num_zeta, num_rho))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((num_zeta, num_rho))[1, 0]
     data = eq.compute(
@@ -979,7 +980,7 @@ def test_metric_derivatives(DummyStellarator):
     metric_components = ["g^rr", "g^rt", "g^rz", "g^tt", "g^tz", "g^zz"]
 
     # rho derivatives
-    grid = LinearGrid(rho=np.linspace(0.5, 0.7, 100))
+    grid = LinearGridFlux(rho=np.linspace(0.5, 0.7, 100))
     drho = np.diff(grid.nodes[:, 0]).mean()
     data = eq.compute(
         metric_components + [foo + "_r" for foo in metric_components], grid=grid
@@ -996,7 +997,7 @@ def test_metric_derivatives(DummyStellarator):
         )
 
     # theta derivatives
-    grid = LinearGrid(theta=np.linspace(0, np.pi / 4, 100))
+    grid = LinearGridFlux(theta=np.linspace(0, np.pi / 4, 100))
     dtheta = np.diff(grid.nodes[:, 1]).mean()
     data = eq.compute(
         metric_components + [foo + "_t" for foo in metric_components], grid=grid
@@ -1013,7 +1014,7 @@ def test_metric_derivatives(DummyStellarator):
         )
 
     # zeta derivatives
-    grid = LinearGrid(zeta=np.linspace(0, np.pi / 4, 100), NFP=3)
+    grid = LinearGridFlux(zeta=np.linspace(0, np.pi / 4, 100), NFP=3)
     dzeta = np.diff(grid.nodes[:, 2]).mean()
     data = eq.compute(
         metric_components + [foo + "_z" for foo in metric_components], grid=grid
@@ -1038,7 +1039,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 
     # partial derivatives wrt rho
     num_rho = 110
-    grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
+    grid = LinearGridFlux(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
     data = eq.compute(["|B|^2", "grad(|B|^2)_rho"], grid=grid)
     B2_r = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / drho
@@ -1051,7 +1052,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 
     # partial derivative wrt theta
     num_theta = 90
-    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
+    grid = LinearGridFlux(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute(["|B|^2", "grad(|B|^2)_theta"], grid=grid)
     B2_t = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dtheta
@@ -1064,7 +1065,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 
     # partial derivative wrt zeta
     num_zeta = 90
-    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
+    grid = LinearGridFlux(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute(["|B|^2", "grad(|B|^2)_zeta"], grid=grid)
     B2_z = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dzeta
@@ -1088,7 +1089,7 @@ def test_BdotgradB(DummyStellarator):
             "t": {"label": "theta", "column_id": 1},
             "z": {"label": "zeta", "column_id": 2},
         }[name[-1]]
-        grid = LinearGrid(NFP=eq.NFP, **{cases["label"]: 120})
+        grid = LinearGridFlux(NFP=eq.NFP, **{cases["label"]: 120})
         dx = grid.nodes[1, cases["column_id"]]
         data = eq.compute(["B*grad(|B|)", name], grid=grid)
         Btilde_x = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dx
@@ -1110,7 +1111,7 @@ def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
     # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
@@ -1142,9 +1143,11 @@ def test_boozer_transform():
 def test_boozer_transform_multiple_surfaces():
     """Test that computing over multiple surfaces is the same as over 1 at a time."""
     eq = get("HELIOTRON")
-    grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid1 = LinearGridFlux(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid2 = LinearGridFlux(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid3 = LinearGridFlux(
+        rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+    )
     data1 = eq.compute("|B|_mn_B", grid=grid1, M_booz=eq.M, N_booz=eq.N)
     data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
     data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
@@ -1162,12 +1165,12 @@ def test_compute_averages():
     eq = get("HELIOTRON")
     V_r = eq.get_profile("V_r(r)")
     rho = np.linspace(0.01, 1, 20)
-    grid = LinearGrid(rho=rho, NFP=eq.NFP)
+    grid = LinearGridFlux(rho=rho, NFP=eq.NFP)
     out = eq.compute("V_r(r)", grid=grid)
     np.testing.assert_allclose(V_r(rho), out["V_r(r)"], rtol=1e-4)
 
     eq = Equilibrium(1, 1, 1)
-    grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])
+    grid = LinearGridFlux(rho=[0.3], theta=[np.pi / 3], zeta=[0])
     out = eq.compute("A", grid=grid)
     np.testing.assert_allclose(out["A"], np.pi)
 
@@ -1227,9 +1230,9 @@ def test_covariant_basis_vectors(DummyStellarator):
         "e_zeta_zz",
     ]
     grids = {
-        "r": LinearGrid(1000, 0, 0, NFP=eq.NFP),
-        "t": LinearGrid(0, 1000, 0, NFP=eq.NFP),
-        "z": LinearGrid(0, 0, 1000, NFP=eq.NFP),
+        "r": LinearGridFlux(1000, 0, 0, NFP=eq.NFP),
+        "t": LinearGridFlux(0, 1000, 0, NFP=eq.NFP),
+        "z": LinearGridFlux(0, 0, 1000, NFP=eq.NFP),
     }
 
     for key in keys:
@@ -1304,9 +1307,9 @@ def test_covariant_basis_vectors_PEST(eq):
 
     # spacing grids in each native direction
     grids_PEST = {
-        "r": LinearGrid(L=N, M=0, N=0, NFP=eq.NFP),
-        "v": LinearGrid(rho=1, M=N, N=0, NFP=eq.NFP, sym=True),
-        "z": LinearGrid(rho=1, M=0, N=N, NFP=eq.NFP, sym=True),
+        "r": LinearGridFlux(L=N, M=0, N=0, NFP=eq.NFP),
+        "v": LinearGridFlux(rho=1, M=N, N=0, NFP=eq.NFP, sym=True),
+        "z": LinearGridFlux(rho=1, M=0, N=N, NFP=eq.NFP, sym=True),
     }
 
     # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
@@ -1358,9 +1361,9 @@ def test_covariant_basis_vectors_PEST(eq):
 
         # Grid will have to be custom for vartheta
         grid_used = (
-            Grid(rtz_nodes)
+            CustomGridFlux(rtz_nodes)
             if deriv == "v"
-            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+            else (grids_PEST[deriv] if deriv == "r" else CustomGridFlux(rtz_nodes1))
         )
 
         # Decide base vector
@@ -1446,9 +1449,9 @@ def test_contravariant_basis_vectors_PEST(eq):
 
     # spacing grids in each native direction
     grids_PEST = {
-        "r": LinearGrid(N, 0, 0, NFP=eq.NFP),
-        "v": LinearGrid(0, N, 0, NFP=eq.NFP, sym=True),
-        "p": LinearGrid(0, 0, N, NFP=eq.NFP, sym=True),
+        "r": LinearGridFlux(N, 0, 0, NFP=eq.NFP),
+        "v": LinearGridFlux(0, N, 0, NFP=eq.NFP, sym=True),
+        "p": LinearGridFlux(0, 0, N, NFP=eq.NFP, sym=True),
     }
 
     # find native (ρ,θ,ζ) nodes that correspond to the uniform θ_PEST grid
@@ -1484,9 +1487,9 @@ def test_contravariant_basis_vectors_PEST(eq):
 
         # Grid will have to be custom for vartheta
         grid_used = (
-            Grid(rtz_nodes)
+            CustomGridFlux(rtz_nodes)
             if deriv == "v"
-            else (grids_PEST[deriv] if deriv == "r" else Grid(rtz_nodes1))
+            else (grids_PEST[deriv] if deriv == "r" else CustomGridFlux(rtz_nodes1))
         )
 
         # Decide base vector
@@ -1650,14 +1653,14 @@ def test_PEST_derivative_math(eq):
     keys_DESC = list(keys_DESC)
     keys_PEST = list(keys_PEST)
 
-    grid_PEST = LinearGrid(
+    grid_PEST = LinearGridFlux(
         rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
     )
     data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
 
     data_to_verify = eq.compute(
         keys_PEST,
-        Grid(
+        CustomGridFlux(
             eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
         ),
     )
@@ -1726,12 +1729,12 @@ def test_contravariant_basis_vectors():
     ]
     gridsize = 300
     grids = {
-        "r": LinearGrid(gridsize, 0, 0, NFP=eq.NFP, axis=False),
-        "t": LinearGrid(0, gridsize, 0, NFP=eq.NFP, axis=False),
-        "z": LinearGrid(0, 0, gridsize, NFP=eq.NFP, axis=False),
-        "rt": LinearGrid(gridsize, gridsize, 0, NFP=eq.NFP, axis=False),
-        "tz": LinearGrid(0, gridsize, gridsize, NFP=eq.NFP, axis=False),
-        "rz": LinearGrid(gridsize, 0, gridsize, NFP=eq.NFP, axis=False),
+        "r": LinearGridFlux(gridsize, 0, 0, NFP=eq.NFP, axis=False),
+        "t": LinearGridFlux(0, gridsize, 0, NFP=eq.NFP, axis=False),
+        "z": LinearGridFlux(0, 0, gridsize, NFP=eq.NFP, axis=False),
+        "rt": LinearGridFlux(gridsize, gridsize, 0, NFP=eq.NFP, axis=False),
+        "tz": LinearGridFlux(0, gridsize, gridsize, NFP=eq.NFP, axis=False),
+        "rz": LinearGridFlux(gridsize, 0, gridsize, NFP=eq.NFP, axis=False),
     }
 
     atol = 2e-3
@@ -1865,7 +1868,7 @@ def test_iota_components():
     # axisymmetric, so all rotational transform should be from the current
     eq_i = get("DSHAPE")  # iota profile assigned
     eq_c = get("DSHAPE_CURRENT")  # current profile assigned
-    grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
+    grid = LinearGridFlux(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
     data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
     data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data_i["iota"], data_i["iota current"])
@@ -1875,7 +1878,7 @@ def test_iota_components():
 
     # vacuum stellarator, so all rotational transform should be from the external field
     eq = get("ESTELL")
-    grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
+    grid = LinearGridFlux(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
     np.testing.assert_allclose(data["iota current"], 0)
@@ -1917,8 +1920,9 @@ def test_surface_equilibrium_geometry():
             np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
         # compare at rho=1, where we expect the eq.compute and the
         # surface.compute to agree for these surface basis vectors
-        grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
+        grid = LinearGridFlux(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
         data_eq = eq.compute(data_basis_vecs_fourierRZ, grid=grid)
+        grid = LinearGridToroidalSurface(M=10, N=10, NFP=eq.NFP)
         data_surf = eq.surface.compute(
             data_basis_vecs_fourierRZ, grid=grid, basis="rpz"
         )
@@ -1932,7 +1936,7 @@ def test_surface_equilibrium_geometry():
             )
         # compare at zeta=0, where we expect the eq.compute and the
         # poincare surface.compute to agree for these surface basis vectors
-        grid = LinearGrid(zeta=np.array(0.0), M=10, L=10, NFP=eq.NFP)
+        grid = LinearGridFlux(zeta=np.array(0.0), M=10, L=10, NFP=eq.NFP)
         data_eq = eq.compute(data_basis_vecs_ZernikeRZ, grid=grid)
         data_surf = eq.get_surface_at(zeta=0.0).compute(
             data_basis_vecs_ZernikeRZ, grid=grid, basis="rpz"
@@ -2050,7 +2054,7 @@ def test_parallel_grad_fd(DummyStellarator):
 def test_compute_deprecation_warning():
     """Test DeprecationWarning for deprecated compute names."""
     eq = Equilibrium()
-    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    grid = LinearGridFlux(L=1, M=2, N=2, NFP=eq.NFP)
     with pytest.warns(DeprecationWarning, match="deprecated"):
         eq.compute("sqrt(g)_B", grid=grid)
     with pytest.warns(DeprecationWarning, match="deprecated"):

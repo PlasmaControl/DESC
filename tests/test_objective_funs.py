@@ -29,7 +29,14 @@ from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import (
+    ConcentricGridFlux,
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+    QuadratureGridFlux,
+)
 from desc.integrals import Bounce2D
 from desc.io import load
 from desc.magnetic_fields import (
@@ -130,12 +137,12 @@ class TestObjectiveFunction:
                 val,
             )
 
-        test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGrid(0, 0, 12))
-        test("length", FourierPlanarCoil(r_n=0.5), LinearGrid(0, 0, 12))
+        test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGridCurve(N=12))
+        test("length", FourierPlanarCoil(r_n=0.5), LinearGridCurve(N=12))
         test(
             "Phi",
             FourierCurrentPotentialField(Phi_mn=np.array([0.2])),
-            LinearGrid(0, 4, 4),
+            LinearGridToroidalSurface(M=4, N=4),
         )
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)), None, True)
@@ -159,15 +166,15 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(R1, R2)
 
         curve = FourierXYZCurve()
-        grid = LinearGrid(0, 0, 5)
+        grid = LinearGridCurve(N=5)
         test(curve, grid)
 
         surf = FourierRZToroidalSurface()
-        grid = LinearGrid(2, 2, 2)
+        grid = LinearGridToroidalSurface(M=2, N=2)
         test(surf, grid)
 
         eq = Equilibrium()
-        grid = LinearGrid(2, 2, 2)
+        grid = LinearGridFlux(L=2, M=2, N=2)
         test(eq, grid)
 
     @pytest.mark.unit
@@ -361,7 +368,7 @@ class TestObjectiveFunction:
         helicity = (1, -eq.NFP)
         M_booz = eq.M
         N_booz = eq.N
-        grid = LinearGrid(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid = LinearGridFlux(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
 
         # objective function returns amplitudes of non-symmetric modes
         obj = QuasisymmetryBoozer(
@@ -405,9 +412,9 @@ class TestObjectiveFunction:
         helicity = (1, -eq.NFP)
         M_booz = eq.M
         N_booz = eq.N
-        grid1 = LinearGrid(rho=0.5, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
-        grid2 = LinearGrid(rho=1.0, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
-        grid3 = LinearGrid(
+        grid1 = LinearGridFlux(rho=0.5, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid2 = LinearGridFlux(rho=1.0, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid3 = LinearGridFlux(
             rho=np.array([0.5, 1.0]), M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False
         )
 
@@ -513,7 +520,7 @@ class TestObjectiveFunction:
         eq = get("NCSX")
 
         # symmetric grid
-        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
+        grid = LinearGridFlux(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
         with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
@@ -554,7 +561,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using BIEST w/ sheet current."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.surface = FourierCurrentPotentialField.from_surface(
             eq.surface, M_Phi=eq.M, N_Phi=eq.N
@@ -576,7 +583,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using BIEST."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
@@ -593,7 +600,7 @@ class TestObjectiveFunction:
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
@@ -610,7 +617,7 @@ class TestObjectiveFunction:
         """Test calculation of boundary error using NESTOR."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
@@ -633,7 +640,7 @@ class TestObjectiveFunction:
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
         coils = [coil for coil in coilset]
-        coil_grid = LinearGrid(N=20)
+        coil_grid = LinearGridCurve(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
 
@@ -654,7 +661,7 @@ class TestObjectiveFunction:
         """Test calculation of iota profile average."""
 
         def test(eq):
-            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            grid = LinearGridFlux(L=5, M=1, N=1, NFP=eq.NFP)
             mean_iota = jnp.mean(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
                 target=mean_iota, weight=1, eq=eq, loss_function="mean", grid=grid
@@ -675,7 +682,7 @@ class TestObjectiveFunction:
         """Test calculation of iota profile max."""
 
         def test(eq):
-            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            grid = LinearGridFlux(L=5, M=1, N=1, NFP=eq.NFP)
             max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
                 target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
@@ -696,7 +703,7 @@ class TestObjectiveFunction:
         """Test calculation of iota profile min."""
 
         def test(eq):
-            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            grid = LinearGridFlux(L=5, M=1, N=1, NFP=eq.NFP)
             min_iota = jnp.min(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
                 target=min_iota, weight=1, eq=eq, loss_function="min", grid=grid
@@ -717,7 +724,7 @@ class TestObjectiveFunction:
         """Test calculation of iota profile sum."""
 
         def test(eq):
-            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            grid = LinearGridFlux(L=5, M=1, N=1, NFP=eq.NFP)
             sum_iota = jnp.sum(
                 eq.compute("iota", grid=grid)["iota"][grid.unique_rho_idx]
             )
@@ -748,22 +755,22 @@ class TestObjectiveFunction:
             R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
         # For equally spaced grids, should get true d=1
-        surf_grid = LinearGrid(M=5, N=6)
-        plas_grid = LinearGrid(M=5, N=6)
+        surface_grid = LinearGridToroidalSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         np.testing.assert_allclose(d, a_s - a_p)
 
         # for unequal M, should have error of order M_spacing*a_p
-        surf_grid = LinearGrid(M=5, N=6)
-        plas_grid = LinearGrid(M=10, N=6)
+        surface_grid = LinearGridToroidalSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=10, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             surface_fixed=True,
         )
@@ -771,26 +778,27 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq))
         assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
-        assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
+        assert abs(d.max() - (a_s - a_p)) < surface_grid.spacing[0, 1] * a_p
 
         # for unequal N, should have error of order N_spacing*R0
-        surf_grid = LinearGrid(M=5, N=6)
-        plas_grid = LinearGrid(M=5, N=12)
+        surface_grid = LinearGridToroidalSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=12)
         obj = PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert abs(d.min() - (a_s - a_p)) < 1e-14
-        assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+        assert abs(d.max() - (a_s - a_p)) < surface_grid.spacing[0, 2] * R0
         # ensure that it works (dimension-wise) when compute_scaled is called
         _ = obj.compute_scaled(*obj.xs(eq, surface))
 
-        grid = LinearGrid(L=3, M=3, N=3)
+        surface_grid = LinearGridToroidalSurface(M=3, N=3)
+        plasma_grid = LinearGridFlux(L=3, M=3, N=3)
         eq = Equilibrium()
         surf = FourierRZToroidalSurface()
         obj = PlasmaVesselDistance(
-            surface=surf, surface_grid=grid, plasma_grid=grid, eq=eq
+            surface=surf, surface_grid=surface_grid, plasma_grid=plasma_grid, eq=eq
         )
         with pytest.raises(UserWarning):
             with warnings.catch_warnings():
@@ -798,12 +806,12 @@ class TestObjectiveFunction:
                 obj.build()
 
         # test softmin, should give approximate value
-        surf_grid = LinearGrid(M=5, N=6)
-        plas_grid = LinearGrid(M=5, N=6)
+        surface_grid = LinearGridToroidalSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             use_softmin=True,
             softmin_alpha=5,
@@ -816,8 +824,8 @@ class TestObjectiveFunction:
         # for large enough alpha, should be same as actual min
         obj = PlasmaVesselDistance(
             eq=eq,
-            plasma_grid=plas_grid,
-            surface_grid=surf_grid,
+            plasma_grid=plasma_grid,
+            surface_grid=surface_grid,
             surface=surface,
             use_softmin=True,
             softmin_alpha=100,
@@ -950,7 +958,7 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = LinearGrid(N=5)  # single grid
+        grid = LinearGridCurve(N=5)  # single grid
 
         test(coil)
         test(coils)
@@ -977,7 +985,7 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = [LinearGrid(N=5)] * 5  # single list of grids
+        grid = [LinearGridCurve(N=5)] * 5  # single list of grids
 
         test(coil)
         test(coils)
@@ -1004,7 +1012,8 @@ class TestObjectiveFunction:
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
-        grid = [[LinearGrid(N=5)] * 3, [LinearGrid(N=5)] * 2]  # nested list of grids
+        # nested list of grids
+        grid = [[LinearGridCurve(N=5)] * 3, [LinearGridCurve(N=5)] * 2]
 
         test(coil)
         test(coils)
@@ -1095,7 +1104,10 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
-            coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
+            coils_angular,
+            np.sqrt(2) * (center - r),
+            grid=LinearGridCurve(s=4),
+            tol=1e-5,
         )
 
         # planar toroidal coils, with symmetry
@@ -1108,7 +1120,7 @@ class TestObjectiveFunction:
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
-        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
+        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGridCurve(s=4))
 
         # mixture of toroidal field coilset, vertical field coilset, and extra coil
         # TF coils instersect with the middle VF coil
@@ -1131,7 +1143,7 @@ class TestObjectiveFunction:
             test(
                 coils_mixed,
                 [0, 0, 0, 0, 1, 0, 1, 2],
-                grid=LinearGrid(zeta=4),
+                grid=LinearGridCurve(s=4),
                 expect_intersect=True,
             )
         # TODO (#1400, 914): move this coil set to conftest?
@@ -1186,8 +1198,8 @@ class TestObjectiveFunction:
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
-        plasma_grid = LinearGrid(M=4, zeta=16)
-        coil_grid = LinearGrid(N=8)
+        plasma_grid = LinearGridFlux(M=4, zeta=16)
+        coil_grid = LinearGridCurve(N=8)
 
         # planar toroidal coils without symmetry, around fixed circular tokamak
         R0 = 3
@@ -1379,8 +1391,8 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f_min, mindist, rtol=5e-2, atol=1e-3)
             np.testing.assert_allclose(f_max, maxdist, rtol=5e-2, atol=1e-3)
 
-        plasma_grid = LinearGrid(M=8, zeta=16)
-        coil_grid = LinearGrid(N=32)
+        plasma_grid = LinearGridFlux(M=8, zeta=16)
+        coil_grid = LinearGridCurve(N=32)
 
         # planar toroidal coils without symmetry, around fixed circular tokamak
         # shifted over slightly to get an interesting max distance
@@ -1502,46 +1514,28 @@ class TestObjectiveFunction:
         eq = desc.examples.get("precise_QA", "all")[0]
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        eval_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
+        flux_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        surf_grid = LinearGridToroidalSurface(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
-        source_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
-        )
-
-        obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
-        Bnorm = t_field.compute_Bnormal(
-            eq, eval_grid=eval_grid, source_grid=source_grid
-        )[0]
+        obj = QuadraticFlux(eq, t_field, eval_grid=flux_grid)
+        Bnorm = t_field.compute_Bnormal(eq, eval_grid=surf_grid)[0]
         obj.build()
-        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        dA = eq.compute("|e_theta x e_zeta|", grid=flux_grid)["|e_theta x e_zeta|"]
         f = obj.compute_unscaled(t_field.params_dict)
-
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
 
         # equilibrium that has B_plasma == 0
         eq = load("./tests/inputs/vacuum_nonaxisym.h5")
-
-        eval_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
+        flux_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        surf_grid = LinearGridToroidalSurface(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
-        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
-        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
+        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=flux_grid)
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=surf_grid)[0]
         obj.build()
         f = obj.compute(t_field.params_dict)
-        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        dA = eq.compute("|e_theta x e_zeta|", grid=flux_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
 
@@ -1562,18 +1556,12 @@ class TestObjectiveFunction:
         eq = desc.examples.get("precise_QA", "all")[0]
         surf = eq.surface
         surf.change_resolution(4, 4)
-        eval_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=surf.M * 2,
-            N=surf.N * 2,
-            NFP=eq.NFP,
-            sym=False,
+        eval_grid = LinearGridToroidalSurface(
+            M=surf.M * 2, N=surf.N * 2, NFP=eq.NFP, sym=False
         )
 
         obj = SurfaceQuadraticFlux(surf, t_field, eval_grid=eval_grid, field_fixed=True)
-        Bnorm = t_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=eval_grid
-        )[0]
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(surf)
         dA = surf.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute(params_1=surf.params_dict)
@@ -1583,7 +1571,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
-        grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
+        grid1 = LinearGridFlux(L=0, M=40, zeta=np.array(0.0))
 
         def test(
             eq,
@@ -1682,11 +1670,12 @@ class TestObjectiveFunction:
         surface = FourierRZToroidalSurface(
             R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
-        grid = LinearGrid(M=5, N=6)
+        surface_grid = LinearGridToroidalSurface(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=grid,
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1706,11 +1695,10 @@ class TestObjectiveFunction:
             modes_R=[[0, 0], [1, 0]],
             modes_Z=[[-1, 0]],
         )
-        grid = LinearGrid(M=5, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=grid,
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1720,11 +1708,11 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(d, a_s - a_p)
 
         # ensure it works with different sized grids (poloidal resolution different)
-        grid = LinearGrid(M=5, N=6)
+        plasma_grid = LinearGridFlux(M=10, N=6)
         obj = PlasmaVesselDistance(
             eq=eq,
-            surface_grid=grid,
-            plasma_grid=LinearGrid(M=10, N=6),
+            surface_grid=surface_grid,
+            plasma_grid=plasma_grid,
             surface=surface,
             use_signed_distance=True,
         )
@@ -1732,16 +1720,15 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
-        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+        assert abs(d.min() - (-a_s)) < plasma_grid.spacing[0, 1] * a_s
 
         # ensure it works with different sized grids (poloidal resolution different)
         # and using softmin (with deprecated name alpha)
-        grid = LinearGrid(M=5, N=6)
         with pytest.raises(FutureWarning):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGrid(M=10, N=6),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
                 use_softmin=True,
@@ -1751,24 +1738,26 @@ class TestObjectiveFunction:
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
-        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+        assert abs(d.min() - (-a_s)) < plasma_grid.spacing[0, 1] * a_s
         # test errors
         # differing grid zetas, same num_zeta
+        plasma_grid = LinearGridFlux(M=surface_grid.M, N=surface_grid.N, NFP=2)
         with pytest.raises(ValueError):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGrid(M=grid.M, N=grid.N, NFP=2),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
             )
             obj.build()
         # test with differing grid.num_zeta
+        plasma_grid = LinearGridFlux(M=surface_grid.M, N=surface_grid.N - 2)
         with pytest.raises(ValueError):
             obj = PlasmaVesselDistance(
                 eq=eq,
-                surface_grid=grid,
-                plasma_grid=LinearGrid(M=grid.M, N=grid.N - 2),
+                surface_grid=surface_grid,
+                plasma_grid=plasma_grid,
                 surface=surface,
                 use_signed_distance=True,
             )
@@ -1812,7 +1801,7 @@ class TestObjectiveFunction:
 
         mirror_ratio_axis = (1.2 - 0.8) / (1.2 + 0.8)
         mirror_ratio_edge = 0.0
-        grid = LinearGrid(L=5, theta=6, N=2)
+        grid = LinearGridFlux(L=5, theta=6, N=2)
         rho = grid.nodes[grid.unique_rho_idx, 0]
         obj = MirrorRatio(field, grid=grid)
         obj.build()
@@ -1825,7 +1814,7 @@ class TestObjectiveFunction:
     def test_linking_current(self):
         """Test calculation of signed linking current from coils to plasma."""
         eq = Equilibrium()
-        G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"][0] * 2 * jnp.pi / mu_0
+        G = eq.compute("G", grid=LinearGridFlux(rho=1.0))["G"][0] * 2 * jnp.pi / mu_0
         c = G / 8
         coil1 = FourierPlanarCoil(current=1.5 * c, center=[10, 1, 0])
         coil2 = FourierPlanarCoil(current=0.5 * c, center=[10, 2, 0])
@@ -1910,9 +1899,9 @@ class TestObjectiveFunction:
                 ]
             ).flatten(),
         )
-        grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
-        grid2 = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
-        grid3 = LinearGrid(rho=np.array([0.5, 1.0]), M=eq.M_grid, N=eq.N_grid)
+        grid1 = LinearGridFlux(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+        grid2 = LinearGridFlux(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        grid3 = LinearGridFlux(rho=np.array([0.5, 1.0]), M=eq.M_grid, N=eq.N_grid)
         obj1 = Omnigenity(eq=eq, field=field, eq_grid=grid1)
         obj2 = Omnigenity(eq=eq, field=field, eq_grid=grid2)
         obj3 = Omnigenity(eq=eq, field=field, eq_grid=grid3)
@@ -1940,7 +1929,7 @@ class TestObjectiveFunction:
         field1 = FourierCurrentPotentialField(
             I=0, G=10, NFP=10, Phi_mn=[[0]], modes_Phi=[[2, 2]]
         )
-        grid = LinearGrid(M=5, N=5, NFP=field1.NFP)
+        grid = LinearGridToroidalSurface(M=5, N=5, NFP=field1.NFP)
         result1 = test(field1, grid)
         result2 = test(field1, grid=None)
 
@@ -2007,7 +1996,7 @@ class TestObjectiveFunction:
         field = FourierCurrentPotentialField(
             I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
         )
-        grid = LinearGrid(M=5, N=5, NFP=field.NFP)
+        grid = LinearGridToroidalSurface(M=5, N=5, NFP=field.NFP)
         test(field, grid, "K")
         test(field, grid, "Phi")
         test(field, grid, "sqrt(Phi)")
@@ -2018,7 +2007,7 @@ class TestObjectiveFunction:
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        obj_grid = LinearGrid(
+        obj_grid = LinearGridFlux(
             rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
         )
         X = 16
@@ -2037,7 +2026,7 @@ class TestObjectiveFunction:
             theta = None
             alpha = np.array([0.0])
             zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
-            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+            grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         else:
             theta = Bounce2D.compute_theta(eq, X, Y, rho)
             grid = obj_grid
@@ -2078,7 +2067,7 @@ class TestObjectiveFunction:
         obj.build()
         lam = eq.compute(
             ["ideal ballooning lambda"],
-            Grid.create_meshgrid(
+            CustomGridFlux.create_meshgrid(
                 [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
                 coordinates="raz",
             ),
@@ -2138,7 +2127,7 @@ class TestObjectiveFunction:
         """Test things_per_objective_idx. Related to GH Issue #1602."""
         eq = desc.examples.get("reactor_QA")
         coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
-        grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        grid = LinearGridFlux(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
         coils.current = linking_current / coils.num_coils
 
@@ -2167,12 +2156,12 @@ class TestObjectiveFunction:
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
             current=PowerSeriesProfile([0, 0, -1]),
         )
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=True)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=True)
         obj = BootstrapRedlConsistency(eq, grid=grid)
         with pytest.raises(ValueError, match="rho=0"):
             obj.build()
 
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
         obj = BootstrapRedlConsistency(eq, grid=grid)
         with pytest.raises(ValueError, match="vanish"):
             obj.build()
@@ -2479,7 +2468,7 @@ def test_profile_objective_print(capsys):
     eq = Equilibrium(
         iota=PowerSeriesProfile([1, 0, 0.5]), pressure=PowerSeriesProfile([1, 0, -1])
     )
-    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    grid = LinearGridFlux(L=10, M=10, N=5, axis=False)
     pre_width = len("Maximum ")
 
     def test(obj, values, print_init=False, normalize=False):
@@ -2652,10 +2641,10 @@ def test_plasma_vessel_distance_print(capsys):
     surface = FourierRZToroidalSurface(
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    surf_grid = LinearGrid(M=5, N=0)
-    plas_grid = LinearGrid(M=5, N=0)
+    surface_grid = LinearGridToroidalSurface(M=5, N=0)
+    plasma_grid = LinearGridFlux(M=5, N=0)
     obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
     )
     obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -2665,7 +2654,7 @@ def test_plasma_vessel_distance_print(capsys):
 
     obj = ObjectiveFunction(
         PlasmaVesselDistance(
-            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+            eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
         )
     )
     obj.build(verbose=0)
@@ -2679,7 +2668,7 @@ def test_boundary_error_print(capsys):
     """Test that the boundary error objectives print correctly."""
     coil = FourierXYZCoil(5e5)
     coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-    coil_grid = LinearGrid(N=20)
+    coil_grid = LinearGridCurve(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
     obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
@@ -2954,10 +2943,10 @@ def test_objective_fun_things():
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
     # For equally spaced grids, should get true d=1
-    surf_grid = LinearGrid(M=5, N=6)
-    plas_grid = LinearGrid(M=5, N=6)
+    surface_grid = LinearGridToroidalSurface(M=5, N=6)
+    plasma_grid = LinearGridFlux(M=5, N=6)
     obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        eq=eq, plasma_grid=plasma_grid, surface_grid=surface_grid, surface=surface
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -3230,12 +3219,18 @@ class TestComputeScalarResolution:
             R_lmn=[10, 1.5], Z_lmn=[-1.5], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
         )
         for i, res in enumerate(self.res_array):
-            grid = LinearGrid(
+            surface_grid = LinearGridToroidalSurface(
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+            )
+            plasma_grid = LinearGridFlux(
                 M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
             )
             obj = ObjectiveFunction(
                 PlasmaVesselDistance(
-                    surface=surface, eq=self.eq, surface_grid=grid, plasma_grid=grid
+                    surface=surface,
+                    eq=self.eq,
+                    surface_grid=surface_grid,
+                    plasma_grid=plasma_grid,
                 ),
                 use_jit=False,
             )
@@ -3254,7 +3249,7 @@ class TestComputeScalarResolution:
 
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
             )
             obj = ObjectiveFunction(
@@ -3275,7 +3270,7 @@ class TestComputeScalarResolution:
 
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=int(self.eq.L * res),
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3297,7 +3292,7 @@ class TestComputeScalarResolution:
 
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=int(self.eq.L * res),
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3468,7 +3463,7 @@ class TestComputeScalarResolution:
         N0 = 5
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = LinearGrid(M=round(M0 * res), N=round(N0 * res))
+            grid = LinearGridToroidalSurface(M=round(M0 * res), N=round(N0 * res))
             obj = ObjectiveFunction(
                 SurfaceCurrentRegularization(field, source_grid=grid), use_jit=False
             )
@@ -3481,7 +3476,7 @@ class TestComputeScalarResolution:
         """Generic objective with scalar qty."""
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = QuadratureGrid(
+            grid = QuadratureGridFlux(
                 L=int(self.eq.L * res),
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3499,7 +3494,7 @@ class TestComputeScalarResolution:
         """Generic objective with profile qty."""
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 L=int(self.eq.L * res),
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3519,7 +3514,7 @@ class TestComputeScalarResolution:
         """Generic objective with volume qty."""
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            grid = ConcentricGrid(
+            grid = ConcentricGridFlux(
                 L=int(self.eq.L * res),
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3539,7 +3534,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             rho = np.linspace(0.2, 1, int(self.eq.L * res))
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 rho=rho,
                 M=int(self.eq.M * res),
                 N=int(self.eq.N * res),
@@ -3579,7 +3574,7 @@ class TestComputeScalarResolution:
         )
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array + 0.5):  # omnigenity needs higher res
-            grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+            grid = LinearGridFlux(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
             obj = ObjectiveFunction(
                 Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
             )
@@ -3631,7 +3626,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGridCurve(N=int(5 + 3 * res))),
                 use_jit=False,
             )
             obj.build(verbose=0)
@@ -3650,7 +3645,7 @@ class TestComputeScalarResolution:
                 LinkingCurrentConsistency(
                     eq,
                     coilset,
-                    grid=LinearGrid(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
+                    grid=LinearGridFlux(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
                 ),
                 use_jit=False,
             )

@@ -33,6 +33,9 @@ Performance Improvements
 
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
 
+Deprecations
+- Removes ``FiniteDiffDerivative`` from the public API. This class was no longer actually usable with the current versions of DESC's optimization framework, as JAX is now required for running any equilibrium or optimization solves.
+
 v0.16.0
 -------
 

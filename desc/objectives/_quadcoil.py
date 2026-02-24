@@ -3,7 +3,6 @@ from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.normalization import compute_scaling_factors
 from desc.compute import get_profiles, get_transforms
-from desc.magnetic_fields import FourierCurrentPotentialField
 from jax import jit
 from desc.backend import jnp
 import jax  # for printing
@@ -686,6 +685,8 @@ class QuadcoilProxy(_Objective):
         return plasma_dofs
 
     def compute_FourierCurrentPotentialField(self, *all_params):
+        # Prevents circular import
+        from desc.magnetic_fields import FourierCurrentPotentialField
         _, quadcoil_qp, quadcoil_dofs, _ = self.compute_full(
             *all_params, full_mode=True
         )

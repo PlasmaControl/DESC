@@ -44,6 +44,7 @@
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/coil_optimization_REGCOIL.ipynb
+   notebooks/tutorials/coil_optimization_QUADCOIL.ipynb
    notebooks/tutorials/omnigenity.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb

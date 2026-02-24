@@ -37,7 +37,7 @@ R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 NFP = aspect_ratio  # Number of field periods
 I_multipliers = np.logspace(-2, 2, num=5)  # Multipliers for the current profile to explore different stability regimes
-
+axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 for I_mult in I_multipliers:
     # Input profiles
     fixed_iota = False
@@ -62,7 +62,7 @@ for I_mult in I_multipliers:
     # Save directory and filename
     save_path = "./high_aspect_ratio_tokamak/"
     profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-    save_tag = f"axisym_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+    save_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
     save_name = f"equilibrium_{save_tag}.h5"
     os.makedirs(save_path, exist_ok=True)
 
@@ -107,7 +107,7 @@ for I_mult in I_multipliers:
     # resolution for low-res solve
     n_rho = 26
     n_theta = 26
-    n_zeta = 1#9
+    n_zeta = 9
 
     # This will probably OOM with the matrix-full method
     print("making input grid and diffmats")
@@ -163,7 +163,7 @@ for I_mult in I_multipliers:
 
     print("computing eigenmode at low res")
     tic = time.time()
-    data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=True)
+    data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=axisym)
     toc = time.time()
     print(f"matrix full took {toc-tic} s.")
 
@@ -220,7 +220,7 @@ for I_mult in I_multipliers:
     print("making high-res grid and diffmats")
     n_rho = 64
     n_theta = 64
-    n_zeta = 1#12
+    n_zeta = 12
 
     x, w = leggauss_lob(n_rho)
 
@@ -323,7 +323,7 @@ for I_mult in I_multipliers:
         incompressible=False,
         gamma=100,
         v_guess=v_guess,
-        axisym=True
+        axisym=axisym
     )
 
     print(data["finite-n lambda matfree"])

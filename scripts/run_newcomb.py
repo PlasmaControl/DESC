@@ -105,8 +105,8 @@ for I_mult in I_multipliers:
     # Evaluate stability using Rahul's method
     # The rest of the script is basically unchanged from what Rahul sent me
     # resolution for low-res solve
-    n_rho = 26
-    n_theta = 26
+    n_rho = 14
+    n_theta = 14
     n_zeta = 9
 
     # This will probably OOM with the matrix-full method

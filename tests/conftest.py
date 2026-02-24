@@ -353,7 +353,7 @@ def regcoil_helical_coils_scan():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP, sym=eq.sym),
     )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
@@ -381,7 +381,7 @@ def regcoil_modular_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP, sym=eq.sym),
     )
     M_Phi = 10
     N_Phi = 10
@@ -389,7 +389,7 @@ def regcoil_modular_coils():
     N_egrid = 20
     M_sgrid = 40
     N_sgrid = 40
-    lambda_regularization = 1e-18
+    lambda_regularization = 1e-20
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
@@ -417,7 +417,7 @@ def regcoil_windowpane_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP, sym=eq.sym),
     )
     M_Phi = 10
     N_Phi = 10
@@ -425,7 +425,7 @@ def regcoil_windowpane_coils():
     N_egrid = 20
     M_sgrid = 20
     N_sgrid = 20
-    lambda_regularization = 1e-18
+    lambda_regularization = 1e-20
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"
@@ -457,7 +457,7 @@ def regcoil_PF_coils():
         offset=0.2,  # desired offset
         M=16,  # Poloidal resolution of desired offset surface
         N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP, sym=eq.sym),
     )
     M_Phi = 10
     N_Phi = 10

@@ -4,9 +4,12 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jax, jit
+from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry.surface import _constant_offset_surface
 from desc.grid import LinearGrid
 from desc.utils import rpz2xyz
 
@@ -154,7 +157,7 @@ class TestFourierRZToroidalSurface:
         r_offset_surf = data["x_offset_surface"]
         r_surf = data["x"]
         dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
-        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        np.testing.assert_allclose(dists, 1, atol=1e-14)
         R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)
         R00_offset = s_offset.R_lmn[R00_offset_ind]
         R10_offset_ind = s_offset.R_basis.get_idx(M=1, N=0)
@@ -171,7 +174,7 @@ class TestFourierRZToroidalSurface:
                 np.array([R00_offset_ind, R10_offset_ind]),
             ),
             0,
-            atol=9e-15,
+            atol=1e-13,
         )
         np.testing.assert_allclose(
             np.delete(
@@ -179,7 +182,7 @@ class TestFourierRZToroidalSurface:
                 Zneg10_offset_ind,
             ),
             0,
-            atol=9e-15,
+            atol=1e-13,
         )
         grid_compute = LinearGrid(M=10, N=10)
         data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
@@ -187,7 +190,7 @@ class TestFourierRZToroidalSurface:
             ["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute
         )
         dists = np.linalg.norm(data["x"] - data_offset["x"], axis=1)
-        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        np.testing.assert_allclose(dists, 1, atol=1e-14)
         correct_data_offset = {
             "e_theta": np.vstack(
                 (
@@ -211,6 +214,45 @@ class TestFourierRZToroidalSurface:
                 atol=1e-4,
                 err_msg=f"Failed test at comparison of {key}",
             )
+
+    @pytest.mark.unit
+    def test_constant_offset_surface_circle_jax_transformable(self, capsys):
+        """Test constant offset algorithm is jax transformable."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(M=3, N=2)
+        transforms = get_transforms(["R", "Z"], s, grid)
+        transforms["R"].build_pinv()
+        transforms["Z"].build_pinv()
+        offset = 1
+
+        def fun(params):
+            return _constant_offset_surface(s, offset, grid, transforms, params)
+
+        # ensure is jitable
+        R_lmn, Z_lmn, data, _ = jit(fun)(s.params_dict)
+
+        # make sure that the function is not recompiled
+        with jax.log_compiles():
+            R_lmn, Z_lmn, data, _ = jit(fun)(s.params_dict)
+
+        out = capsys.readouterr()
+        assert out.out == ""
+
+        # check gradient is correct
+        # R00 of offset should change with R00 of original surface
+        grad_R00 = jax.grad(lambda params: fun(params)[0][s.R_basis.get_idx(M=0, N=0)])(
+            s.params_dict
+        )
+        # check that the gradient is nonzero for the R00 component
+        assert np.any(np.abs(grad_R00["R_lmn"][s.R_basis.get_idx(M=0, N=0)]) > 1e-10)
+        # check that the gradient is zero otherwise
+        non_R00_indices = np.where(s.R_basis.modes.sum(axis=1) != 0)[0]
+        assert np.all(np.abs(grad_R00["R_lmn"][non_R00_indices]) < 1e-10)
+
+        # check gradient is correct
+        np.testing.assert_allclose(
+            grad_R00["R_lmn"][s.R_basis.get_idx(M=0, N=0)], 1.0, atol=1e-10
+        )
 
     @pytest.mark.slow
     @pytest.mark.unit

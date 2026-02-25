@@ -1,9 +1,10 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
 import functools
+from collections import namedtuple
 
 import numpy as np
-from collections import namedtuple
+
 from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (

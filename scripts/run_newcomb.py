@@ -9,7 +9,6 @@ from desc.examples import get
 from desc.grid import LinearGrid, Grid
 from desc.diffmat_utils import *
 from desc.equilibrium.coords import map_coordinates
-from desc.integrals.quad_utils import leggauss_lob
 from desc.equilibrium import Equilibrium
 from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
@@ -35,7 +34,7 @@ a = 1  # Minor radius
 aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
-NFP = aspect_ratio  # Number of field periods
+NFP = 1#aspect_ratio  # Number of field periods
 I_multipliers = np.logspace(-2, 2, num=5)  # Multipliers for the current profile to explore different stability regimes
 axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 for I_mult in I_multipliers:

@@ -252,7 +252,12 @@ class Optimizer(IOAble):
 
         timer.start("Initializing the optimization")
         if not is_linear_proj:
-            objective, nonlinear_constraint = get_combined_constraint_objectives(
+            (
+                objective,
+                nonlinear_constraint,
+                is_prox,
+                exist_non_eq_nonlinear_constraints,
+            ) = get_combined_constraint_objectives(
                 eq,
                 constraints,
                 objective,
@@ -263,9 +268,15 @@ class Optimizer(IOAble):
                 options,
             )
         else:
+            is_prox = "prox" in method
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
+        # we dont know if is_prox is True or not if it is already a linear proj...
+        # shoot
+
+        if is_prox and exist_non_eq_nonlinear_constraints:
+            nonlinear_constraint = objective.wrapped_constraint
         # we have to use this cumbersome indexing in this method when passing things
         # to objective to guard against the passed-in things having an ordering
         # different from objective.things, to ensure the correct order is passed
@@ -572,19 +583,65 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
+def _parse_equilibrium_constraints(constraints):
+    """Break nonlinear constraints into equilibrium and other.
+
+    Parameters
+    ----------
+    constraints : tuple of Objective
+        Constraints to parse.
+
+    Returns
+    -------
+    equilibrium_constraints : tuple of Objective
+        Individual linear constraints.
+    nonlinear_constraints : tuple of Objective
+        Individual other nonlinear constraints.
+
+    """
+    if not isinstance(constraints, (tuple, list)):
+        constraints = (constraints,)
+    # we treat linear bound constraints as nonlinear since they can't be easily
+    # factorized like linear equality constraints
+    linear_constraints = tuple(
+        constraint
+        for constraint in constraints
+        if (constraint.linear and (constraint.bounds is None))
+    )
+    eq_constraints = tuple(con for con in constraints if con._equilibrium)
+
+    other_nonlinear_constraints = tuple(
+        constraint for constraint in constraints if constraint not in eq_constraints
+    )
+
+    return eq_constraints, other_nonlinear_constraints
+
+
 def _maybe_wrap_nonlinear_constraints(
     eq, objective, nonlinear_constraints, method, options
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
-    if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
-        return objective, nonlinear_constraints
+    eq_constraints, other_nonlinear_constraints = _parse_equilibrium_constraints(
+        nonlinear_constraints
+    )
+    exist_non_equilibrum_nonlinear_constraints = len(other_nonlinear_constraints) >= 1
+    if eq is None:  # not dealing with an equilibrium problem -> no ProximalProjection
+        return (
+            objective,
+            nonlinear_constraints,
+            exist_non_equilibrum_nonlinear_constraints,
+        )
     wrapper, method = _parse_method(method)
     if not len(nonlinear_constraints):
         if wrapper is not None:
             warnings.warn(
                 f"No nonlinear constraints detected, ignoring wrapper method {wrapper}."
             )
-        return objective, nonlinear_constraints
+        return (
+            objective,
+            nonlinear_constraints,
+            exist_non_equilibrum_nonlinear_constraints,
+        )
     if wrapper is None and not optimizers[method]["equality_constraints"]:
         warnings.warn(
             FutureWarning(
@@ -601,15 +658,21 @@ def _maybe_wrap_nonlinear_constraints(
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
+
         objective = ProximalProjection(
             objective,
-            constraint=_combine_constraints(nonlinear_constraints),
+            constraint=_combine_constraints(eq_constraints),
+            nonlinear_constraint=(
+                _combine_constraints(other_nonlinear_constraints)
+                if exist_non_equilibrum_nonlinear_constraints
+                else None
+            ),
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
         )
         nonlinear_constraints = ()
-    return objective, nonlinear_constraints
+    return objective, nonlinear_constraints, exist_non_equilibrum_nonlinear_constraints
 
 
 def get_combined_constraint_objectives(  # noqa: C901
@@ -631,8 +694,10 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
-    objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-        eq, objective, nonlinear_constraints, opt_method, options
+    objective, nonlinear_constraints, exist_non_eq_nonlinear_constraints = (
+        _maybe_wrap_nonlinear_constraints(
+            eq, objective, nonlinear_constraints, opt_method, options
+        )
     )
     is_prox = isinstance(objective, ProximalProjection)
     for t in things:
@@ -716,6 +781,8 @@ def get_combined_constraint_objectives(  # noqa: C901
             objective, linear_constraint, **linear_constraint_options
         )
         objective.build(verbose=verbose)
+        # will be None if we wrap in Proximal, but we need some way to know this still exists...
+        # maybe just return flags "is_prox" and "nonlinear_constraints_exist" as well
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
                 nonlinear_constraint, linear_constraint
@@ -732,7 +799,7 @@ def get_combined_constraint_objectives(  # noqa: C901
             )
         )
 
-    return objective, nonlinear_constraint
+    return objective, nonlinear_constraint, is_prox, exist_non_eq_nonlinear_constraints
 
 
 def _get_default_tols(

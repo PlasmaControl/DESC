@@ -336,7 +336,7 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _objective_build(obj, names, singular):
+    def _objective_build(obj, names, eta):
         """Default build for bounce integrals objectives.
 
         Examples
@@ -351,11 +351,10 @@ class Bounce2D(Bounce):
         names : str
             Builds profiles and transforms for the compute quantities registered
             with these names.
-        singular : str
-            Type of singularity in {"deriv", "weak"}.
-            Choose ``deriv`` if the integrand is bounded with
-            a weakly singular derivative wrt the integration variable.
-            Choose ``weak`` if the integrand is weakly singular.
+        eta : int
+            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
+            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
+            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
 
         """
         from desc.compute import get_profiles, get_transforms
@@ -382,13 +381,14 @@ class Bounce2D(Bounce):
 
         obj._constants["_vander"] = get_vander(obj._grid, Y, Y_B, eq.NFP)
 
-        if singular == "deriv":
-            obj._constants["quad"] = chebgauss2(obj._hyperparam.pop("num_quad"))
+        num_quad = obj._hyperparam.pop("num_quad")
+        if eta == 1:
+            obj._constants["quad"] = chebgauss2(num_quad)
+        elif eta == -1:
+            obj._constants["quad"] = chebgauss1(num_quad)
         else:
-            assert singular == "weak", f"Got unexpected input for singular: {singular}"
             obj._constants["quad"] = get_quadrature(
-                leggauss(obj._hyperparam.pop("num_quad")),
-                (automorphism_sin, grad_automorphism_sin),
+                leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
             )
 
         rho = obj._grid.compress(obj._grid.nodes[:, 0])
@@ -408,16 +408,15 @@ class Bounce2D(Bounce):
         )
 
     @staticmethod
-    def _default_kwargs(singular, NFP, **kwargs):
+    def _default_kwargs(eta, NFP, **kwargs):
         """Default kwargs for the registered compute functions.
 
         Parameters
         ----------
-        singular : str
-            Type of singularity in {"deriv", "weak"}.
-            Choose ``deriv`` if the integrand is bounded with
-            a weakly singular derivative wrt the integration variable.
-            Choose ``weak`` if the integrand is weakly singular.
+        eta : int
+            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
+            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
+            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
         NFP : int
             Number of field periods.
 
@@ -428,7 +427,7 @@ class Bounce2D(Bounce):
             quad, nufft_eps, spline, vander
 
         """
-        if singular == "deriv":
+        if eta == 1:
             quad = (
                 kwargs["quad"]
                 if "quad" in kwargs
@@ -436,12 +435,22 @@ class Bounce2D(Bounce):
             )
             num_pitch = kwargs.get("num_pitch", 51)
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
-        else:
-            assert singular == "weak", f"Got unexpected input for singular: {singular}"
+        elif eta == -1:
             quad = (
                 kwargs["quad"]
                 if "quad" in kwargs
                 else chebgauss1(kwargs.get("num_quad", 32))
+            )
+            num_pitch = kwargs.get("num_pitch", 65)
+            nufft_eps = kwargs.get("nufft_eps", 1e-7)
+        else:
+            quad = (
+                kwargs["quad"]
+                if "quad" in kwargs
+                else get_quadrature(
+                    leggauss(kwargs.get("num_quad", 32)),
+                    (automorphism_sin, grad_automorphism_sin),
+                )
             )
             num_pitch = kwargs.get("num_pitch", 65)
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
@@ -614,7 +623,7 @@ class Bounce2D(Bounce):
         iota=None,
         params=None,
         profiles=None,
-        tol=1e-7,
+        tol=1e-8,
         maxiter=30,
         **kwargs,
     ):
@@ -633,7 +642,7 @@ class Bounce2D(Bounce):
         iota=None,
         params=None,
         profiles=None,
-        tol=1e-7,
+        tol=1e-8,
         maxiter=30,
         **kwargs,
     ):
@@ -663,7 +672,7 @@ class Bounce2D(Bounce):
             Optional profiles.
         tol : float
             Stopping tolerance for root finding.
-            Default is ``1e-7``.
+            Default is ``1e-8``.
         maxiter : int
             Maximum number of Newton iterations.
 
@@ -782,7 +791,9 @@ class Bounce2D(Bounce):
             broadcast_for_bounce(pitch_inv), self._c["knots"], self._c["B(z)"], num_well
         )
 
-    # TODO: Enable in later PR.
+    # TODO: Enable in the next PR.
+    #   Weakly singular integrals will have O(1) error without using Newton to ensure
+    #   points are computed to high precision.
     def _refine_points(self, points, pitch_inv, nufft_eps=1e-6):
         """One application of the Newton method to recover spectral accuracy.
 

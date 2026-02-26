@@ -125,7 +125,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
+    ) = Bounce2D._default_kwargs(-2, grid.NFP, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -277,7 +277,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
+    ) = Bounce2D._default_kwargs(-2, grid.NFP, **kwargs)
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -379,7 +379,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs("weak", grid.NFP, **kwargs)
+    ) = Bounce2D._default_kwargs(-1, grid.NFP, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(

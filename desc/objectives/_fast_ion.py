@@ -255,7 +255,9 @@ class GammaC(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._objective_build(self, names=self._key, singular="weak")
+        Bounce2D._objective_build(
+            self, names=self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -294,7 +296,7 @@ class GammaC(_Objective):
             constants["lambda"],
             outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-7,
+            tol=1e-8,
         )[..., ::-1]
 
         data = compute_fun(

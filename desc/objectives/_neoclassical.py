@@ -553,6 +553,14 @@ class TrappedResonance(_Objective):
         Alpha values are derived per rho surface via
         ``alpha = eta * (N*nfp - iota*M) / nfp``.
         Default is 10.
+    weight_method : {"linear", "bump"}, optional
+        How to weight surfaces near resonance. ``"linear"`` uses 2-point linear
+        interpolation between bracketing surfaces. ``"bump"`` uses a smooth
+        normalized bump function. Default is ``"linear"``.
+    Delta_Omega : float, optional
+        Half-width of the resonance interval for ``weight_method="bump"``.
+        If ``None``, defaults to 2× the mean |Ω[i+1]-Ω[i]| spacing.
+        Ignored when ``weight_method="linear"``.
 
     """
 
@@ -600,6 +608,8 @@ class TrappedResonance(_Objective):
         pitch_batch_size=1,
         surf_batch_size=1,
         f_q_conservative=False,
+        weight_method="linear",
+        Delta_Omega=None,
     ):
         if target is None and bounds is None:
             target = 1e-8
@@ -633,6 +643,8 @@ class TrappedResonance(_Objective):
             "num_transit": num_transit,
             "pitch_method": pitch_method,
             "f_q_conservative": f_q_conservative,
+            "weight_method": weight_method,
+            "Delta_Omega": Delta_Omega,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "f_tr2"
@@ -712,9 +724,11 @@ class TrappedResonance(_Objective):
         res_range_min = self._hyperparameters["res_range_min"]
         res_range_max = self._hyperparameters["res_range_max"]
 
-        res_arr = np.full((2*n_max+1)*(m_max+1), jnp.pi) # maximum possible size of array of resonances, including the zero resonance and negative resonances
-        n_arr = np.full((2*n_max+1)*(m_max+1), 1)
-        m_arr = np.full((2*n_max+1)*(m_max+1), 1)
+        # Preallocate: max resonances = n_max (m=0) + 2*m_max*n_max (m>0)
+        n_res_max = n_max + 2 * m_max * n_max
+        res_arr = np.full(n_res_max, np.nan)
+        n_arr = np.zeros(n_res_max, dtype=int)
+        m_arr = np.zeros(n_res_max, dtype=int)
         res_arr_set = 0
 
         for m in range(0,m_max+1):

@@ -550,6 +550,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     # Flags
     DEBUG = kwargs.get("DEBUG",False)
     f_q_conservative = kwargs.get("f_q_conservative", False)
+    weight_method = kwargs.get("weight_method", "linear")  # "linear" or "bump"
+    Delta_Omega = kwargs.get("Delta_Omega", None)
 
     # Setup energies
     m_alpha = 6.6446573450*10**(-27) # kg, mass of alpha particle
@@ -603,56 +605,117 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     omega_bounce = 2 * jnp.pi / tau_bounce
 
     # Setup mean functions
-    def jnpmean_nz(x,axis=0,fill=0): # if all values in x along axis = 0, this outputs zero. This is okay for f_b, well=0 points where no bounce occurs will be taken care of by psi_drift_out
-        mask = x!=0.0
-        count = jnp.sum(mask,axis) # how many wells that are not 0
-        return safediv(jnp.sum(x,axis=axis) , count, fill=fill)
+    def jnpmean_nz(x, axis=0, fill=jnp.nan):
+        mask = x != 0.0
+        count = jnp.sum(mask, axis=axis)
+        return safediv(jnp.sum(x, axis=axis), count, fill=fill)
 
-    # Perform averaging over eta
-    omega_bounce_avg = jnpmean_nz(omega_bounce,axis=1,fill=11.0)
-    eta_drift_avg = jnpmean_nz(eta_drift,axis=1,fill=11.0)
+    # Perform averaging over eta (fill=nan for no data)
+    omega_bounce_avg = jnpmean_nz(omega_bounce, axis=1, fill=jnp.nan)
+    eta_drift_avg = jnpmean_nz(eta_drift, axis=1, fill=jnp.nan)
 
-    # Normalized frequency
-    Omega = eta_drift_avg / omega_bounce_avg
+    # Normalized frequency; safediv avoids inf when omega_bounce_avg=0
+    Omega = safediv(eta_drift_avg, omega_bounce_avg, fill=jnp.nan)
+
+    valid = jnp.isfinite(Omega)  # := (rho, Bcrit, well)
 
     pitch_invs = _data['pitch_inv']
+    rhos = grid.compress(grid.nodes[:, 0])  # := (rho,)
+
+    # Compute Omega'(s) = (dOmega/drho) / (2*rho) early (needed for bump weights)
+    Omega_prev_g = jnp.concatenate(
+        [jnp.full((1,) + Omega.shape[1:], jnp.nan), Omega[:-1]], axis=0
+    )
+    Omega_next_g = jnp.concatenate(
+        [Omega[1:], jnp.full((1,) + Omega.shape[1:], jnp.nan)], axis=0
+    )
+    valid_prev = jnp.concatenate(
+        [jnp.zeros((1,) + valid.shape[1:], dtype=bool), valid[:-1]], axis=0
+    )
+    valid_next = jnp.concatenate(
+        [valid[1:], jnp.zeros((1,) + valid.shape[1:], dtype=bool)], axis=0
+    )
+    grad_central = (Omega_next_g - Omega_prev_g) / (2 * rho_res)
+    grad_forward = (Omega_next_g - Omega) / rho_res
+    grad_backward = (Omega - Omega_prev_g) / rho_res
+    dOmega_drho = jnp.where(
+        valid & valid_prev & valid_next,
+        grad_central,
+        jnp.where(
+            valid & valid_next & ~valid_prev,
+            grad_forward,
+            jnp.where(
+                valid & valid_prev & ~valid_next,
+                grad_backward,
+                jnp.nan,
+            ),
+        ),
+    )
+    Omega_prime_s = safediv(
+        dOmega_drho, 2 * rhos[:, None, None], fill=jnp.nan
+    )  # := (rho, Bcrit, well)
 
     # Resonance weights w_i(p/q) per Eq. (12).
     # Omega := (rho, Bcrit, well), res_arr := (res,)
-    # Output w := (rho, Bcrit, well, res)
-    valid = Omega != 11.0  # := (rho, Bcrit, well)
-
     Omega_broad = Omega[..., None]  # := (rho, Bcrit, well, 1)
     res_broad = res_arr[None, None, None, :]  # := (1, 1, 1, res)
 
-    # Omega at neighboring rho surfaces, padded with NaN at boundaries so
-    # that the boundary surfaces can only use the interior neighbor.
-    Omega_prev = jnp.concatenate(
-        [jnp.full_like(Omega[:1], jnp.nan), Omega[:-1]], axis=0
-    )[..., None]  # := (rho, Bcrit, well, 1)
-    Omega_next = jnp.concatenate(
-        [Omega[1:], jnp.full_like(Omega[:1], jnp.nan)], axis=0
-    )[..., None]  # := (rho, Bcrit, well, 1)
+    if weight_method == "bump":
+        # Smooth normalized bump: w_i = C|Ω'| exp((2ΔΩ)²/((Ω-b)(Ω-a))) for b≤Ω≤a
+        # a = p/q + ΔΩ, b = p/q - ΔΩ; C = 71.12518788738504 / ΔΩ
+        dOmega_spacing = jnp.nanmean(
+            jnp.where(valid, jnp.abs(Omega_next_g - Omega), jnp.nan)
+        )
+        dOmega_spacing = jnp.where(
+            jnp.isfinite(dOmega_spacing), dOmega_spacing, 0.1
+        )
+        Delta_Omega_val = (
+            Delta_Omega if Delta_Omega is not None else 2.0 * dOmega_spacing
+        )
+        a = res_broad + Delta_Omega_val
+        b = res_broad - Delta_Omega_val
+        in_interval = (Omega_broad >= b) & (Omega_broad <= a)
+        denom = (Omega_broad - b) * (Omega_broad - a)
+        exp_arg = safediv(
+            (2.0 * Delta_Omega_val) ** 2, denom, fill=-1e10
+        )  # -inf at boundaries -> exp=0
+        C_norm = 71.12518788738504 / Delta_Omega_val
+        w_raw = C_norm * jnp.abs(Omega_prime_s[..., None]) * jnp.exp(exp_arg)
+        w_raw = jnp.where(in_interval, w_raw, jnp.nan)
+        w_sum = jnp.nansum(jnp.where(valid[..., None], w_raw, jnp.nan), axis=0)
+        res_weight = safediv(w_raw, w_sum[None, :, :, :], fill=jnp.nan)
+    else:
+        # Linear interpolation between bracketing surfaces (original)
+        Omega_prev = jnp.concatenate(
+            [jnp.full_like(Omega[:1], jnp.nan), Omega[:-1]], axis=0
+        )[..., None]  # := (rho, Bcrit, well, 1)
+        Omega_next = jnp.concatenate(
+            [Omega[1:], jnp.full_like(Omega[:1], jnp.nan)], axis=0
+        )[..., None]  # := (rho, Bcrit, well, 1)
+        between_next = (
+            ((Omega_next >= res_broad) & (res_broad >= Omega_broad))
+            | ((Omega_next <= res_broad) & (res_broad <= Omega_broad))
+        )
+        w_next = safediv(
+            Omega_next - res_broad, Omega_next - Omega_broad, fill=jnp.nan
+        )
+        between_prev = (
+            ((Omega_prev >= res_broad) & (res_broad >= Omega_broad))
+            | ((Omega_prev <= res_broad) & (res_broad <= Omega_broad))
+        )
+        w_prev = safediv(
+            Omega_prev - res_broad, Omega_prev - Omega_broad, fill=jnp.nan
+        )
+        res_weight = jnp.where(
+            between_next, w_next, jnp.where(between_prev, w_prev, jnp.nan)
+        )
 
-    # Case 1: resonance lies between surface i and i+1
-    between_next = (
-        ((Omega_next >= res_broad) & (res_broad >= Omega_broad))
-        | ((Omega_next <= res_broad) & (res_broad <= Omega_broad))
-    )
-    w_next = safediv(Omega_next - res_broad, Omega_next - Omega_broad)
-
-    # Case 2: resonance lies between surface i and i-1
-    between_prev = (
-        ((Omega_prev >= res_broad) & (res_broad >= Omega_broad))
-        | ((Omega_prev <= res_broad) & (res_broad <= Omega_broad))
-    )
-    w_prev = safediv(Omega_prev - res_broad, Omega_prev - Omega_broad)
-
-    res_weight = jnp.where(between_next, w_next, jnp.where(between_prev, w_prev, 0.0))
-    res_weight = jnp.where(valid[..., None], res_weight, 0.0)  # zero out invalid surfaces
+    res_weight = jnp.where(valid[..., None], res_weight, jnp.nan)  # invalid surfaces -> nan
 
     # integrand = <v_m . grad(psi)>_b * tau_b := (rho, eta, Bcrit, well)
     ft_integrand = s_drift * tau_bounce
+    ft_integrand = jnp.where(jnp.isfinite(ft_integrand), ft_integrand, jnp.nan)
+    ft_integrand = jnp.where(valid[:, None, :, :], ft_integrand, jnp.nan)
 
     # eta ranges uniformly over [0, 2*pi); alpha = eta * (N*nfp - iota*M) / nfp
     eta_vals = kwargs.get("eta_vals", None)
@@ -696,27 +759,20 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         f_q_abs = 0.5 * jnp.sqrt(f_q_c**2 + f_q_s**2)  # := (rho, Bcrit, well, res)
 
     # Island width Delta_s per Eq. (X).
-
-    # Omega'(s) = (dOmega/drho) / (2*rho), with s = rho^2
-    # Omega := (rho, Bcrit, well), valid marks surfaces with real bounce data
-    rhos = grid.compress(grid.nodes[:, 0])  # := (rho,)
-    dOmega_drho = jnp.gradient(Omega, rho_res, axis=0)  # := (rho, Bcrit, well)
-    dOmega_drho = jnp.where(valid, dOmega_drho, 0.0)
-    Omega_prime_s = safediv(
-        dOmega_drho, 2 * rhos[:, None, None]
-    )  # := (rho, Bcrit, well)
+    # Omega_prime_s already computed above for res_weight
 
     # Interpolate |f_q| and Omega' to resonance locations using res_weight.
-    # res_weight := (rho, Bcrit, well, res) — nonzero at 1-2 surfaces per resonance
-    f_q_at_res = jnp.sum(res_weight * f_q_abs, axis=0)  # := (Bcrit, well, res)
-    Omega_prime_at_res = jnp.sum(
+    # res_weight := (rho, Bcrit, well, res); nansum ignores nan (invalid) contributions
+    f_q_at_res = jnp.nansum(res_weight * f_q_abs, axis=0)  # := (Bcrit, well, res)
+    Omega_prime_at_res = jnp.nansum(
         res_weight * Omega_prime_s[..., None], axis=0
     )  # := (Bcrit, well, res)
 
-    # Delta_s = 4 * sqrt( |f_q| / (pi * q * |Omega'(s_0)|) )
+    # Delta_s = 4 * sqrt( |f_q| / (pi * q * |Omega'(s_0)|) ); fill=nan for zero/NaN denom
     q_iw = q_arr[None, None, :]  # := (1, 1, res)
+    denom = jnp.pi * q_iw * jnp.abs(Omega_prime_at_res)
     Delta_s = 4 * jnp.sqrt(
-        safediv(f_q_at_res, jnp.pi * q_iw * jnp.abs(Omega_prime_at_res))
+        safediv(f_q_at_res, denom, fill=jnp.nan)
     )  # := (Bcrit, well, res)
 
     """
@@ -780,9 +836,16 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     
     # Compute s_res: weighted-average s = rho^2 location of each resonance
     s_vals = rhos**2  # := (rho,)
-    w_prof = jnp.sum(res_weight, axis=(1, 2))  # := (rho, res)
-    w_sum = jnp.sum(w_prof, axis=0)  # := (res,)
-    s_res = safediv(jnp.sum(w_prof * s_vals[:, None], axis=0), w_sum)  # := (res,)
+    w_prof = jnp.nansum(res_weight, axis=(1, 2))  # := (rho, res)
+    w_sum = jnp.nansum(w_prof, axis=0)  # := (res,)
+    s_res = safediv(
+        jnp.nansum(w_prof * s_vals[:, None], axis=0), w_sum, fill=jnp.nan
+    )  # := (res,)
+
+    # Extract alpha grid from source_grid for DEBUG verification
+    raz_grid = transforms["grid"].source_grid
+    alpha_3d = raz_grid.meshgrid_reshape(raz_grid.nodes[:, 1], "raz")
+    alpha_per_rho_from_grid = alpha_3d[:, :, 0].T  # (num_rho, num_alpha)
 
     if DEBUG:
         data["f_tr2"] = {
@@ -803,6 +866,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             'Delta_s': Delta_s,
             'f_q_conservative': f_q_conservative,
             's_res': s_res,
+            'alpha_per_rho': alpha_per_rho_from_grid,
         }
     else:
         data["f_tr2"] = Omega # full output

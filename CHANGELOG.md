@@ -41,7 +41,6 @@ Performance Improvements
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
 - Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
-- Default quadrature over pitch angles in ``Gamma_c`` changed. Handling logarithmic singularities in the velocity coordinate remains future work (waiting on maturation of jax.ffi compatibility).
 
 Deprecations
 - Removes ``FiniteDiffDerivative`` from the public API. This class was no longer actually usable with the current versions of DESC's optimization framework, as JAX is now required for running any equilibrium or optimization solves.

@@ -199,7 +199,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs("deriv", grid.NFP, **kwargs)
+    ) = Bounce2D._default_kwargs(1, grid.NFP, **kwargs)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""

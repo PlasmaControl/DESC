@@ -239,7 +239,7 @@ class EffectiveRipple(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._objective_build(self, names="effective ripple", singular="deriv")
+        Bounce2D._objective_build(self, names="effective ripple", eta=1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -278,7 +278,7 @@ class EffectiveRipple(_Objective):
             constants["lambda"],
             outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-7,
+            tol=1e-8,
         )[..., ::-1]
 
         data = compute_fun(

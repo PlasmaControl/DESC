@@ -22,6 +22,7 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
+- Add support for Python 3.14
 
 Bug Fixes
 

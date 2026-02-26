@@ -6,11 +6,12 @@ from math import factorial
 
 import mpmath
 import numpy as np
+from scipy.fft import dct, idct
 
-from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, irfft, jit, jnp, rfft, sign
 from desc.grid import Grid, _Grid
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, flatten_list
+from desc.utils import check_nonnegint, check_posint, flatten_list, safediv
 
 __all__ = [
     "PowerSeries",
@@ -20,6 +21,7 @@ __all__ = [
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
+    "ChebyshevDoubleFourierBasis",
 ]
 
 
@@ -1118,6 +1120,196 @@ class ChebyshevDoubleFourierBasis(_Basis):
             self._set_up()
 
 
+class DoubleChebyshevFourierBasis(_Basis):
+    """3D basis: tensor product of two Chebyshev polynomials and Fourier series.
+
+    Chebyshev polynomial in R and Z, and Fourier series in phi.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+    M : int
+        Maximum toroidal resolution.
+    N : int
+        Maximum vertical resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+
+    _fft_poloidal = False
+    _fft_toroidal = False
+
+    def __init__(self, L, M, N, NFP=1, sym=False):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L, M, N):
+        """Get mode numbers for Chebyshev-Fourier series.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum toroidal resolution.
+        N : int
+            Maximum vertical resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1)
+        m = np.arange(-M, M + 1)
+        n = np.arange(N + 1)
+        l, m, n = np.meshgrid(l, m, n, indexing="ij")
+        l = l.ravel()
+        m = m.ravel()
+        n = n.ravel()
+        return np.array([l, m, n]).T
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,phi,Z).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,phi,Z).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is given by
+            ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
+            an outer product of Chebyshev and Fourier matrices with order
+            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
+            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
+
+        """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+        if modes is None:
+            modes = self.modes
+            # The indices of the unique modes in the first, second, and third dims
+            lidx = self.unique_L_idx
+            midx = self.unique_M_idx
+            nidx = self.unique_N_idx
+
+            # Indices that can be used to reconstruct modes from unique values
+            loutidx = self.inverse_L_idx
+            moutidx = self.inverse_M_idx
+            noutidx = self.inverse_N_idx
+        else:
+            lidx = loutidx = np.arange(len(modes))
+            midx = moutidx = np.arange(len(modes))
+            nidx = noutidx = np.arange(len(modes))
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+
+        # Get the nodes of the grid
+        r, p, z = grid.nodes.T
+        l, m, n = modes.T
+
+        # The coordinates in the grid are hardcoded to be called rho, theta, zeta,
+        # but these vars are just unique values for 1st, 2nd, and 3rd coordinates
+        try:
+            ridx = grid.unique_rho_idx
+            routidx = grid.inverse_rho_idx
+        except AttributeError:
+            ridx = routidx = np.arange(grid.num_nodes)
+        try:
+            pidx = grid.unique_theta_idx
+            poutidx = grid.inverse_theta_idx
+        except AttributeError:
+            pidx = poutidx = np.arange(grid.num_nodes)
+        try:
+            zidx = grid.unique_zeta_idx
+            zoutidx = grid.inverse_zeta_idx
+        except AttributeError:
+            zidx = zoutidx = np.arange(grid.num_nodes)
+
+        # Get only the unique coordinates
+        r = r[ridx]
+        p = p[pidx]
+        z = z[zidx]
+        l = l[lidx]
+        m = m[midx]
+        n = n[nidx]
+
+        # Evaluate the radial and vertical derivatives as a Chebyshev polynomial
+        # and the toroidal (phi) derivative as a Fourier series with N field periods
+        # up to the l/m/n order
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        toroidal = fourier(p[:, np.newaxis], m, self.NFP, derivatives[1])
+        vertical = chebyshev(z[:, np.newaxis], n, dr=derivatives[2])
+
+        # Reshape the arrays to not just be unique values for grid and modes
+        radial = radial[routidx][:, loutidx]
+        toroidal = toroidal[poutidx][:, moutidx]
+        vertical = vertical[zoutidx][:, noutidx]
+
+        return radial * toroidal * vertical
+
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+          Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = NFP if NFP is not None else self.NFP
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
+            self._set_up()
+
+
 class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
@@ -1851,11 +2043,244 @@ def chebyshev(r, l, dr=0):
     if dr == 0:
         return jnp.cos(l * jnp.arccos(x))
     else:
-        # dy/dr = dy/dx * dx/dr = dy/dx * 2
+        # Calculate derivative recursively using the chebyshev_second_kind function
+        dydx = l * chebyshev_second_kind(r, l - 1, dr=(dr - 1))
+        dydr = 2 * dydx
+
+        return dydr
+
+
+def chebyshev_second_kind(r, l, dr=0):
+    """Shifted Chebyshev polynomial of the second kind.
+
+    Parameters
+    ----------
+    r : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        U_n evaluated at specified points
+    """
+    r, l = map(jnp.asarray, (r, l))
+    x = 2 * r - 1  # shift
+    if dr == 0:
+        return jnp.where(
+            jnp.abs(x) == 1,
+            (l + 1) * (x ** (l)),
+            safediv(jnp.sin((l + 1) * jnp.arccos(x)), jnp.sqrt(1 - x**2)),
+        )
+    elif dr == 1:
+        a = (l + 1) * chebyshev(r, l + 1, dr=0) - x * chebyshev_second_kind(r, l, dr=0)
+        b = x**2 - 1
+        dydx = jnp.where(
+            jnp.abs(x) == 1, x ** (l + 1) / 3 * ((l + 1) ** 3 - (l + 1)), safediv(a, b)
+        )
+        dydr = 2 * dydx
+        return dydr
+    else:
         raise NotImplementedError(
-            "Analytic radial derivatives of Chebyshev polynomials "
+            "Analytic third-degree derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
+
+
+def chebfit(y, axis):
+    """
+    Fast method for calculating Chebyshev coefficients.
+
+    Assumes basis and grid resolution are equal and
+    y is evaluated on the Chebyshev-Gauss-Lobatto nodes.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+    N = y.shape[axis]
+
+    # Normalize the Chebyshev coefficients
+    f = ((-1) ** np.arange(N)).astype(float)
+    f[[0, -1]] = 0.5
+    f = f / (N - 1)
+
+    # Reshape to broadcast onto axis
+    f_shape = [1 if i != axis else -1 for i in range(y.ndim)]
+
+    # Direct cosine transform of y and then adjust normalization
+    return dct(y, axis=axis, type=1, norm=None) * f.reshape(f_shape)
+
+
+def ichebfit(y_c, axis):
+    """
+    Fast method for converting from Chebyshev coefficients to real space.
+
+    Assumes basis and grid resolution are equal and evaluates on the
+    Chebyshev-Gauss-Lobatto nodes.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,N,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+
+    Returns
+    -------
+    y : ndarray, shape(...,N,...)
+        Transform of y along axis.
+    """
+    N = y_c.shape[axis]
+
+    # Normalize the Chebyshev coefficients
+    f = ((-1) ** np.arange(N)).astype(float)
+    f[[0, N - 1]] = 0.5
+    f = f / (N - 1)
+
+    # Reshape to braodcast onto axis
+    f_shape = [1 if i != axis else -1 for i in range(y_c.ndim)]
+
+    # Adjust normalization and then inverse direct cosine transform
+    return idct(y_c / f.reshape(f_shape), axis=axis, type=1, norm=None)
+
+
+def fftfit(y, axis, n=None):
+    """
+    Real fast fourier transform along axis.
+
+    Designed to convert coefficients into the form expected by the
+    fourier functions. Assumes nodes are spaced linearly.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,2N+1,...)
+        Function to Fourier transform.
+    axis : int
+        Axis along which to transform y.
+    n: int
+        Desired output resolution along axis. Defaults
+        to input resolution N.
+
+    Returns
+    -------
+    y_c : ndarray, shape(...,2n+1,...)
+        Transform of y along axis.
+    """
+    N = int((y.shape[axis] - 1) / 2)
+    if n is None:
+        n = N
+
+    # Real fourier transform
+    c_cplx = rfft(y, axis=axis, norm="forward")
+
+    # Get all terms except for the constant
+    unpad_slice = tuple(
+        slice(1, None) if i == axis else slice(None) for i in range(y.ndim)
+    )
+
+    c_unpad = 2 * c_cplx[unpad_slice]
+
+    # Get the constant term
+    c0_slice = tuple(
+        slice(None, 1) if i == axis else slice(None) for i in range(y.ndim)
+    )
+    c0 = c_cplx[c0_slice].real
+
+    # Separate sine (imaginary) modes and cosine (real) modes
+    c2 = c_unpad.real
+    c1 = -np.flip(c_unpad.imag, axis=axis)
+
+    # Recombine
+    y_c = jnp.concatenate([c1, c0, c2], axis=axis)
+
+    # If n>N, then pad with zeros along axis
+    if n > N:
+        pad_shape = tuple(n - N if i == axis else y_c.shape[i] for i in range(y_c.ndim))
+        padding = np.zeros(pad_shape)
+        y_c = np.concatenate([padding, y_c, padding], axis=axis)
+
+    # If n<N, then cut off the Fourier coefficients with mode number>n
+    elif n < N:
+        cutoff_slice = tuple(
+            slice(N - n, n - N) if i == axis else slice(None) for i in range(y_c.ndim)
+        )
+        y_c = y_c[cutoff_slice]
+
+    return y_c
+
+
+def ifftfit(y_c, axis, n=None):
+    """
+    Real fast inverse fourier transform along axis.
+
+    Designed to convert from form in basis classes to real space.
+    Evaluates on equally spaced nodes.
+
+    Parameters
+    ----------
+    y : ndarray, shape(...,2N+1,...)
+        Function to decompose into basis of Chebyshev functions.
+    axis : int
+        Axis along which to transform y.
+    n : int
+        Desired output resolution along axis. Defaults to input
+        resolution N.
+
+    Returns
+    -------
+    y : ndarray, shape(...,2n+1,...)
+        Transform of y along axis.
+    """
+    N = int((y_c.shape[axis] - 1) / 2)
+    if n is None:
+        n = N
+
+    # If n>N, then pad with zeros along axis
+    if n > N:
+        pad_shape = tuple(n - N if i == axis else y_c.shape[i] for i in range(y_c.ndim))
+        padding = np.zeros(pad_shape)
+        y_c = np.concatenate([padding, y_c, padding], axis=axis)
+    # If n<N, then cut off the Fourier coefficients with mode number>n
+    elif n < N:
+        cutoff_slice = tuple(
+            slice(N - n, n - N) if i == axis else slice(None) for i in range(y_c.ndim)
+        )
+        y_c = y_c[cutoff_slice]
+
+    # Reconstruct c_cplx in a form jnp expects
+    # Imaginary (sine) modes
+    c1_slice = tuple(
+        slice(n - 1, None, -1) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c1 = y_c[c1_slice]
+
+    # Constant term
+    c0_slice = tuple(
+        slice(n, n + 1) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c0 = y_c[c0_slice]
+
+    # Real (cosine) modes
+    c2_slice = tuple(
+        slice(n + 1, None) if i == axis else slice(None) for i in range(y_c.ndim)
+    )
+    c2 = y_c[c2_slice]
+    c_cplx = np.concatenate([c0, (c2 - 1j * c1) / 2], axis=axis)
+
+    # Inverse fourier transform
+    return irfft(c_cplx, axis=axis, norm="forward", n=y_c.shape[axis])
 
 
 @jit

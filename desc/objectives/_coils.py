@@ -79,6 +79,7 @@ class _CoilObjective(_Objective):
         grid=None,
         name=None,
         jac_chunk_size=None,
+        device_id=0,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -95,6 +96,7 @@ class _CoilObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -375,6 +377,7 @@ class CoilLength(_CoilObjective):
         grid=None,
         name="coil length",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -392,6 +395,7 @@ class CoilLength(_CoilObjective):
             grid=grid,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -479,6 +483,7 @@ class CoilCurvature(_CoilObjective):
         grid=None,
         name="coil curvature",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -496,6 +501,7 @@ class CoilCurvature(_CoilObjective):
             grid=grid,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -579,6 +585,7 @@ class CoilTorsion(_CoilObjective):
         grid=None,
         name="coil torsion",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -596,6 +603,7 @@ class CoilTorsion(_CoilObjective):
             grid=grid,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -679,6 +687,7 @@ class CoilCurrentLength(CoilLength):
         grid=None,
         name="coil current length",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -695,6 +704,7 @@ class CoilCurrentLength(CoilLength):
             grid=grid,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -787,6 +797,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         grid=None,
         name="coil integrated curvature",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -803,6 +814,7 @@ class CoilIntegratedCurvature(_CoilObjective):
             grid=grid,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -911,6 +923,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        device_id=0,
     ):
         from desc.coils import CoilSet
 
@@ -936,6 +949,7 @@ class CoilSetMinDistance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1105,6 +1119,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -1140,6 +1155,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1462,6 +1478,7 @@ class CoilArclengthVariance(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil arclength variance",
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1478,6 +1495,7 @@ class CoilArclengthVariance(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1622,6 +1640,7 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
+        device_id=0,
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
@@ -1655,6 +1674,7 @@ class QuadraticFlux(_Objective):
             normalize_target=normalize_target,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1844,6 +1864,7 @@ class SurfaceQuadraticFlux(_Objective):
         name="Surface Quadratic Flux",
         field_fixed=False,
         jac_chunk_size=None,
+        device_id=0,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -1869,6 +1890,7 @@ class SurfaceQuadraticFlux(_Objective):
             normalize_target=normalize_target,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2068,6 +2090,7 @@ class ToroidalFlux(_Objective):
         field_fixed=False,
         eq_fixed=False,
         jac_chunk_size=None,
+        device_id=0,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -2102,6 +2125,7 @@ class ToroidalFlux(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2336,6 +2360,7 @@ class LinkingCurrentConsistency(_Objective):
         deriv_mode="auto",
         jac_chunk_size=None,
         name="linking current",
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -2356,6 +2381,7 @@ class LinkingCurrentConsistency(_Objective):
             deriv_mode=deriv_mode,
             jac_chunk_size=jac_chunk_size,
             name=name,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2524,6 +2550,7 @@ class CoilSetLinkingNumber(_Objective):
         deriv_mode="auto",
         jac_chunk_size=None,
         name="coil-coil linking number",
+        device_id=0,
     ):
         from desc.coils import CoilSet
 
@@ -2546,6 +2573,7 @@ class CoilSetLinkingNumber(_Objective):
             deriv_mode=deriv_mode,
             jac_chunk_size=jac_chunk_size,
             name=name,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2684,6 +2712,7 @@ class SurfaceCurrentRegularization(_Objective):
         regularization="K",
         source_grid=None,
         name="surface-current-regularization",
+        device_id=0,
     ):
         from desc.magnetic_fields import (
             CurrentPotentialField,
@@ -2724,6 +2753,7 @@ class SurfaceCurrentRegularization(_Objective):
             deriv_mode=deriv_mode,
             jac_chunk_size=jac_chunk_size,
             name=name,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

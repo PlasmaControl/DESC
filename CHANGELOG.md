@@ -55,7 +55,11 @@ New Features
 - Adds support for optimization targeting individual coils in a coilset.
   - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
   - Able to set weights to zero, excluding certain coils from the objective.
-
+- Adds initial support for multi-device optimization with MPI. This allows to compute derivatives and costs on multiple devices (GPUs/CPUs), and to split memory usage during these operations across devices. See the [documentation](https://desc-docs.readthedocs.io/en/stable/notebooks/tutorials/multi_device.html) for details. Couple important notes:
+    - MPI is not a default dependency of DESC, so, to use MPI functionality, the users should verify their MPI installation themselves.
+    - Using MPI is recommended only for the cases where you get out-of-memory error. If your problem fits to single GPU memory, it's unlikely that MPI will give speed improvement.
+    - MPI is not implemented for matrix decompositions (i.e. QR/SVD/Cholesky) which default optimizer ``lsq-exact`` uses. For the cases where Jacobian doesn't fit to GPU memory, matrix decompositions will be performed on CPU and will be slow. Feel free to open a PR, if you have knowledge on parallel QR/SVD or Cholesky.
+    - CUDA-aware MPI is not supported yet.
 
 
 Bug Fixes
@@ -81,6 +85,7 @@ Performance Improvements
 
 - Coordinate mapping uses partial summation, see #1826
 - Non-uniform FFTs (NUFFTS) are now used by default for computing bounce integrals, see #1834. NUFFT functionality is added through `jax-finufft` package. If the GPU installation fails, users can fall back to the older (much slower) implementation by setting `nufft_eps=0` in the computation of the related quantities.
+
 
 
 v0.15.0

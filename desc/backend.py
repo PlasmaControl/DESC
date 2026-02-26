@@ -17,7 +17,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
 else:
-    if desc_config.get("device") is None:
+    if desc_config.get("devices") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -52,15 +52,48 @@ def print_backend_info():
     if use_jax:
         print(
             f"Using JAX backend: jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+            f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
-    print(
-        "Using device: {}, with {:.2f} GB available memory.".format(
-            desc_config.get("device"), desc_config.get("avail_mem")
+
+    if desc_config["num_device"] == 1:
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+            "GB available memory"
         )
-    )
+    elif desc_config["kind"] == "cpu":
+        print(
+            f"Using {desc_config['num_device']} CPUs with "
+            + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
+        )
+        for i, dev in enumerate(desc_config["devices"]):
+            print(f"\t CPU : {dev}")
+
+        print(
+            "\nNote: The backend information assumes that the user has 1 "
+            "process per CPU (node). Using multiple processes per CPU (node) is "
+            "not the most efficient way to use MPI with purely CPUs."
+        )
+
+    if desc_config["kind"] == "gpu":
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+            "GB available memory"
+        )
+        print(f"Using {desc_config['num_device']} device:")
+        for i, dev in enumerate(desc_config["devices"]):
+            print(
+                f"\t Device : {dev} with {desc_config['avail_mems'][i]:.2f} "
+                "GB available memory"
+            )
+
+        if desc_config["num_device"] != 1:
+            print(
+                "\nNote: The backend information only reflects the devices for "
+                "the current process. The full set of devices used by other processes "
+                "may be different."
+            )
 
 
 def _diag_to_full(d, e):
@@ -521,6 +554,69 @@ if use_jax:  # noqa: C901
         else:
             x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
+
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Safe Bcast function for Jax arrays.
+
+        JAX arrays cannot be directly broadcasted using MPI's Bcast, but numpy
+        arrays can. If CUDA-aware MPI is available, JAX arrays on GPU can be
+        broadcasted directly. This function checks the type of the array and
+        perform the broadcast safely.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to broadcast.
+        comm : MPI.Comm
+            MPI communicator.
+        root : int
+            Rank of root process. Default is 0.
+
+        Returns
+        -------
+        arr : jnp.ndarray or np.ndarray
+            Broadcasted array.
+        """
+        if not desc_config["mpi-cuda"]:
+            arr = np.array(arr)
+        comm.Bcast(arr, root=root)
+        # don't use this returned value for root == rank, as it will replace the jax
+        # array with a numpy array, which is not ideal
+        return arr
+
+    def safe_transfer_to_device(arr):
+        """Safely transfer array to device.
+
+        Handles the final array device if the array is too big for GPU,
+        or the backend is CPU.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to transfer.
+
+        Returns
+        -------
+        arr : jnp.ndarray
+            Array on the target device.
+        """
+        size_gb = arr.nbytes / 1024**3
+
+        # this can still fail if arr is big even for CPU
+        if desc_config["kind"] == "cpu" or size_gb > desc_config["avail_mems"][0] * 0.9:
+            if (
+                not desc_config["SUPPRESS_GPU_MEMORY_WARNING"]
+                and desc_config["kind"] == "gpu"
+            ):
+                warnings.warn(
+                    "The total size of the arrays exceeds the available memory of the "
+                    "GPU[id=0]. Moving the array to CPU. This may cause performance "
+                    "degredation. To suppress this warning, use \n"
+                    "`from desc import config as desc_config` \n"
+                    "`desc_config['SUPPRESS_GPU_MEMORY_WARNING'] = True`"
+                )
+            return jnp.asarray(arr, device=jax.devices("cpu")[0])
+        return jnp.asarray(arr)
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -996,3 +1092,11 @@ else:  # pragma: no cover
         else:
             out = np.take(a, indices, axis, out, mode)
         return out
+
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Numpy implementation of desc.backend.safe_mpi_Bcast."""
+        return comm.Bcast(arr, root=root)
+
+    def safe_transfer_to_device(arr):
+        """Numpy implementation of desc.backend.safe_transfer_to_device."""
+        return arr

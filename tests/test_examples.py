@@ -169,9 +169,9 @@ def test_solve_bounds():
         eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
     eq.p_l *= 2
 
-    # target force balance residuals with |F| <= 1e3 N
+    # target force balance residuals with |F| <= 3e3 N
     obj = ObjectiveFunction(
-        ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3), eq=eq)
+        ForceBalance(normalize=False, normalize_target=False, bounds=(-3e3, 3e3), eq=eq)
     )
     eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
 

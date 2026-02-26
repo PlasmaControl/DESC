@@ -17,13 +17,14 @@ New Features
 - Adds utility functions ``desc.external.paraview.export_surface_to_paraview``, ``desc.external.paraview.export_volume_to_paraview`` and ``desc.external.paraview.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
 - The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
-- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
-alternative to fourier continuation methods.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an alternative to fourier continuation methods.
+- Adds `x_scale='ess'` option for the ``OmigenousField`` class.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
 - The ``x_scale`` parameter can now be used with stochastic gradient descent type optimizers.
 - Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary. See the docstring of the ``optax-custom`` for details.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
+- Add support for Python 3.14
 
 Bug Fixes
 
@@ -37,6 +38,7 @@ Performance Improvements
 Deprecations
 
 - ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer('sgd')` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer('optax-sgd')` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
+- Removes ``FiniteDiffDerivative`` from the public API. This class was no longer actually usable with the current versions of DESC's optimization framework, as JAX is now required for running any equilibrium or optimization solves.
 
 
 v0.16.0

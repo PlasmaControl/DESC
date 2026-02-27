@@ -26,6 +26,7 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms, rpz2xyz, rpz2xyz_vec
+from desc.diagnostics import PointBMeasurements
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -70,6 +71,7 @@ from desc.objectives import (
     LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
+    MeasurementError,
     MercierStability,
     MirrorRatio,
     ObjectiveFromUser,
@@ -78,7 +80,6 @@ from desc.objectives import (
     PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
-    PointBMeasurement,
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
@@ -1508,17 +1509,20 @@ class TestObjectiveFunction:
                 if directions is None
                 else np.zeros(coords.shape[0])
             )
-            obj = PointBMeasurement(
-                eq=eq,
-                field=coils,
-                target=target,
+            diag = PointBMeasurements(
                 measurement_coords=coords,
                 directions=directions,
+                basis=basis,
+            )
+            obj = MeasurementError(
+                eq,
+                field=coils,
+                target=target,
+                diagnostics=diag,
                 vc_source_grid=vc_source_grid,
                 field_grid=coil_grid,
                 field_fixed=field_fixed,
                 vacuum=vacuum,
-                basis=basis,
             )
             obj.build()
             if field_fixed:
@@ -3355,7 +3359,7 @@ class TestComputeScalarResolution:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
-        PointBMeasurement,
+        PointBMeasurements,
         QuadraticFlux,
         SurfaceQuadraticFlux,
         ToroidalFlux,
@@ -3756,14 +3760,16 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(
-                PointBMeasurement(
-                    eq=eq,
-                    field=field,
-                    measurement_coords=coords,
-                    target=0,
-                )
+            diag = PointBMeasurements(
+                measurement_coords=coords,
             )
+            obj = MeasurementError(
+                eq,
+                field=field,
+                target=0,
+                diagnostics=diag,
+            )
+            obj = ObjectiveFunction(obj)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x(eq, field))
         np.testing.assert_allclose(f, f[-1], rtol=1e-3)
@@ -3876,7 +3882,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
-        PointBMeasurement,
+        PointBMeasurements,
         QuadraticFlux,
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,

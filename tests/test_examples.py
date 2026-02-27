@@ -22,6 +22,7 @@ from desc.coils import (
     _Coil,
 )
 from desc.continuation import solve_continuation_automatic
+from desc.diagnostics import DiagnosticSet, PointBMeasurements2
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
@@ -62,11 +63,11 @@ from desc.objectives import (
     GenericObjective,
     LinearObjectiveFromUser,
     MeanCurvature,
+    MeasurementError,
     ObjectiveFunction,
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
-    PointBMeasurement,
     PrincipalCurvature,
     QuadraticFlux,
     QuasisymmetryBoozer,
@@ -2772,42 +2773,46 @@ def test_continuation_L_res():
 @pytest.mark.unit
 @pytest.mark.optimize
 @pytest.mark.slow
-def test_PointBMeasurement_fixed_bdry():
-    """Tests PointBMeasurement reconstruction with fixed bdry."""
+def test_PointBMeasurements2_fixed_bdry():
+    """Tests PointBMeasurements2 reconstruction with fixed bdry."""
     eq = get("precise_QA")
     meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
 
     # solve with finite pressure, use that as target B
     p0 = 2e4
-    eq.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
-    eq.solve(verbose=3)
+    eq_target = eq.copy()
+    eq_target.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
+    eq_target.solve(verbose=3)
 
     meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
     dummy_coil = ToroidalMagneticField(0, 0)
-    obj = PointBMeasurement(
-        eq,
-        dummy_coil,
+    diag = PointBMeasurements2(
         measurement_coords=meas_loc_rpz,
-        target=0,
         basis="rpz",
-        field_fixed=True,
     )
+    meas_loc_rpz2 = [
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.3],
+        [0.7, 2 * np.pi / eq.NFP / 2, 0.15],
+    ]
+    diag2 = PointBMeasurements2(
+        measurement_coords=meas_loc_rpz2,
+        basis="rpz",
+    )
+
+    diagnostics = DiagnosticSet([diag, diag2])
+    obj = MeasurementError(eq_target, dummy_coil, diagnostics, field_fixed=True)
     obj.build()
-    target_fin_beta = obj.compute(*obj.xs(eq))
+    target_fin_beta = obj.compute(*obj.xs(eq_target))
+
     # scale eq pressure back down to a lower value
-    eq.pressure = ScaledProfile(0.5, eq.pressure)
-    eq.solve()
+    eq.pressure = ScaledProfile(0.0, eq_target.pressure)
 
     # optimize for matching the Bplasma external measurement,
     # only allowing pressure scale to vary
+
     obj = ObjectiveFunction(
-        PointBMeasurement(
-            eq,
-            dummy_coil,
-            measurement_coords=meas_loc_rpz,
-            target=target_fin_beta,
-            basis="rpz",
-            field_fixed=True,
+        MeasurementError(
+            eq, dummy_coil, diagnostics, field_fixed=True, target=target_fin_beta
         )
     )
 

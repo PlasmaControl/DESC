@@ -1499,11 +1499,17 @@ class _Objective(IOAble, ABC):
             # the first value in the {} string, so the second one is unused.
             # That is why we set f0 to f.
             print_value_fmt = f"{self._print_value_fmt:<{PRINT_WIDTH}}" + "{:10.3e} "
-        if self._print_error:
+        if self._print_error and (
+            self.target is not None or np.all(self.bounds[0] == self.bounds[1])
+        ):
             # this is an error metric, makes sense to print the error and not the
             # absolute value
-            f = f - self.target
-            f0 = f0 - self.target
+            if self.target is not None:
+                f = f - self.target
+                f0 = f0 - self.target
+            else:
+                f = f - self.bounds[0]
+                f0 = f0 - self.bounds[0]
         if self.linear:
             # probably a Fixed* thing, just need to know norm
             f = jnp.linalg.norm(self._shift(f))

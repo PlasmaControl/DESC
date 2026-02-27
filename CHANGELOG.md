@@ -28,6 +28,7 @@ Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
 - ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
+- Adds error in ``MercierStability`` to guard against situation where if a grid with a point at ``rho=0`` were used, NaN would be computed, as``MercierStability`` is undefined on-axis.
 
 Performance Improvements
 

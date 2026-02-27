@@ -1,20 +1,9 @@
 """Interpolation utilities."""
 
-import warnings
 from functools import partial
 
 from interpax import interp1d
-
-try:
-    from jax_finufft import nufft2, options
-except ImportError:
-    warnings.warn(
-        "\njax-finufft is not installed.\n"
-        "If you want to use NUFFTs, follow the DESC installation instructions.\n"
-        "Otherwise you must set the parameter nufft_eps to zero\n"
-        "when computing effective ripple, Gamma_c, and any other\n"
-        "computations that involve bounce integrals.\n"
-    )
+from jax_finufft import nufft2, options
 
 from desc.backend import jax, jnp
 

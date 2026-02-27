@@ -8,7 +8,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.integrals.bounce_integral import Bounce2D
-from desc.utils import parse_argname_change, setdefault, warnif
+from desc.utils import parse_argname_change, setdefault
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -189,17 +189,6 @@ class GammaC(_Objective):
         Nemov=True,
         **kwargs,
     ):
-        try:
-            import jax_finufft  # noqa: F401
-        except ImportError:
-            warnif(
-                nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed.\n"
-                "Setting parameter nufft_eps to zero.\n"
-                "Performance will deteriorate significantly.\n",
-            )
-            nufft_eps = 0.0
-
         if target is None and bounds is None:
             target = 0.0
 

@@ -7,19 +7,20 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from desc.integrals import get_interpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    cross,
+    dot,
     errorif,
     parse_argname_change,
     setdefault,
     warnif,
 )
 
-from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
 
 
@@ -545,51 +546,20 @@ class BoundaryError(_Objective):
         else:
             source_grid = self._source_grid
 
-        if self._eval_grid is None:
-            eval_grid = source_grid
-        else:
-            eval_grid = self._eval_grid
-
+        eval_grid = setdefault(self._eval_grid, source_grid)
         self._use_same_grid = eval_grid.equiv(source_grid)
 
-        errorif(
-            not np.all(source_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "source_grid contains nodes not on rho=1",
+        ratio_data = (
+            eq.compute(["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid)
+            if (self._st is None or self._sz is None or self._q is None)
+            else {}
         )
-        errorif(
-            not np.all(eval_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "eval_grid contains nodes not on rho=1",
+        interpolator = get_interpolator(
+            eval_grid, source_grid, ratio_data, st=self._st, sz=self._sz, q=self._q
         )
-        errorif(
-            source_grid.sym,
-            ValueError,
-            "Source grids for singular integrals must be non-symmetric",
-        )
-
-        if self._st is None or self._sz is None or self._q is None:
-            ratio_data = eq.compute(
-                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-            )
-            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
-            self._st = setdefault(self._st, st)
-            self._sz = setdefault(self._sz, sz)
-            self._q = setdefault(self._q, q)
-
-        try:
-            interpolator = FFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
-        except AssertionError as e:
-            warnif(
-                True,
-                msg="Could not build fft interpolator, switching to dft which is slow."
-                "\nReason: " + str(e),
-            )
-            interpolator = DFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
+        del self._st
+        del self._sz
+        del self._q
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
@@ -780,7 +750,7 @@ class BoundaryError(_Objective):
         )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
-            Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
+            Kerr = mu_0 * sheet_eval_data["K"] - cross(eval_data["n_rho"], Bjump)
             Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
             return jnp.concatenate([Bn_err, Bsq_err, Kerr])
         else:
@@ -899,6 +869,374 @@ class BoundaryError(_Objective):
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
         return out
+
+
+class FreeSurfaceError(_Objective):
+    """Target for free surface ideal MHD equilirium conditions on LCFS.
+
+    References
+    ----------
+        [1] Unalmis et al. New high-order accurate free surface stellarator
+            equilibria optimization and boundary integral methods in DESC.
+
+    Warnings
+    --------
+    Bugs with the optimizer may cause the optimizer to stall in the optimization
+    landscape of this objective. See GitHub issue #1208 to resolve.
+    Also, if ``field`` is an instance of ``FreeSurfaceOuterField``, then
+    ``field._B_coil`` should be smooth and divergence free until GitHub issue #1796
+    is resolved.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    field : FreeSurfaceOuterField or SourceFreeField
+        Laplace solver object. If is an instance of ``FreeSurfaceOuterField``
+        assumes ``field._B_coil`` is the magnetic field due to coils.
+        If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
+        the magnetic field due to coils.
+    eval_grid : Grid
+        Evaluation points on boundary to evaluate objective error.
+        Default is ``grid``, but it is likely best to use a grid
+        with much lower resolution.
+    grid : Grid
+        Grid for the integral transforms.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
+        Default is ``LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP)``.
+    coil_grid : Grid, optional
+        Source grid used to discretize coil magnetic field computation.
+        Default is default grid of coil magnetic field.
+    q : int
+        Order of integration on the local singular grid.
+    xtol : float
+        Stopping tolerance for fixed point method. Default is ``1e-7``.
+    maxiter : int
+        Maximum number of iterations for fixed point method.
+        If non-positive then the linear operator will be inverted instead.
+        If positive, then performs that many fixed point iterations until ``maxiter``
+        or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
+        error of ``1e-5`` as illustrated in [1]. Default is ``25``.
+    chunk_size : int or None
+        Size to split integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.  Default is ``None``.
+        Recommend to verify computation with ``chunk_size`` set to a
+        small number due to bugs in JAX or XLA.
+    B_coil_chunk_size : int or None
+        Size to split coil integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.  Default is ``None``.
+    I_sheet : float
+        Net toroidal sheet current determining a circulation of Φ.
+        Default is zero.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _print_value_fmt = "Free surface Error: "
+    _units = "T^2 m^2"
+
+    _static_attrs = _Objective._static_attrs + [
+        "_is_neumann",
+        "_field",
+        "_B_coil",
+        "_use_same_grid",
+        "_q",
+        "_xtol",
+        "_maxiter",
+        "_chunk_size",
+        "_B_coil_chunk_size",
+        "_grad_keys",
+        "_inner_keys",
+        "_reuseable_keys",
+    ]
+
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        *,
+        eval_grid=None,
+        grid=None,
+        coil_grid=None,
+        q=None,
+        xtol=1e-7,
+        maxiter=25,
+        chunk_size=None,
+        B_coil_chunk_size=None,
+        I_sheet=0.0,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="Free surface error",
+        **kwargs,
+    ):
+        if target is None and bounds is None:
+            target = 0.0
+
+        if grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        assert grid.can_fft2
+        errorif(field.M_Phi > grid.M, msg=f"M_Phi = {field.M_Phi} > {grid.M} = grid.M.")
+        errorif(field.N_Phi > grid.N, msg=f"N_Phi = {field.N_Phi} > {grid.N} = grid.N.")
+
+        self._is_neumann = not hasattr(field, "M_Phi_coil")
+        errorif(
+            not self._is_neumann and field.M_Phi_coil > grid.M,
+            msg=f"M_Phi_coil = {getattr(field, 'M_Phi_coil', 0)} > {grid.M} = grid.M.",
+        )
+        errorif(
+            not self._is_neumann and field.N_Phi_coil > grid.N,
+            msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
+        )
+        eval_grid = setdefault(eval_grid, grid)
+
+        self._field = field
+        self._B_coil = field._B0 if self._is_neumann else field._B_coil
+        self._grid = grid
+        self._eval_grid = eval_grid
+        self._coil_grid = coil_grid
+        self._use_same_grid = grid.equiv(eval_grid)
+        self._q = q
+        self._xtol = xtol
+        self._maxiter = maxiter
+        self._chunk_size = chunk_size
+        self._B_coil_chunk_size = B_coil_chunk_size
+        self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
+        self._inner_keys = ["|B|^2", "p", "I", "|e_theta x e_zeta|"] + self._grad_keys
+        self._reuseable_keys = [
+            "0",
+            "R",
+            "R_t",
+            "R_z",
+            "Z_t",
+            "Z_z",
+            "e_theta",
+            "e_theta x e_zeta",
+            "e_zeta",
+            "n_rho",
+            "omega_t",
+            "omega_z",
+            "|e_theta x e_zeta|",
+        ]
+        self._I_sheet = I_sheet
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
+        eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
+        if self._use_same_grid:
+            source_transforms = eval_transforms
+            grad_transforms = eq_transforms
+        else:
+            source_transforms = get_transforms("Phi_mn", self._field, grid=self._grid)
+            grad_transforms = get_transforms(self._grad_keys, eq, grid=self._grid)
+
+        data, _ = self._field.compute(
+            ["interpolator"] if self._is_neumann else ["interpolator", "Y_coil"],
+            grid=self._grid,
+            q=self._q,
+            transforms=source_transforms,
+            B_coil=self._B_coil,
+            B_coil_chunk_size=self._B_coil_chunk_size,
+        )
+        # No net poloidal current in equation 4.13 of [1].
+        self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
+
+        self._constants = {
+            "interpolator": data["interpolator"],
+            "eq_transforms": eq_transforms,
+            "grad_transforms": grad_transforms,
+            "eval_transforms": eval_transforms,
+            "source_transforms": source_transforms,
+            "profiles": get_profiles(self._inner_keys, eq, grid=self._eval_grid),
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
+        }
+        self._dim_f = self._eval_grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (
+                np.ones(self._eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary error [[B² + 2μ₀p]]*area Jacobian in T² m².
+
+        """
+        if constants is None:
+            constants = self.constants
+        eq = self.things[0]
+
+        inner = compute_fun(
+            eq,
+            self._inner_keys,
+            params,
+            constants["eq_transforms"],
+            constants["profiles"],
+        )
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            # This is I_plasma + I_sheet.
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]] + self._I_sheet,
+            "Y": self._field.Y,
+        }
+        outer = {key: inner[key] for key in self._reuseable_keys}
+
+        if self._is_neumann:
+            outer = compute_fun(
+                self._field,
+                "B_coil",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=outer,
+                B_coil_chunk_size=self._B_coil_chunk_size,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+
+        problem = {"problem": "exterior Neumann"} if self._is_neumann else {}
+
+        if self._use_same_grid:
+            outer["interpolator"] = constants["interpolator"]
+            outer["B0*n"] = self._phi_sec_dot_n(field_params, inner)
+            if self._is_neumann:
+                outer["B0*n"] += dot(outer["B_coil"], inner["n_rho"])
+        else:
+            grads = compute_fun(
+                eq,
+                self._grad_keys,
+                params,
+                constants["grad_transforms"],
+                constants["profiles"],
+            )
+            data = {key: grads[key] for key in self._reuseable_keys}
+            data["interpolator"] = constants["interpolator"]
+            data["B0*n"] = self._phi_sec_dot_n(field_params, grads)
+            if self._is_neumann:
+                data = compute_fun(
+                    self._field,
+                    "B_coil",
+                    field_params,
+                    constants["source_transforms"],
+                    constants["profiles"],
+                    data=data,
+                    B_coil_chunk_size=self._B_coil_chunk_size,
+                    B_coil=self._B_coil,
+                    field_grid=self._coil_grid,
+                )
+                data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+
+            outer["Phi_mn"] = compute_fun(
+                self._field,
+                "Phi_mn",
+                field_params,
+                constants["source_transforms"],
+                constants["profiles"],
+                data=data,
+                xtol=self._xtol,
+                maxiter=self._maxiter,
+                chunk_size=self._chunk_size,
+                B_coil_chunk_size=self._B_coil_chunk_size,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+                **problem,
+            )["Phi_mn"]
+
+        outer = compute_fun(
+            self._field,
+            ["K_vc", "n_rho x B_coil"] if self._is_neumann else "|K_vc|^2",
+            field_params,
+            constants["eval_transforms"],
+            constants["profiles"],
+            data=outer,
+            xtol=self._xtol,
+            maxiter=self._maxiter,
+            chunk_size=self._chunk_size,
+            B_coil_chunk_size=self._B_coil_chunk_size,
+            B_coil=self._B_coil,
+            field_grid=self._coil_grid,
+            **problem,
+        )
+        if self._is_neumann:
+            outer["K_vc"] -= outer["n_rho x B_coil"]
+            outer["|K_vc|^2"] = dot(outer["K_vc"], outer["K_vc"])
+
+        return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
+            "|e_theta x e_zeta|"
+        ]
+
+    @staticmethod
+    def _phi_sec_dot_n(params, grads):
+        return dot(
+            params["I"] * grads["grad(theta)"] + params["Y"] * grads["grad(zeta)"],
+            grads["n_rho"],
+        )
 
 
 class BoundaryErrorNESTOR(_Objective):

@@ -125,7 +125,8 @@ class Equilibrium(IOAble, Optimizable):
     anisotropy : Profile or ndarray
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
-    surface: Surface or ndarray shape(k,5) (optional)
+    surface: Surface or ndarray
+        Shape(k,5) (optional).
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
         Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
@@ -850,7 +851,7 @@ class Equilibrium(IOAble, Optimizable):
             Name(s) of the quantity(s) to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
-        params : dict of ndarray
+        params : dict[str, jnp.ndarray]
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to attributes of self.
         transforms : dict of Transform
@@ -871,7 +872,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, ndarray]
             Computed quantity and intermediate variables.
 
         """

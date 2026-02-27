@@ -949,17 +949,18 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(y, ord=ord, axis=axis)
-    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
-    if keepdims:
-        axis = 0 if axis is None else axis
-        n = jnp.expand_dims(n, axis)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)
+    if not keepdims:
+        is_zero = is_zero.squeeze(axis=axis)
+    n = jnp.linalg.norm(y, ord=ord, axis=axis, keepdims=keepdims)
+    n = jnp.where(is_zero, fill, n)
     return n
 
 
 def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    If x is zero returns a constant array of unit length.
 
     Parameters
     ----------
@@ -976,10 +977,10 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold, keepdims=True) * jnp.ones_like(x)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims=True)
     # return unit vector with equal components if norm <= threshold
-    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+    return jnp.where(n <= threshold, jnp.reciprocal(jnp.sqrt(x.size)), y / n)
 
 
 def safediv(a, b, fill=0, threshold=0):
@@ -1219,7 +1220,7 @@ def apply(d, fun=identity, subset=None, exclude=None):
     if subset is None:
         subset = d.keys()
     exclude = () if (exclude is None) else exclude
-    return {k: fun(d[k]) for k in subset if k not in exclude}
+    return {k: fun(d[k]) for k in subset if (k in d and k not in exclude)}
 
 
 def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):

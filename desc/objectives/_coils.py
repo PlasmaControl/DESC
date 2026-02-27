@@ -1809,7 +1809,7 @@ class SurfaceQuadraticFlux(_Objective):
         coils). Default grid is determined by the specific MagneticField object, see
         the docs of that object's ``compute_magnetic_field`` method for more detail.
     field_fixed : bool
-        Whether or not to fix the magnetic field's DOFs during the optimization.
+        Whether to fix the magnetic field's DOFs during the optimization.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input

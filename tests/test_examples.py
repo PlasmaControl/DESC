@@ -66,6 +66,7 @@ from desc.objectives import (
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
+    PointBMeasurement,
     PrincipalCurvature,
     QuadraticFlux,
     QuasisymmetryBoozer,
@@ -80,7 +81,7 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, ScaledProfile
 
 from .utils import area_difference_desc, area_difference_vmec
 
@@ -2766,3 +2767,58 @@ def test_continuation_L_res():
     assert eqf[0].M == 6
     assert eqf[-1].L == 8
     assert eqf[-1].M == 6
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+@pytest.mark.slow
+def test_PointBMeasurement_fixed_bdry():
+    """Tests PointBMeasurement reconstruction with fixed bdry."""
+    eq = get("precise_QA")
+    meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
+
+    # solve with finite pressure, use that as target B
+    p0 = 2e4
+    eq.pressure = PowerSeriesProfile([p0, -p0], [0, 2])
+    eq.solve(verbose=3)
+
+    meas_loc_rpz = [0.8, 2 * np.pi / eq.NFP / 2, 0.15]
+    dummy_coil = ToroidalMagneticField(0, 0)
+    obj = PointBMeasurement(
+        eq,
+        dummy_coil,
+        measurement_coords=meas_loc_rpz,
+        target=0,
+        basis="rpz",
+        field_fixed=True,
+    )
+    obj.build()
+    target_fin_beta = obj.compute(*obj.xs(eq))
+    # scale eq pressure back down to a lower value
+    eq.pressure = ScaledProfile(0.5, eq.pressure)
+    eq.solve()
+
+    # optimize for matching the Bplasma external measurement,
+    # only allowing pressure scale to vary
+    obj = ObjectiveFunction(
+        PointBMeasurement(
+            eq,
+            dummy_coil,
+            measurement_coords=meas_loc_rpz,
+            target=target_fin_beta,
+            basis="rpz",
+            field_fixed=True,
+        )
+    )
+
+    cons = (
+        ForceBalance(eq),
+        FixBoundaryR(eq),
+        FixBoundaryZ(eq),
+        FixCurrent(eq),
+        FixPsi(eq),
+        FixPressure(eq, indices=np.arange(eq.pressure.params.size)[1:]),
+    )
+    eq.optimize(objective=obj, constraints=cons, verbose=3, xtol=5e-3)
+
+    np.testing.assert_allclose(eq.pressure.params[0], 1.0, rtol=1e-2)

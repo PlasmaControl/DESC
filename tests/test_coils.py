@@ -23,11 +23,12 @@ from desc.coils import (
 from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
+from desc.objectives._reconstruction import FluxLoop
 from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 
@@ -277,11 +278,27 @@ class TestCoil:
         rs = np.linspace(0.1, 3, 10, endpoint=True)
         N = 200
         curve_grid = LinearGrid(zeta=N)
+        eq_dummy = get("SOLOVEV")
 
         def test(
-            coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
+            coil,
+            grid_xyz,
+            grid_rpz,
+            A_true_rpz,
+            correct_flux,
+            fluxloop,
+            rtol=1e-10,
+            atol=1e-12,
         ):
             """Test that we compute the correct flux for the given coil."""
+            # also test FluxLoop obj
+            obj = FluxLoop(
+                eq_dummy,
+                coilset=CoilSet(coil),
+                flux_loops=CoilSet(fluxloop),
+                vacuum=True,
+                target=0,
+            )
             A_xyz = coil.compute_magnetic_vector_potential(
                 grid_xyz, basis="xyz", source_grid=coil_grid
             )
@@ -294,12 +311,17 @@ class TestCoil:
             flux_rpz = jnp.sum(
                 dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
             )
+            obj.build()
+            flux_obj = obj.compute(eq_dummy.params_dict, CoilSet(coil).params_dict)
 
             np.testing.assert_allclose(
                 correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}"
             )
             np.testing.assert_allclose(
                 correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                correct_flux, flux_obj, rtol=rtol, err_msg=f"Using {coil} FluxLoop obj"
             )
             np.testing.assert_allclose(
                 A_true_rpz,
@@ -317,7 +339,7 @@ class TestCoil:
             ).T
             correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
 
-            curve = FourierXYZCurve(
+            curve = FourierXYZCoil(
                 X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0]
             )  # flux loop to integrate A over
 
@@ -340,6 +362,7 @@ class TestCoil:
                 grid_rpz,
                 A_true_rpz,
                 correct_flux,
+                curve,
                 rtol=1e-8,
                 atol=1e-12,
             )
@@ -353,6 +376,7 @@ class TestCoil:
                 grid_rpz,
                 A_true_rpz,
                 correct_flux,
+                curve,
                 rtol=1e-4,
                 atol=1e-12,
             )
@@ -365,6 +389,7 @@ class TestCoil:
                 grid_rpz,
                 A_true_rpz,
                 correct_flux,
+                curve,
                 rtol=1e-8,
                 atol=1e-12,
             )
@@ -391,6 +416,7 @@ class TestCoil:
                 grid_rpz,
                 A_true_rpz,
                 correct_flux,
+                curve,
                 rtol=1e-8,
                 atol=1e-12,
             )

@@ -281,7 +281,7 @@ def _B_sup_phi_p_rv(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B^phi_r|v,p",
-    label="\\partial_{\\rho} B^{\\phi} |_{\\vartheta, \\phi}",
+    label="\\partial_{\\rho}|_{\\vartheta, \\phi} B^{\\phi}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="Contravariant cylindrical toroidal angle component of magnetic field,"
@@ -304,7 +304,7 @@ def _B_sup_phi_r_vp(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_r|v,p",
-    label="\\partial_{\\rho} |\\mathbf{B}| |_{\\vartheta, \\phi}",
+    label="\\partial_{\\rho}|_{\\vartheta, \\phi} |\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Magnetic field norm, derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",

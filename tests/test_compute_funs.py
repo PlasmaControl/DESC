@@ -1546,14 +1546,19 @@ def test_contravariant_basis_vectors_PEST(eq):
 
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.parametrize("eq", [get("precise_QA")])
-def test_PEST_derivative_math(eq):
+@pytest.mark.parametrize("eq, mapping_tol", [(get("precise_QA"), 1e-10)])
+def test_PEST_derivative_math(eq, mapping_tol):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index
 
-    tol = 1e-10
     # TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
-    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=tol)
+    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=mapping_tol)
+    eq.change_resolution(
+        L_grid=eq_PEST.L_grid, M_grid=eq_PEST.M_grid, N_grid=eq_PEST.N_grid
+    )
+    grid_PEST = LinearGrid(
+        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
 
     keys_DESC = [
         "e_theta",
@@ -1650,15 +1655,13 @@ def test_PEST_derivative_math(eq):
     keys_DESC = list(keys_DESC)
     keys_PEST = list(keys_PEST)
 
-    grid_PEST = LinearGrid(
-        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-    )
     data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
-
     data_to_verify = eq.compute(
         keys_PEST,
         Grid(
-            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+            eq.map_coordinates(
+                grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=mapping_tol
+            )
         ),
     )
 

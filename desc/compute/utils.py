@@ -20,6 +20,7 @@ profile_names = {
     "electron_temperature": "Te_l",
     "electron_density": "ne_l",
     "ion_temperature": "Ti_l",
+    "ion_density": "ni_l",
     "atomic_number": "Zeff_l",
 }
 

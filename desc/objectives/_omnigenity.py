@@ -2,11 +2,14 @@
 
 import warnings
 
+from diffrax import Event, PIDController, RecursiveCheckpointAdjoint, SaveAt, Tsit5
+
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.profiles import PowerSeriesProfile
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -976,3 +979,224 @@ class Isodynamicity(_Objective):
             profiles=constants["profiles"],
         )
         return data["isodynamicity"]
+
+
+class DirectParticleTracing(_Objective):
+    """Confinement metric for radial transport from direct tracing.
+
+    Traces particles in flux coordinates within the equilibrium, and
+    returns a confinement metric based off of the average deviation of
+    the particle trajectory from its initial flux surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    iota_grid : Grid, optional
+        Grid to evaluate rotational transform profile on.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``.
+    particles : ParticleInitializer
+        should initialize them in flux coordinates, same seed
+        will be used each time.
+    model : TrajectoryModel
+        should be either Vacuum or SlowingDown
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    _static_attrs = _Objective._static_attrs + [
+        "_trace_particles",
+        "_max_steps",
+        "_has_iota_profile",
+        "_stepsize_controller",
+        "_adjoint",
+        "_event",
+        "_particle_chunk_size",
+    ]
+
+    _coordinates = "rtz"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Particle Confinement error: "
+
+    def __init__(
+        self,
+        eq,
+        particles,
+        model,
+        solver=Tsit5(),
+        ts=jnp.arange(0, 1e-3, 100),
+        iota_grid=None,
+        stepsize_controller=None,
+        adjoint=RecursiveCheckpointAdjoint(),
+        max_steps=None,
+        min_step_size=1e-8,
+        particle_chunk_size=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        deriv_mode="auto",
+        name="Particle Confinement",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._ts = jnp.asarray(ts)
+        self._adjoint = adjoint
+        if max_steps is None:
+            max_steps = 10
+            max_steps = int((ts[-1] - ts[0]) / min_step_size * max_steps)
+        self._max_steps = max_steps
+        self._min_step_size = min_step_size
+        self._stepsize_controller = (
+            stepsize_controller
+            if stepsize_controller is not None
+            else PIDController(rtol=1e-4, atol=1e-4, dtmin=min_step_size)
+        )
+        self._iota_grid = iota_grid
+        assert model.frame == "flux", "can only trace in flux coordinates"
+        self._model = model
+        self._particles = particles
+        self._solver = solver
+        self._has_iota_profile = eq.iota is not None
+        self._particle_chunk_size = particle_chunk_size
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._iota_grid is None:
+            iota_grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+            )
+        else:
+            iota_grid = self._iota_grid
+
+        self._x0, self._model_args = self._particles.init_particles(
+            model=self._model, field=eq
+        )
+
+        # one metric per particle
+        self._dim_f = self._x0.shape[0]
+
+        # tracing uses carteasian coordinates internally, the termainating event
+        # must look at rho values by conversion
+        def default_event(t, y, args, **kwargs):
+            i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
+            return jnp.logical_or(i < 0.0, i > 1.0)
+
+        self._event = Event(default_event)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota_profiles = get_profiles(["iota"], obj=eq, grid=iota_grid)
+        self._iota_transforms = get_transforms(["iota"], obj=eq, grid=iota_grid)
+        self._iota_power_series = PowerSeriesProfile(sym="even")
+        self._iota_power_series.change_resolution(L=eq.L)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute particle tracing metric errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Average deviation in rho from initial surface, for each particle.
+        """
+        from desc.particles import _trace_particles
+
+        if not self._has_iota_profile:
+            # compute and fit iota profile beforehand, as
+            # particle trace only computes things one point at a time
+            # and thus cannot do the flux surf averages required for iota
+            eq = self.things[0]
+            data = compute_fun(
+                eq, ["rho", "iota"], params, self._iota_transforms, self._iota_profiles
+            )
+            iota_values = self._iota_transforms["grid"].compress(data["iota"])
+            rho = self._iota_transforms["grid"].compress(data["rho"])
+            x = rho**2
+            iota_prof = self._iota_power_series
+            order = iota_prof.basis.L // 2
+            iota_params = jnp.polyfit(
+                x, iota_values, order, rcond=None, w=None, full=False
+            )[::-1]
+            params["i_l"] = iota_params
+        else:
+            iota_prof = None
+
+        rpz, _ = _trace_particles(
+            field=self.things[0],
+            y0=self._x0,
+            model=self._model,
+            model_args=self._model_args,
+            ts=self._ts,
+            params=params,
+            stepsize_controller=self._stepsize_controller,
+            saveat=SaveAt(ts=self._ts),
+            max_steps=self._max_steps,
+            min_step_size=self._min_step_size,
+            solver=self._solver,
+            adjoint=self._adjoint,
+            event=self._event,
+            options={"iota": iota_prof},
+            chunk_size=self._particle_chunk_size,
+            throw=False,
+            return_aux=False,
+        )
+
+        # rpz is shape [N_particles, N_time, 3], take just index rho
+        rhos = rpz[:, :, 0]
+        rho0s = self._x0[:, 0]
+
+        def fit_line(y):
+            ts = self._ts
+            # replace nans with zeros, since (0,0) is already the initial
+            # point, this will not affect the fit
+            y = jnp.where(jnp.isnan(y), 0.0, y)
+            ts = jnp.where(jnp.isnan(y), 0.0, ts)
+            coeffs = jnp.polyfit(ts, y, 1)
+            return coeffs[0]
+
+        slopes = vmap(fit_line)(rhos - rho0s[:, None])
+        return slopes

@@ -23,13 +23,13 @@ jobs:
     strategy:
       matrix:
         combos: [{group: 1, python_version: '3.10'},
-                 {group: 2, python_version: '3.10'},
+                 {group: 2, python_version: '3.11'},
                  {group: 3, python_version: '3.11'},
-                 {group: 4, python_version: '3.11'},
+                 {group: 4, python_version: '3.12'},
                  {group: 5, python_version: '3.12'},
-                 {group: 6, python_version: '3.12'},
+                 {group: 6, python_version: '3.13'},
                  {group: 7, python_version: '3.13'},
-                 {group: 8, python_version: '3.13'}]
+                 {group: 8, python_version: '3.14'}]
 
     steps:
       - uses: actions/checkout@v6
@@ -79,7 +79,7 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.9.2
+          pip install matplotlib==3.10.8
 
       - name: Set Swap Space
         if: env.has_changes == 'true'

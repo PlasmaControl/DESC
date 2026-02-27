@@ -238,6 +238,7 @@ if use_jax:  # noqa: C901
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
+        tree_broadcast,
         tree_flatten,
         tree_leaves,
         tree_map,
@@ -813,6 +814,10 @@ else:  # pragma: no cover
 
     def treedef_is_leaf(*args, **kwargs):
         """Check is leaf of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_broadcast(*args, **kwargs):
+        """Broadcast pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

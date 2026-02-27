@@ -25,7 +25,7 @@ from desc.coils import (
     MixedCoilSet,
     initialize_modular_coils,
 )
-from desc.compute import get_transforms
+from desc.compute import get_transforms, rpz2xyz, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -78,6 +78,7 @@ from desc.objectives import (
     PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
+    PointBMeasurement,
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
@@ -108,7 +109,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, safenorm
+from desc.utils import PRINT_WIDTH, dot, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1484,6 +1485,155 @@ class TestObjectiveFunction:
             coil_grid=coil_grid,
             eq_fixed=False,
             coils_fixed=True,
+        )
+
+    @pytest.mark.unit
+    def test_point_B_measurement(self):
+        """Tests point B measurement from plasma and coilset."""
+
+        def test(
+            eq,
+            coils,
+            correct_B,
+            coords,
+            directions=None,
+            vc_source_grid=None,
+            coil_grid=None,
+            field_fixed=False,
+            vacuum=False,
+            basis="rpz",
+        ):
+            target = (
+                np.zeros_like(coords).flatten()
+                if directions is None
+                else np.zeros(coords.shape[0])
+            )
+            obj = PointBMeasurement(
+                eq=eq,
+                field=coils,
+                target=target,
+                measurement_coords=coords,
+                directions=directions,
+                vc_source_grid=vc_source_grid,
+                field_grid=coil_grid,
+                field_fixed=field_fixed,
+                vacuum=vacuum,
+                basis=basis,
+            )
+            obj.build()
+            if field_fixed:
+                f = obj.compute(eq_params=eq.params_dict)
+            else:
+                f = obj.compute(
+                    eq_params=eq.params_dict, field_params=coils.params_dict
+                )
+            if directions is None:
+                assert f.size == coords.size
+            else:
+                assert f.size == coords.shape[0]
+            if basis == "xyz":
+                f = rpz2xyz_vec(
+                    f.reshape(coords.shape), x=coords[:, 0], y=coords[:, 1]
+                ).flatten()
+            np.testing.assert_allclose(f, correct_B, atol=3e-3, rtol=1e-5)
+
+        # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
+        eq = get("ESTELL")
+        plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+
+        field = ToroidalMagneticField(B0=1, R0=1)
+        coords_R = np.concatenate([np.linspace(0.2, 0.8, 1), np.linspace(1.9, 2.5, 1)])
+        coords_phi = np.linspace(0, 2 * np.pi / eq.NFP, coords_R.size)
+        coords_Z = np.zeros_like(coords_R)
+        coords = np.vstack([coords_R, coords_phi, coords_Z]).T
+        correct_BR = np.zeros_like(coords_R)
+        correct_Bphi = 1 / coords_R
+        correct_BZ = correct_BR
+        correct_B = np.vstack([correct_BR, correct_Bphi, correct_BZ]).T
+
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=plasma_grid,
+            field_fixed=True,
+        )
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=plasma_grid,
+            field_fixed=True,
+            vacuum=True,
+        )
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=None,
+            field_fixed=False,
+        )
+        # test xyz
+        coords_xyz = rpz2xyz(coords)
+        correct_B_xyz = rpz2xyz_vec(correct_B, phi=coords_phi)
+        test(
+            eq,
+            field,
+            correct_B_xyz.flatten(),
+            coords_xyz,
+            vc_source_grid=None,
+            field_fixed=False,
+            basis="xyz",
+        )
+        # test dotted with R hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 0] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 0],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
+            field_fixed=True,
+        )
+
+        # test dotted with phi hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 1] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 1],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
+            field_fixed=False,
+        )
+        directions_xyz = rpz2xyz_vec(directions, phi=coords[:, 1])
+        test(
+            eq,
+            field,
+            dot(correct_B_xyz, directions_xyz, axis=1),
+            coords_xyz,
+            directions=directions_xyz,
+            vc_source_grid=plasma_grid,
+            field_fixed=False,
+        )
+        # test dotted with Z hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 2] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 2],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
+            field_fixed=True,
         )
 
     @pytest.mark.unit
@@ -3205,6 +3355,7 @@ class TestComputeScalarResolution:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        PointBMeasurement,
         QuadraticFlux,
         SurfaceQuadraticFlux,
         ToroidalFlux,
@@ -3588,6 +3739,36 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=1e-3)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_point_B_measurement(self):
+        """Tests point B measurement scalar resolution from plasma and coilset."""
+        # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
+        eq = get("ESTELL")
+        eq.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+
+        field = ToroidalMagneticField(B0=1, R0=1)
+        coords_R = np.concatenate([np.linspace(0.2, 0.8, 5), np.linspace(1.9, 2.5, 5)])
+        coords_phi = np.linspace(0, 2 * np.pi / eq.NFP, coords_R.size)
+        coords_Z = np.zeros_like(coords_R)
+        coords = np.vstack([coords_R, coords_phi, coords_Z]).T
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(
+                PointBMeasurement(
+                    eq=eq,
+                    field=field,
+                    measurement_coords=coords,
+                    target=0,
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+    @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
     )
@@ -3695,6 +3876,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        PointBMeasurement,
         QuadraticFlux,
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,

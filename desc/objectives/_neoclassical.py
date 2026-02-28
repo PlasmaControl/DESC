@@ -719,35 +719,39 @@ class TrappedResonance(_Objective):
         )
 
         # Setup rational array
-        m_max = self._hyperparameters["m_max"]
-        n_max = self._hyperparameters["n_max"]
+        p_max = self._hyperparameters["p_max"]
+        q_max = self._hyperparameters["q_max"]
         res_range_min = self._hyperparameters["res_range_min"]
         res_range_max = self._hyperparameters["res_range_max"]
 
         # Preallocate: max resonances = n_max (m=0) + 2*m_max*n_max (m>0)
-        n_res_max = n_max + 2 * m_max * n_max
+        n_res_max = q_max + 2 * p_max * q_max
         res_arr = np.full(n_res_max, np.nan)
-        n_arr = np.zeros(n_res_max, dtype=int)
-        m_arr = np.zeros(n_res_max, dtype=int)
+        q_arr = np.zeros(n_res_max, dtype=int)
+        p_arr = np.zeros(n_res_max, dtype=int)
         res_arr_set = 0
 
-        for m in range(0,m_max+1):
-            for n in range(1,n_max+1):
-                condition = np.logical_and(m/n >= res_range_min, m/n <= res_range_max)
+        for p in range(0,p_max+1):
+            for q in range(1,q_max+1):
+                condition = np.logical_and(p/q >= res_range_min, p/q <= res_range_max)
                 if condition:
-                    res_arr[res_arr_set] = m/n
-                    n_arr[res_arr_set] = n
-                    m_arr[res_arr_set] = m
+                    res_arr[res_arr_set] = p/q
+                    q_arr[res_arr_set] = q
+                    p_arr[res_arr_set] = p
                     res_arr_set+=1
-                    if m != 0:
-                        res_arr[res_arr_set] = -m/n
-                        n_arr[res_arr_set] = n
-                        m_arr[res_arr_set] = m
-                        res_arr_set+=1
+                    if p != 0:
+                        res_arr[res_arr_set] = -p/q
+                        q_arr[res_arr_set] = q
+                        p_arr[res_arr_set] = -p
+                        res_arr_set += 1
 
-        self._hyperparameters['q_arr'] = n_arr
+        res_arr = res_arr[:res_arr_set]
+        q_arr = q_arr[:res_arr_set]
+        p_arr = p_arr[:res_arr_set]
+
+        self._hyperparameters['q_arr'] = q_arr
         self._hyperparameters['res_arr'] = res_arr
-        self._hyperparameters['p_arr'] = m_arr
+        self._hyperparameters['p_arr'] = p_arr
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")

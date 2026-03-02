@@ -748,9 +748,7 @@ class FourierRZToroidalSurface(Surface):
         base_surface.change_resolution(M=M, N=N)
 
         R_lmn, Z_lmn, data, (res, niter) = _constant_offset_surface(
-            base_surface,
-            offset,
-            grid=grid,
+            base_surface, offset, grid=grid
         )
 
         offset_surface = FourierRZToroidalSurface(

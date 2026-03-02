@@ -73,7 +73,11 @@ def test_proximal_jac_w7x_with_eq_update():
         constraint,
         eq,
         perturb_options={"verbose": 0},
-        solve_options={"verbose": 0, "maxiter": 0},
+        solve_options={
+            "verbose": 0,
+            "maxiter": 0,
+            "solve_during_proximal_build": False,
+        },
     )
     prox.build(verbose=0)
     x = prox.x(eq)
@@ -97,7 +101,9 @@ def test_proximal_freeb_jac():
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -125,7 +131,9 @@ def test_proximal_freeb_jac_batched():
         jac_chunk_size=100,
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -152,7 +160,9 @@ def test_proximal_freeb_jac_blocked():
         deriv_mode="blocked",
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
@@ -169,13 +179,13 @@ def test_proximal_jac_ripple():
 
 
 @pytest.mark.memory
-def test_proximal_jac_ripple_spline():
+def test_proximal_jac_ripple_bounce1d():
     """Benchmark computing objective jacobian for effective ripple."""
     _test_proximal_ripple(True, "jac_scaled_error")
 
 
 @pytest.mark.memory
-def _test_proximal_ripple(spline, method):
+def _test_proximal_ripple(use_bounce1d, method):
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("HELIOTRON")
@@ -191,12 +201,14 @@ def _test_proximal_ripple(spline, method):
                 num_transit=num_transit,
                 num_well=10 * num_transit,
                 num_quad=16,
-                spline=spline,
+                use_bounce1d=use_bounce1d,
             )
         ]
     )
     constraint = ObjectiveFunction([ForceBalance(eq)])
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build(verbose=0)
     x = prox.x(eq)
     for _ in range(3):
@@ -241,8 +253,8 @@ if __name__ == "__main__":
         test_proximal_freeb_jac_blocked()
     elif func == "test_proximal_jac_ripple":
         test_proximal_jac_ripple()
-    elif func == "test_proximal_jac_ripple_spline":
-        test_proximal_jac_ripple_spline()
+    elif func == "test_proximal_jac_ripple_bounce1d":
+        test_proximal_jac_ripple_bounce1d()
     elif func == "test_eq_solve":
         test_eq_solve()
     else:

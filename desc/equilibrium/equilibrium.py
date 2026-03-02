@@ -46,7 +46,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -54,6 +54,7 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    get_ess_scale,
     only1,
     rpz2xyz,
     rpz2xyz_vec,
@@ -73,7 +74,12 @@ from .coords import (
     to_sfl,
 )
 from .initial_guess import set_initial_guess
-from .utils import parse_axis, parse_profile, parse_surface
+from .utils import (
+    ensure_consistent_profile_eq_resolution,
+    parse_axis,
+    parse_profile,
+    parse_surface,
+)
 
 
 class Equilibrium(Optimizable, _MagneticField):
@@ -83,6 +89,10 @@ class Equilibrium(Optimizable, _MagneticField):
     and profile inputs. It can compute additional information, such as the magnetic
     field and plasma currents, as well as "solving" itself by finding the equilibrium
     fields, and perturbing those fields to find nearby equilibria.
+
+    Note that any passed-in profiles with resolution lower than eq.L will be
+    automatically increased in resolution to match eq.L. Higher resolution profiles will
+    be left untouched.
 
     Parameters
     ----------
@@ -227,11 +237,11 @@ class Equilibrium(Optimizable, _MagneticField):
         **kwargs,
     ):
         errorif(
-            not isinstance(Psi, numbers.Real),
+            not isinstance(float(Psi), numbers.Real),
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(float(Psi))
 
         errorif(
             spectral_indexing
@@ -389,12 +399,7 @@ class Equilibrium(Optimizable, _MagneticField):
             "anisotropy",
         ]:
             p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
-            warnif(
-                isinstance(p, PowerSeriesProfile) and p.sym != "even",
-                msg=f"{profile} profile is not an even power series.",
-            )
+            ensure_consistent_profile_eq_resolution(p, self, name=profile)
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -1634,42 +1639,52 @@ class Equilibrium(Optimizable, _MagneticField):
         N_grid=None,
         rcond=None,
         copy=False,
+        tol=1e-9,
     ):
-        """Transform this equilibrium to use straight field line coordinates.
+        """Transform this equilibrium to use straight field line PEST coordinates.
 
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
+        The flux surfaces of the returned equilibrium usually differ from the original
+        by 1% when the default resolution parameters are used.
 
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+            Radial resolution to use for SFL equilibrium.
+            Default is ``3*eq.L``.
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+            Poloidal resolution to use for SFL equilibrium.
+            Default is ``4*eq.M``.
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+            toroidal resolution to use for SFL equilibrium.
+            Default is ``3*eq.N``.
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 2*L
+            Radial grid resolution to use for fit to Zernike series.
+            Default is ``1.5*L``.
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 2*M
+            Poloidal grid resolution to use for fit to Zernike series.
+            Default is ``1.5*M``.
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 2*N
+            Toroidal grid resolution to use for fit to Fourier series.
+            Default is ``N``.
         rcond : float, optional
-            cutoff for small singular values in least squares fit.
+            Cutoff for small singular values in the least squares fit.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
+        tol : float
+            Tolerance for coordinate mapping.
+            Default is ``1e-9``.
 
         Returns
         -------
-        eq_sfl : Equilibrium
+        eq_PEST : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
 
     def in_plasma(self, points, M=24):
         """
@@ -1747,7 +1762,7 @@ class Equilibrium(Optimizable, _MagneticField):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(float(np.squeeze(Psi)))
 
     @property
     def NFP(self):
@@ -1913,6 +1928,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
+        self._pressure = ensure_consistent_profile_eq_resolution(
+            self._pressure, self, name="pressure"
+        )
 
     @optimizable_parameter
     @property
@@ -1961,6 +1979,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @electron_temperature.setter
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
+        self._electron_temperature = ensure_consistent_profile_eq_resolution(
+            self._electron_temperature, self, name="electron temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -1989,6 +2010,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @electron_density.setter
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
+        self._electron_density = ensure_consistent_profile_eq_resolution(
+            self._electron_density, self, name="electron density"
+        )
 
     @optimizable_parameter
     @property
@@ -2017,6 +2041,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @ion_temperature.setter
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
+        self._ion_temperature = ensure_consistent_profile_eq_resolution(
+            self._ion_temperature, self, name="ion temperature"
+        )
 
     @optimizable_parameter
     @property
@@ -2043,6 +2070,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @atomic_number.setter
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
+        self._atomic_number = ensure_consistent_profile_eq_resolution(
+            self._atomic_number, self, name="atomic number"
+        )
 
     @optimizable_parameter
     @property
@@ -2067,6 +2097,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @iota.setter
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
+        self._iota = ensure_consistent_profile_eq_resolution(
+            self._iota, self, name="iota"
+        )
         if self.iota is None:
             return
         warnif(
@@ -2102,6 +2135,9 @@ class Equilibrium(Optimizable, _MagneticField):
     @current.setter
     def current(self, new):
         self._current = parse_profile(new, "current")
+        self._current = ensure_consistent_profile_eq_resolution(
+            self._current, self, name="current"
+        )
         if self.current is None:
             return
         warnif(
@@ -2374,6 +2410,7 @@ class Equilibrium(Optimizable, _MagneticField):
         unused_keys = [
             "pres_ratio",
             "bdry_ratio",
+            "curr_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -2385,7 +2422,7 @@ class Equilibrium(Optimizable, _MagneticField):
             "output_path",
             "verbose",
         ]
-        [inputs.pop(key) for key in unused_keys]
+        [inputs.pop(key, None) for key in unused_keys]
         inputs.update(kwargs)
         return cls(**inputs)
 
@@ -2418,15 +2455,27 @@ class Equilibrium(Optimizable, _MagneticField):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2524,15 +2573,27 @@ class Equilibrium(Optimizable, _MagneticField):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2665,6 +2726,50 @@ class Equilibrium(Optimizable, _MagneticField):
         )
 
         return eq
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the all ones scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        bdry_scale = self.surface._get_ess_scale(alpha, order, min_value)
+        axis_scale = self.axis._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {
+            "R_lmn": self.R_basis.modes,
+            "Z_lmn": self.Z_basis.modes,
+            "L_lmn": self.L_basis.modes,
+        }
+        # note there is no ESS for profiles, since they may not be polynomials, and
+        # even if they are, they're usually low order and not in an orthogonal basis
+        # so its not clear if ESS is appropriate.
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        scales["Ra_n"] = axis_scale["R_n"]
+        scales["Za_n"] = axis_scale["Z_n"]
+        scales["Rb_lmn"] = bdry_scale["R_lmn"]
+        scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        if hasattr(self.surface, "Phi_mn"):
+            scales["Phi_mn"] = bdry_scale["Phi_mn"]
+        return scales
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

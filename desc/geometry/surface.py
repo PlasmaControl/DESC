@@ -25,6 +25,7 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    get_ess_scale,
     rpz2xyz_vec,
     setdefault,
     xyz2rpz,
@@ -832,9 +833,38 @@ class FourierRZToroidalSurface(Surface):
             else jnp.zeros_like(Rmid)
         )
         axis = FourierRZCurve.from_values(
-            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
         )
         return axis
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 class ZernikeRZToroidalSection(Surface):
@@ -1144,5 +1174,34 @@ class ZernikeRZToroidalSection(Surface):
 
         grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
-        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales

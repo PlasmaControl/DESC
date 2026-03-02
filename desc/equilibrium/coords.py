@@ -468,6 +468,10 @@ def _map_clebsch_coordinates(
 ):
     """Find θ for given Clebsch field line poloidal label α.
 
+    # TODO: input (rho, alpha, zeta) coordinates may be an arbitrary point cloud
+    #       and the partial summation will work without modification.
+    #       Clean up input parameter API to support this.
+
     Parameters
     ----------
     iota : ndarray
@@ -607,111 +611,122 @@ def to_sfl(
     N_grid=None,
     rcond=None,
     copy=False,
+    tol=1e-9,
 ):
-    """Transform this equilibrium to use straight field line coordinates.
+    """Transform this equilibrium to use straight field line PEST coordinates.
 
     Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
     with respect to the straight field line coordinates, rather than the boundary
     coordinates. The new lambda value will be zero.
 
-    NOTE: Though the converted equilibrium will have the same flux surfaces,
-    the force balance error will likely be higher than the original equilibrium.
+    The flux surfaces of the returned equilibrium usually differ from the original
+    by 1% when the default resolution parameters are used.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use
     L : int, optional
-        radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+        Radial resolution to use for SFL equilibrium.
+        Default is ``3*eq.L``.
     M : int, optional
-        poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+        Poloidal resolution to use for SFL equilibrium.
+        Default is ``4*eq.M``.
     N : int, optional
-        toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+        toroidal resolution to use for SFL equilibrium.
+        Default is ``3*eq.N``.
     L_grid : int, optional
-        radial spatial resolution to use for fit to new basis. Default = 2*L
+        Radial grid resolution to use for fit to Zernike series.
+        Default is ``1.5*L``.
     M_grid : int, optional
-        poloidal spatial resolution to use for fit to new basis. Default = 2*M
+        Poloidal grid resolution to use for fit to Zernike series.
+        Default is ``1.5*M``.
     N_grid : int, optional
-        toroidal spatial resolution to use for fit to new basis. Default = 2*N
+        Toroidal grid resolution to use for fit to Fourier series.
+        Default is ``N``.
     rcond : float, optional
-        cutoff for small singular values in the least squares fit.
+        Cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
+    tol : float
+        Tolerance for coordinate mapping.
+        Default is ``1e-9``.
 
     Returns
     -------
-    eq_sfl : Equilibrium
+    eq_PEST : Equilibrium
         Equilibrium transformed to a straight field line coordinate representation.
 
     """
-    L = L or int(1.5 * eq.L)
-    M = M or int(1.5 * eq.M)
-    N = N or int(1.5 * eq.N)
-    L_grid = L_grid or int(2 * L)
-    M_grid = M_grid or int(2 * M)
-    N_grid = N_grid or int(2 * N)
+    L = L or int(3 * eq.L)
+    M = M or int(4 * eq.M)
+    N = N or int(3 * eq.N)
+    L_grid = L_grid or int(1.5 * L)
+    M_grid = M_grid or int(1.5 * M)
+    N_grid = N_grid or int(N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
-
-    toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
-    theta = grid.nodes[:, 1]
-    vartheta = theta + toroidal_coords["lambda"]
-    sfl_grid = Grid(np.array([grid.nodes[:, 0], vartheta, grid.nodes[:, 2]]).T)
-
-    bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
-    bdry_theta = bdry_grid.nodes[:, 1]
-    bdry_vartheta = bdry_theta + bdry_coords["lambda"]
-    bdry_sfl_grid = Grid(
-        np.array([bdry_grid.nodes[:, 0], bdry_vartheta, bdry_grid.nodes[:, 2]]).T
+    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
+    data = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(
+            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+        ),
+    )
+    data_bdry = eq.compute(
+        ["R", "Z", "lambda"],
+        Grid(
+            eq.map_coordinates(
+                grid_PEST_bdry.nodes, ("rho", "theta_PEST", "zeta"), tol=tol
+            )
+        ),
     )
 
-    if copy:
-        eq_sfl = eq.copy()
-    else:
-        eq_sfl = eq
-    eq_sfl.change_resolution(L, M, N)
-
-    R_sfl_transform = Transform(
-        sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
+    eq_PEST = eq.copy() if copy else eq
+    eq_PEST.change_resolution(
+        L,
+        M,
+        N,
+        L_grid=max(eq_PEST.L_grid, L),
+        M_grid=max(eq_PEST.M_grid, M),
+        N_grid=max(eq_PEST.N_grid, N),
     )
-    R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
-    del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
-    Z_sfl_transform = Transform(
-        sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
-    )
-    Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
-    del Z_sfl_transform
-    L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
-
-    R_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.R_basis,
+    eq_PEST.R_lmn = Transform(
+        grid_PEST,
+        eq_PEST.R_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    )
-    Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
-    del R_sfl_bdry_transform
+    ).fit(data["R"])
 
-    Z_sfl_bdry_transform = Transform(
-        bdry_sfl_grid,
-        eq_sfl.surface.Z_basis,
+    eq_PEST.Z_lmn = Transform(
+        grid_PEST,
+        eq_PEST.Z_basis,
         build=False,
         build_pinv=True,
         rcond=rcond,
-    )
-    Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
-    del Z_sfl_bdry_transform
+    ).fit(data["Z"])
 
-    eq_sfl.Rb_lmn = Rb_lmn_sfl
-    eq_sfl.Zb_lmn = Zb_lmn_sfl
-    eq_sfl.R_lmn = R_lmn_sfl
-    eq_sfl.Z_lmn = Z_lmn_sfl
-    eq_sfl.L_lmn = L_lmn_sfl
+    eq_PEST.L_lmn = np.zeros_like(eq_PEST.L_lmn)
 
-    return eq_sfl
+    eq_PEST.Rb_lmn = Transform(
+        grid_PEST_bdry,
+        eq_PEST.surface.R_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data_bdry["R"])
+
+    eq_PEST.Zb_lmn = Transform(
+        grid_PEST_bdry,
+        eq_PEST.surface.Z_basis,
+        build=False,
+        build_pinv=True,
+        rcond=rcond,
+    ).fit(data_bdry["Z"])
+
+    return eq_PEST
 
 
 def get_rtz_grid(

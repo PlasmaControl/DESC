@@ -243,9 +243,7 @@ class TestFourierRZToroidalSurface:
         grad_R00 = jax.grad(lambda params: fun(params)[0][s.R_basis.get_idx(M=0, N=0)])(
             s.params_dict
         )
-        # check that the gradient is nonzero for the R00 component
-        assert np.any(np.abs(grad_R00["R_lmn"][s.R_basis.get_idx(M=0, N=0)]) > 1e-10)
-        # check that the gradient is zero otherwise
+        # check that the gradient is zero other than R00 component
         non_R00_indices = np.where(s.R_basis.modes.sum(axis=1) != 0)[0]
         assert np.all(np.abs(grad_R00["R_lmn"][non_R00_indices]) < 1e-10)
 

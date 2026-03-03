@@ -17,23 +17,33 @@ New Features
 - Adds utility functions ``desc.external.paraview.export_surface_to_paraview``, ``desc.external.paraview.export_volume_to_paraview`` and ``desc.external.paraview.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
 - The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
 or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
-- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
-alternative to fourier continuation methods.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an alternative to fourier continuation methods.
+- Adds `x_scale='ess'` option for the ``OmigenousField`` class.
 - Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- The ``x_scale`` parameter can now be used with stochastic gradient descent type optimizers.
+- Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary. See the docstring of the ``optax-custom`` for details.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
-
+- Add support for Python 3.14
 
 Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
 - ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
 - Fixes some bugs that hampered robustness of ``desc.geometry.FourierRZToroidalSurface.constant_offset_surface``, particularly when the given grid had stellarator symmetry or when NFP=1.
+- Fixes possible bug in computing normalizations when both kinetic and pressure profiles are assigned. Also adds warnings whenever an pressure is added to a kinetic-constrained equilibrium and vice-versa to alert user to ambiguous equilibrium setups.
+- Adds error in ``MercierStability`` to guard against situation where if a grid with a point at ``rho=0`` were used, NaN would be computed, as``MercierStability`` is undefined on-axis.
 
 Performance Improvements
 
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+
+Deprecations
+
+- ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer('sgd')` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer('optax-sgd')` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
+- Removes ``FiniteDiffDerivative`` from the public API. This class was no longer actually usable with the current versions of DESC's optimization framework, as JAX is now required for running any equilibrium or optimization solves.
+
 
 v0.16.0
 -------
@@ -51,6 +61,10 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+- Adds support for optimization targeting individual coils in a coilset.
+  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+  - Able to set weights to zero, excluding certain coils from the objective.
+
 
 
 Bug Fixes

@@ -22,7 +22,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.11']
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
@@ -73,7 +73,7 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.9.2
+          pip install matplotlib==3.10.8
 
       - name: Set Swap Space
         if: env.has_changes == 'true'

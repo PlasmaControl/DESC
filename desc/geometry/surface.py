@@ -722,8 +722,8 @@ class FourierRZToroidalSurface(Surface):
                     coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
-            as well as the transforms bases used to fit R and Z.
-            Only returned if ``full_output`` is True
+                ``transforms`` : dict containing the Transform objects used to
+                    fit R and Z of the
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True
@@ -748,9 +748,7 @@ class FourierRZToroidalSurface(Surface):
         base_surface.change_resolution(M=M, N=N)
 
         R_lmn, Z_lmn, data, (res, niter) = _constant_offset_surface(
-            base_surface,
-            offset,
-            grid=grid,
+            base_surface, offset, grid=grid
         )
 
         offset_surface = FourierRZToroidalSurface(
@@ -1274,7 +1272,7 @@ def _constant_offset_surface(
     vecroot = jit(
         vmap(
             lambda x0, *p: root_scalar(
-                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-12
+                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-12, maxiter=100
             )
         )
     )

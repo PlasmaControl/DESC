@@ -101,19 +101,19 @@ class QuadcoilProxy(_Objective):
         Uses the normalized objective by default.
         We strongly advise using the default value to ensure accurate adjoint
         differentiation.
-    metric_target : scalar or ndarray, default=None.
+    metric_target : scalar or ndarray, default=None
         In addition to target, bounds and weight,
         The QUADCOIL proxy objective allows the user to set weights and
         targets for each objective terms individually besides using ``target``
         and ``bounds`` that comes with other DESC objectives.
         Targets of each property. 0 by default.
-    metric_weight : scalar or ndarray, default=None.
+    metric_weight : scalar or ndarray, default=None
         Weights of each property. Reproduces the normalized objective function
         in the subproblem by default.
     vacuum : bool, optional, default=False
         Whether to enable Bnormal contributions from plasma current.
-    normalize : bool, optional, default=False,
-    normalize_target : bool, optional, default=False,
+    normalize : bool, optional, default=False
+    normalize_target : bool, optional, default=False
         Normalization options for a typical DESC Objective. Disabled by default.
         When enabled, overrides the ``<quantity>_unit`` in
         ``quadcoil_kwargs`` with scaling constants calculated from the parameteres
@@ -122,6 +122,32 @@ class QuadcoilProxy(_Objective):
         winding surface solution (either the solution of the same problem with
         ``<quantity>_unit=1``, or the solution of a REGCOIL problem). Setting
         this to ``True`` may impact QUADCOIL's accuracy.
+    verbose : int, optional, default=0
+        Whether to enable verbose output.
+    name : str, optional, default="QUADCOIL Proxy"
+        Name of the objective.
+    source_grid : Grid, optional, default=None
+        Grid for evaluating vacuum casing and the required net poloidal coil
+        current. By default, a ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    field : list or CoilSet, optional, default=[]
+        Other coils to use in combinations with the winding surface.
+        Can be optimized. For combined filament-dipole modeling/optimization.
+    field_grid : Grid, optional, default=None:
+        The grid for ``field``.
+    enable_net_current_plasma : bool, optional, default=True,
+        Whether to enable a net poloidal current in the winding surface. ``True``
+        by default.
+    eq_fixed : bool, optional, default=False
+        Whether to fix ``eq``, or make it optimizable degrees of freedom. ``False``
+        by default for quasi-single-stage optimization.
+    field_fixed : bool, optional, default=True
+        Whether to fix ``eq``, or make it optimizable degrees of freedom. ``True``
+        by default for quasi-single-stage dipole/PM optimization with known
+        filament coils.
+    Bnormal_plasma_chunk_size : int, optional, default=None
+    jac_chunk_size : int, optional, default=None
+    bs_chunk_size : int, optional, default=None
+        Chunk sizes.
 
     Attributes
     ----------
@@ -171,7 +197,6 @@ class QuadcoilProxy(_Objective):
         normalize_target=False,
         verbose=0,
         name="QUADCOIL Proxy",
-        Bnormal_plasma_chunk_size=None,
         source_grid=None,
         # External coils - no external coils by default
         field=[],
@@ -180,6 +205,7 @@ class QuadcoilProxy(_Objective):
         eq_fixed=False,  # Whether the equilibrium are fixed
         field_fixed=True,  # Whether the external fields are fixed
         # misc
+        Bnormal_plasma_chunk_size=None,
         jac_chunk_size=None,
         bs_chunk_size=None,
     ):

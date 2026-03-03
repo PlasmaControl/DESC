@@ -9,7 +9,7 @@ from desc.integrals import compute_B_plasma
 from desc.plotting import plot_dipoles, plot_3d, plot_comparison, plot_coils2
 from desc.io import load
 import pyvista as pv
-eq = load('input.MUSE_fixedb.h5')[-1]
+eq = load('input.muse-fixedb_output.h5')[-1]
 
 
 def compute_average_normalized_field(

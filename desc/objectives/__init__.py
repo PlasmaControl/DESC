@@ -41,6 +41,7 @@ from ._geometry import (
     GoodCoordinates,
     MeanCurvature,
     MirrorRatio,
+    NeutronWallLoading,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,

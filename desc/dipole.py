@@ -892,3 +892,32 @@ def export_dipoles(dipole_set, f):
         print(f"{d[i].x}, {d[i].y}, {d[i].z}, {d[i].rho}, {d[i].phi}, {d[i].theta}", file=outfile)
 
     outfile.close()
+
+import csv
+
+def create_dipole(x, y, z, phi, theta, rho):
+    return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=0.074625, rho=rho)
+
+def import_dipoles(eq, filename):
+    with open(filename, newline="") as f:
+        reader = csv.DictReader(f)
+
+        csv_data = [
+            (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["rho (unitless)"]))
+            for line in reader
+        ]
+        #print(csv_data)
+    num=0
+    num2=0
+    dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
+    #print(eq.sym)
+    for line in csv_data:
+        if (line[-1] != 0):
+            dipole_set.append( create_dipole(*line))
+            #print(line)
+            num+=1
+        num2+=1
+    print("rho!=0",num)
+    print("total",num2)
+
+    return dipole_set

@@ -2807,6 +2807,111 @@ def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
     return plotter
 
 
+def plot_coils2(coils, grid=None, plotter=None, return_data=False, **kwargs):
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+    figsize = kwargs.pop("figsize", (10, 10))
+    color = kwargs.pop("color", "black")
+    unique = kwargs.pop("unique", False)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
+    errorif(
+        len(kwargs) != 0,
+        msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+    errorif(
+        not isinstance(coils, _Coil),
+        ValueError,
+        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
+    )
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+    if grid is None:
+        grid = LinearGrid(N=400, endpoint=True)
+
+    def flatten_coils(coilset, check_intersection=check_intersection):
+        if hasattr(coilset, "__len__"):
+            if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
+                if not unique and (coilset.NFP > 1 or coilset.sym):
+                    # plot all coils for symmetric coil sets
+                    coilset = CoilSet.from_symmetry(
+                        coilset,
+                        NFP=coilset.NFP,
+                        sym=coilset.sym,
+                        check_intersection=check_intersection,
+                    )
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coils_list = flatten_coils(coils)
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+
+    if plotter is None:
+        dpi = 100
+        window_size = (int(figsize[0] * dpi), int(figsize[1] * dpi))
+        plotter = pv.Plotter(window_size=window_size)
+
+    for i, coil in enumerate(coils_list):
+        x, y, z = coil.compute("x", grid=grid, basis="xyz")["x"].T
+        current = getattr(coil, "current", np.nan)
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+
+        points = np.column_stack((x, y, z))
+        
+        n_points = len(points)
+        lines = np.column_stack([
+            np.full(n_points - 1, 2),
+            np.arange(n_points - 1),
+            np.arange(1, n_points)
+        ]).ravel()
+        
+        polydata = pv.PolyData(points)
+        polydata.lines = lines
+        
+        coil_color = color[i % len(color)]
+        coil_lw = lw[i % len(lw)]
+        
+        plotter.add_mesh(
+            polydata,
+            color=coil_color,
+            line_width=coil_lw,
+            render_lines_as_tubes=True,
+            label=coil.name or f"CoilSet[{i}]",
+        )
+
+    xaxis_title = "X (m)" if showaxislabels else ""
+    yaxis_title = "Y (m)" if showaxislabels else ""
+    zaxis_title = "Z (m)" if showaxislabels else ""
+    
+    if showaxislabels:
+        plotter.add_axes(
+            xlabel=xaxis_title,
+            ylabel=yaxis_title,
+            zlabel=zaxis_title,
+        )
+    
+    if showgrid:
+        plotter.show_grid()
+    
+    if return_data:
+        return plotter, plot_data
+    return plotter
+
+
 def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.
 

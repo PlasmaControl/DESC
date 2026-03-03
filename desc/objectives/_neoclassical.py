@@ -564,9 +564,9 @@ class TrappedResonance(_Objective):
 
     """
 
-    _scalar = True
-    _coordinates = "" # "rtz" if need all three coordinates
-    _units = "(s^-2)"
+    _scalar = False
+    _coordinates = "r"
+    _units = "~"
     _print_value_fmt = "Trapped EP Resonance Penalty: "
 
     _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]
@@ -590,7 +590,7 @@ class TrappedResonance(_Objective):
         knots_per_transit=100,
         num_quad=32,
         num_pitch=16,
-        pitch_method=1,
+        pitch_method=0,
         batch=True,
         num_well=None,
         Nemov=True,
@@ -772,8 +772,9 @@ class TrappedResonance(_Objective):
 
         Returns
         -------
-        result : ndarray
-            Γ_c as a function of the flux surface label.
+        f_res_avg : ndarray
+            Phase-space-averaged trapped resonance penalty as a function
+            of the flux surface label.
 
         """
         if constants is None:
@@ -786,9 +787,7 @@ class TrappedResonance(_Objective):
             params,
             constants["transforms_1dr"],
             constants["profiles"],
-            
         )
-        # Build grid with per-rho alpha derived from uniformly spaced eta
         iotas = self._grid_1dr.compress(data["iota"])
         rhos = constants["rho"]
         zeta = constants["zeta"]
@@ -824,6 +823,6 @@ class TrappedResonance(_Objective):
             **self._hyperparameters,
             **self._params2,
         )
-        # return grid.compress(data[self._key]) # return the value of the objective function evaluated at each point on the grid
-
-        return data[self._key]
+        if self._hyperparameters.get("DEBUG", False):
+            return data[self._key]
+        return grid.compress(data[self._key])

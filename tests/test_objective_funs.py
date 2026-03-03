@@ -110,7 +110,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, safenorm
+from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -690,7 +690,19 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MercierStability(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MercierStability(eq=eq, grid=grid_bad_tor_res).build()
+        grid_bad_axis = LinearGrid(rho=0.0, M=eq.M_grid, N=eq.N_grid)
+        with pytest.raises(ValueError, match="on-axis"):
+            MercierStability(eq=eq, grid=grid_bad_axis).build()
 
     @pytest.mark.unit
     def test_magnetic_well(self):
@@ -706,7 +718,16 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MagneticWell(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MagneticWell(eq=eq, grid=grid_bad_tor_res).build()
 
     @pytest.mark.unit
     def test_boundary_error_biestsc(self):
@@ -3407,11 +3428,11 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_bootstrap(self):
         """BootstrapRedlConsistency."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.atomic_number = 1.0
-
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
@@ -3428,6 +3449,8 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_fusion_power(self):
         """FusionPower."""
         eq = self.eq.copy()
+        eq.pressure = None
+
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3450,6 +3473,7 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])

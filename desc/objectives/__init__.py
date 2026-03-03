@@ -28,7 +28,12 @@ from ._equilibrium import (
 )
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
-from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
+from ._generic import (
+    ExternalObjective,
+    GenericObjective,
+    LinearObjectiveFromUser,
+    ObjectiveFromUser,
+)
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -50,6 +55,7 @@ from ._omnigenity import (
 )
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
+from ._quadcoil import QuadcoilProxy
 from ._stability import BallooningStability, MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
@@ -98,5 +104,4 @@ from .linear_objectives import (
     FixThetaSFL,
     ShareParameters,
 )
-from ._quadcoil import QuadcoilProxy
 from .objective_funs import ObjectiveFunction

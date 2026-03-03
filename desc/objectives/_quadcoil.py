@@ -1,26 +1,26 @@
-from desc.utils import Timer
-from desc.grid import LinearGrid
-from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.objectives.normalization import compute_scaling_factors
-from desc.compute import get_profiles, get_transforms
-from jax import jit
-from desc.backend import jnp
-import jax  # for printing
 import warnings
-from quadcoil import get_quantity
-from quadcoil.io import gen_quadcoil_for_diff, generate_desc_scaling
+
+from jax import jit
+
+from desc.backend import jnp
+from desc.compute import get_profiles, get_transforms
+from desc.grid import LinearGrid
+from desc.objectives.normalization import compute_scaling_factors
+from desc.objectives.objective_funs import _Objective, collect_docs
+from desc.utils import Timer
+
 from ._quadcoil_utils import (
     _BCOIL_DATA_KEYS,
     _BPLASMA_DATA_KEYS,
-    _quadcoil_kwargs_to_field_kwargs,
-    _ptolemy_identity_rev_precompute,
-    _ptolemy_identity_rev_compute,
-    _compute_G,
+    _compute_Bnormal,
+    _compute_Bnormal_ext,
     _compute_Bnormal_plasma,
     _compute_eval_data_coils,
-    _compute_Bnormal_ext,
-    _compute_Bnormal,
+    _compute_G,
     _create_source,
+    _ptolemy_identity_rev_compute,
+    _ptolemy_identity_rev_precompute,
+    _quadcoil_kwargs_to_field_kwargs,
 )
 
 # ----- A QUADCOIL wrapper -----
@@ -40,7 +40,6 @@ _DESC_DERIVED_ARGNAMES = [
     "Bnormal_plasma",
     "metric_name",
     "value_only",
-    "verbose",
 ]
 
 # A list of argnames that must be user-provided,
@@ -65,24 +64,64 @@ class QuadcoilProxy(_Objective):
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     quadcoil_kwargs : dict
-        (Mixed, automatically handled) A dictionary containing all inputs for ``quadcoil.quadcoil``,
-        except some that can be extracted from the equilibrium.
-    metric_target : dict
-        (Traced) Targets for each objectives. Keys must contain all strings in quadcoil_kwargs['metric_name']
-    metric_weight : dict
-        (Traced) Weights for each objectives.
-    plasma_M_theta : int
-        (static) The plasma poloidal quadrature resolution.
-        Unlike the winding surface quadrature points, which is a required input, the plasma surface quadpoints
-        is evaluated from a linear grid to make sure that the grid points in DESC B calculations line up exactly
-        with
-    plasma_N_phi : int
-        (static) The plasma toroidal quadrature resolution.
-    enable_Bnormal_plasma : bool, optional, default=False
-        (Traced) Whether to enable Bnormal contributions from plasma current.
-    Bnormal_plasma_chunk_size
-        (static)
-    source_grid
+        A dictionary containing all inputs for
+        ``quadcoil.quadcoil`` (see the [QUADCOIL documentation](
+        https://quadcoil.readthedocs.io/en/latest/tutorial_outputs.html)
+        )). The following quantities are automatically extracted from DESC and
+        will be ignored:
+        .. code-block:: python
+            nfp,
+            stellsym,
+            plasma_mpol, plasma_ntor,
+            plasma_quadpoints_phi, plasma_quadpoints_theta,
+            plasma_dofs,
+            net_poloidal_current_amperes,
+            Bnormal_plasma,
+            metric_name,
+            value_only,
+            verbose,
+    plasma_M_theta : int, optional, default=eq.M_grid
+        The plasma poloidal quadrature resolution. Determines the
+        resolution of QUADCOIL plasma surface integrals and point-wise
+        functions.
+        Unlike the winding surface quadrature points, which is a required input,
+        the plasma surface quadpoints is evaluated from a linear grid to make
+        sure that the grid points in DESC B calculations line up exactly
+        with the QUADCOIL grids.
+        Values lower than eq.M_grid will trigger interpolation truncation
+        warnings.
+    plasma_N_phi : int, optional, default=eq.N_grid
+        The plasma toroidal quadrature resolution.
+    target : scalar or ndarray, optional, default=None
+    bounds : scalar or ndarray, optional, default=None
+    weight : scalar or ndarray, optional, default=None
+        The original targets, bounds and weight available in every DESC Objective class.
+    metric_name : str or tuple of str, default=None
+        The coil property(ies) to measure as the value of the proxy.
+        Uses the normalized objective by default.
+        We strongly advise using the default value to ensure accurate adjoint
+        differentiation.
+    metric_target : scalar or ndarray, default=None.
+        In addition to target, bounds and weight,
+        The QUADCOIL proxy objective allows the user to set weights and
+        targets for each objective terms individually besides using ``target``
+        and ``bounds`` that comes with other DESC objectives.
+        Targets of each property. 0 by default.
+    metric_weight : scalar or ndarray, default=None.
+        Weights of each property. Reproduces the normalized objective function
+        in the subproblem by default.
+    vacuum : bool, optional, default=False
+        Whether to enable Bnormal contributions from plasma current.
+    normalize : bool, optional, default=False,
+    normalize_target : bool, optional, default=False,
+        Normalization options for a typical DESC Objective. Disabled by default.
+        When enabled, overrides the ``<quantity>_unit`` in
+        ``quadcoil_kwargs`` with scaling constants calculated from the parameteres
+        of the DESC equilibrium. Note that QUADCOIL usually works the best
+        when ``<quantity>_unit`` are the same quantities measured from another
+        winding surface solution (either the solution of the same problem with
+        ``<quantity>_unit=1``, or the solution of a REGCOIL problem). Setting
+        this to ``True`` may impact QUADCOIL's accuracy.
 
     Attributes
     ----------
@@ -100,33 +139,36 @@ class QuadcoilProxy(_Objective):
         For use in the superclass.
     """
 
-    # Most of the documentation is shared among all objectives, so we just inherit
-    # the docstring from the base class and add a few details specific to this objective.
+    # Most of the documentation is shared among all objectives, so we just
+    # inherit the docstring from the base class and add a few details specific
+    # to this objective.
     # See the documentation of `collect_docs` for more details.
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
-    _coordinates = ""  # What coordinates is this objective a function of, with r=rho, t=theta, z=zeta?
-    # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
+    _coordinates = ""  # What coordinates is this objective a function of, with
+    # r=rho, t=theta, z=zeta? i.e. if only a profile, it is "r" , while if all
+    # 3 coordinates it is "rtz"
     _units = "N/A"  # units of the output
-    _print_value_fmt = "QUADCOIL subproblem: "  # string with python string formatting for printing the value
+    # string with python string formatting for printing the value
+    _print_value_fmt = "QUADCOIL subproblem: "
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         eq,
         quadcoil_kwargs,
-        metric_name,
-        metric_target,
-        metric_weight,
-        plasma_M_theta: int,
-        plasma_N_phi: int,
-        enable_Bnormal_plasma: bool = False,
+        plasma_M_theta=None,
+        plasma_N_phi=None,
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        metric_name="f_obj",
+        metric_weight=1.0,
+        metric_target=0.0,
+        vacuum: bool = False,
+        normalize=False,
+        normalize_target=False,
         verbose=0,
         name="QUADCOIL Proxy",
         Bnormal_plasma_chunk_size=None,
@@ -141,6 +183,12 @@ class QuadcoilProxy(_Objective):
         jac_chunk_size=None,
         bs_chunk_size=None,
     ):
+        # Importing QUADCOIL
+        try:
+            from quadcoil.io import gen_quadcoil_for_diff
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
         self._eq = eq
         if field:  # To be also tolerant on `False` and `None` as an input
             self._field = [field] if not isinstance(field, list) else field
@@ -160,38 +208,44 @@ class QuadcoilProxy(_Objective):
         if not field_fixed:
             if not field:
                 raise AttributeError(
-                    "When field_fixed is False, field must be an object or a non-empty list."
+                    "When field_fixed is False, field must "
+                    "be an object or a non-empty list."
                 )
             things += [field]
 
         if not (enable_net_current_plasma or field):
             warnings.warn(
-                "enable_net_current_plasma is false and field is empty. The problem may be trivial."
+                "enable_net_current_plasma is false and field is empty. "
+                "The problem may be trivial."
             )
 
         if enable_net_current_plasma and field:
             warnings.warn(
                 "There are both external coils and net current. "
-                "This is very uncommon (windowpane filaments + winding surface with net current)."
+                "This is very uncommon (windowpane filaments + "
+                "winding surface with net current)."
             )
 
-        # quadcoil_kwargs_bak = quadcoil_kwargs.copy()
         quadcoil_kwargs = quadcoil_kwargs.copy()
         if target is None and bounds is None:
             target = 0  # default target value
+        # Uses LSE to smooth non-smooth problems rather than slack variables
+        # by default.
+        if "smoothing" not in quadcoil_kwargs.keys():
+            quadcoil_kwargs["smoothing"] = "approx"
 
         # ----- Checking inputs -----
         # Checking whether all metrics have a weight and a target provided.
+        # By default, the metric is the quadcoil objective. This choice
+        # empirically has the most accurate adjoint gradients.
         if isinstance(metric_name, str):
-            if metric_target is None:
-                metric_target = 0.0
-            if metric_weight is None:
-                metric_weight = 1.0
             if (not jnp.isscalar(metric_target)) or (not jnp.isscalar(metric_weight)):
                 raise ValueError(
-                    "When metric_name is str, metric_target and metric_target must both be scalar."
+                    "When metric_name is a str, metric_target and "
+                    "metric_target must both be scalar."
                 )
-            # Makign them into iterables will make things easier when scaling in the end.
+            # Makign them into iterables will make things easier when
+            # scaling in the end.
             metric_name = (metric_name,)
             metric_weight = jnp.array(
                 [
@@ -213,7 +267,7 @@ class QuadcoilProxy(_Objective):
                     "metric_name and metric_weight have mismatching lengths!."
                 )
         else:
-            raise ValueError("When metric_name must be a tuple or a str.")
+            raise ValueError("metric_name must be a tuple or a str.")
         # Detect if the user has provided any arguments
         # that will also-be extracted from DESC.
         # If there are, these objectives will be discarded.
@@ -240,9 +294,9 @@ class QuadcoilProxy(_Objective):
         # ----- Storing equilibrium-independent, differentiable variables -----
         # These are differentiable quantities that are not equilibrium-dependent.
         # They can be user-provided, but they also all have default values, so
-        # we set them here. This is necessary because we're calling quadcoil through
-        # quadcoil.io.quadcoil_for_diff, which cannot see their default value in
-        # quadcoil.quadcoil.
+        # we set them here. This is necessary because we are calling quadcoil
+        # through quadcoil.io.quadcoil_for_diff, which cannot see their default
+        # values in quadcoil.quadcoil.
         if "net_toroidal_current_amperes" in quadcoil_kwargs.keys():
             self.net_toroidal_current_amperes = quadcoil_kwargs.pop(
                 "net_toroidal_current_amperes"
@@ -273,29 +327,65 @@ class QuadcoilProxy(_Objective):
         self.metric_target = metric_target
         self.metric_weight = metric_weight
         self._verbose = verbose
-        self._source_grid = source_grid  # B_normal grids
         self._bplasma_chunk_size = Bnormal_plasma_chunk_size
         self._bs_chunk_size = bs_chunk_size
-        self._enable_Bnormal_plasma = enable_Bnormal_plasma
+        self._vacuum = vacuum
+        if not plasma_M_theta:
+            plasma_M_theta = eq.M_grid
+        elif plasma_M_theta <= eq.M_grid:
+            warnings.warn(
+                "plasma_M_theta = "
+                + str(plasma_M_theta)
+                + " <= "
+                + "eq.M_grid = "
+                + str(eq.M_grid)
+                + ". "
+                + "An interpolation truncation warning may appear."
+            )
+        if not plasma_N_phi:
+            plasma_N_phi = eq.N_grid
+        elif plasma_N_phi <= eq.N_grid:
+            warnings.warn(
+                "plasma_N_phi = "
+                + str(plasma_N_phi)
+                + " <= "
+                + "eq.N_grid = "
+                + str(eq.N_grid)
+                + ". "
+                + "An interpolation truncation warning may appear."
+            )
         self._plasma_M_theta = plasma_M_theta
         self._plasma_N_phi = plasma_N_phi
         self._constants = {}
+        # B_normal and G source grids
+        if source_grid is None:
+            self._constants["source_grid"] = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                # for axisymmetry we still need to know about toroidal effects, so its
+                # cheapest to pretend there are extra field periods
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        else:
+            self._constants["source_grid"] = source_grid
         self._constants["field_grid"] = field_grid
         # These are differentiable quantities that are not equilibrium-dependent.
         # They can be user-provided, but they also all have default values, so
-        # we set them here. This is necessary because we're calling quadcoil through
+        # we set them here. This is necessary because we are calling quadcoil through
         # quadcoil.io.quadcoil_for_diff, which cannot see their default value in
         # quadcoil.quadcoil.
 
         # ----- Calculating DESC-derived, non-differentiable attrs -----
-        # plasma_grid is used to generate quadrature points.
+        # eval_grid is used to generate quadrature points.
+        # It is the same as "eval_grid" in desc.integrals.compute_B_plasma
         # it is also used to calculate surface Bnormal_plasma
-        # when enable_Bnormal_plasma=True, along with surface_grid.
+        # when vacuum=False, along with surface_grid.
         # because we the quadrature points must be calculated before generating
         # quadcoil callable, it will be constructed here, instead of in the build().
-        plasma_grid = LinearGrid(
+        eval_grid = LinearGrid(
             NFP=eq.NFP,
-            # If we set this to sym it'll only evaluate
+            # If we set this to sym it will only evaluate
             # theta from 0 to pi.
             sym=False,
             M=self._plasma_M_theta,  # Poloidal grid resolution.
@@ -305,13 +395,13 @@ class QuadcoilProxy(_Objective):
         eval_data_keys = []
         if self._field:
             eval_data_keys = eval_data_keys + _BCOIL_DATA_KEYS
-        if self._enable_Bnormal_plasma:
+        if not self._vacuum:
             eval_data_keys = eval_data_keys + _BPLASMA_DATA_KEYS
-        eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=plasma_grid)
-        eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=plasma_grid)
+        eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=eval_grid)
+        self._constants["eval_grid"] = eval_grid
         self._constants["eval_profiles"] = eval_profiles
         self._constants["eval_transforms"] = eval_transforms
-        self._constants["plasma_grid"] = plasma_grid
         self.nfp = eq.NFP
         self.stellsym = eq.sym
         quadcoil_kwargs["metric_name"] = metric_name
@@ -320,10 +410,10 @@ class QuadcoilProxy(_Objective):
         quadcoil_kwargs["plasma_mpol"] = eq.surface.M
         quadcoil_kwargs["plasma_ntor"] = eq.surface.N
         quadcoil_kwargs["plasma_quadpoints_phi"] = (
-            plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2] / jnp.pi / 2
+            eval_grid.nodes[eval_grid.unique_zeta_idx, 2] / jnp.pi / 2
         )
         quadcoil_kwargs["plasma_quadpoints_theta"] = (
-            plasma_grid.nodes[plasma_grid.unique_theta_idx, 1] / jnp.pi / 2
+            eval_grid.nodes[eval_grid.unique_theta_idx, 1] / jnp.pi / 2
         )
         self._Bnormal_shape = (
             len(quadcoil_kwargs["plasma_quadpoints_phi"]),
@@ -340,11 +430,9 @@ class QuadcoilProxy(_Objective):
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)
         self._quadcoil_values = jit(_quadcoil_values)
-        # self._quadcoil_kwargs_bak = quadcoil_kwargs_bak
         # ----- Setting and registering keyword arguments -----
         self._static_attrs = _Objective._static_attrs + [
             # External-coils related
-            # '_quadcoil_kwargs_bak'
             "_enable_net_current_plasma",
             "_eq_fixed",
             "_field_fixed",
@@ -355,7 +443,7 @@ class QuadcoilProxy(_Objective):
             "_verbose",
             # Free-boundary-related
             "_bplasma_chunk_size",
-            "_enable_Bnormal_plasma",
+            "_vacuum",
             # QUADCOIL-related
             "metric_name",
             "nfp",
@@ -376,7 +464,7 @@ class QuadcoilProxy(_Objective):
 
         # ----- Superclass -----
         super().__init__(
-            things=things,  # things is a list of things that will be optimized, in this case just the equilibrium
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -397,6 +485,12 @@ class QuadcoilProxy(_Objective):
             Level of output.
 
         """
+        # Importing QUADCOIL
+        try:
+            from quadcoil.io import generate_desc_scaling
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
         # ----- Starting and timing-----
         # things is the list of things that will be optimized,
         # we assigned things to be just eq in the init, so we know that the
@@ -428,51 +522,50 @@ class QuadcoilProxy(_Objective):
         )
 
         # ----- Building grids and transforms -----
-        # source_grid for Bnormal_plasma, and plasma_grid.
+        # source_grid for Bnormal_plasma, and eval_grid.
         # Eval grid has a special role, in that it helps
         # generate plasma_quadpoint_phi and theta. Therefore,
         # it will be generated in init instead.
         if self._enable_net_current_plasma:
-            net_poloidal_current_grid = LinearGrid(rho=jnp.array(1.0))
             net_poloidal_current_profiles = get_profiles(
-                ["G"], obj=eq, grid=net_poloidal_current_grid
+                ["G"], obj=eq, grid=self._constants["source_grid"]
             )
             net_poloidal_current_transforms = get_transforms(
-                ["G"], obj=eq, grid=net_poloidal_current_grid
+                ["G"], obj=eq, grid=self._constants["source_grid"]
             )
             # Storing transforms
-            # Attributes inside and outside _constants aren't really treated
-            # differently, except that self._constants is traced. Because quadcoil_arg
-            # is a mixture of traced and static inputs, we want to individually register
-            # all the static inputs. Moreover, dicts are not hashable, so the static
-            # arguments in quadcoil_kwargs must all be stored as individual attributes.
-            # We might as well store everything in quadcoil_kwargs as individual attributes,\
+            # Attributes inside and outside _constants are not really treated
+            # differently, except that self._constants is traced. Because
+            # quadcoil_arg is a mixture of traced and static inputs, we want to
+            # individually register all the static inputs. Moreover, dicts are
+            # not hashable, so the static arguments in quadcoil_kwargs must all
+            # be stored as individual attributes. We might as well store
+            # everything in quadcoil_kwargs as individual attributes,
             # and only store the transforms and profiles here in self._constants.
-            self._constants[
-                "net_poloidal_current_profiles"
-            ] = net_poloidal_current_profiles
-            self._constants[
-                "net_poloidal_current_transforms"
-            ] = net_poloidal_current_transforms
+            self._constants["net_poloidal_current_profiles"] = (
+                net_poloidal_current_profiles
+            )
+            self._constants["net_poloidal_current_transforms"] = (
+                net_poloidal_current_transforms
+            )
 
         # Mose DESC objectives are fields, so they
         # hard-coded the superclass to ask for a weight
         # to integrate the field over a quadrature...
 
-        # source_grid will only be generated when self._enable_Bnormal_plasma == True.
-        # Here, plasma_grid is not only used to define Bnormal_plasma,
+        # source_grid will only be generated when self.vacuum == False.
+        # Here, eval_grid is not only used to define Bnormal_plasma,
         # but also used to generate plasma_quadpoints_phi and theta.
-        # Therefore, it will be greated regardless self.valuum == True.
-        if self._enable_Bnormal_plasma:
-            if verbose:
-                jax.debug.print(
-                    "enable_Bnormal_plasma=True, QUADCOIL will no "
-                    "longer assume zero Bnormal_plasma at the boundary."
-                )
-            (source_profiles, source_transforms, interpolator,) = _create_source(
+        # Therefore, it will be greated regardless self.vacuum == True.
+        if not self._vacuum:
+            (
+                source_profiles,
+                source_transforms,
+                interpolator,
+            ) = _create_source(
                 eq=eq,
-                source_grid_in=self._source_grid,
-                plasma_grid_in=self._constants["plasma_grid"],
+                source_grid=self._constants["source_grid"],
+                eval_grid=self._constants["eval_grid"],
             )
             self._constants["source_profiles"] = source_profiles
             self._constants["source_transforms"] = source_transforms
@@ -489,14 +582,16 @@ class QuadcoilProxy(_Objective):
         # precompute quantities where applicable.
         if self._eq_fixed:
             # Plasma dofs
-            self._constants["plasma_dofs"] = self.compute_plasma_dofs(eq.params_dict)
+            self._constants["plasma_dofs"] = self.compute_plasma_surface_dofs_simsopt(
+                eq.params_dict
+            )
 
             # Net plasma current
             if self._enable_net_current_plasma:
                 self._constants["G"] = _compute_G(eq.params_dict, self._constants)
 
             # B plasma
-            if self._enable_Bnormal_plasma:
+            if not self._vacuum:
                 self._constants["Bnormal_plasma"] = _compute_Bnormal_plasma(
                     self._constants, eq.params_dict, self._bplasma_chunk_size
                 )
@@ -511,7 +606,7 @@ class QuadcoilProxy(_Objective):
                 if self._field_fixed:
                     self._constants["Bnormal_ext"] = _compute_Bnormal_ext(
                         self._constants,
-                        self._constants["sum_field"].params_dict,  # params_field,
+                        self._constants["sum_field"].params_dict,
                         self._bs_chunk_size,
                     )
 
@@ -522,7 +617,7 @@ class QuadcoilProxy(_Objective):
         # The unit for each objective is implemented as the attribute ``desc_unit``
         # of the corresponding function. These attributes are lambda functions
         # that act on self.scales and returns a number. Example:
-        # K.desc_unit = lambda scales: scales["B"] / mu_0
+        # K.desc_unit = lambda scales: scales["B"] / mu_0 # noqa: E800
         if self._normalize:
             self.scales = compute_scaling_factors(eq)
             obj_unit_new, cons_unit_new = generate_desc_scaling(
@@ -539,27 +634,60 @@ class QuadcoilProxy(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, *all_params, constants=None):
+        """Computes the scalar value of the QUADCOIL proxy.
+
+        Computes the scalar value of the QUADCOIL proxy. A wrapper for
+        ``compute_full``.
+
+        Parameters
+        ----------
+        *all_params : dict
+            Dictionaries of equilibrium/coils degrees of freedom, depending on
+            ``eq_fixed`` and ``field_fixed``.
+        constants : dict
+            (Dummy for now) Dictionary of constant data, eg transforms,
+            profiles etc. Defaults to self.constants
+
+        Returns
+        -------
+        The scalar quadcoil proxy.
+
+        """
         # We prohibit the user from providing constants
         return self.compute_full(*all_params, full_mode=False)
 
     def compute_full(self, *all_params, full_mode=True):
-        """
+        """Calls QUADCOIL.
+
         Takes the same parameters as compute, but can either output the
         full quadcoil results, or do what compute() is supposed to do.
-        compute() will be a wrapper for this.
+        compute() is a wrapper for compute_full.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        *all_params : dict
+            Dictionaries of equilibrium/coils degrees of freedom, depending on
+            ``eq_fixed`` and ``field_fixed``.
         constants : dict
-            (Dummy for now) Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            Dictionary of constant data, eg transforms,
+            profiles etc. Defaults to self.constants
+        full_mode : bool
+            When ``True``, returns the QUADCOIL standard outputs (see the
+            [QUADCOIL documentation](
+            https://quadcoil.readthedocs.io/en/latest/tutorial_outputs.html)
+            ). When ``False``, returns the scalar QUADCOIL proxy.
 
         Returns
         -------
         f : scalar
+
         """
+        # Importing QUADCOIL
+        try:
+            from quadcoil import get_quantity
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
         # Loading constants
         constants = self._constants
 
@@ -583,13 +711,13 @@ class QuadcoilProxy(_Objective):
         if self._eq_fixed:
             plasma_dofs = constants["plasma_dofs"]
         else:
-            plasma_dofs = self.compute_plasma_dofs(params_eq)
+            plasma_dofs = self.compute_plasma_surface_dofs_simsopt(params_eq)
 
         Bnormal = _compute_Bnormal(
             field=self._field,
             constants=constants,
             Bnormal_shape=self._Bnormal_shape,
-            enable_Bnormal_plasma=self._enable_Bnormal_plasma,
+            vacuum=self._vacuum,
             eq_fixed=self._eq_fixed,
             field_fixed=self._field_fixed,
             params_eq=params_eq,
@@ -613,7 +741,7 @@ class QuadcoilProxy(_Objective):
                 plasma_dofs=plasma_dofs,
                 net_poloidal_current_amperes=net_poloidal_current_amperes,
                 net_toroidal_current_amperes=self.net_toroidal_current_amperes,
-                Bnormal_plasma=-Bnormal,  # Because DESC plasma surface is flipped.
+                Bnormal_plasma=Bnormal,  # Because DESC plasma surface is flipped.
                 plasma_coil_distance=self.plasma_coil_distance,
                 winding_dofs=self.winding_dofs,
                 objective_weight=self.objective_weight,
@@ -654,7 +782,22 @@ class QuadcoilProxy(_Objective):
 
         return f_out
 
-    def compute_plasma_dofs(self, params_eq):
+    def compute_plasma_surface_dofs_simsopt(self, params_eq):
+        """Computes the plasma surface dofs in the Simsopt convention.
+
+        Computes the plasma surface dofs in the Simsopt convention.
+
+        Parameters
+        ----------
+        *all_params : dict
+            Dictionaries of equilibrium/coils degrees of freedom, depending on
+            ``eq_fixed`` and ``field_fixed``.
+
+        Returns
+        -------
+        plasma_dofs : ndarray
+            The plasma surface dofs in the Simsopt SurfaceRZFourier convention.
+        """
         rs_raw, rc_raw = _ptolemy_identity_rev_compute(
             self._surf_R_A,
             self._surf_R_c_indices,
@@ -667,10 +810,10 @@ class QuadcoilProxy(_Objective):
             self._surf_Z_s_indices,
             params_eq["Zb_lmn"],
         )
-        # Stellsym SurfaceRZFourier's dofs consists of
-        # [rc, zs]
-        # Non-stellsym SurfaceRZFourier's dofs consists of
-        # [rc, rs, zc, zs]
+        # Stellsym SurfaceRZFourier dofs consists of
+        # [rc, zs] # noqa: E800
+        # Non-stellsym SurfaceRZFourier dofs consists of
+        # [rc, rs, zc, zs] # noqa: E800
         # Because rs, zs from ptolemy_identity_rev shares the same m, n
         # arrays as rc, zc, they both have a zero as the first element
         # that need to be removed.
@@ -684,9 +827,25 @@ class QuadcoilProxy(_Objective):
             plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
         return plasma_dofs
 
-    def compute_FourierCurrentPotentialField(self, *all_params):
+    def compute_surface_current_field(self, *all_params):
+        """Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
+
+        Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
+        For use with DESC's built-in REGCOIL and coil-cutting features.
+
+        Parameters
+        ----------
+        params_eq : dict
+            Dictionary of equilibrium degrees of freedom, eg
+            Equilibrium.params_dict.
+
+        Returns
+        -------
+        A FourierCurrentPotentialField containing the QUADCOIL solution.
+        """
         # Prevents circular import
         from desc.magnetic_fields import FourierCurrentPotentialField
+
         _, quadcoil_qp, quadcoil_dofs, _ = self.compute_full(
             *all_params, full_mode=True
         )
@@ -707,28 +866,29 @@ class QuadcoilProxy(_Objective):
             quadcoil_dofs,
             self._eq.sym,
             FourierCurrentPotentialField,
+            self._verbose,
         )
         winding_surface = quadcoil_qp.winding_surface.to_desc()
         R_lmn = winding_surface.R_lmn
         Z_lmn = winding_surface.Z_lmn
         modes_R = winding_surface._R_basis.modes[:, 1:]
         modes_Z = winding_surface._Z_basis.modes[:, 1:]
-        return FourierCurrentPotentialField.__init__(
-            # Phi_mn=Phi_mn, # already in filtered
-            # modes_Phi=modes_Phi, # already in filtered
-            # I=I, # already in filtered
-            # G=G, # already in filtered
-            # sym_Phi=sym_Phi, # already in filtered
-            # M_Phi=M_Phi, # already in filtered
-            # N_Phi=N_Phi, # already in filtered
+        return FourierCurrentPotentialField(
+            # Phi_mn is already in filtered
+            # modes_Phi is already in filtered
+            # I is already in filtered
+            # G is already in filtered
+            # sym_Phi is already in filtered
+            # M_Phi is already in filtered
+            # N_Phi is already in filtered
             R_lmn=R_lmn,
             Z_lmn=Z_lmn,
             modes_R=modes_R,
             modes_Z=modes_Z,
-            # NFP=NFP, # already in filtered
-            # sym=sym, # already in filtered
-            # M=M, # already in filtered
-            # N=N, # already in filtered
+            NFP=self.nfp,
+            sym=self._eq.sym,  # Symmetry of the plasma
+            # M is already in filtered
+            # N is already in filtered
             name="QUADCOIL Proxy Output",
             check_orientation=True,
             **filtered

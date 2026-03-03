@@ -1,22 +1,20 @@
-from desc.backend import jnp
-from desc.compute.utils import _compute as compute_fun
-from desc.integrals import virtual_casing_biot_savart
-from scipy.constants import mu_0
-from desc.vmec_utils import ptolemy_linear_transform
-from jax import jit
+import inspect
+import warnings
 from functools import partial
-from desc.vmec_utils import ptolemy_identity_fwd
-from quadcoil import make_rzfourier_mc_ms_nc_ns, SurfaceRZFourierJAX
+
+import numpy as np
+from jax import jit
+from scipy.constants import mu_0
+
+from desc.backend import jnp
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
+from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from desc.utils import warnif
+from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_linear_transform
 
 # Used in create_source_grid only
 from ..integrals.singularities import best_params, best_ratio
-from desc.grid import LinearGrid
-from desc.compute import get_profiles, get_transforms
-from desc.utils import warnif
-from desc.integrals import DFTInterpolator, FFTInterpolator
-import numpy as np
-import warnings
-import inspect
 
 # Data keys needed to calculate Bnormal_plasma.
 _BPLASMA_DATA_KEYS = [
@@ -31,6 +29,7 @@ _BPLASMA_DATA_KEYS = [
 ]
 # Data keys needed to calculate Bnormal from external coils.
 _BCOIL_DATA_KEYS = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
+
 
 # ----- Helper functions -----
 def _compute_Bnormal_plasma(constants, params_eq, _bplasma_chunk_size):
@@ -77,9 +76,7 @@ def _compute_eval_data_coils(constants, params_eq):
 
 
 def _compute_Bnormal_ext(constants, params_field, _bs_chunk_size):
-    """
-    Computes the magnetic field from a coilset using magnetic field parameters.
-    """
+    # Computes the magnetic field from a coilset using magnetic field parameters.
     coils_nrho = constants["coils_n_rho"]
     coils_x = constants["coils_x"]
     B_ext = constants["sum_field"].compute_magnetic_field(
@@ -94,9 +91,7 @@ def _compute_Bnormal_ext(constants, params_field, _bs_chunk_size):
 
 
 def _compute_G(params_eq, constants):
-    """
-    Computes the net poloidal current G using equilibrium parameters.
-    """
+    # Computes the net poloidal current G using equilibrium parameters.
     G_data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
         ["G"],
@@ -109,10 +104,11 @@ def _compute_G(params_eq, constants):
 
 
 def _ptolemy_identity_rev_precompute(m_1, n_1):
-    """
-    We have split ptolemy_identity_rev into two parts:
+    """First half of ``ptolemy_identity_rev``.
+
+    We have split ``ptolemy_identity_rev`` into two parts:
     ``ptolemy_identity_rev_precompute`` and
-    ``ptolemy_identity_rev_compute``. The ``original ptolemy_identity_rev``
+    ``ptolemy_identity_rev_compute``. The original ``ptolemy_identity_rev``
     relies on numpy boolean indexing. Even when we set m_1, n_1 to static,
     they will still be converted to traced arrays once jit happens, and the
     numpy boolean indexing will break. Because of that, we perform all numpy
@@ -131,10 +127,11 @@ def _ptolemy_identity_rev_precompute(m_1, n_1):
             tuple(eq.surface.Z_basis.modes[:,2])
         )
         rs_raw, rc_raw = desc_to_vmec_surf_R(eq.surface.R_lmn)
-        zs_raw, zc_raw = desc_to_vmec_surf_Z(eq.surface.Z_lmn)# Stellsym SurfaceRZFourier's dofs consists of
-        # [rc, zs]
+        # Stellsym SurfaceRZFourier's dofs consists of
+        zs_raw, zc_raw = desc_to_vmec_surf_Z(eq.surface.Z_lmn)
+        # [rc, zs] # noqa: E800
         # Non-stellsym SurfaceRZFourier's dofs consists of
-        # [rc, rs, zc, zs]
+        # [rc, rs, zc, zs] # noqa: E800
         # Because rs, zs from ptolemy_identity_rev shares the same m, n
         # arrays as rc, zc, they both have a zero as the first element
         # that need to be removed.
@@ -158,7 +155,8 @@ def _ptolemy_identity_rev_precompute(m_1, n_1):
     ----------
     m_1 : ndarray, shape(num_modes,)
     n_1 : ndarray, shape(num_modes,)
-        ``R_basis_modes[:,1], R_basis_modes[:,2]`` or ``Z_basis_modes[:,1], Z_basis_modes[:,2]``
+        ``R_basis_modes[:,1], R_basis_modes[:,2]``
+        or ``Z_basis_modes[:,1], Z_basis_modes[:,2]``
 
     Returns
     -------
@@ -171,13 +169,6 @@ def _ptolemy_identity_rev_precompute(m_1, n_1):
             rs_raw, rc_raw = _modes_x_to_mnsc(vmec_modes, y)
 
     """
-    try:
-        from desc.backend import jnp, sign
-
-        # from desc.vmec_utils import ptolemy_linear_transform # , _modes_x_to_mnsc
-    except:
-        raise ModuleNotFoundError("desc.backend.jnp and desc.backend.sign unavailable.")
-
     # Precomputing linear operators
     m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
     desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
@@ -202,6 +193,7 @@ def _ptolemy_identity_rev_precompute(m_1, n_1):
     ],
 )
 def _ptolemy_identity_rev_compute(A, c_indices, s_indices, x):
+    # Second half of ptolemy_identity_rev
     A = jnp.array(A)
     y = (A @ x.T).T
     if len(c_indices):
@@ -236,7 +228,7 @@ def _compute_Bnormal(
     field,
     constants,
     Bnormal_shape,
-    enable_Bnormal_plasma,
+    vacuum,
     eq_fixed,
     field_fixed,
     params_eq,
@@ -270,7 +262,7 @@ def _compute_Bnormal(
             )  # neither fixed, field fixed only.
 
     # Plasma fields
-    if enable_Bnormal_plasma:
+    if not vacuum:
         if eq_fixed:
             Bnormal += constants["Bnormal_plasma"].reshape(Bnormal.shape)
         else:
@@ -302,7 +294,13 @@ def _toroidal_flip(phi, m, n):
 
 
 def _quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
-    """Converts quadcoil phi to desc phi."""
+    # Importing QUADCOIL
+    try:
+        from quadcoil import make_rzfourier_mc_ms_nc_ns
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
+    # Converts quadcoil phi to desc phi.
     if stellsym:
         # The dofs contain rc, zs, and rc has one more element than zs.
         phis = phi_mn_quadcoil
@@ -320,50 +318,49 @@ def _quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
     return Phi_mn, modes_M, modes_N
 
 
-def _create_source(eq, source_grid_in, plasma_grid_in):
-    if source_grid_in is None:
-        # for axisymmetry we still need to know about toroidal effects, so its
-        # cheapest to pretend there are extra field periods
-        source_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
-        )
-        source_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
-        source_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
-    else:
-        source_grid = source_grid_in
+def _create_source(eq, source_grid, eval_grid):
     # Creating interpolator for Bnormal_plasma
     ratio_data = eq.compute(
         ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
     )
     st, sz, q = best_params(source_grid, best_ratio(ratio_data))
     try:
-        interpolator = FFTInterpolator(plasma_grid_in, source_grid, st, sz, q)
+        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:
         warnif(
             True,
             msg="Could not build fft interpolator, switching to dft which is slow."
             "\nReason: " + str(e),
         )
-        interpolator = DFTInterpolator(plasma_grid_in, source_grid, st, sz, q)
+        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    # Creating source grids
+    source_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
+    source_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=source_grid)
     return (source_profiles, source_transforms, interpolator)
 
 
-def _quadcoil_kwargs_to_field_kwargs(
-    quadcoil_kwargs, quadcoil_dofs, sym_default, target_type
+def _quadcoil_kwargs_to_field_kwargs(  # noqa: C901
+    quadcoil_kwargs, quadcoil_dofs, sym_default, target_type, verbose, flip_phi=False
 ):
-    """
-    Converts a kwargs for quadcoil into a kwargs for QuadcoilField or FourierCurrentPotentialField
-    """
+    # Importing QUADCOIL
+    try:
+        from quadcoil import QuadcoilParams
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+    # Converts a kwargs for quadcoil into a kwargs for QuadcoilField or
+    # FourierCurrentPotentialField
     filtered = {}
     source_kwargs = quadcoil_kwargs.copy()
     if "winding_stellsym" in source_kwargs.keys():
         winding_stellsym = source_kwargs["winding_stellsym"]
     else:
         winding_stellsym = sym_default
+
+    # Importing QUADCOIL
+    try:
+        from quadcoil import SurfaceRZFourierJAX
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
 
     # Reading winding surface information.
     if "winding_dofs" in source_kwargs.keys():
@@ -404,9 +401,14 @@ def _quadcoil_kwargs_to_field_kwargs(
             phi_pre_flip = aux_dofs_vals.pop("phi")
             mpol = quadcoil_kwargs["mpol"]
             ntor = quadcoil_kwargs["ntor"]
-            # TODO: This seems necessary in MUSE but not in Aries. WHY?????
-            # phi_flipped = toroidal_flip(phi_pre_flip, m, n)
-            phi_flipped = phi_pre_flip
+            # TODO: This seems necessary when loading some winding surfaces
+            # from simsopt, but not necessary if the winding surface is
+            # auto-generated. Make this more robust later.
+            if flip_phi:
+                m, n = QuadcoilParams.make_mn_helper(mpol, ntor, stellsym)
+                phi_flipped = _toroidal_flip(phi_pre_flip, m, n)
+            else:
+                phi_flipped = phi_pre_flip
             Phi_mn, modes_M, modes_N = _quadcoil_phi_to_desc_phi(
                 phi_mn_quadcoil=phi_flipped, stellsym=stellsym, mpol=mpol, ntor=ntor
             )
@@ -438,12 +440,13 @@ def _quadcoil_kwargs_to_field_kwargs(
 
     # Filter only parameters accepted by target_func
     target_params = inspect.signature(target_type).parameters
-    filtered = filtered | {k: v for k, v in source_kwargs.items() if k in target_params}
-    discarded_kwargs = [k for k, v in source_kwargs.items() if k not in target_params]
-    if discarded_kwargs:
-        warnings.warn(
+    filtered = filtered | source_kwargs
+    filtered = {k: v for k, v in filtered.items() if k in target_params.keys()}
+    discarded_kwargs = [k for k, v in filtered.items() if k not in target_params.keys()]
+    if discarded_kwargs and verbose > 1:
+        print(
             "The following items in quadcoil_kwargs will be ignored "
             "because they will be automatically calculated by or has alternative "
-            "definitions in QuadcoilField: " + str(discarded_kwargs)
+            "definitions in " + str(target_type) + ": " + str(discarded_kwargs)
         )
     return filtered

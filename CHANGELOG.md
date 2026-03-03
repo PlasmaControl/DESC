@@ -24,12 +24,15 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary. See the docstring of the ``optax-custom`` for details.
 - Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
+- Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
 
 Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
 - ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
+- Fixes some bugs that hampered robustness of ``desc.geometry.FourierRZToroidalSurface.constant_offset_surface``, particularly when the given grid had stellarator symmetry or when NFP=1.
+- Fixes possible bug in computing normalizations when both kinetic and pressure profiles are assigned. Also adds warnings whenever an pressure is added to a kinetic-constrained equilibrium and vice-versa to alert user to ambiguous equilibrium setups.
 - Adds error in ``MercierStability`` to guard against situation where if a grid with a point at ``rho=0`` were used, NaN would be computed, as``MercierStability`` is undefined on-axis.
 
 Performance Improvements

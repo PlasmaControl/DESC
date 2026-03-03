@@ -1,6 +1,9 @@
 Changelog
 =========
 
+v0.17.0
+-------
+
 New Features
 
 - Adds particle tracing capabilities in ``desc.particles`` module.

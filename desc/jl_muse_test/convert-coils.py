@@ -54,14 +54,12 @@ def coils_to_arrays(coils):
             modes, np.array(currents), np.array(names))
 
 
-if "--focus" in sys.argv:
-    focus_path = sys.argv[sys.argv.index("--focus") + 1]
-    print(f"Parsing FOCUS file: {focus_path}")
-    coils = parse_focus_file(focus_path)
-    X_n, Y_n, Z_n, modes, currents, names = coils_to_arrays(coils)
-else:
-    npz_path = "tf_coils_desc.npz"
-    print(f"Loading pre-parsed data from: {npz_path}")
+import os
+
+npz_path   = "tf_coils_desc.npz"
+focus_path = "tf-coils.focus"
+
+if os.path.exists(npz_path):
     data     = np.load(npz_path, allow_pickle=True)
     X_n      = data["X_n"]
     Y_n      = data["Y_n"]
@@ -69,6 +67,17 @@ else:
     modes    = data["modes"]
     currents = data["currents"]
     names    = data["names"]
+else:
+    coils = parse_focus_file(focus_path)
+    X_n, Y_n, Z_n, modes, currents, names = coils_to_arrays(coils)
+
+    np.savez(npz_path,
+             X_n=X_n,
+             Y_n=Y_n,
+             Z_n=Z_n,
+             modes=modes,
+             currents=currents,
+             names=names)
 
 n_coils, n_modes = X_n.shape
 print(f"Loaded {n_coils} coils, {n_modes} modes each (N_max = {modes.max()})")

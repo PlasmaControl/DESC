@@ -763,27 +763,32 @@ def _resonance_physics(
     # Diagnostics
     Delta_s = jnp.nansum(res_weight * Delta_s_profile, axis=0)
     s_vals = rhos**2
-    w_prof = jnp.nansum(res_weight, axis=(1, 2))
-    w_sum = jnp.nansum(w_prof, axis=0)
+    w_sum = jnp.nansum(res_weight, axis=0)
     s_res = safediv(
-        jnp.nansum(w_prof * s_vals[:, None], axis=0), w_sum, fill=jnp.nan
+        jnp.nansum(
+            res_weight * s_vals[:, None, None, None],
+            axis=0,
+        ),
+        w_sum,
+        fill=jnp.nan,
     )
 
     return {
-        'f_res': f_res,
-        'Omega': Omega,
-        'omega_bounce_avg': omega_bounce_avg,
-        'eta_drift_avg': eta_drift_avg,
-        'omega_bounce': omega_bounce,
-        'eta_drift': eta_drift,
-        'Omega_prime_s': Omega_prime_s,
-        'res_weight': res_weight,
-        'f_q_c': f_q_c,
-        'f_q_s': f_q_s,
-        'f_q_abs': f_q_abs,
-        'Delta_s': Delta_s,
-        'f_q_conservative': f_q_conservative,
-        's_res': s_res,
+        'f_res': f_res,  # (rho, pitch, well)
+        'Omega': Omega,  # (rho, pitch, well)
+        'omega_bounce_avg': omega_bounce_avg,  # (rho, pitch, well)
+        'eta_drift_avg': eta_drift_avg,  # (rho, pitch, well)
+        'omega_bounce': omega_bounce,  # (rho, alpha, pitch, well)
+        'eta_drift': eta_drift,  # (rho, alpha, pitch, well)
+        'Omega_prime_s': Omega_prime_s,  # (rho, pitch, well)
+        'res_weight': res_weight,  # (rho, pitch, well, res)
+        'f_q_c': f_q_c,  # (rho, pitch, well, res) or None if conservative
+        'f_q_s': f_q_s,  # (rho, pitch, well, res) or None if conservative
+        'f_q_abs': f_q_abs,  # (rho, pitch, well, res)
+        'Delta_s': Delta_s,  # (pitch, well, res), rho-weighted diagnostic
+        'Delta_s_prof': Delta_s_profile,  # (rho, pitch, well, res)
+        'f_q_conservative': f_q_conservative,  # scalar bool
+        's_res': s_res,  # (pitch, well, res), rho-weighted resonance location
     }
 
 
@@ -888,6 +893,11 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
 
     # --- 4. Output ---
     if DEBUG:
+        # DEBUG payload dimensions:
+        # pitch_inv: (rho, pitch)
+        # res_arr/p_arr/q_arr: (res,)
+        # f_res_avg: (rho,)
+        # plus keys returned by _resonance_physics (see inline comments there).
         data["f_tr2"] = {
             **res,
             'pitch_inv': _data['pitch_inv'],

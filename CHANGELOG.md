@@ -1,6 +1,9 @@
 Changelog
 =========
 
+v0.17.0
+-------
+
 New Features
 ------------
 - Automatically-differentiable, non-singular Laplace BIE solver.

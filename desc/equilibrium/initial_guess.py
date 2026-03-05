@@ -768,20 +768,16 @@ def ___babin_initial_guess(eq):
     ramnc = rmnc[0]
     zamns = zmns[0]
 
+    # TODO: make mode initialization better, like probably we want
+    # _babin_init to return the modes used
+    # and allow it to be asym as well
     eq.axis = FourierRZCurve(
-        R_n=ramnc[0],
-        Z_n=zamns[0],
+        R_n=ramnc,
+        Z_n=zamns,
         modes_R=np.arange(0, n__babin_init + 1),
-        modes_Z=np.arange(0, n__babin_init + 1),
+        modes_Z=-np.arange(0, n__babin_init + 1),
         sym=True,
         NFP=eq.NFP,
     )
-    rax = np.concatenate([-np.zeros_like(ramnc)[1:][::-1], ramnc])
-    zax = np.concatenate([-zamns[1:][::-1], np.zeros_like(zamns)])
-    nax = len(ramnc) - 1
-    nax = np.arange(-nax, nax + 1)
-
-    # how to set the new axis?
-    eq.axis = np.vstack([nax, rax, zax]).T
 
     return eq

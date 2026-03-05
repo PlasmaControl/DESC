@@ -88,9 +88,11 @@ if use_jax:  # noqa: C901
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
+        tree_broadcast,
         tree_flatten,
         tree_leaves,
         tree_map,
+        tree_map_with_path,
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
@@ -373,8 +375,7 @@ if use_jax:  # noqa: C901
                 return state[0]
 
         def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
+            return y / g(1.0)
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
@@ -606,6 +607,10 @@ else:  # pragma: no cover
         """Map pytree for numpy backend."""
         raise NotImplementedError
 
+    def tree_map_with_path(*args, **kwargs):
+        """Map pytree with path for numpy backend."""
+        raise NotImplementedError
+
     def tree_structure(*args, **kwargs):
         """Get structure of pytree for numpy backend."""
         raise NotImplementedError
@@ -616,6 +621,10 @@ else:  # pragma: no cover
 
     def treedef_is_leaf(*args, **kwargs):
         """Check is leaf of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_broadcast(*args, **kwargs):
+        """Broadcast pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

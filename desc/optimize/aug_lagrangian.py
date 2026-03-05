@@ -334,7 +334,9 @@ def fmin_auglag(  # noqa: C901
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
-        x_scale = jnp.broadcast_to(x_scale, z.shape)
+        x_scale = jnp.broadcast_to(x_scale, x0.shape)
+        # add ones for slack variables
+        x_scale = jnp.concatenate([x_scale, jnp.ones(z0.size - x0.size)])
         scale, scale_inv = x_scale, 1 / x_scale
 
     v, dv = cl_scaling_vector(z, g, lb, ub)
@@ -426,6 +428,29 @@ def fmin_auglag(  # noqa: C901
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print(f"{'Alpha Omega':<35}: {alpha_omega:.3e}")
+        print(f"{'Beta Omega':<35}: {beta_omega:.3e}")
+        print(f"{'Alpha Eta':<35}: {alpha_eta:.3e}")
+        print(f"{'Beta Eta':<35}: {beta_eta:.3e}")
+        print(f"{'Omega':<35}: {omega:.3e}")
+        print(f"{'Eta':<35}: {eta:.3e}")
+        print(f"{'Tau':<35}: {beta_eta:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")

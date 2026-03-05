@@ -230,6 +230,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
 
     if ensure_nested and not eq.is_nested():
+
         warnings.warn(
             "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
@@ -760,13 +761,14 @@ def _babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
 
 def ___babin_initial_guess(eq):
     print("Using babin init")
-    n__babin_init = 2
     M_bdry, N_bdry, rbc_bdry, zbs_bdry = _convert_bdry(eq)
     xm_init, xn_init, rmnc, zmns, rhos = _babin_init(
-        rbc_bdry, zbs_bdry, np.max(M_bdry), np.max(N_bdry), 7, 0, n__babin_init
+        rbc_bdry, zbs_bdry, np.max(M_bdry), np.max(N_bdry), eq.L, eq.M, eq.N
     )
-    ramnc = rmnc[0]
-    zamns = zmns[0]
+
+    inds_axis = np.where(xm_init == 0)
+    ramnc = rmnc[0, inds_axis].squeeze()
+    zamns = zmns[0, inds_axis].squeeze()
 
     # TODO: make mode initialization better, like probably we want
     # _babin_init to return the modes used
@@ -774,10 +776,17 @@ def ___babin_initial_guess(eq):
     eq.axis = FourierRZCurve(
         R_n=ramnc,
         Z_n=zamns,
-        modes_R=np.arange(0, n__babin_init + 1),
-        modes_Z=-np.arange(0, n__babin_init + 1),
+        modes_R=xn_init[inds_axis],
+        modes_Z=-xn_init[inds_axis],
         sym=True,
         NFP=eq.NFP,
     )
+
+    from desc.vmec_utils import fourier_to_zernike, ptolemy_identity_fwd
+
+    m, n, R_mn = ptolemy_identity_fwd(xm_init, xn_init, s=np.zeros_like(rmnc), c=rmnc)
+    eq.R_lmn = fourier_to_zernike(m, n, R_mn, eq.R_basis)
+    m, n, Z_mn = ptolemy_identity_fwd(xm_init, xn_init, s=zmns, c=np.zeros_like(zmns))
+    eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
 
     return eq

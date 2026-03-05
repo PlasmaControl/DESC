@@ -656,7 +656,7 @@ def _babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
     rbc = np.array(rbc)
     zbs = np.array(zbs)
     # example for output of the  full solution (VMEC):
-    rho1d_out = np.linspace(0, 1, nrho) ** 2  # in rho^2
+    rho1d_out = np.linspace(0, 1, nrho)  # ** 2  # in rho^2
     M_out = m_out
     m1d_out = np.arange(0, M_out + 1)
     theta1d_out = np.linspace(0, 2 * np.pi, 2 * M_out + 1, endpoint=False)

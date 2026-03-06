@@ -1,6 +1,11 @@
 Changelog
 =========
 
+New Features
+
+- Uses Babin's ``map2disc`` package to find nested initial coordinate mappings for complex boundaries.
+
+
 v0.17.0
 -------
 

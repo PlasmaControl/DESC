@@ -7,19 +7,21 @@ import numpy as np
 from map2disc import BCM
 
 from desc.backend import fori_loop, jit, jnp, put
-from desc.basis import zernike_radial
+from desc.basis import FourierZernikeBasis, zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.io import load
 from desc.objectives import (
     FixThetaSFL,
     GoodCoordinates,
     ObjectiveFunction,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
-from desc.vmec_utils import ptolemy_identity_rev
 
 
 def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
@@ -235,17 +237,49 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
         )
-        obj = ObjectiveFunction(GoodCoordinates(eq))
-        constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
-        eq.solve(
-            objective=obj,
-            constraints=constraints,
-            ftol=0,
-            xtol=0,
-            gtol=1e-8,
-            verbose=0,
-            optimizer="fmintr-bfgs",
-        )
+        try:
+            Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
+
+            eq.R_lmn = Rlmn
+            eq.Z_lmn = Zlmn
+            eq.axis = eq.get_axis()
+            # enforce the R_lmn Z_lmn to match the original surface, as
+            # right now there may be a mismatch, through applying
+            # the linear constraints
+            constraints = get_fixed_axis_constraints(
+                profiles=False, eq=eq
+            ) + get_fixed_boundary_constraints(eq=eq)
+            constraints = maybe_add_self_consistency(eq, constraints)
+            objective = ObjectiveFunction(constraints)
+            objective.build(verbose=0)
+            _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
+                objective, objective
+            )
+            args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
+            eq.params_dict = args
+        except (
+            Exception
+        ) as e:  # if Babin init fails, just try to refine the existing guess
+            print(
+                "Unable to use map2disc method to obtain nested initial guess, got "
+                "error: ",
+                e,
+            )
+            print(
+                "Falling back to performing optimization using GoodCoordinates"
+                " objective following work of Tecchiolli et al."
+            )
+            obj = ObjectiveFunction(GoodCoordinates(eq))
+            constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
+            eq.solve(
+                objective=obj,
+                constraints=constraints,
+                ftol=0,
+                xtol=0,
+                gtol=1e-8,
+                verbose=0,
+                optimizer="fmintr-bfgs",
+            )
         warnif(
             not eq.is_nested(),
             UserWarning,
@@ -378,415 +412,131 @@ def _initial_guess_points(nodes, x, x_basis):
     return x_lmn
 
 
-def _convert_bdry(eq):
-    # convert boundary in desc representation lmn to vmecs rbmnc/zbmns
-    eps = 1e-15  # to filter very low values after ptolemy's identity
-    M, N, _, RBC = ptolemy_identity_rev(
-        eq.surface.R_basis.modes[:, 1],
-        eq.surface.R_basis.modes[:, 2],
-        eq.surface.R_lmn,
-    )
-    _, _, ZBS, _ = ptolemy_identity_rev(
-        eq.surface.Z_basis.modes[:, 1],
-        eq.surface.Z_basis.modes[:, 2],
-        eq.surface.Z_lmn,
-    )
-    ZBS = ZBS[0]
-    RBC = RBC[0]
-    ZBS[np.abs(ZBS) < eps] = 0.0
-    RBC[np.abs(RBC) < eps] = 0.0
-    max_m = max(np.max(M[RBC != 0]), np.max(M[ZBS != 0]))
-    max_n = max(np.max(np.abs(N[ZBS != 0])), np.max(np.abs(N[RBC != 0])))
-
-    M_bdry = np.arange(max_m + 1)
-    N_bdry = np.arange(max_n * 2 + 1) - max_n
-
-    RBC_out = RBC[np.logical_and(M <= max_m, np.abs(N) <= max_n)]
-    ZBS_out = ZBS[np.logical_and(M <= max_m, np.abs(N) <= max_n)]
-    RBC_out = np.concatenate([np.zeros(max_n), RBC_out]).reshape(
-        max_m + 1, 2 * max_n + 1
-    )
-    ZBS_out = np.concatenate([np.zeros(max_n), ZBS_out]).reshape(
-        max_m + 1, 2 * max_n + 1
-    )
-
-    return M_bdry, N_bdry, RBC_out, ZBS_out
-
-
-def mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=None, xs2d=None):
-    """Evaluate a 2d fourier series.
-
-    x(theta,zeta) = sum_mn (xc_mn cos(m*theta-n*zeta)+ xs_mn sin(m*theta-n*zeta) )
-    on a meshgrid of theta1d X zeta1d
-    making use of the tensor product to speed up the evaluation
-
-    Input:
-    theta1d : 1d array of angle in 2pi in poloidal direction
-    zeta1d  : 1d array of angle in 2pi in toroidal direction
-    m1d     : 1d array of integer poloidal mode numbers, size must be equal to first
-      dimension of xc2d, xs2d
-    n1d     : 1d array of integer toroidal mode numbers, size must be equal to second
-      dimension of xc2d, xs2d
-    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),  dimension is of
-      len(m1d) X  len(n1d)
-    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),  dimension is of
-    len(m1d) X  len(n1d)
-
-    Output:
-    x2d     : 2d array of values of the 2d fourier series, dimension is of
-      len(theta1d) X len(zeta1d)
-
-    """
-    assert (xc2d is not None) or (xs2d is not None)
-    if xc2d is not None:
-        assert xc2d.shape == (len(m1d), len(n1d))
-    if xs2d is not None:
-        assert xs2d.shape == (len(m1d), len(n1d))
-
-    sin_mt = np.sin(np.outer(theta1d, m1d))
-    cos_mt = np.cos(np.outer(theta1d, m1d))
-    sin_nz = np.sin(np.outer(n1d, zeta1d))
-    cos_nz = np.cos(np.outer(n1d, zeta1d))
-
-    Lt = len(theta1d)
-    Lz = len(zeta1d)
-    Lm = len(m1d)
-    Ln = len(n1d)
-    #  xout= (  cos_mt @ xc2d @ cos_nz + sin_mt @ xc2d @ sin_nz
-    #         + sin_mt @ xs2d @ cos_nz - cos_mt @ xs2d @ sin_nz )
-    # performance, number of multiplications:
-    # - first bracket m*theta then apply n*zeta:
-    #  [1,2]*Lt*Lm*Ln + Lt*Ln*Lz = Lt*Ln*([1,2]*Lm+Lz)
-    # - first bracket n*zeta then apply m*theta:
-    #  [1,2]*Lm*Ln*Lz + Lt*Lm*Lz = Lz*Lm*([1,2]*Ln+Lt)
-    onetwo = (xc2d is not None) * 1 + (xs2d is not None) * 1
-    mfirst = Lt * Ln * (onetwo * Lm + Lz) < Lz * Lm * (onetwo * Ln + Lt)
-    if xc2d is not None:
-        if xs2d is None:  # only xc2d
-            if mfirst:
-                xout = (cos_mt @ xc2d) @ cos_nz + (sin_mt @ xc2d) @ sin_nz
-            else:
-                xout = cos_mt @ (xc2d @ cos_nz) + sin_mt @ (xc2d @ sin_nz)
-        else:  # xc2d and xs2d
-            if mfirst:
-                xout = (cos_mt @ xc2d + sin_mt @ xs2d) @ cos_nz + (
-                    sin_mt @ xc2d - cos_mt @ xs2d
-                ) @ sin_nz
-            else:
-                xout = cos_mt @ (xc2d @ cos_nz - xs2d @ sin_nz) + sin_mt @ (
-                    xc2d @ sin_nz + xs2d @ cos_nz
-                )
-    else:  # only xs2d
-        if mfirst:
-            xout = (sin_mt @ xs2d) @ cos_nz - (cos_mt @ xs2d) @ sin_nz
-        else:
-            xout = sin_mt @ (xs2d @ cos_nz) - cos_mt @ (xs2d @ sin_nz)
-
-    return xout
-
-
-def tz_to_mn(theta1d, zeta1d, m1d, n1d, x2d=None, sincos=None, testmass=True):
-    """Project a 2d data given on a meshgrid.
-
-       of theta1d X zeta1d to a 2d real fourier series:
-        xc_mn = 1/norm_mn * sum_tz (x(theta,zeta)* cos(m*theta-n*zeta)
-    or
-        xs_mn = 1/norm_mn *sum_tz (x(theta,zeta) sin(m*theta-n*zeta)
-    making use of the tensor product to speed up the evaluation
-
-    Input:
-    theta1d : 1d array of angle in 2pi in poloidal direction: careful,
-      this is now an integration, so it has to be equidistant without
-        the periodic endpoint, [0,2pi]
-    zeta1d  : 1d array of angle in 2pi in toroidal direction  careful,
-      this is now an integration, so it has to be equidistant [0,2pi[
-    m1d     : 1d array of integer poloidal mode numbers, size equals
-      first dimension of xc2d, xs2d
-    n1d     : 1d array of integer toroidal mode numbers, size equals
-      second dimension of xc2d, xs2d
-    x2d    : 2d array of values on the meshgrid (theta1d) X (zeta1d)
-    sincos : either sine,cosine or both to be projected!
-    testmass : check if mass matrix (int(cos_m1,cos_m2)  , int(cos_n1,cos_n2))
-    is diagonal with the chosen poloidal / toroidal points
-
-    Output:
-    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),
-        dimension is of len(m1d) X  len(n1d) (single output if sincos="cos"
-          or first output when sincos="sincos")
-    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),
-        dimension is of len(m1d) X  len(n1d) (single output if sincos="sin"
-          or second output if sincos="sincos")
-
-    """
-    assert sincos == "sin" or sincos == "cos" or sincos == "sincos"
-    assert x2d is not None
-    sin_mt = np.sin(np.outer(m1d, theta1d))
-    cos_mt = np.cos(np.outer(m1d, theta1d))
-    sin_nz = np.sin(np.outer(zeta1d, n1d))
-    cos_nz = np.cos(np.outer(zeta1d, n1d))
-
-    Lt = len(theta1d)
-    Lz = len(zeta1d)
-    Lm = len(m1d)
-    Ln = len(n1d)
-
-    bases = {}
-    bases["sin_mt"] = {"mat": sin_mt, "mode1d": m1d}
-    bases["cos_mt"] = {"mat": cos_mt, "mode1d": m1d}
-    bases["sin_nz"] = {"mat": sin_nz.T, "mode1d": n1d}
-    bases["cos_nz"] = {"mat": cos_nz.T, "mode1d": n1d}
-
-    # check mass matrix to be diagonal, extract the diagonal
-    for key, base in bases.items():
-        mass = base["mat"] @ base["mat"].T
-        # check mass matrix,  equal absolute mode numbers =>
-        #  non-zero entry in mass matrix (includes diagonal)
-        filter = (
-            np.abs(base["mode1d"][:, None]) - np.abs(base["mode1d"][None, :]) == 0
-        ) * 1
-        maxerr = np.amax(np.abs(mass - mass * filter))
-        assert (
-            maxerr < 1e-10
-        ), f" {key} mass matrix not diagonal, maxerr = {maxerr} > 1e-10"
-
-    # divide by norm of cosine / sine of each mode m,n (use cosine since)
-    # 1/norm, from sum_Lt sum_lz
-    sdiag = np.ones((Lm, Ln)) / (0.5 * Lt * Lz)
-    # set m=0,n=0 mode to half
-    sdiag[np.where(m1d == 0), np.where(n1d == 0)] *= 0.5
-    # set zero m=0,n<0 modes!
-    filter_m0_nneg = ((m1d[:, None] == 0) * (n1d[None, :] < 0)) * (-1) + 1
-    sdiag *= filter_m0_nneg
-
-    xtz_cos_nz = x2d @ cos_nz
-    xtz_sin_nz = x2d @ sin_nz
-    if sincos == "cos":
-        xc2d = (cos_mt @ xtz_cos_nz + sin_mt @ xtz_sin_nz) * sdiag
-        return xc2d
-    if sincos == "sin":
-        xs2d = (sin_mt @ xtz_cos_nz - cos_mt @ xtz_sin_nz) * sdiag
-        return xs2d
-    if sincos == "sincos":
-        xc2d = (cos_mt @ xtz_cos_nz + sin_mt @ xtz_sin_nz) * sdiag
-        xs2d = (sin_mt @ xtz_cos_nz - cos_mt @ xtz_sin_nz) * sdiag
-        return xc2d, xs2d
-
-
-def _boundary_cut(rbc, zbs, zeta):
-    M, N = rbc.shape[0] - 1, (rbc.shape[1] - 1) // 2
-    assert rbc.shape == zbs.shape == (M + 1, 2 * N + 1)  # m = 0..M, n = -N..N
+def _boundary_cut(surface, zeta):
+    """Given surface and zeta, return function curve(theta) which yields R(t),Z(t)."""
 
     def curve(theta):
         theta = np.asarray(theta)
-
-        Rslow, Zslow = np.zeros((2, theta.size))
-        for m in range(M + 1):
-            for n in range(-N, N + 1):
-                if m == 0 and n < 0:
-                    continue
-                Rslow += rbc[m, n + N] * np.cos(m * theta - n * zeta)
-                Zslow += zbs[m, n + N] * np.sin(m * theta - n * zeta)
-
-        return Rslow, Zslow
+        nodes = np.vstack([np.ones_like(theta), theta, zeta * np.ones_like(theta)]).T
+        grid = Grid(nodes=nodes, NFP=surface.NFP, jitable=True)
+        # Must use Grid, as cannot let LinearGrid re-sort the nodes
+        # in case map2disc needs to use a different curve orientation
+        # (which it does, as it needs left-handed coordinate system
+        # with theta increasing CCW)
+        data = surface.compute(["R", "Z"], grid=grid)
+        return np.array(data["R"]), np.array(data["Z"])
 
     return curve
 
 
-def real_dft_mat(x_in, x_out, nfp=1, modes=None, deriv=0):
-    """Flexible Direct Fourier Transform for real data.
+def _babin_init_Zernike_only(eq, nrho):
+    """Use Babin's map2disc package to get initially nested mapping.
 
-    takes an input array of equidistant points in [0,2pi/nfp[ (exclude endpoint!),
-    evaluate the discrete fourier transform with the given 1d mode vector (all >=0)
-    using the input points x_in, then evaluate the inverse transform
-    (or its derivative deriv>0) on the output points x_out anywhere...
+    Assumes equilibrium is right-handed (positive jacobian),
+    and returns R_lmn Z_lmn in the same right-handed convention.
 
-    len(x_in) must be > 2*max(modes)
-    output is the matrix that transforms real function to real function [derivative]:
-     f^deriv(x_out) = Mat f(x_in) (can then be used to do 2d transforms with matmul!)
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to initialize
+    nrho : int
+        Number of radial grid points to evaluate mapping at. These
+        will then be fit to form the output Fourier-Zernike coefficients
 
-    nfp is the number of field periods, default 1 (int), all modes are multiples of nfp
+    Returns
+    -------
+    R_lmn : ndarray
+        Nested R_lmn coefficients
+    Z_lmn : ndarray
+        Nested Z_lmn coefficients
 
     """
-    if modes is None:
-        modes = np.arange((len(x_in) - 1) // 2 + 1)  # all modes up to Nyquist
-    assert (
-        np.abs(x_in[-1] + (x_in[1] - x_in[0]) - x_in[0] - 2 * np.pi / nfp) < 1.0e-8
-    ), "x_in must be equidistant in [0,2pi/nfp["
-    assert np.all(modes >= 0), "modes must be positive"
-    zeromode = np.where(modes == 0)
-    assert len(zeromode) <= 1, "only one zero mode allowed"
-    maxmode = np.amax(modes)
-    assert (
-        len(x_in) > 2 * maxmode
-    ), f"number of sampling points ({len(x_in)}) > 2*maxmodenumber/nfp ({maxmode})"
-    # matrix for forward transform
-    modes_forward = np.exp(1j * nfp * (modes[:, None] * x_in[None, :]))
-    mass_re = modes_forward.real @ modes_forward.real.T
-    mass_im = modes_forward.imag @ modes_forward.imag.T
-    diag_re = np.copy(np.diag(mass_re))
-    diag_im = np.copy(np.diag(mass_im))
-
-    assert np.all(
-        np.abs(mass_re - np.diag(diag_re)) < 1.0e-8
-    ), "massre must be diagonal"
-    assert np.all(
-        np.abs(mass_im - np.diag(diag_im)) < 1.0e-8
-    ), "massim must be diagonal"
-    diag_im[zeromode] = 1  # imag (=sin) is zero at zero mode
-    assert np.all(diag_re > 0.0)
-    assert np.all(diag_im > 0.0)
-
-    # inverse mass matrix applied (for real and imag)
-    modes_forward_mod = (
-        np.diag(1 / diag_re) @ modes_forward.real
-        + np.diag(1j / diag_im) @ modes_forward.imag
-    )
-    if deriv == 0:
-        modes_back = np.exp(-1j * nfp * (modes[None, :] * x_out[:, None]))
-    else:
-        modes_back = (-1j * nfp * modes[None, :]) ** deriv * np.exp(
-            -1j * nfp * (modes[None, :] * x_out[:, None])
-        )
-    Mat = (modes_back @ modes_forward_mod).real
-    return Mat
-
-
-def _babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
-    # what about nfp?
-    rbc = np.array(rbc)
-    zbs = np.array(zbs)
-    # example for output of the  full solution (VMEC):
-    rho1d_out = np.linspace(0, 1, nrho)  # ** 2  # in rho^2
-    M_out = m_out
-    m1d_out = np.arange(0, M_out + 1)
-    theta1d_out = np.linspace(0, 2 * np.pi, 2 * M_out + 1, endpoint=False)
-    N_out = n_out
-    n1d_out = np.arange(-N_out, N_out + 1)
-    zeta1d_out = np.linspace(0, 2 * np.pi, 2 * N_out + 1, endpoint=False)
-
-    # filter out poloidal and toroidal modes:
-    # M_filter = M set on 11.24 because mass test of tz_to_mn fails otherwise
-    M_filter = M
-    m1d_filter = np.arange(0, M_filter + 1)
-    N_filter = N
-    n1d_filter = np.arange(-N_filter, N_filter + 1)
-    m1d = np.arange(0, M + 1)
-    n1d = np.arange(-N, N + 1)
+    surface = eq.surface
+    L = eq.L
+    M = eq.M
+    N = eq.N
+    rho1d_out = np.linspace(0, 1, nrho * 2)
+    N_out = N
+    zeta1d_out = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N_out + 1, endpoint=False)
 
     # solve BCM
-    cuts = 2 * N_filter + 1
-    MZernike = M_filter
-    zeta_cut = np.linspace(
-        0, 2 * np.pi, cuts, endpoint=False
-    )  # only half-period due to stellarator symmetry
+    MZernike = M
+    zeta_cut = zeta1d_out
     theta1d = np.linspace(0, 2 * np.pi, 2 * M + 1, endpoint=False)
     theta1d += 0.5 * (theta1d[1] - theta1d[0])
-    zeta1d = np.linspace(0, 2 * np.pi, 2 * N + 1, endpoint=False)
+    zeta1d = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N + 1, endpoint=False)
     zeta1d += 0.5 * (zeta1d[1] - zeta1d[0])
-    # to real
-    Rout = mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=rbc)
-    Zout = mn_to_tz(theta1d, zeta1d, m1d, n1d, xs2d=zbs)
-    rbc_filter = tz_to_mn(
-        theta1d, zeta1d, m1d_filter, n1d_filter, x2d=Rout, sincos="cos"
-    )
-    zbs_filter = tz_to_mn(
-        theta1d, zeta1d, m1d_filter, n1d_filter, x2d=Zout, sincos="sin"
-    )
 
     all_bcm = {}
     for z, zeta in enumerate(zeta_cut):
-        curve = _boundary_cut(rbc_filter, zbs_filter, zeta)
+        curve = _boundary_cut(surface, zeta)
         bcm = BCM(curve, MZernike)
         bcm.solve("interpolate")
         all_bcm[z] = bcm
 
-    all_cx = np.zeros((all_bcm[0].cx.shape[0], cuts))
-    all_cy = np.zeros((all_bcm[0].cy.shape[0], cuts))
+    grid = LinearGrid(zeta=zeta_cut, NFP=eq.NFP)
+    all_cx = np.zeros((all_bcm[0].cx.shape[0], zeta_cut.size))
+    all_cy = np.zeros((all_bcm[0].cy.shape[0], zeta_cut.size))
     for z, zeta in enumerate(zeta_cut):
         all_cx[:, z] = all_bcm[z].cx
         all_cy[:, z] = all_bcm[z].cy
 
-    f_up = real_dft_mat(zeta_cut, zeta1d_out)
-
-    # using all_cx from above
-    new_cx = all_cx @ f_up.T
-    new_cy = all_cy @ f_up.T
-
-    # use bcm for evaluation of zernike polynomial (coefficients cx, cy)
-    Rout = np.zeros((nrho, 2 * M_out + 1, 2 * N_out + 1))
-    Zout = np.zeros((nrho, 2 * M_out + 1, 2 * N_out + 1))
-    curve = _boundary_cut(
-        rbc_filter, zbs_filter, 0.0
-    )  # not used in evaluation of cx,cy
-    bcm = BCM(curve, MZernike)
-    scaledjac = 0 * zeta1d_out - 1
-    for z, zeta in enumerate(zeta1d_out):
-        bcm.cx = new_cx[:, z]
-        bcm.cy = new_cy[:, z]
-        Rout[:, :, z], Zout[:, :, z] = bcm.eval_rt_1d(rho1d_out, theta1d_out)
-        # check jacobian
-        jac = bcm.eval_Jac_rt_1d(rho1d_out, theta1d_out)
-        scaledjac[z] = np.amin(jac) / np.amax(jac)
-
-    assert np.all(scaledjac > 1e-4), (
-        "Problem with invertibility, scaled 2d jacobian in cross-sections is"
-        f"<1.0e-4... min(scaledjac(zeta))={np.amin(scaledjac)},"
-        f"max(scaledjac(zeta))={np.amax(scaledjac)}"
+    # simplest way to obtain the 3D Fourier-Zernike coeffs: just evaluate in real space
+    # and re-fit, that way no need to worry about mode orderings
+    grid = LinearGrid(rho=rho1d_out, M=M, zeta=zeta_cut, NFP=eq.NFP)
+    Rbasis = FourierZernikeBasis(
+        L=L,
+        M=surface.M,
+        N=surface.N,
+        NFP=surface.NFP,
+        sym={True: "cos", False: False}[surface.sym],
+        spectral_indexing=eq.spectral_indexing,
     )
+    Rtransform_3d = Transform(grid=grid, basis=Rbasis, build_pinv=True)
+    Zbasis = FourierZernikeBasis(
+        L=L,
+        M=surface.M,
+        N=surface.N,
+        NFP=surface.NFP,
+        sym={True: "sin", False: False}[surface.sym],
+        spectral_indexing=eq.spectral_indexing,
+    )
+    Ztransform_3d = Transform(grid=grid, basis=Zbasis, build_pinv=True)
 
-    rbc_out = np.zeros((nrho, M_out + 1, 2 * N_out + 1))
-    zbs_out = np.zeros((nrho, M_out + 1, 2 * N_out + 1))
-    for i in range(nrho):
-        rbc_out[i, :, :] = tz_to_mn(
-            theta1d_out, zeta1d_out, m1d_out, n1d_out, x2d=Rout[i, :, :], sincos="cos"
+    Rout = np.zeros(grid.nodes.shape[0])
+    Zout = np.zeros(grid.nodes.shape[0])
+    Rout = grid.meshgrid_reshape(Rout, "rtz")
+    Zout = grid.meshgrid_reshape(Zout, "rtz")
+    rhos_grid = grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+    thetas_grid = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")
+
+    curve = _boundary_cut(surface, 0.0)  # not used in evaluation of cx,cy
+    bcm = BCM(curve, MZernike)
+    for z, zeta in enumerate(zeta1d_out):
+        bcm.cx = all_cx[:, z]
+        bcm.cy = all_cy[:, z]
+        Rout[:, :, z], Zout[:, :, z] = bcm.eval_rt(
+            rhos_grid[:, :, z].squeeze(), thetas_grid[:, :, z].squeeze()
         )
-        zbs_out[i, :, :] = tz_to_mn(
-            theta1d_out, zeta1d_out, m1d_out, n1d_out, x2d=Zout[i, :, :], sincos="sin"
-        )
+    R_lmn = Rtransform_3d.fit(grid.meshgrid_flatten(Rout, "rtz"))
+    Z_lmn = Ztransform_3d.fit(grid.meshgrid_flatten(Zout, "rtz"))
 
-    xm_out = m1d_out[:, None] * 1 + n1d_out[None, :] * 0
-    xn_out = m1d_out[:, None] * 0 + n1d_out[None, :] * 1
+    # TODO: smarter way would be to take the existing Zernike coeffs as fxn of phi and
+    # fit those coefficients to immediately get the 3D FourierZernike coefficients.
+    # Need to know what the mode orderings are though for cx and cy to use this
+    # approach, which I've not dug into yet as the other method works fine.
 
-    # vmec output, filter out m=0 n<0 and flatten modes
-    filtm, filtn = np.where(~((m1d_out[:, None] == 0) * (n1d_out[None, :] < 0)))
+    # map2disc outputs in left-handed coordinates, so we need to flip
+    # the sign of theta to get back to right-handed coords
+    rone = np.ones_like(R_lmn)
+    rone[eq.R_basis.modes[:, 1] < 0] *= -1
+    R_lmn *= rone
+
+    zone = np.ones_like(Z_lmn)
+    zone[eq.Z_basis.modes[:, 1] < 0] *= -1
+    Z_lmn *= zone
 
     return (
-        xm_out[filtm, filtn],
-        xn_out[filtm, filtn],
-        rbc_out[:, filtm, filtn],
-        zbs_out[:, filtm, filtn],
-        rho1d_out,
+        R_lmn,
+        Z_lmn,
     )
-
-
-def ___babin_initial_guess(eq):
-    print("Using babin init")
-    M_bdry, N_bdry, rbc_bdry, zbs_bdry = _convert_bdry(eq)
-    xm_init, xn_init, rmnc, zmns, rhos = _babin_init(
-        rbc_bdry, zbs_bdry, np.max(M_bdry), np.max(N_bdry), eq.L, eq.M, eq.N
-    )
-
-    inds_axis = np.where(xm_init == 0)
-    ramnc = rmnc[0, inds_axis].squeeze()
-    zamns = zmns[0, inds_axis].squeeze()
-
-    # TODO: make mode initialization better, like probably we want
-    # _babin_init to return the modes used
-    # and allow it to be asym as well
-    eq.axis = FourierRZCurve(
-        R_n=ramnc,
-        Z_n=zamns,
-        modes_R=xn_init[inds_axis],
-        modes_Z=-xn_init[inds_axis],
-        sym=True,
-        NFP=eq.NFP,
-    )
-
-    from desc.vmec_utils import fourier_to_zernike, ptolemy_identity_fwd
-
-    m, n, R_mn = ptolemy_identity_fwd(xm_init, xn_init, s=np.zeros_like(rmnc), c=rmnc)
-    eq.R_lmn = fourier_to_zernike(m, n, R_mn, eq.R_basis)
-    m, n, Z_mn = ptolemy_identity_fwd(xm_init, xn_init, s=zmns, c=np.zeros_like(zmns))
-    eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
-
-    return eq

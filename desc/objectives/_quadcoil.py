@@ -54,6 +54,19 @@ _DIFF_USER_ARGNAMES = [
     "constraint_value"
 ]
 
+_normalize_target_detail = (
+    "Normalization options for a typical DESC Objective. Disabled by default. "
+    "When enabled, overrides the ``<quantity>_unit`` in "
+    "``quadcoil_kwargs`` with scaling constants calculated from the parameteres "
+    "of the DESC equilibrium. Note that QUADCOIL usually works the best "
+    "when ``<quantity>_unit`` are the same quantities measured from another "
+    "winding surface solution (either the solution of the same problem with "
+    "``<quantity>_unit=1``, or the solution of a REGCOIL problem). This is "
+    "because coil metrics at a QUADCOIL optimum can differ by orders of "
+    "magnitudes from the DESC auto-calculated values. Setting "
+    "this to ``True`` may impact QUADCOIL's accuracy."
+)
+
 
 class QuadcoilProxy(_Objective):
     """
@@ -92,10 +105,6 @@ class QuadcoilProxy(_Objective):
         warnings.
     plasma_N_phi : int, optional, default=eq.N_grid
         The plasma toroidal quadrature resolution.
-    target : scalar or ndarray, optional, default=0
-    bounds : scalar or ndarray, optional, default=None
-    weight : scalar or ndarray, optional, default=1
-        The original targets, bounds and weight available in every DESC Objective class.
     metric_name : str or tuple of str, default=None
         The coil property(ies) to measure as the value of the proxy.
         Uses the normalized objective by default.
@@ -112,22 +121,8 @@ class QuadcoilProxy(_Objective):
         in the subproblem by default.
     vacuum : bool, optional, default=False
         Whether to enable Bnormal contributions from plasma current.
-    normalize : bool, optional, default=False
-    normalize_target : bool, optional, default=False
-        Normalization options for a typical DESC Objective. Disabled by default.
-        When enabled, overrides the ``<quantity>_unit`` in
-        ``quadcoil_kwargs`` with scaling constants calculated from the parameteres
-        of the DESC equilibrium. Note that QUADCOIL usually works the best
-        when ``<quantity>_unit`` are the same quantities measured from another
-        winding surface solution (either the solution of the same problem with
-        ``<quantity>_unit=1``, or the solution of a REGCOIL problem). This is
-        because coil metrics at a QUADCOIL optimum can differ by orders of
-        magnitudes from the DESC auto-calculated values. Setting
-        this to ``True`` may impact QUADCOIL's accuracy.
     verbose : int, optional, default=0
         Whether to enable verbose output.
-    name : str, optional, default="QUADCOIL Proxy"
-        Name of the objective.
     source_grid : Grid, optional, default=None
         Grid for evaluating vacuum casing and the required net poloidal coil
         current. By default, a ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
@@ -146,10 +141,12 @@ class QuadcoilProxy(_Objective):
         Whether to fix ``field``, or make it optimizable degrees of freedom. ``True``
         by default for quasi-single-stage dipole/PM optimization with known
         filament coils.
-    Bnormal_plasma_chunk_size : int, optional, default=None
-    jac_chunk_size : int, optional, default=None
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
     bs_chunk_size : int, optional, default=None
-        Chunk sizes.
+        Size to split Biot-Savart computation into chunks of evaluation points.
 
     Attributes
     ----------
@@ -172,7 +169,10 @@ class QuadcoilProxy(_Objective):
     # to this objective.
     # See the documentation of `collect_docs` for more details.
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.", bounds_default="``target=0``."
+        target_default="``target=0``.",
+        bounds_default="``bound=None``.",
+        weight_default="``weight=1``.",
+        normalize_target_detail=_normalize_target_detail,
     )
 
     _coordinates = ""  # What coordinates is this objective a function of, with
@@ -207,7 +207,7 @@ class QuadcoilProxy(_Objective):
         eq_fixed=False,  # Whether the equilibrium are fixed
         field_fixed=False,  # Whether the external fields are fixed
         # misc
-        Bnormal_plasma_chunk_size=None,
+        B_plasma_chunk_size=None,
         jac_chunk_size=None,
         bs_chunk_size=None,
     ):
@@ -350,7 +350,7 @@ class QuadcoilProxy(_Objective):
         self.metric_target = metric_target
         self.metric_weight = metric_weight
         self._verbose = verbose
-        self._bplasma_chunk_size = Bnormal_plasma_chunk_size
+        self._bplasma_chunk_size = B_plasma_chunk_size
         self._bs_chunk_size = bs_chunk_size
         self._vacuum = vacuum
         if not plasma_M_theta:

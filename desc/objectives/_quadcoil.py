@@ -92,9 +92,9 @@ class QuadcoilProxy(_Objective):
         warnings.
     plasma_N_phi : int, optional, default=eq.N_grid
         The plasma toroidal quadrature resolution.
-    target : scalar or ndarray, optional, default=None
+    target : scalar or ndarray, optional, default=0
     bounds : scalar or ndarray, optional, default=None
-    weight : scalar or ndarray, optional, default=None
+    weight : scalar or ndarray, optional, default=1
         The original targets, bounds and weight available in every DESC Objective class.
     metric_name : str or tuple of str, default=None
         The coil property(ies) to measure as the value of the proxy.
@@ -120,7 +120,9 @@ class QuadcoilProxy(_Objective):
         of the DESC equilibrium. Note that QUADCOIL usually works the best
         when ``<quantity>_unit`` are the same quantities measured from another
         winding surface solution (either the solution of the same problem with
-        ``<quantity>_unit=1``, or the solution of a REGCOIL problem). Setting
+        ``<quantity>_unit=1``, or the solution of a REGCOIL problem). This is
+        because coil metrics at a QUADCOIL optimum can differ by orders of
+        magnitudes from the DESC auto-calculated values. Setting
         this to ``True`` may impact QUADCOIL's accuracy.
     verbose : int, optional, default=0
         Whether to enable verbose output.
@@ -140,8 +142,8 @@ class QuadcoilProxy(_Objective):
     eq_fixed : bool, optional, default=False
         Whether to fix ``eq``, or make it optimizable degrees of freedom. ``False``
         by default for quasi-single-stage optimization.
-    field_fixed : bool, optional, default=True
-        Whether to fix ``eq``, or make it optimizable degrees of freedom. ``True``
+    field_fixed : bool, optional, default=False
+        Whether to fix ``field``, or make it optimizable degrees of freedom. ``True``
         by default for quasi-single-stage dipole/PM optimization with known
         filament coils.
     Bnormal_plasma_chunk_size : int, optional, default=None
@@ -199,11 +201,11 @@ class QuadcoilProxy(_Objective):
         name="QUADCOIL Proxy",
         source_grid=None,
         # External coils - no external coils by default
-        field=[],
+        field=None,
         field_grid=None,
         enable_net_current_plasma=True,
         eq_fixed=False,  # Whether the equilibrium are fixed
-        field_fixed=True,  # Whether the external fields are fixed
+        field_fixed=False,  # Whether the external fields are fixed
         # misc
         Bnormal_plasma_chunk_size=None,
         jac_chunk_size=None,
@@ -215,28 +217,24 @@ class QuadcoilProxy(_Objective):
         except ModuleNotFoundError:
             raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
 
+        self._enable_net_current_plasma = enable_net_current_plasma
+        self._eq_fixed = eq_fixed
         self._eq = eq
         if field:  # To be also tolerant on `False` and `None` as an input
             self._field = [field] if not isinstance(field, list) else field
+            self._field_fixed = field_fixed
         else:
             self._field = []
-        # Coil and things initialization
-        self._enable_net_current_plasma = enable_net_current_plasma
-        self._eq_fixed = eq_fixed
-        self._field_fixed = field_fixed
+            self._field_fixed = True
+        # Things initialization
         things = []
-        if not (eq_fixed or field_fixed):
+        if not (self._eq_fixed or self._field_fixed):
             warnings.warn(
                 "Both eq_fixed and field_fixed are True. things will be empty."
             )
-        if not eq_fixed:
+        if not self._eq_fixed:
             things += [eq]
-        if not field_fixed:
-            if not field:
-                raise AttributeError(
-                    "When field_fixed is False, field must "
-                    "be an object or a non-empty list."
-                )
+        if not self._field_fixed:
             things += [field]
 
         if not (enable_net_current_plasma or field):
@@ -257,8 +255,7 @@ class QuadcoilProxy(_Objective):
             target = 0  # default target value
         # Uses LSE to smooth non-smooth problems rather than slack variables
         # by default.
-        if "smoothing" not in quadcoil_kwargs.keys():
-            quadcoil_kwargs["smoothing"] = "approx"
+        quadcoil_kwargs.setdefault("smoothing", "approx")
 
         # ----- Checking inputs -----
         # Checking whether all metrics have a weight and a target provided.
@@ -330,12 +327,12 @@ class QuadcoilProxy(_Objective):
         else:
             self.net_toroidal_current_amperes = 0.0
         if "plasma_coil_distance" in quadcoil_kwargs.keys():
-            # A sign flip is necessary here!
+            # A sign flip is necessary here since simsopt and DESC surfaces
+            # have different handedness. QUADCOIL uses the simsopt convention.
             self.plasma_coil_distance = -quadcoil_kwargs.pop("plasma_coil_distance")
         else:
             self.plasma_coil_distance = None
         if "winding_dofs" in quadcoil_kwargs.keys():
-            # A sign flip is necessary here!
             self.winding_dofs = quadcoil_kwargs.pop("winding_dofs")
         else:
             self.winding_dofs = None

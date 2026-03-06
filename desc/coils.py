@@ -949,6 +949,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             name=name,
         )
 
+    @classmethod
     def from_simsopt(coil_simsopt, name=""):
         """Load a simsopt coil as a FourierXYZCoil.
 

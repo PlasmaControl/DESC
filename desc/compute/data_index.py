@@ -281,12 +281,6 @@ _class_inheritance = {
         "desc.geometry.core.Surface",
         "desc.magnetic_fields._core.MagneticField",
     ],
-    "desc.magnetic_fields._quadcoil_field.QuadcoilField": [
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
-        "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.core.Surface",
-        "desc.magnetic_fields._core.MagneticField",
-    ],
     "desc.coils.SplineXYZCoil": [
         "desc.geometry.curve.SplineXYZCurve",
         "desc.geometry.core.Curve",

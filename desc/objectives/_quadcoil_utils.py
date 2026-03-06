@@ -1,5 +1,4 @@
 import inspect
-import warnings
 from functools import partial
 
 import numpy as np
@@ -351,10 +350,7 @@ def _quadcoil_kwargs_to_field_kwargs(  # noqa: C901
     # FourierCurrentPotentialField
     filtered = {}
     source_kwargs = quadcoil_kwargs.copy()
-    if "winding_stellsym" in source_kwargs.keys():
-        winding_stellsym = source_kwargs["winding_stellsym"]
-    else:
-        winding_stellsym = sym_default
+    winding_stellsym = source_kwargs.get("winding_stellsym", sym_default)
 
     # Importing QUADCOIL
     try:
@@ -376,24 +372,13 @@ def _quadcoil_kwargs_to_field_kwargs(  # noqa: C901
         )
         filtered["winding_surface"] = quadcoil_winding_surface.to_desc()
 
-    if "stellsym" in source_kwargs.keys():
-        stellsym = source_kwargs.pop("stellsym")
-    else:
-        stellsym = sym_default and winding_stellsym
+    stellsym = source_kwargs.get("stellsym", sym_default and winding_stellsym)
     if stellsym:
         filtered["sym_Phi"] = "sin"
     else:
         filtered["sym_Phi"] = False
-    if "smoothing" not in source_kwargs.keys():
-        filtered["smoothing"] = "approx"
-        filtered["smoothing_params"] = {"lse_epsilon": 1e-3}
-    elif source_kwargs["smoothing"] == "slack":
-        warnings.warn(
-            "It is not advised to perform single-stage "
-            "optimization using the 'slack' smoothing mode, because "
-            "DESC may hang when the constraint has large dimensions (~500), "
-            "which is common under the 'slack' smoothing mode."
-        )
+    filtered["smoothing"] = "approx"
+    filtered["smoothing_params"] = {"lse_epsilon": 1e-3}
     # Initialize using a Quadcoil initial guess
     if quadcoil_dofs is not None:
         try:

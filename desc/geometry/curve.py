@@ -631,6 +631,7 @@ class FourierXYZCurve(Curve):
             X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
         )
 
+    @classmethod
     def from_simsopt(curve_simsopt, name=""):
         """Load a simsopt CurveXYZFourier as a FourierXYZCurve.
 

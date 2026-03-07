@@ -267,7 +267,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             )
             print(
                 "Falling back to performing optimization using GoodCoordinates"
-                " objective following work of Tecchiolli et al."
+                " objective (following work of Tecchiolli et al.)"
             )
             obj = ObjectiveFunction(GoodCoordinates(eq))
             constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
@@ -457,15 +457,10 @@ def _babin_init_Zernike_only(eq, nrho):
     N = eq.N
     rho1d_out = np.linspace(0, 1, nrho * 2)
     N_out = N
-    zeta1d_out = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N_out + 1, endpoint=False)
+    zeta_cut = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N_out + 1, endpoint=False)
 
     # solve BCM
     MZernike = M
-    zeta_cut = zeta1d_out
-    theta1d = np.linspace(0, 2 * np.pi, 2 * M + 1, endpoint=False)
-    theta1d += 0.5 * (theta1d[1] - theta1d[0])
-    zeta1d = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N + 1, endpoint=False)
-    zeta1d += 0.5 * (zeta1d[1] - zeta1d[0])
 
     all_bcm = {}
     for z, zeta in enumerate(zeta_cut):
@@ -512,7 +507,7 @@ def _babin_init_Zernike_only(eq, nrho):
 
     curve = _boundary_cut(surface, 0.0)  # not used in evaluation of cx,cy
     bcm = BCM(curve, MZernike)
-    for z, zeta in enumerate(zeta1d_out):
+    for z, zeta in enumerate(zeta_cut):
         bcm.cx = all_cx[:, z]
         bcm.cy = all_cy[:, z]
         Rout[:, :, z], Zout[:, :, z] = bcm.eval_rt(

@@ -6,6 +6,7 @@ v0.17.0
 
 New Features
 ------------
+- Inverse method free surface optimization.
 - Automatically-differentiable, non-singular Laplace BIE solver.
 - Improved performance and accuracy of FFT interpolation in singular integrals
   ([1](https://github.com/f0uriest/interpax/pull/116), [2](https://github.com/f0uriest/interpax/pull/117)).

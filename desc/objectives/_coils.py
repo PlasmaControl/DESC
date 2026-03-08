@@ -1992,6 +1992,8 @@ class ToroidalFlux(_Objective):
     a vacuum equilibrium, to avoid the trivial solution of minimizing Bn
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
+    It is also useful for finite beta to ensure the proper toroidal flux
+    is created even when there is nonzero residual normal field error.
 
     Will try to use the vector potential method to calculate the toroidal flux
     (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)

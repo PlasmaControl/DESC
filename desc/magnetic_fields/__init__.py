@@ -12,6 +12,8 @@ from ._core import (
     VectorPotentialField,
     VerticalMagneticField,
     _MagneticField,
+    biot_savart_general,
+    biot_savart_general_vector_potential,
     field_line_integrate,
     read_BNORM_file,
 )
@@ -21,3 +23,4 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
+from ._plasma_field import PlasmaField

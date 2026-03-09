@@ -9,7 +9,7 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.integrals._interp_utils import bijection_from_disc, cheb_pts, fourier_pts
 from desc.utils import parse_argname_change, setdefault
 
@@ -439,95 +439,6 @@ def _vander_dct_cfl(x, Y):
 
 
 
-def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
-    """Build a DESC grid with per-rho alpha values derived from uniform eta.
-
-    Creates a meshgrid-like grid where each rho surface has its own alpha
-    values (computed from uniformly spaced eta), maps it to DESC (rho, theta,
-    zeta) coordinates, and returns the resulting grid with the original
-    (rho, alpha, zeta) grid stored as ``source_grid``.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-    rhos : jnp.ndarray, shape (num_rho,)
-    alpha_per_rho : jnp.ndarray, shape (num_rho, num_eta)
-        Alpha values for each rho surface, derived from uniform eta.
-    zeta : jnp.ndarray, shape (num_zeta,)
-    iotas : jnp.ndarray, shape (num_rho,)
-    params : dict
-        Equilibrium parameters.
-
-    Returns
-    -------
-    grid : Grid
-        DESC grid in (rho, theta, zeta) with ``source_grid`` in (rho, alpha, zeta).
-    """
-    from desc.equilibrium.coords import map_coordinates
-
-    num_rho = len(rhos)
-    num_eta = alpha_per_rho.shape[1]
-    num_zeta = len(zeta)
-
-    # Build raz nodes in meshgrid order: alpha fastest, rho middle, zeta slowest
-    # (matching the Fortran-order layout used by Grid.create_meshgrid)
-    _, rr, zz = jnp.meshgrid(jnp.arange(num_eta), rhos, zeta, indexing="ij")
-    alpha_arr = jnp.broadcast_to(
-        alpha_per_rho.T[:, :, jnp.newaxis], (num_eta, num_rho, num_zeta)
-    )
-    raz_nodes = jnp.column_stack([
-        rr.flatten(order="F"),
-        alpha_arr.flatten(order="F"),
-        zz.flatten(order="F"),
-    ])
-
-    unique_rho_idx = jnp.arange(num_rho) * num_eta
-    unique_poloidal_idx = jnp.arange(num_eta)
-    unique_zeta_idx = jnp.arange(num_zeta) * num_rho * num_eta
-    inverse_rho_idx = jnp.tile(
-        jnp.repeat(jnp.arange(num_rho), num_eta), num_zeta
-    )
-    inverse_poloidal_idx = jnp.tile(jnp.arange(num_eta), num_rho * num_zeta)
-    inverse_zeta_idx = jnp.repeat(jnp.arange(num_zeta), num_rho * num_eta)
-
-    raz_grid = Grid(
-        nodes=raz_nodes,
-        coordinates="raz",
-        period=(jnp.inf, jnp.inf, jnp.inf),
-        sort=False,
-        is_meshgrid=True,
-        jitable=True,
-        _unique_rho_idx=unique_rho_idx,
-        _unique_poloidal_idx=unique_poloidal_idx,
-        _unique_zeta_idx=unique_zeta_idx,
-        _inverse_rho_idx=inverse_rho_idx,
-        _inverse_poloidal_idx=inverse_poloidal_idx,
-        _inverse_zeta_idx=inverse_zeta_idx,
-    )
-
-    iota_expanded = raz_grid.expand(jnp.atleast_1d(jnp.asarray(iotas)))
-    rtz_nodes = map_coordinates(
-        eq,
-        raz_grid.nodes,
-        inbasis=["rho", "alpha", "zeta"],
-        outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, jnp.inf, jnp.inf),
-        iota=iota_expanded,
-        params=params,
-    )
-
-    desc_grid = Grid(
-        nodes=rtz_nodes,
-        coordinates="rtz",
-        source_grid=raz_grid,
-        sort=False,
-        jitable=True,
-        _unique_rho_idx=unique_rho_idx,
-        _inverse_rho_idx=inverse_rho_idx,
-    )
-    return desc_grid
-
-
 # New resonance objective from John Anthony Labbate
 class TrappedResonance(_Objective):
     """Trapped energetic particle resonance penalty.
@@ -540,14 +451,11 @@ class TrappedResonance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    grid : Grid, optional
-        Meshgrid (e.g. ``LinearGrid``) whose rho nodes define the flux
-        surfaces to evaluate on.  If provided, rho is extracted via
-        ``grid.compress(grid.nodes[:, 0])``, matching the pattern used by
-        ``EffectiveRipple``.  Takes precedence over the ``rho`` parameter.
-    rho : ndarray, optional
-        Unique flux surface labels.  Ignored when ``grid`` is given.
-        Default is ``np.linspace(0.1, 0.9, 3)``.
+    num_rho : int, optional
+        Number of flux surfaces.  Constructed as
+        ``np.linspace(0, 1, num_rho + 1)[1:]``, giving ``num_rho``
+        uniformly spaced surfaces from ``1/num_rho`` to ``1`` with
+        spacing ``1/num_rho``.  Default is 10.
     num_eta : int, optional
         Number of uniformly spaced eta points in [0, 2*pi).
         Alpha values are derived per rho surface via
@@ -574,7 +482,6 @@ class TrappedResonance(_Objective):
     def __init__(
         self,
         eq,
-        grid=None,
         target=None,
         bounds=None,
         weight=1,
@@ -582,7 +489,7 @@ class TrappedResonance(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=None,
+        num_rho=10,
         num_eta=10,
         KE_frac=np.array([1]),
         *,
@@ -610,12 +517,18 @@ class TrappedResonance(_Objective):
         f_q_conservative=False,
         weight_method="linear",
         Delta_Omega=None,
+        fill_value=11,
+        wd_blur=1.25,
+        stab_sacrifice=False,
     ):
         if target is None and bounds is None:
             target = 1e-8
-        self._grid = grid
-        self._rho = np.atleast_1d(rho) if rho is not None else None
+        self._num_rho = int(num_rho)
         self._num_eta = int(num_eta)
+        if self._num_eta < 2:
+            raise ValueError(f"num_eta must be >= 2, got {self._num_eta}.")
+        if self._num_rho < 2:
+            raise ValueError(f"num_rho must be >= 2, got {self._num_rho}.")
         self._constants = {
             "quad_weights": 1,
             "zeta": np.linspace(
@@ -626,6 +539,7 @@ class TrappedResonance(_Objective):
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
+            "num_eta": self._num_eta,
             "batch": batch,
             "num_well": num_well,
             "KE_frac": KE_frac,
@@ -645,6 +559,9 @@ class TrappedResonance(_Objective):
             "f_q_conservative": f_q_conservative,
             "weight_method": weight_method,
             "Delta_Omega": Delta_Omega,
+            "fill_value": fill_value,
+            "wd_blur": wd_blur,
+            "stab_sacrifice": stab_sacrifice,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "f_tr2"
@@ -673,22 +590,7 @@ class TrappedResonance(_Objective):
         """
         eq = self.things[0]
 
-        # Resolve rho: grid takes precedence, then explicit array, then default.
-        if self._grid is not None:
-            assert self._grid.is_meshgrid, (
-                "Provided grid must be a meshgrid (e.g. LinearGrid)."
-            )
-            rho = self._grid.compress(self._grid.nodes[:, 0])
-            if self._rho is not None:
-                warnings.warn(
-                    "Both `grid` and `rho` were provided. "
-                    "Using rho values from `grid`."
-                )
-        elif self._rho is not None:
-            rho = self._rho
-        else:
-            rho = np.linspace(0.1, 0.9, 3)
-
+        rho = np.linspace(0, 1, self._num_rho + 1)[1:]
         self._constants["rho"] = rho
         self._dim_f = rho.size
 
@@ -699,8 +601,11 @@ class TrappedResonance(_Objective):
             leggauss(self._hyperparameters.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
+        rho_res = 1.0 / self._num_rho
+        eta_res = 2 * np.pi / self._num_eta
         self._params2 = {
-            "rho_res": (rho[-1] - rho[0]) / (len(rho) - 1),
+            "rho_res": rho_res,
+            "eta_res": eta_res,
         }
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, rho
@@ -788,23 +693,6 @@ class TrappedResonance(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        iotas = self._grid_1dr.compress(data["iota"])
-        rhos = constants["rho"]
-        zeta = constants["zeta"]
-        num_eta = self._num_eta
-        nfp = eq.NFP
-        N_mode = self._hyperparameters["N"]
-        M_mode = self._hyperparameters["M"]
-
-        eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
-        ft_denom = N_mode * nfp - iotas * M_mode
-        alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
-
-        grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
-        data = {
-            key: grid.copy_data_from_other(data[key], self._grid_1dr)
-            for key in self._keys_1dr
-        }
         quad2 = {}
         if "quad2" in constants:
             quad2["quad2"] = constants["quad2"]
@@ -813,16 +701,17 @@ class TrappedResonance(_Objective):
             eq,
             self._key,
             params,
-            get_transforms(self._key, eq, grid, jitable=True),
+            get_transforms(self._key, eq, self._grid_1dr, jitable=True),
             constants["profiles"],
             data=data,
             quad=constants["quad"],
             nfp=eq.NFP,
-            eta_vals=eta_vals,
+            eq=eq,
+            zeta=constants["zeta"],
             **quad2,
             **self._hyperparameters,
             **self._params2,
         )
         if self._hyperparameters.get("DEBUG", False):
             return data[self._key]
-        return grid.compress(data[self._key])
+        return self._grid_1dr.compress(data[self._key])

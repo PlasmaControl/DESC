@@ -1,6 +1,10 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes incorrect units in the documentation of some curvature varaibles.
+
 v0.17.0
 -------
 

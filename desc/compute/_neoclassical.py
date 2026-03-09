@@ -270,7 +270,7 @@ def _compute2D(
     return out
 
 
-def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False, pitch_method=1, pitch_invs=None):
+def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=True, pitch_invs=None):
     """Compute Bounce1D integral quantity with ``fun``.
 
     Parameters
@@ -290,36 +290,26 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         Default is ``1``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
+    pitch_invs : jnp.ndarray
+        If specified, use the given pitch_invs values rather than using num_pitch. 
 
     """
     for name in Bounce1D.required_names:
         fun_data[name] = data[name]
     for name in fun_data:
         fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
-    if pitch_method==0:
+    if pitch_invs is None:
         fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce1D.get_pitch_inv_quad(
             grid.compress(data["min_tz |B|"]),
             grid.compress(data["max_tz |B|"]),
             num_pitch,
             simp=simp
         )
-    if pitch_method==1:
-        Bmin = grid.compress(data["min_tz |B|"]) # := (rho)
-        Bmax = grid.compress(data["max_tz |B|"])# := (rho)
-        fun_data["pitch_inv"] = jnp.transpose( jnp.linspace(Bmin,Bmax,num_pitch), (1,0) ) # := (rho,Bcrit)
-        fun_data["Bcrit_res"] = fun_data["pitch_inv"][:,1]-fun_data["pitch_inv"][:,0] # := (rho)
-        fun_data["pitch_inv weight"] = jnp.broadcast_to(
-            fun_data["Bcrit_res"][:, jnp.newaxis], fun_data["pitch_inv"].shape
-        )
-    elif pitch_method==2:
+    else: # in DEBUG mode, use the given pitch_inv values. Weights not needed. 
         fun_data["pitch_inv"] = jnp.broadcast_to(pitch_invs, (grid.num_rho,len(pitch_invs) )) # needs to be shape (rho,Bcrit)
-        fun_data["Bcrit_res"] = fun_data["pitch_inv"][:,1]-fun_data["pitch_inv"][:,0] # := (rho)
-        fun_data["pitch_inv weight"] = jnp.broadcast_to(
-            fun_data["Bcrit_res"][:, jnp.newaxis], fun_data["pitch_inv"].shape
-        )
+
     out = batch_map(fun, fun_data, surf_batch_size)
-    # assert out.ndim == 1
-    # return grid.expand(out)
+
     return out
 
 
@@ -598,9 +588,8 @@ def _phase_space_average(
     """Phase-space average of f_res.
 
     Computes <f_res> = Σ_w ∫dα ∫dλ v·τ_b · f / (2 ∫dα ∫dl/B).
-    f_res is α-independent, so it is pulled out of the α integral.
     Pitch quadrature uses Gauss-Legendre weights from
-    ``Bounce1D.get_pitch_inv_quad``, matching eps_eff / Gamma_c.
+    ``Bounce1D.get_pitch_inv_quad``. 
 
     Parameters
     ----------
@@ -685,7 +674,8 @@ def _resonance_physics(
         Toroidal mode numbers of resonances.
     eta_vals : jnp.ndarray, shape (num_eta,)
         Uniform eta grid on [0, 2π).
-
+    eta_res : float
+        Grid spacing for eta.
     f_q_conservative : bool
         Whether to use conservative Fourier coefficient estimate.
     weight_method : str
@@ -811,12 +801,12 @@ def _resonance_physics(
         exp_arg = safediv(
             (2.0 * Delta_Omega_val) ** 2, denom, fill=-1e10
         )
-        # C_norm = safediv(71.12518788738504, Delta_Omega_val, fill=0.0)
-        w_raw = jnp.abs(Omega_prime_s[..., None]) * jnp.exp(exp_arg)
+        C_norm = safediv(71.12518788738504, Delta_Omega_val, fill=0.0)
+        w_raw = rho_res * C_norm * jnp.abs(dOmega_drho[..., None]) * jnp.exp(exp_arg)
         # Weight is non-zero only if in interval and valid 
         res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0)
         # Normalize res_weight to sum to 1 
-        res_weight = safediv(res_weight, res_weight.sum(axis=0), fill=0.0)
+        # res_weight = safediv(res_weight, res_weight.sum(axis=0), fill=0.0)
     else:
         # Double-where: use Omega_safe (0 at invalid entries) so that
         # safediv never sees fill_value operands, preventing NaN gradients.
@@ -891,7 +881,7 @@ def _resonance_physics(
     Delta_s_sum = Delta_s_profile.sum(axis=-1)
 
     if stab_sacrifice:
-        f_res = Delta_s_sum**4 * Omega_prime_s[..., None]**2 
+        f_res = Delta_s_sum**4 * Omega_prime_s**2 
     else:
         f_res = Delta_s_sum**4
 
@@ -962,7 +952,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     res_arr = kwargs.get("res_arr", None)
     p_arr = kwargs.get("p_arr", None)
     q_arr = kwargs.get("q_arr", None)
-    pitch_method = kwargs.get("pitch_method", 0)
     quad = kwargs.get("quad", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     num_eta = kwargs.get("num_eta", None)
@@ -1078,7 +1067,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         num_pitch,
         surf_batch_size,
         pitch_invs=pitch_invs,
-        pitch_method=pitch_method,
     )
 
     # --- 2. Resonance physics (cross-surface) ---
@@ -1091,50 +1079,49 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         )
 
     # --- 3. Phase-space average on the PSA grid (uniform in alpha) ---
-    num_alpha_psa = psa_grid.num_poloidal
+    if not DEBUG: 
+        num_alpha_psa = psa_grid.num_poloidal
 
-    def drifts_vtau(data_local):
-        bounce = Bounce1D(psa_grid, data_local, quad, is_reshaped=True)
-        v_tau = bounce.integrate(
-            [_v_tau],
-            data_local["pitch_inv"],
-            data_local,
-            [],
-            num_well=num_well,
-        )[0]
-        return v_tau, data_local
+        def drifts_vtau(data_local):
+            bounce = Bounce1D(psa_grid, data_local, quad, is_reshaped=True)
+            v_tau = bounce.integrate(
+                [_v_tau],
+                data_local["pitch_inv"],
+                data_local,
+                [],
+                num_well=num_well,
+            )[0]
+            return v_tau, data_local
 
-    vtau_psa, _data_psa = _compute(
-        drifts_vtau,
-        {},
-        data_psa,
-        psa_grid,
-        num_pitch,
-        surf_batch_size,
-        pitch_invs=pitch_invs,
-        pitch_method=pitch_method,
-    )
-    num_rho_psa = psa_grid.num_rho
-    if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
-        vtau_psa = vtau_psa.reshape(
-            num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+        vtau_psa, _data_psa = _compute(
+            drifts_vtau,
+            {},
+            data_psa,
+            psa_grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs,
         )
+        num_rho_psa = psa_grid.num_rho
+        if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
+            vtau_psa = vtau_psa.reshape(
+                num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+            )
 
-    B_psa = Bounce1D.reshape(psa_grid, data_psa["|B|"])
-    fl_length = simpson(1 / B_psa, axis=-1).mean(axis=1)
+        B_psa = Bounce1D.reshape(psa_grid, data_psa["|B|"])
+        fl_length = simpson(1 / B_psa, axis=-1).mean(axis=1)
 
-    f_res_avg = _phase_space_average(
-        vtau_psa,
-        res['f_res'],
-        _data_psa["pitch_inv"],
-        _data_psa["pitch_inv weight"],
-        fl_length,
-        num_alpha=num_alpha_psa,
-        fill_value=fill_value,
-    )
-
-    # --- 4. Output ---
-    if DEBUG:
+        f_res_avg = _phase_space_average(
+            vtau_psa,
+            res['f_res'],
+            _data_psa["pitch_inv"],
+            _data_psa["pitch_inv weight"],
+            fl_length,
+            num_alpha=num_alpha_psa,
+            fill_value=fill_value,
+        )
+        data["f_tr2"] = base_grid.expand(f_res_avg)
+    else: # If DEBUG mode, don't phase-space average, just return the resonance physics results
         data["f_tr2"] = {
             **res,
             'pitch_inv': _data['pitch_inv'],
@@ -1144,7 +1131,5 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             'f_res_avg': f_res_avg,
             'rhos': rhos,
         }
-    else:
-        data["f_tr2"] = base_grid.expand(f_res_avg)
 
     return data

@@ -90,6 +90,7 @@ one_period = import_dipoles(eq, fin)
 
 pl = pv.Plotter()
 b1 = compute_average_normalized_field(one_period, coilset, eq, pl)
+print(b1)
 pl.add_points(
     cloud,
     #    scalars="values",
@@ -99,4 +100,5 @@ pl.add_points(
 )
 
 pl.add_scalar_bar()
+pl.camera.azimuth = 90
 pl.show()

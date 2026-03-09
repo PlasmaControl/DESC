@@ -109,7 +109,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, safenorm
+from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -532,7 +532,19 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MercierStability(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MercierStability(eq=eq, grid=grid_bad_tor_res).build()
+        grid_bad_axis = LinearGrid(rho=0.0, M=eq.M_grid, N=eq.N_grid)
+        with pytest.raises(ValueError, match="on-axis"):
+            MercierStability(eq=eq, grid=grid_bad_axis).build()
 
     @pytest.mark.unit
     def test_magnetic_well(self):
@@ -548,7 +560,16 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MagneticWell(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MagneticWell(eq=eq, grid=grid_bad_tor_res).build()
 
     @pytest.mark.unit
     def test_boundary_error_biestsc(self):
@@ -3250,11 +3271,11 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_bootstrap(self):
         """BootstrapRedlConsistency."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.atomic_number = 1.0
-
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
@@ -3271,6 +3292,8 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_fusion_power(self):
         """FusionPower."""
         eq = self.eq.copy()
+        eq.pressure = None
+
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3293,6 +3316,7 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -4437,3 +4461,76 @@ def test_deflation_operator_all_Nones():
         val2,
         surf.compute("R", grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0))["R"].squeeze(),
     )
+
+
+@pytest.mark.unit
+def test_coil_objective_input(DummyMixedCoilSet):
+    """Tests broadcasting for inputs to _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
+
+    obj = CoilLength(coilset, bounds=bounds, weight=weight)
+    obj.build()
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, target=target)
+    obj.build()
+    np.testing.assert_allclose(obj._target, target_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, bounds=(1, 2), weight=1)
+    obj.build()
+    assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
+    assert np.size(obj._weight) == 1
+
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
+    obj.build()
+
+
+@pytest.mark.unit
+def test_coil_objective_indices(DummyMixedCoilSet):
+    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
+
+    weight = [0, [1, 0, 0], 1, 1]
+    objA = CoilLength(coilsetA, weight=weight, normalize=False)
+    objB = CoilLength(coilsetB, normalize=False)
+    objA.build()
+    objB.build()
+    compA = objA.compute_scaled_error(None)
+    compB = objB.compute_scaled_error(None)
+    np.testing.assert_allclose(compA, compB, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    obj = CoilLength(coilset)
+
+    weight = [1.0, 1.0, 0.0, 0.0]
+    weight_expanded = [1.0, 1.0, 1.0, 1.0]
+    obj.weight = weight
+    obj.build()
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0]
+
+    obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    obj.bounds = None
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)

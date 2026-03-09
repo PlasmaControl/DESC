@@ -131,6 +131,12 @@ class MercierStability(_Objective):
             "MercierStability objective grid requires toroidal "
             "resolution for surface averages",
         )
+        errorif(
+            grid.axis.size,
+            ValueError,
+            "MercierStability objective grid should not contain axis, "
+            "as its on-axis limit does not exist",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
@@ -207,9 +213,10 @@ class MagneticWell(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
-        it should have poloidal and toroidal resolution, as flux surface averages
-        are required.
+        Defaults to ``LinearGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP,
+        sym=eq.sym, axis=False)``. Note that it should have poloidal and toroidal
+        resolution, since flux surface averages are required. The on-axis magnetic well
+        is always zero, so it is not necessary to include a point on-axis.
 
     """
 
@@ -306,8 +313,12 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(
+            self._data_keys, obj=eq, grid=grid, has_axis=grid.axis.size
+        )
+        transforms = get_transforms(
+            self._data_keys, obj=eq, grid=grid, has_axis=grid.axis.size
+        )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,

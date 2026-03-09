@@ -43,7 +43,17 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     # is a subclass of diffrax.AbstractTerm which is an Equinox.Module. The following
     # attributes need to be defined as static fields for JAX transformation.
     _frame: str = eqx.field(static=True)
+    # Velocity coordinates used by the model, in order.
+    #     Options are:
+    #     "v" : modulus of velocity
+    #     "vpar" : velocity in direction of local magnetic field.
+    #     "vperp" : modulus of velocity perpendicular to local magnetic field.
+    #     "vR" : velocity in lab frame R direction
+    #     "vP" : velocity in lab frame phi direction
+    #     "vZ" : velocity in lab frame Z direction
     vcoords: list[str] = eqx.field(static=True)
+    # Additional arguments needed by the model.
+    # Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
     args: list[str] = eqx.field(static=True)
 
     @property
@@ -56,30 +66,6 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
         """
         return self._frame
-
-    @property
-    @abstractmethod
-    def vcoords(self):  # noqa : F811
-        """Velocity coordinates used by the model, in order.
-
-        Options are:
-        "v" : modulus of velocity
-        "vpar" : velocity in direction of local magnetic field.
-        "vperp" : modulus of velocity perpendicular to local magnetic field.
-        "vR" : velocity in lab frame R direction
-        "vP" : velocity in lab frame phi direction
-        "vZ" : velocity in lab frame Z direction
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def args(self):  # noqa : F811
-        """Additional arguments needed by the model.
-
-        Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
-        """
-        pass
 
     @abstractmethod
     def vf(self, t, x, args):

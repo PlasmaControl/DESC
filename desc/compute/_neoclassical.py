@@ -650,7 +650,7 @@ def _resonance_physics(
     alpha_drift_out, s_drift_out, vtau_out,
     iotas, rhos, rho_res, KE_frac, nfp, M, N,
     res_arr, q_arr, eta_vals, eta_res,
-    f_q_conservative, weight_method, Delta_Omega, wd_blur, fill_value,
+    f_q_conservative, weight_method, Delta_Omega, wd_blur, fill_value, stab_sacrifice,
 ):
     """Compute resonance frequencies, weights, island widths, and f_res.
 
@@ -817,10 +817,6 @@ def _resonance_physics(
         res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0)
         # Normalize res_weight to sum to 1 
         res_weight = safediv(res_weight, res_weight.sum(axis=0), fill=0.0)
-        # # Alternative way to compute res weight. 
-        # Res weight is non-zero only if 
-        # w_sum = jnp.nansum(jnp.where(valid[..., None], w_raw, jnp.nan), axis=0)
-        # res_weight = safediv(w_raw, w_sum[None, :, :, :], fill=jnp.nan)
     else:
         # Double-where: use Omega_safe (0 at invalid entries) so that
         # safediv never sees fill_value operands, preventing NaN gradients.

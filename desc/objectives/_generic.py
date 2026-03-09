@@ -805,28 +805,56 @@ class DeflationOperator(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        assert np.all(
-            [
-                (isinstance(t, type(thing)) and t != thing) or t is None
-                for t in things_to_deflate
-            ]
+        errorif(
+            not np.all(
+                [
+                    (isinstance(t, type(thing)) and t != thing) or t is None
+                    for t in things_to_deflate
+                ]
+            ),
+            ValueError,
+            "All things_to_deflate must be the same type as"
+            " thing and not the same object as thing.",
         )
         self._things_to_deflate = things_to_deflate.copy()
         self._sigma = sigma
         self._power = power
         self._params_to_deflate_with = params_to_deflate_with
-        assert deflation_type in ["power", "exp"]
+        errorif(
+            deflation_type not in ["power", "exp"],
+            ValueError,
+            f"deflation_type must be 'power' or 'exp', got {deflation_type}",
+        )
         self._deflation_type = deflation_type
-        assert multiple_deflation_type in ["prod", "sum"]
+        errorif(
+            multiple_deflation_type not in ["prod", "sum"],
+            ValueError,
+            "multiple_deflation_type must be 'prod' or 'sum',"
+            f"got {multiple_deflation_type}",
+        )
         self._multiple_deflation_type = multiple_deflation_type
         self._single_shift = single_shift
         self._objective = objective
         if self._objective is not None:
-            assert isinstance(
-                self._objective, _Objective
-            ), "objective passed in must be an _Objective!"
-            assert len(objective.things) == 1
-            assert objective.things[0] == thing
+            errorif(
+                not isinstance(self._objective, _Objective),
+                ValueError,
+                "objective passed in must be an _Objective!",
+            )
+            errorif(
+                len(objective.things) > 1,
+                NotImplementedError,
+                "objective wrapped by DeflationOperator currently must have only"
+                " a single object being optimized. Deflation on multiple optimizable"
+                "objects at once is not yet implemented",
+            )
+            errorif(
+                objective.things[0] != thing,
+                ValueError,
+                "optimizable thing "
+                " passed to DeflationOperator must be the same as the one passed to the"
+                " wrapped objective",
+            )
             name = "Deflated " + self._objective._name
             self._units = self._objective._units
             self._scalar = self._objective._scalar
@@ -868,8 +896,11 @@ class DeflationOperator(_Objective):
             self._params_to_deflate_with, default_params
         )
         self._indices = tree_leaves(self._params_to_deflate_with)
-        assert tree_structure(self._params_to_deflate_with) == tree_structure(
-            default_params
+        errorif(
+            tree_structure(self._params_to_deflate_with)
+            != tree_structure(default_params),
+            AssertionError,
+            "",
         )
 
         if self._objective is not None:
@@ -881,7 +912,6 @@ class DeflationOperator(_Objective):
         else:
             self._dim_f = 1
 
-        self._is_none_mask = []
         self._is_not_none_mask = []
         self._not_all_things_to_deflate_are_None = not np.all(
             [t is None for t in self._things_to_deflate]
@@ -889,14 +919,11 @@ class DeflationOperator(_Objective):
 
         for i, t in enumerate(self._things_to_deflate):
             if t is None:
-                self._is_none_mask.append(1.0)
                 self._is_not_none_mask.append(0.0)
                 self._things_to_deflate[i] = thing
             else:
-                self._is_none_mask.append(0.0)
                 self._is_not_none_mask.append(1.0)
 
-        self._is_none_mask = np.array(self._is_none_mask)
         self._is_not_none_mask = np.array(self._is_not_none_mask)
 
         if (
@@ -907,10 +934,14 @@ class DeflationOperator(_Objective):
                 if self._single_shift
                 else self._sigma * np.sum(self._is_not_none_mask)
             )
-            assert np.all(self._bounds[0] <= lower_bound_min), (
-                "Provided lower bound for deflation operator is too high compared "
-                f"to the minimum value of {lower_bound_min} it can take based off "
-                "of sigma, use a smaller lower bound"
+            errorif(
+                not np.all(self._bounds[0] <= lower_bound_min),
+                ValueError,
+                (
+                    f"Provided lower bound {self._bounds[0]} for deflation operator "
+                    f"is too high compared  to the minimum value of {lower_bound_min} "
+                    "it can take based off of sigma, use a smaller lower bound"
+                ),
             )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -972,9 +1003,7 @@ class DeflationOperator(_Objective):
             ) + self._sigma * (self._single_shift)
 
         # enforce deflation paremeter 0 here if every thing_to_deflate is None
-        deflation_parameter = (
-            deflation_parameter * self._not_all_things_to_deflate_are_None
-        )
+        deflation_parameter *= self._not_all_things_to_deflate_are_None
 
         if self._objective is not None:
             f = self._objective.compute(params)

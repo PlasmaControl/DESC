@@ -3557,34 +3557,29 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_ForceBalanceDeflated(self):
+    def test_compute_scalar_resolution_DeflationOperator_ForceBalance(self):
         """Deflated Force Balance."""
+        eq = self.eq.copy()
         eq0 = self.eq.copy()
         eq0.set_initial_guess()  # make eq0 different than self.eq
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            self.eq.change_resolution(
+            eq.change_resolution(
                 L_grid=int(self.eq.L * res),
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
             obj = ObjectiveFunction(
                 DeflationOperator(
-                    thing=self.eq,
+                    thing=eq,
                     things_to_deflate=[eq0],
-                    objective=ForceBalance(self.eq),
+                    objective=ForceBalance(eq),
                 ),
                 use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        # put res of self.eq back to original
-        res = self.res_array[0]
-        self.eq.change_resolution(
-            L_grid=int(self.eq.L * res),
-            M_grid=int(self.eq.M * res),
-            N_grid=int(self.eq.N * res),
-        )
+
         np.testing.assert_allclose(f, f[-1], rtol=4e-2)
 
     @pytest.mark.regression
@@ -3754,7 +3749,7 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "plasma vessel distance"
 
     @pytest.mark.unit
-    def test_objective_no_nangrad_ForceBalanceDeflated(self):
+    def test_objective_no_nangrad_DeflationOperator_ForceBalance(self):
         """Deflation operator on force balance."""
         eq = Equilibrium(
             L=2,
@@ -4378,7 +4373,7 @@ def test_deflation_operator_Nones():
         use_jit=False,
     )
     # min value is 1.0, but lowest bound is 2.0 so raise error
-    with pytest.raises(AssertionError, match="lower"):
+    with pytest.raises(ValueError, match="lower"):
         obj2.build()
     obj2 = ObjectiveFunction(
         DeflationOperator(
@@ -4395,7 +4390,7 @@ def test_deflation_operator_Nones():
     )
     # min value is 1.0 * # things not none = 2.0,
     # but lowest bound is 2.5 so raise error
-    with pytest.raises(AssertionError, match="lower"):
+    with pytest.raises(ValueError, match="lower"):
         obj2.build()
 
 

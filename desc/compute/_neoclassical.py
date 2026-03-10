@@ -791,7 +791,9 @@ def _resonance_physics(
                 jnp.abs(Omega_next_b - Omega_prev_b),
                 0.0,
             )  # (rho-1, pitch, well)
-            Delta_Omega_val = wd_blur * softmax(domega_arr, alpha=50, axis=0) / 2.0
+            Delta_Omega_val = (
+                wd_blur * softmax(domega_arr, alpha=50, axis=0) / 2.0
+            )[None, :, :, None]
         else:
             Delta_Omega_val = Delta_Omega
         a = res_broad + Delta_Omega_val

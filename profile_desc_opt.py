@@ -62,7 +62,7 @@ from desc.objectives._coils import FieldNormalError
 from desc.optimize import Optimizer
 from desc.backend import fori_loop, tree_stack
 from desc.utils import reflection_matrix
-from desc.geometry.utils import rpz2xyz, xyz2rpz, rpz2xyz_vec, xyz2rpz_vec
+from desc.utils import rpz2xyz, xyz2rpz, rpz2xyz_vec, xyz2rpz_vec
 from desc.optimizable import get_params
 from jax.lax import scan as jax_scan
 

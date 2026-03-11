@@ -2345,6 +2345,12 @@ class FieldNormalError(_Objective):
     eq_kwargs : dict, optional
         Extra keyword arguments passed to ``eq.compute_magnetic_field``.
     """
+    _static_attrs = _Objective._static_attrs + [
+        "_basis",
+        "_bs_chunk_size",
+        "_field_fixed",
+        "_eq_fixed",
+    ]
 
     _scalar = False
     _linear = False

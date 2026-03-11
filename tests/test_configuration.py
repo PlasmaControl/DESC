@@ -448,6 +448,87 @@ class TestInitialGuess:
 
         assert eq.is_nested()
 
+    @pytest.mark.unit
+    def test_guess_when_heuristic_coordinate_mapping_fails(self):
+        """Test that we can still get nested initial mapping heuristics fail."""
+        # using an extremely shaped bounday where the heuristics fail,
+        # forcing a fallback to the map2disc method
+        # also is stellarator-asymmetric
+        ms = np.array([0, 1, 2, 3, 4, 5, -1, -2, -3, -4, -5], dtype=int)
+
+        R_fourier_coefficients = np.array(
+            [
+                1.3632016735662402,
+                -0.17920904751089126,
+                -0.09184049109234207,
+                -0.015015971365554322,
+                0.01785460188882407,
+                0.01127538964941767,
+                0.04685176357481472,
+                -0.03932003193401997,
+                0.008780113148483934,
+                -0.016567421786232828,
+                0.0005675447567040712,
+            ],
+            dtype=float,
+        )
+
+        Z_fourier_coefficients = np.array(
+            [
+                0.15014033588991132,
+                0.49764502850673253,
+                -0.25485561513463484,
+                -0.07126968315533386,
+                -0.05498667593364822,
+                0.009600095984420543,
+                0.19738445681518377,
+                0.01663894489889671,
+                0.07177657694273143,
+                0.01037613387581884,
+                0.029505162423974128,
+            ],
+            dtype=float,
+        )
+
+        # first check axisymmetric case
+
+        modes_R = np.array([[m, 0] for m in ms])
+        modes_Z = np.array([[m, 0] for m in ms])
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=R_fourier_coefficients.squeeze(),
+            modes_R=modes_R,
+            Z_lmn=Z_fourier_coefficients.squeeze(),
+            modes_Z=modes_Z,
+        )
+        with pytest.warns(
+            UserWarning, match="Surfaces from initial guess are not nested"
+        ):
+            eq_difficult_bdry = Equilibrium(surface=surf, L=6, M=6)
+
+        assert eq_difficult_bdry.is_nested(), "Axisymmetric Case"
+        # then add an N=1 torsion to it
+
+        R_fourier_coefficients = np.concatenate([R_fourier_coefficients, [0.4]])
+        Z_fourier_coefficients = np.concatenate([Z_fourier_coefficients, [-0.4]])
+
+        modes_R = np.array([[m, 0] for m in ms] + [[0, 1]])
+        modes_Z = np.array([[m, 0] for m in ms] + [[0, -1]])
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=R_fourier_coefficients.squeeze(),
+            modes_R=modes_R,
+            Z_lmn=Z_fourier_coefficients.squeeze(),
+            modes_Z=modes_Z,
+            NFP=2,
+        )
+        with pytest.warns(
+            UserWarning, match="Surfaces from initial guess are not nested"
+        ):
+            eq_difficult_bdry = Equilibrium(surface=surf, L=6, M=6, N=1, N_grid=6)
+
+        assert eq_difficult_bdry.is_nested(), "Non-axisymmetric Case"
+
 
 class TestGetSurfaces:
     """Tests for get_surface method."""

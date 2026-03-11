@@ -40,3 +40,8 @@ shapely >= 1.8.2, <= 2.1.2
 
 # building
 build
+
+# for ensuring initial guesses are nested
+# in dev-requirements bc relies on some packages
+# which are not well-maintained and may have issues with installs
+map2disc @ git+https://gitlab.mpcdf.mpg.de/gvec-group/map2disc.git

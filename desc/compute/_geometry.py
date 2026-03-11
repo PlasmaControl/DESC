@@ -1143,7 +1143,7 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     name="curvature_K_zeta",
     label="K_{\\zeta}",
     units="m^{-2}",
-    units_long="meters squared",
+    units_long="inverse meters squared",
     description="Gaussian curvature of constant zeta surfaces",
     dim=1,
     params=[],

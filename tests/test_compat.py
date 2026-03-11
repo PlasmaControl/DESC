@@ -11,7 +11,7 @@ from desc.compat import (
     rotate_zeta,
 )
 from desc.examples import get
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import CustomGridFlux, LinearGridFlux, QuadratureGridFlux
 from desc.profiles import FourierZernikeProfile, SplineProfile
 
 
@@ -20,7 +20,7 @@ def test_flip_helicity_axisym():
     """Test flip_helicity on an axisymmetric Equilibrium."""
     eq = get("DSHAPE")
 
-    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_keys = ["current", "|F|", "D_Mercier"]
 
     data_old = eq.compute(data_keys, grid=grid)
@@ -58,10 +58,10 @@ def test_flip_helicity_iota():
     """Test flip_helicity on an Equilibrium with an iota profile."""
     eq = get("HELIOTRON")
 
-    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
     nodes[:, -1] *= -1
-    grid_flip = Grid(nodes)  # grid with negative zeta values
+    grid_flip = CustomGridFlux(nodes)  # grid with negative zeta values
     data_keys = ["current", "|F|", "D_Mercier"]
 
     data_old = eq.compute(data_keys, grid=grid)
@@ -100,10 +100,10 @@ def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
     eq = get("HSX")
 
-    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
     nodes[:, -1] *= -1
-    grid_flip = Grid(nodes)  # grid with negative zeta values
+    grid_flip = CustomGridFlux(nodes)  # grid with negative zeta values
     data_keys = ["current", "|F|", "D_Mercier", "f_C"]
 
     data_old = eq.compute(data_keys, grid=grid, helicity=(1, eq.NFP))
@@ -145,7 +145,7 @@ def test_flip_theta_axisym():
     """Test flip_theta on an axisymmetric Equilibrium."""
     eq = get("DSHAPE")
 
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         L=eq.L_grid,
         theta=2 * eq.M_grid,
         N=eq.N_grid,
@@ -187,10 +187,10 @@ def test_flip_theta_nonaxisym():
     """Test flip_theta on a non-axisymmetric Equilibrium."""
     eq = get("HSX")
 
-    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
     nodes[:, 1] = np.mod(nodes[:, 1] + np.pi, 2 * np.pi)
-    grid_flip = Grid(nodes)  # grid with flipped theta values
+    grid_flip = CustomGridFlux(nodes)  # grid with flipped theta values
     data_keys = ["current", "|F|", "D_Mercier", "f_C"]
 
     data_old = eq.compute(data_keys, grid=grid, helicity=(1, eq.NFP))
@@ -227,14 +227,16 @@ def test_rescale():
 
     def fun(eq):
         """Compute the quantities that can be scaled."""
-        grid_quad = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        grid_quad = QuadratureGridFlux(
+            L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
         data_quad = eq.compute(
             ["R0", "a", "R0/a", "V", "<|B|>_vol", "|F|", "|grad(|B|^2)|/2mu0"],
             grid_quad,
         )
-        grid_axis = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+        grid_axis = LinearGridFlux(N=eq.N_grid, NFP=eq.NFP, rho=0)
         data_axis = eq.compute("|B|", grid_axis)
-        grid_lcfs = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+        grid_lcfs = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
         data_lcfs = eq.compute("|B|", grid_lcfs)
         return {
             "R0": data_quad["R0"],
@@ -349,13 +351,13 @@ def test_contract_equilibrium():
 
     # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
     data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
-    contract_grid = LinearGrid(
+    contract_grid = LinearGridFlux(
         rho=np.linspace(0, 1.0, eq.L),
         M=eq.M_grid,
         N=eq.N_grid,
         NFP=eq.NFP,
     )
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         rho=np.linspace(0, rho, eq.L),
         M=eq.M_grid,
         N=eq.N_grid,
@@ -413,13 +415,13 @@ def test_contract_equilibrium_warns_errors():
     assert isinstance(eq_half_rho.pressure, SplineProfile)
     eq.pressure = p_orig
     data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
-    contract_grid = LinearGrid(
+    contract_grid = LinearGridFlux(
         rho=np.linspace(0, 1.0, eq.L),
         M=eq.M_grid,
         N=eq.N_grid,
         NFP=eq.NFP,
     )
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         rho=np.linspace(0, rho, eq.L),
         M=eq.M_grid,
         N=eq.N_grid,

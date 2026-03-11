@@ -8,7 +8,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
 from desc.batching import batch_map
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._bounce_utils import (
     _broadcast_for_bounce,
     _check_bounce_points,
@@ -182,7 +182,7 @@ class Bounce2D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
@@ -370,7 +370,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, θ, ζ).
         f : jnp.ndarray
             Data evaluated on grid.
@@ -474,7 +474,9 @@ class Bounce2D(Bounce):
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", "Unequal number of field periods")
                 lmbda = get_transforms(
-                    "lambda", eq, grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta)
+                    "lambda",
+                    eq,
+                    grid=LinearGridFlux(rho=rho, M=eq.L_basis.M, zeta=zeta),
                 )["L"]
         assert lmbda.basis.NFP == eq.NFP
 
@@ -1034,7 +1036,7 @@ class Bounce1D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
@@ -1121,7 +1123,7 @@ class Bounce1D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         f : jnp.ndarray
             Data evaluated on grid.

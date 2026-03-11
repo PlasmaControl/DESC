@@ -13,7 +13,7 @@ from quadax import simpson
 
 from desc.backend import jnp
 
-from ..grid import QuadratureGrid
+from ..grid import QuadratureGridFlux
 from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
@@ -34,7 +34,7 @@ from .data_index import register_compute_fun
     resolution_requirement="rtz",
 )
 def _V(params, transforms, profiles, data, **kwargs):
-    if isinstance(transforms["grid"], QuadratureGrid):
+    if isinstance(transforms["grid"], QuadratureGridFlux):
         data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
     else:
         # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
@@ -86,6 +86,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
         surface_integrals(
             transforms["grid"],
             cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
+            surface_label="x0",
         )
     )
     return data
@@ -158,7 +159,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
         return jnp.mean(grid.compress(data["A(z)"], surface_label="zeta"))
 
     max_rho = jnp.max(data["rho"])
-    if isinstance(grid, QuadratureGrid) or "n_rho" not in data:  # TODO(#1761)
+    if isinstance(grid, QuadratureGridFlux) or "n_rho" not in data:  # TODO(#1761)
         assert extrap
         A = surface_integrals(
             grid,
@@ -187,7 +188,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
                 grid,
                 data["Z"] * n[:, 2] * safenorm(data["e_theta"], axis=-1),
                 line_label="theta",
-                fix_surface=("rho", max_rho),
+                fix_surface=("x0", max_rho),
                 expand_out=False,
             )
         )
@@ -428,7 +429,9 @@ def _S_fourier_rz_surface(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
-    data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
+    data["S(r)"] = surface_integrals(
+        transforms["grid"], data["|e_theta x e_zeta|"], surface_label="x0"
+    )
     return data
 
 
@@ -589,18 +592,17 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "e_theta"],
+    data=["e_theta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
 def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
-    max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = line_integrals(
         transforms["grid"],
         safenorm(data["e_theta"], axis=-1),
         line_label="theta",
-        fix_surface=("rho", max_rho),
+        fix_surface=("x0", 0.0),
         expand_out=True,
     )
     return data

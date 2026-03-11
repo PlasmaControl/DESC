@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 
 from desc.backend import execute_on_cpu, jnp
-from desc.grid import Grid
+from desc.grid import AbstractGridFlux, CustomGridFlux
 
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
@@ -127,9 +127,12 @@ def compute(  # noqa: C901
                     f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
 
-        _ = _get_deps(
-            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+        has_axis = (
+            transforms["grid"].axis.size
+            if isinstance(transforms["grid"], AbstractGridFlux)
+            else False
         )
+        _ = _get_deps(p, names, set(), data, has_axis, check_fun=check_fun)
 
     if data is None:
         data = {}
@@ -184,13 +187,17 @@ def _compute(
     if data is None:
         data = {}
 
+    has_axis = (
+        transforms["grid"].axis.size
+        if isinstance(transforms["grid"], AbstractGridFlux)
+        else False
+    )
+
     for name in names:
         if name in data:
             # don't compute something that's already been computed
             continue
-        if not has_data_dependencies(
-            parameterization, name, data, transforms["grid"].axis.size
-        ):
+        if not has_data_dependencies(parameterization, name, data, has_axis):
             # then compute the missing dependencies
             data = _compute(
                 parameterization,
@@ -201,7 +208,7 @@ def _compute(
                 data=data,
                 **kwargs,
             )
-            if transforms["grid"].axis.size:
+            if has_axis:
                 data = _compute(
                     parameterization,
                     data_index[parameterization][name]["dependencies"][
@@ -439,7 +446,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
         Name of the desired quantity from the data index.
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
-    grid : Grid
+    grid : AbstractGrid
         Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
@@ -457,7 +464,11 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    has_axis = has_axis or (grid is not None and grid.axis.size)
+    has_axis = has_axis or (
+        grid is not None and grid.axis.size
+        if isinstance(grid, AbstractGridFlux)
+        else False
+    )
     deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
     profs = []
     for key in deps:
@@ -523,7 +534,7 @@ def get_transforms(
         Name of the desired quantity from the data index
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
-    grid : Grid
+    grid : AbstractGrid
         Grid to compute quantity on
     jitable: bool
         Whether to skip certain checks so that this operation works under JIT
@@ -540,12 +551,16 @@ def get_transforms(
 
     """
     from desc.basis import DoubleFourierSeries
-    from desc.grid import LinearGrid
+    from desc.grid import LinearGridFlux
     from desc.transform import Transform
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
-    has_axis = has_axis or (grid is not None and grid.axis.size)
+    has_axis = has_axis or (
+        grid is not None and grid.axis.size
+        if isinstance(grid, AbstractGridFlux)
+        else False
+    )
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
     for c in derivs.keys():
@@ -581,10 +596,12 @@ def get_transforms(
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform
             # assume grid is a meshgrid but only care about a single surface
-            if grid.num_rho > 1:
-                theta = grid.nodes[grid.unique_theta_idx, 1]
-                zeta = grid.nodes[grid.unique_zeta_idx, 2]
-                grid_B = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+            if grid.num_x0 > 1:
+                theta = grid.nodes[grid.unique_x1_idx, 1]
+                zeta = grid.nodes[grid.unique_x2_idx, 2]
+                grid_B = LinearGridFlux(
+                    theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym
+                )
             else:
                 grid_B = grid
             transforms["B"] = Transform(
@@ -608,7 +625,9 @@ def get_transforms(
             if grid.num_rho > 1:
                 theta = grid.nodes[grid.unique_theta_idx, 1]
                 zeta = grid.nodes[grid.unique_zeta_idx, 2]
-                grid_w = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+                grid_w = LinearGridFlux(
+                    theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym
+                )
             else:
                 grid_w = grid
             transforms["w"] = Transform(
@@ -630,7 +649,7 @@ def get_transforms(
             alpha = grid.nodes[:, 2] * grid.NFP
             nodes = jnp.array([rho, eta, alpha]).T
             transforms["h"] = Transform(
-                Grid(nodes, jitable=jitable),
+                CustomGridFlux(nodes, jitable=jitable),
                 obj.x_basis,
                 derivs=derivs["h"],
                 build=True,
@@ -681,7 +700,11 @@ def has_dependencies(parameterization, qty, params, transforms, profiles, data):
     return (
         _has_data(qty, data, parameterization)
         and (
-            not transforms["grid"].axis.size
+            not (
+                transforms["grid"].axis.size
+                if isinstance(transforms["grid"], AbstractGridFlux)
+                else False
+            )
             or _has_axis_limit_data(qty, data, parameterization)
         )
         and _has_params(qty, params, parameterization)

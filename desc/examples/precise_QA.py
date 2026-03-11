@@ -14,7 +14,7 @@ import numpy as np
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.objectives import (
     AspectRatio,
     FixBoundaryR,
@@ -47,7 +47,9 @@ eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=
 eqfam = EquilibriaFamily(eq)
 
 # create grid where we want to minimize QS error. Here we do it on 3 surfaces
-grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True)
+grid = LinearGridFlux(
+    M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+)
 
 # optimize in steps
 for k in range(1, eq.M + 1):

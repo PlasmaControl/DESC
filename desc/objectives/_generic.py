@@ -8,7 +8,7 @@ from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
-from desc.grid import QuadratureGrid
+from desc.grid import QuadratureGridFlux
 from desc.optimizable import OptimizableCollection
 from desc.utils import errorif, getsource, jaxify, parse_argname_change, setdefault
 
@@ -219,9 +219,10 @@ class GenericObjective(_Objective):
         Name of the quantity to compute.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
+        if thing is an Equilibrium.
     compute_kwargs : dict
         Optional keyword arguments passed to core compute function, eg ``helicity``.
 
@@ -306,7 +307,9 @@ class GenericObjective(_Objective):
                 ValueError,
                 "grid must be supplied for things besides an Equilibrium.",
             )
-            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
+            grid = QuadratureGridFlux(
+                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
+            )
         else:
             grid = self._grid
 
@@ -480,7 +483,7 @@ class ObjectiveFromUser(_Objective):
 
     The user supplied function should take two arguments: ``grid`` and ``data``.
 
-    ``grid`` is the Grid object containing the nodes where the data is computed.
+    ``grid`` is the AbstractGrid object containing the nodes where the data is computed.
 
     ``data`` is a dictionary of values with keys from the list of `variables`_. Values
     will be the given data evaluated at ``grid``.
@@ -497,9 +500,10 @@ class ObjectiveFromUser(_Objective):
         Custom objective function.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    grid : Grid, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
+        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)``
+        if thing is an Equilibrium.
     compute_kwargs : dict
         Optional keyword arguments passed to core compute function, eg ``helicity``.
 
@@ -602,7 +606,9 @@ class ObjectiveFromUser(_Objective):
                 ValueError,
                 "grid must be supplied for things besides an Equilibrium.",
             )
-            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
+            grid = QuadratureGridFlux(
+                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
+            )
         else:
             grid = self._grid
 

@@ -6,7 +6,7 @@ import pytest
 from tests.test_plotting import tol_1d
 
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.integrals import Bounce2D
 
 
@@ -17,7 +17,7 @@ def test_Gamma_c_Nemov_2D(nufft_eps):
     """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
         "Gamma_c",
@@ -41,7 +41,7 @@ def test_Gamma_c_Velasco_2D(nufft_eps):
     """Test Γ_c Velasco with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
         "Gamma_c Velasco",
@@ -69,7 +69,7 @@ def test_Gamma_c_Nemov_1D():
     rho = np.linspace(1e-12, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute("old Gamma_c", grid=grid, num_well=num_well, surf_batch_size=2)
 
     assert np.isfinite(data["old Gamma_c"]).all()
@@ -89,7 +89,7 @@ def test_Gamma_c_Velasco_1D():
     rho = np.linspace(1e-12, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     data = eq.compute("old Gamma_c Velasco", grid=grid, num_well=num_well)
 
     assert np.isfinite(data["old Gamma_c Velasco"]).all()

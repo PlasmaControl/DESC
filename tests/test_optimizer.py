@@ -28,7 +28,7 @@ from desc.coils import (
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux, LinearGridToroidalSurface
 from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
@@ -790,7 +790,7 @@ def test_scipy_constrained_solve():
     ARbounds = (0.95 * AR, 1.05 * AR)
     H = eq.compute(
         "curvature_H_rho",
-        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
+        grid=LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
@@ -821,7 +821,7 @@ def test_scipy_constrained_solve():
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
         "curvature_H_rho",
-        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
+        grid=LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
 
     assert ARbounds[0] < AR2 < ARbounds[1]
@@ -1066,7 +1066,7 @@ def test_constrained_AL_lsq():
     )
     H = eq.compute(
         "curvature_H_rho",
-        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
+        grid=LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4
@@ -1168,13 +1168,14 @@ def test_optimize_multiple_things_different_order():
 
     target_dist = 1
 
-    grid = LinearGrid(M=10, N=0, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=10, N=0, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=10, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        plasma_grid=grid,
-        surface_grid=grid,
+        plasma_grid=plasma_grid,
+        surface_grid=surface_grid,
         surface_fixed=False,
     )
     objective = ObjectiveFunction((obj,))
@@ -1209,8 +1210,8 @@ def test_optimize_multiple_things_different_order():
         surface=surf,
         eq=eq,
         target=target_dist,
-        plasma_grid=grid,
-        surface_grid=grid,
+        plasma_grid=plasma_grid,
+        surface_grid=surface_grid,
         surface_fixed=False,
     )
     objective = ObjectiveFunction((obj,))
@@ -1565,8 +1566,8 @@ def test_quad_flux_with_surface_current_field():
             eq=eq,
             field=field,
             vacuum=True,
-            eval_grid=LinearGrid(M=2, N=2, sym=True),
-            field_grid=LinearGrid(M=2, N=2),
+            eval_grid=LinearGridFlux(M=2, N=2, sym=True),
+            field_grid=LinearGridToroidalSurface(M=2, N=2),
         ),
     )
     constraints = FixParameters(field, {"I": True, "G": True})
@@ -1582,7 +1583,7 @@ def test_optimize_coil_currents(DummyCoilSet):
     """Tests optimization takes step sizes proportional to variable scales."""
     eq = desc.examples.get("precise_QH")
     coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
-    grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGridFlux(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
     for coil in coils:
         coil.current = current / coils.num_coils

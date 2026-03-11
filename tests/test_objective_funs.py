@@ -4000,7 +4000,7 @@ class TestObjectiveNaNGrad:
             elongation=6,
             mirror_ratio=0.2,
             torsion=0.1,
-            NFP=1,
+            NFP=2,
             sym=True,
         )
         eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)

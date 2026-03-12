@@ -5,7 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, put
-from desc.batching import batched_vectorize
+from desc.batching import batched_vectorize, jacrev_chunked
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -157,6 +157,12 @@ class LinearConstraintProjection(ObjectiveFunction):
         # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
         # Since the fixed parameters stay constant, we add 0 rows by below operation
         self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
+
+        # Choose AD mode for _jac: reverse when fewer outputs than inputs
+        if self._objective.dim_f < self._dim_x_reduced:
+            self._ad_mode = "rev"
+        else:
+            self._ad_mode = "fwd"
 
         self._built = True
         timer.stop(f"{self.name} build")
@@ -385,9 +391,14 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        v = self._feasible_tangents
-        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
-        return df.T
+        if self._ad_mode == "rev":
+            fun = lambda x: getattr(self._objective, "compute_" + op)(x, constants)
+            J_full = jacrev_chunked(fun, chunk_size=None)(x)
+            return J_full @ self._feasible_tangents
+        else:
+            v = self._feasible_tangents
+            df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+            return df.T
 
     def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_scaled.

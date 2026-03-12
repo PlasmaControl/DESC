@@ -1894,34 +1894,77 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             axis=-2,
         )  # (NFP, 3, 3)
 
-        # Vectorized Biot-Savart: vmap over coils, vmap over field periods.
-        # For each field period k, we rotate eval points by R_k, compute BS
-        # from the fundamental-domain coils, then un-rotate the result by R_k^T.
-        # The sum over all periods gives the total field from all NFP copies.
+        # Chunked vmap Biot-Savart: vmap within coil chunks, scan across
+        # chunks, vmap over field periods. Pure vmap over all coils at once
+        # causes memory pressure for large coilsets (>~16 coils), so we
+        # limit the vmap width and accumulate via scan.
+        _COIL_VMAP_CHUNK = 16
+        n_coils = len(self)
+        n_chunks = max(1, (n_coils + _COIL_VMAP_CHUNK - 1) // _COIL_VMAP_CHUNK)
+        pad_n = n_chunks * _COIL_VMAP_CHUNK - n_coils
+
         if use_hh:
+            if pad_n > 0:
+                all_starts = jnp.pad(
+                    all_starts, ((0, pad_n), (0, 0), (0, 0))
+                )
+                all_ends = jnp.pad(
+                    all_ends, ((0, pad_n), (0, 0), (0, 0))
+                )
+                all_currents = jnp.pad(all_currents, ((0, pad_n),))
+            starts_ch = all_starts.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
+            ends_ch = all_ends.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
+            currents_ch = all_currents.reshape(n_chunks, _COIL_VMAP_CHUNK)
 
             def _bs_one_coil(starts, ends, current, eval_pts):
                 return op_fn(eval_pts, starts, ends, current)
 
             def _one_period(rot_mat):
                 rotated = coords_full @ rot_mat.T
-                B_per_coil = vmap(_bs_one_coil, in_axes=(0, 0, 0, None))(
-                    all_starts, all_ends, all_currents, rotated
+
+                def _chunk_sum(B_acc, chunk):
+                    s, e, c = chunk
+                    B_chunk = vmap(_bs_one_coil, in_axes=(0, 0, 0, None))(
+                        s, e, c, rotated
+                    )
+                    return B_acc + B_chunk.sum(axis=0), None
+
+                B_sum, _ = scan(
+                    _chunk_sum,
+                    jnp.zeros(rotated.shape),
+                    (starts_ch, ends_ch, currents_ch),
                 )
-                B_sum = B_per_coil.sum(axis=0)
                 return B_sum @ rot_mat
 
         else:
+            if pad_n > 0:
+                all_coil_pts = jnp.pad(
+                    all_coil_pts, ((0, pad_n), (0, 0), (0, 0))
+                )
+                all_JdV = jnp.pad(
+                    all_JdV, ((0, pad_n), (0, 0), (0, 0))
+                )
+            pts_ch = all_coil_pts.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
+            JdV_ch = all_JdV.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
 
             def _bs_one_coil(coil_pts, JdV, eval_pts):
                 return op_fn(eval_pts, coil_pts, JdV, chunk_size=chunk_size)
 
             def _one_period(rot_mat):
                 rotated = coords_full @ rot_mat.T
-                B_per_coil = vmap(_bs_one_coil, in_axes=(0, 0, None))(
-                    all_coil_pts, all_JdV, rotated
+
+                def _chunk_sum(B_acc, chunk):
+                    cp, jdv = chunk
+                    B_chunk = vmap(_bs_one_coil, in_axes=(0, 0, None))(
+                        cp, jdv, rotated
+                    )
+                    return B_acc + B_chunk.sum(axis=0), None
+
+                B_sum, _ = scan(
+                    _chunk_sum,
+                    jnp.zeros(rotated.shape),
+                    (pts_ch, JdV_ch),
                 )
-                B_sum = B_per_coil.sum(axis=0)
                 return B_sum @ rot_mat
 
         # vmap over field periods and sum

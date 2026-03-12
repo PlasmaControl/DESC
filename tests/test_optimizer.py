@@ -1377,6 +1377,44 @@ def test_LinearConstraint_jacobian():
 
 
 @pytest.mark.unit
+def test_LCP_jac_fwd_vs_rev():
+    """Test that LCP._jac produces identical results in fwd and rev mode."""
+    eq = desc.examples.get("HELIOTRON")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+
+    obj = ObjectiveFunction(
+        ForceBalance(eq, deriv_mode="auto"), deriv_mode="batched", use_jit=False
+    )
+    con = ObjectiveFunction(get_fixed_boundary_constraints(eq))
+    lc = LinearConstraintProjection(obj, con)
+    lc.build()
+
+    x_reduced = lc.x()
+
+    # Force fwd mode and compute
+    lc._ad_mode = "fwd"
+    J_fwd_scaled = np.array(lc.jac_scaled(x_reduced))
+    J_fwd_unscaled = np.array(lc.jac_unscaled(x_reduced))
+    J_fwd_scaled_error = np.array(lc.jac_scaled_error(x_reduced))
+
+    # Force rev mode and compute
+    lc._ad_mode = "rev"
+    J_rev_scaled = np.array(lc.jac_scaled(x_reduced))
+    J_rev_unscaled = np.array(lc.jac_unscaled(x_reduced))
+    J_rev_scaled_error = np.array(lc.jac_scaled_error(x_reduced))
+
+    np.testing.assert_allclose(J_fwd_scaled, J_rev_scaled, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(J_fwd_unscaled, J_rev_unscaled, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(
+        J_fwd_scaled_error, J_rev_scaled_error, rtol=1e-10, atol=1e-10
+    )
+    print(f"  dim_f={lc.dim_f}, dim_x_reduced={lc._dim_x_reduced}")
+    print(f"  J shape: {J_fwd_scaled.shape}")
+    print(f"  max |fwd-rev| scaled: {np.max(np.abs(J_fwd_scaled - J_rev_scaled)):.2e}")
+
+
+@pytest.mark.unit
 def test_quad_flux_with_surface_current_field():
     """Test that QuadraticFlux does not throw an error when field has transforms."""
     # this happens because in QuadraticFlux.compute, field.compute_magnetic_field

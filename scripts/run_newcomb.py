@@ -107,7 +107,10 @@ for I_mult in I_multipliers:
     # resolution for low-res solve
     n_rho = 14
     n_theta = 14
-    n_zeta = 9
+    if axisym:
+        n_zeta = 1
+    else:
+        n_zeta = 9
 
     # This will probably OOM with the matrix-full method
     print("making input grid and diffmats")
@@ -222,7 +225,10 @@ for I_mult in I_multipliers:
     print("making high-res grid and diffmats")
     n_rho = 64
     n_theta = 64
-    n_zeta = 12
+    if axisym:
+        n_zeta = 1
+    else:
+        n_zeta = 12
 
     x, w = leggauss_lob(n_rho)
 

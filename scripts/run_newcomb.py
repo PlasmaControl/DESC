@@ -169,6 +169,8 @@ for I_mult in I_multipliers:
     print(data["finite-n lambda"])
     X = data["finite-n eigenfunction"]
 
+    np.save(save_path + f"low_res_eigenfunction_all_{save_tag}.npy", X)
+
     idx0 = (n_rho - 2) * n_theta * n_zeta
     idx1 = idx0 + (n_rho) * n_theta * n_zeta
 
@@ -345,3 +347,6 @@ for I_mult in I_multipliers:
     np.save(save_path + f"xi_zeta_{save_tag}.npy", xi_sup_zeta_final)
     np.save(save_path + f"lambda_{save_tag}.npy", data["finite-n lambda matfree"])
     np.save(save_path + f"rtz_nodes_{save_tag}.npy", rtz_nodes)
+
+    # Save all the eigenfunctions
+    np.save(save_path + f"eigenfunction_{save_tag}.npy", data["finite-n eigenfunction matfree all"])

@@ -1933,7 +1933,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     sort_idxs = jnp.argsort(mu, descending=True)
     w = sigma + 1.0 / mu[sort_idxs]
-    v = vecs[sort_idxs][0, :]
+    v_all = vecs[sort_idxs]
+    v = v_all[0, :]
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))
@@ -1942,6 +1943,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     data["finite-n lambda matfree"] = w
     data["finite-n eigenfunction matfree"] = v
+    data["finite-n eigenfunction matfree all"] = v_all
 
     return data
 

@@ -1912,17 +1912,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         n_chunks = max(1, (n_coils + _COIL_VMAP_CHUNK - 1) // _COIL_VMAP_CHUNK)
         pad_n = n_chunks * _COIL_VMAP_CHUNK - n_coils
 
+        def _pad_first_axis(arr, n):
+            """Pad with zeros along axis 0 only, for any ndim."""
+            pw = [(0, n)] + [(0, 0)] * (arr.ndim - 1)
+            return jnp.pad(arr, pw)
+
         if use_hh:
             if pad_n > 0:
-                all_starts = jnp.pad(
-                    all_starts, ((0, pad_n), (0, 0), (0, 0))
-                )
-                all_ends = jnp.pad(
-                    all_ends, ((0, pad_n), (0, 0), (0, 0))
-                )
-                all_currents = jnp.pad(all_currents, ((0, pad_n),))
-            starts_ch = all_starts.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
-            ends_ch = all_ends.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
+                all_starts = _pad_first_axis(all_starts, pad_n)
+                all_ends = _pad_first_axis(all_ends, pad_n)
+                all_currents = _pad_first_axis(all_currents, pad_n)
+            n_src = all_starts.shape[1]
+            starts_ch = all_starts.reshape(n_chunks, _COIL_VMAP_CHUNK, n_src, 3)
+            ends_ch = all_ends.reshape(n_chunks, _COIL_VMAP_CHUNK, n_src, 3)
             currents_ch = all_currents.reshape(n_chunks, _COIL_VMAP_CHUNK)
 
             def _bs_one_coil(starts, ends, current, eval_pts):
@@ -1947,14 +1949,16 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         else:
             if pad_n > 0:
-                all_coil_pts = jnp.pad(
-                    all_coil_pts, ((0, pad_n), (0, 0), (0, 0))
-                )
-                all_JdV = jnp.pad(
-                    all_JdV, ((0, pad_n), (0, 0), (0, 0))
-                )
-            pts_ch = all_coil_pts.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
-            JdV_ch = all_JdV.reshape(n_chunks, _COIL_VMAP_CHUNK, -1, 3)
+                all_coil_pts = _pad_first_axis(all_coil_pts, pad_n)
+                all_JdV = _pad_first_axis(all_JdV, pad_n)
+            # Use actual shapes for reshape — don't assume 3D
+            per_coil_shape = all_coil_pts.shape[1:]
+            pts_ch = all_coil_pts.reshape(
+                n_chunks, _COIL_VMAP_CHUNK, *per_coil_shape
+            )
+            JdV_ch = all_JdV.reshape(
+                n_chunks, _COIL_VMAP_CHUNK, *per_coil_shape
+            )
 
             def _bs_one_coil(coil_pts, JdV, eval_pts):
                 return op_fn(eval_pts, coil_pts, JdV, chunk_size=chunk_size)

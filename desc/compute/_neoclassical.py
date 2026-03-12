@@ -1130,7 +1130,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             'res_arr': res_arr,
             'p_arr': p_arr,
             'q_arr': q_arr,
-            'f_res_avg': f_res_avg,
             'rhos': rhos,
         }
 

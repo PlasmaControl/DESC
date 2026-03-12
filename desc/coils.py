@@ -1839,7 +1839,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # unexpected shapes if the params dict structure varies.
         all_currents = jnp.array(
             [p.pop("current", self[i].current) for i, p in enumerate(params)]
-        )
+        ).ravel()
         stacked = tree_stack(params)
         if source_grid is None:
             sg = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)

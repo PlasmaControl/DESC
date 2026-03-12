@@ -1833,6 +1833,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # Pre-compute all coil source geometries using scan.
         # This is cheap (spectral -> real-space transforms) and produces
         # stacked arrays suitable for vmapped Biot-Savart.
+        #
+        # Extract currents before stacking/scan to avoid shape issues —
+        # current is always a scalar per coil but tree_stack can produce
+        # unexpected shapes if the params dict structure varies.
+        all_currents = jnp.array(
+            [p.pop("current", self[i].current) for i, p in enumerate(params)]
+        )
         stacked = tree_stack(params)
         if source_grid is None:
             sg = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
@@ -1852,15 +1859,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             }[compute_A_or_B]
 
             def _extract_geom(_, x):
-                current = x.pop("current", coil_ref.current)
                 data = coil_ref.compute(["x"], grid=sg, params=x, basis="xyz")
                 coil_pts_start = data["x"]
                 coil_pts_end = jnp.concatenate(
                     [data["x"][1:], data["x"][:1]]
                 )
-                return None, (coil_pts_start, coil_pts_end, current)
+                return None, (coil_pts_start, coil_pts_end)
 
-            _, (all_starts, all_ends, all_currents) = scan(
+            _, (all_starts, all_ends) = scan(
                 _extract_geom, None, stacked
             )
         else:
@@ -1870,14 +1876,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             }[compute_A_or_B]
 
             def _extract_geom(_, x):
-                current = x.pop("current", coil_ref.current)
                 data = coil_ref.compute(
                     ["x", "x_s", "ds"], grid=sg, params=x, basis="xyz"
                 )
-                JdV = current * data["x_s"] * data["ds"][:, None]
-                return None, (data["x"], JdV)
+                tangents = data["x_s"] * data["ds"][:, None]
+                return None, (data["x"], tangents)
 
-            _, (all_coil_pts, all_JdV) = scan(_extract_geom, None, stacked)
+            _, (all_coil_pts, all_tangents) = scan(
+                _extract_geom, None, stacked
+            )
+            # Apply currents after scan to get JdV = current * tangents
+            all_JdV = all_currents[:, None, None] * all_tangents
 
         # Build NFP rotation matrices around Z axis in xyz.
         # R_k rotates by 2*pi*k/NFP.

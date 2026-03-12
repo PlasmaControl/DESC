@@ -35,8 +35,9 @@ aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 I = 10000 # Plasma current in amps
 NFP = 1#aspect_ratio  # Number of field periods
-I_multipliers = np.logspace(-2, 2, num=5)  # Multipliers for the current profile to explore different stability regimes
-axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
+I_multipliers = np.ones(1)#np.logspace(-2, 2, num=5)  # Multipliers for the current profile to explore different stability regimes
+axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
+n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
 for I_mult in I_multipliers:
     # Input profiles
     fixed_iota = False
@@ -162,7 +163,7 @@ for I_mult in I_multipliers:
 
     print("computing eigenmode at low res")
     tic = time.time()
-    data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=axisym)
+    data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=axisym, n_mode_axisym=n_mode_axisym)
     toc = time.time()
     print(f"matrix full took {toc-tic} s.")
 
@@ -324,7 +325,8 @@ for I_mult in I_multipliers:
         incompressible=False,
         gamma=100,
         v_guess=v_guess,
-        axisym=axisym
+        axisym=axisym,
+        n_mode_axisym=n_mode_axisym,
     )
 
     print(data["finite-n lambda matfree"])

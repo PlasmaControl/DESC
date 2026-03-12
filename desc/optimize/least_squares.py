@@ -203,11 +203,8 @@ def lsqtr(  # noqa: C901
 
     g_h = g * d
     # TODO: place this function under JIT to use in-place operation (#1669)
+    J_unscaled = J  # save before scaling; JAX J *= d creates new array, won't mutate
     J *= d
-
-    # we don't need unscaled J anymore, so we overwrite
-    # it with J_h = J * d to avoid carrying so many J-sized matrices
-    # in memory, which can be large
     J_h = J
     del J
     g_norm = jnp.linalg.norm(
@@ -237,6 +234,9 @@ def lsqtr(  # noqa: C901
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "qr")
+    jac_recompute_every = options.pop("jac_recompute_every", 6)
+    broyden_quality_threshold = options.pop("broyden_quality_threshold", 0.1)
+    max_inner_retries = options.pop("max_inner_retries", 3)
 
     errorif(
         len(options) > 0,
@@ -271,6 +271,12 @@ def lsqtr(  # noqa: C901
 
     alpha = 0.0  # "Levenberg-Marquardt" parameter
 
+    # Broyden state
+    steps_since_full_jac = 0
+    broyden_force_recompute = False
+    x_prev = x
+    f_prev = f
+
     while iteration < maxiter and success is None:
 
         # we don't want to factorize the extra stuff if we don't need to
@@ -296,6 +302,7 @@ def lsqtr(  # noqa: C901
             del Q, R
 
         actual_reduction = -1
+        inner_retries = 0
 
         # theta controls step back step ratio from the bounds.
         theta = max(0.995, 1 - g_norm)
@@ -343,6 +350,8 @@ def lsqtr(  # noqa: C901
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
             actual_reduction = cost - cost_new
+            if actual_reduction <= 0:
+                inner_retries += 1
 
             # update the trust radius according to the actual/predicted ratio
             tr_old = trust_radius
@@ -382,14 +391,38 @@ def lsqtr(  # noqa: C901
             if success is not None:
                 break
 
+        # If inner loop struggled, Broyden approximation may be degrading
+        if inner_retries > max_inner_retries and steps_since_full_jac > 0:
+            broyden_force_recompute = True
+
         # if reduction was enough, accept the step
         if actual_reduction > 0:
+            x_prev = x  # save before update for Broyden delta
+            f_prev = f
             x = x_new
             allx.append(x)
             f = f_new
             cost = cost_new
-            J = jac(x, *args)
-            njev += 1
+
+            steps_since_full_jac += 1
+            force_full_jac = (
+                steps_since_full_jac >= jac_recompute_every
+                or reduction_ratio < broyden_quality_threshold
+                or broyden_force_recompute
+            )
+
+            if force_full_jac:
+                J = jac(x, *args).block_until_ready()
+                njev += 1
+                steps_since_full_jac = 0
+                broyden_force_recompute = False
+            else:
+                delta_f = f - f_prev
+                delta_x = x - x_prev
+                J = J_unscaled + jnp.outer(
+                    delta_f - J_unscaled @ delta_x, delta_x
+                ) / jnp.dot(delta_x, delta_x)
+
             g = jnp.dot(J.T, f)
 
             if jac_scale:
@@ -400,11 +433,11 @@ def lsqtr(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
 
+            # Save unscaled J before scaling (JAX *= creates new array)
+            J_unscaled = J
+
             g_h = g * d
             J *= d
-            # we don't need unscaled J anymore this iteration, so we overwrite
-            # it with J_h = J * d to avoid carrying so many J-sized matrices
-            # in memory, which can be large
             J_h = J
             del J
             x_norm = jnp.linalg.norm(
@@ -441,7 +474,7 @@ def lsqtr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back
+        jac=J_unscaled,  # unscaled copy kept alongside J_h
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

@@ -68,8 +68,8 @@ counts. With `dim_f=191` the full reverse pass is small enough to run unchunked.
 If future workloads have very large `dim_f`, a dedicated `_rev_chunk_size` can be
 added to LCP.
 
-**AD mode selection** (at the end of `build()`, after line 140 where
-`self._dim_x_reduced = self._Z.shape[1]` is first assigned):
+**AD mode selection** (at the end of `build()`, after line 159 where
+`self._feasible_tangents` is assigned, before `self._built = True` at line 161):
 
 ```python
 if self._objective.dim_f < self._dim_x_reduced:
@@ -177,6 +177,9 @@ to the `options.pop()` block (around lines 188-239) so they don't trigger
 - First iteration always uses full Jacobian.
 - `broyden_force_recompute` is initialized to `False` and reset after each full
   recompute.
+- `x_prev` and `f_prev` must be initialized before the main loop to the initial
+  `x` and `f` values (the values after the pre-loop Jacobian computation at
+  line 183). This ensures the first Broyden update has valid reference values.
 
 **Expected impact:** With K=6, only 1 in 6 iterations pays the full Jacobian
 cost. Amortized Jacobian time drops by ~5-6x.

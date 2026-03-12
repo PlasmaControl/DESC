@@ -171,7 +171,6 @@ class QuadcoilProxy(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.",
         bounds_default="``bound=None``.",
-        weight_default="``weight=1``.",
         normalize_target_detail=_normalize_target_detail,
     )
 

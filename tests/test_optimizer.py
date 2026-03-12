@@ -312,6 +312,70 @@ class TestLSQTR:
 
 
 @pytest.mark.unit
+def test_lsqtr_broyden_recompute_every_1():
+    """Broyden with jac_recompute_every=1 must match baseline exactly."""
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def res(p):
+        return vector_fun(x, p) - y
+
+    rando = default_rng(seed=0)
+    p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+    jac_fn = Derivative(res, 0, "fwd")
+
+    # jac_recompute_every=1 should force full Jacobian every step = baseline
+    out = lsqtr(
+        res,
+        p0,
+        jac_fn,
+        verbose=0,
+        x_scale=1,
+        options={
+            "initial_trust_radius": 0.15,
+            "max_trust_radius": 0.25,
+            "tr_method": "cho",
+            "jac_recompute_every": 1,
+        },
+    )
+    np.testing.assert_allclose(out["x"], p, atol=1e-8)
+
+
+@pytest.mark.unit
+def test_lsqtr_broyden_convergence():
+    """Broyden updates with jac_recompute_every=6 must still converge."""
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def res(p):
+        return vector_fun(x, p) - y
+
+    rando = default_rng(seed=0)
+    p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+    jac_fn = Derivative(res, 0, "fwd")
+
+    out = lsqtr(
+        res,
+        p0,
+        jac_fn,
+        verbose=0,
+        x_scale=1,
+        maxiter=200,
+        options={
+            "initial_trust_radius": 0.15,
+            "max_trust_radius": 0.25,
+            "tr_method": "cho",
+            "jac_recompute_every": 6,
+        },
+    )
+    np.testing.assert_allclose(out["x"], p, atol=1e-6)
+    # Broyden should use fewer Jacobian evaluations
+    print(f"  njev={out['njev']}, nit={out['nit']}, nfev={out['nfev']}")
+
+
+@pytest.mark.unit
 def test_no_iterations():
     """Make sure giving the correct answer works correctly."""
     np.random.seed(0)

@@ -497,7 +497,8 @@ def source_matrix(TS, M, N, weights, cmns, sym, source, kt, kz, ntheta, nzeta, N
         sym, source, weights, M, N, kt, kz, ntheta, nzeta, NFP
     ) + analytic_source_matrix(TS, M, N, weights, cmns, sym, ntheta, nzeta)
     A = put(A, Index[N + 1 : 2 * N + 1, :], 0.0)
-    return A#-A  # flip the sign for exterior neumann problem
+    return A  # -A  # flip the sign for exterior neumann problem
+
 
 def ifft_matrix(M, N, ntheta, nzeta):
     """Converts phi_mn as returned by G^{-1}HB_n to phi on uniform theta, zeta grid
@@ -508,12 +509,15 @@ def ifft_matrix(M, N, ntheta, nzeta):
     """
     m = jnp.arange(M + 1)
     n = jnp.concatenate([jnp.arange(N + 1), jnp.arange(-N, 0)])
-    theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False) # (ntheta, )
-    zeta = np.linspace(0, 2 * np.pi, nzeta, endpoint=False) # (ntheta, )
+    theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)  # (ntheta, )
+    zeta = np.linspace(0, 2 * np.pi, nzeta, endpoint=False)  # (ntheta, )
     m_theta = m[:, None, None, None] * theta[None, None, :, None]
     n_zeta = n[None, :, None, None] * zeta[None, None, None, :]
-    modes_matrix = jnp.sin(m_theta - n_zeta).reshape((M + 1) * (2 * N + 1), ntheta * nzeta).T # (M+1, 2N+1, ntheta*nzeta)
+    modes_matrix = (
+        jnp.sin(m_theta - n_zeta).reshape((M + 1) * (2 * N + 1), ntheta * nzeta).T
+    )  # (M+1, 2N+1, ntheta*nzeta)
     return modes_matrix
+
 
 def get_matrices(eq, M, N, ntheta, nzeta):
     """G phi = H B_n"""
@@ -555,9 +559,11 @@ def get_matrices(eq, M, N, ntheta, nzeta):
         sym=sym,
     )
 
-    K_mntz = analytic_kernel(TS=TS, M=M, N=N, ntheta=ntheta, nzeta=nzeta, cmns=cmns, sym=sym)
+    K_mntz = analytic_kernel(
+        TS=TS, M=M, N=N, ntheta=ntheta, nzeta=nzeta, cmns=cmns, sym=sym
+    )
 
-    g_mntz = (#-(
+    g_mntz = (  # -(
         g_mntz + K_mntz
     )  # flip the sign for exterior neumann problem; see merkel 1986
 

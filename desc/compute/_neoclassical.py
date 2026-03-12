@@ -116,13 +116,9 @@ def _jnpmean_nz(x, axis=0, fill=jnp.nan):
     count = jnp.sum(mask, axis=axis)
     return safediv(jnp.sum(jnp.where(mask, x, 0.0), axis=axis), count, fill=fill)
 
-
 def _is_valid_value(x, fill_value):
-    """Validity mask compatible with NaN or finite sentinel fill values."""
-    fill_is_nan = jnp.isnan(jnp.asarray(fill_value))
-    not_fill = jnp.where(fill_is_nan, jnp.ones_like(x, dtype=bool), x != fill_value)
-    return jnp.isfinite(x) & not_fill
-
+    """Validity mask compatible with finite sentinel fill values."""
+    return x != fill_value
 
 def _masked_sum(x, mask, axis=None):
     """Sum x over axis, excluding entries where mask is False."""
@@ -956,6 +952,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     q_arr = kwargs.get("q_arr", None)
     quad = kwargs.get("quad", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
+    pitch_batch_size = kwargs.get("pitch_batch_size", 1)
     num_eta = kwargs.get("num_eta", None)
     DEBUG = kwargs.get("DEBUG", False)
     f_q_conservative = kwargs.get("f_q_conservative", False)

@@ -234,7 +234,7 @@ def lsqtr(  # noqa: C901
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "qr")
-    jac_recompute_every = options.pop("jac_recompute_every", 6)
+    jac_recompute_every = options.pop("jac_recompute_every", 1)
     broyden_quality_threshold = options.pop("broyden_quality_threshold", 0.1)
     max_inner_retries = options.pop("max_inner_retries", 3)
 
